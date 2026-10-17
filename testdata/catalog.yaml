@@ -1,0 +1,20 @@
+# Fake API surface for the headless backend (-catalog): what ⌘O completes.
+# Mirrors real discovery shapes: core + grouped types, short names, a name
+# that exists in two groups (machines), cluster-scoped types.
+resources:
+  - {name: pods, version: v1, kind: Pod, singular: pod, shortNames: [po], namespaced: true}
+  - {name: services, version: v1, kind: Service, singular: service, shortNames: [svc], namespaced: true}
+  - {name: configmaps, version: v1, kind: ConfigMap, singular: configmap, shortNames: [cm], namespaced: true}
+  - {name: secrets, version: v1, kind: Secret, singular: secret, namespaced: true}
+  - {name: namespaces, version: v1, kind: Namespace, singular: namespace, shortNames: [ns], namespaced: false}
+  - {name: nodes, version: v1, kind: Node, singular: node, shortNames: [no], namespaced: false}
+  - {name: events, version: v1, kind: Event, singular: event, shortNames: [ev], namespaced: true}
+  - {name: deployments, group: apps, version: v1, kind: Deployment, singular: deployment, shortNames: [deploy], namespaced: true}
+  - {name: statefulsets, group: apps, version: v1, kind: StatefulSet, singular: statefulset, shortNames: [sts], namespaced: true}
+  - {name: daemonsets, group: apps, version: v1, kind: DaemonSet, singular: daemonset, shortNames: [ds], namespaced: true}
+  - {name: customresourcedefinitions, group: apiextensions.k8s.io, version: v1, kind: CustomResourceDefinition, singular: customresourcedefinition, shortNames: [crd, crds], namespaced: false}
+  - {name: shoots, group: core.gardener.cloud, version: v1beta1, kind: Shoot, singular: shoot, namespaced: true}
+  - {name: machines, group: machine.sapcloud.io, version: v1alpha1, kind: Machine, singular: machine, shortNames: [mach], namespaced: true}
+  - {name: machines, group: cluster.x-k8s.io, version: v1beta1, kind: Machine, singular: machine, shortNames: [ma], namespaced: true}
+  - {name: e2e-pods, version: v1, kind: Pod, namespaced: true}
+namespaces: [default, garden, kube-public, kube-system, prod, shoot--foo--bar]

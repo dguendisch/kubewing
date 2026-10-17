@@ -1,0 +1,45 @@
+{
+  "name": "kubewing-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build --mode production",
+    "build:dev": "tsc -b && vite build --minify false --mode development",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "e2e": "playwright test"
+  },
+  "dependencies": {
+    "@glideapps/glide-data-grid": "6.0.3",
+    "@wailsio/runtime": "3.0.0-beta.28",
+    "lodash": "^4.18.1",
+    "marked": "^4.3.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-responsive-carousel": "^3.2.23",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@babel/core": "^8.0.7",
+    "@playwright/test": "^1.64.0",
+    "@rolldown/plugin-babel": "^0.2.4",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/babel__core": "^7.20.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "babel-plugin-react-compiler": "^1.0.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "@glideapps/glide-data-grid": {
+      "react": "$react",
+      "react-dom": "$react-dom"
+    }
+  }
+}

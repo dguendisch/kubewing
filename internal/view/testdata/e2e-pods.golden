@@ -1,0 +1,66 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    },
+    {
+      "name": "RESTARTS",
+      "type": "number"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "e-etcd-0",
+    "e-api-0",
+    "e-api-1"
+  ],
+  "rows": [
+    {
+      "key": "e-etcd-0",
+      "cells": [
+        "kube-system",
+        "etcd-0",
+        "Running",
+        "0",
+        "2026-01-01T09:00:00Z"
+      ]
+    },
+    {
+      "key": "e-api-0",
+      "cells": [
+        "prod",
+        "api-0",
+        "Running",
+        "0",
+        "2026-01-01T10:00:00Z"
+      ]
+    },
+    {
+      "key": "e-api-1",
+      "cells": [
+        "prod",
+        "api-1",
+        "Running",
+        "0",
+        "2026-01-01T10:00:00Z"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

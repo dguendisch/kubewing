@@ -1,0 +1,39 @@
+import { rowAt } from "./grid/rowcache";
+import { paneData, useUI } from "./store/store";
+import * as S from "./store/state";
+
+/**
+ * Test introspection hook: app state as data (layout, focus, panes, visible
+ * rows, overlays). Exposed as window.__kw.inspect() in non-production builds.
+ */
+export function inspect() {
+  const s = useUI.getState();
+  const tab = S.activeTab(s);
+  return {
+    activeTab: s.activeTab,
+    tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused })),
+    focus: s.focus,
+    focusedPane: tab.focused,
+    overlays: s.overlay ? [s.overlay.kind] : [],
+    overlay: s.overlay,
+    panes: Object.fromEntries(
+      Object.values(s.panes).map((p) => {
+        const d = p.serverId ? paneData.get(p.serverId) : undefined;
+        return [
+          p.id,
+          {
+            spec: p.spec,
+            pipeline: S.pipelineYAML(p.spec),
+            serverId: p.serverId,
+            error: p.error,
+            selected: p.selected,
+            total: d?.total ?? 0,
+            status: d?.status,
+            columns: d?.columns.map((c) => c.name) ?? [],
+            rows: d ? d.order.map((_, i) => rowAt(d, d.offset + i)).filter(Boolean) : [],
+          },
+        ];
+      }),
+    ),
+  };
+}

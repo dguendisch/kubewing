@@ -1,0 +1,73 @@
+# Server-side table columns, an update to a visible column, a hidden change,
+# a heartbeat-only (noise) change, delete + recreate under the same name,
+# and tombstone expiry.
+pipeline:
+  source: {resource: pods, namespace: kube-system}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+  - {name: Restarts, type: string, priority: 0}
+  - {name: Age, type: date, priority: 0}
+  - {name: IP, type: string, priority: 1}
+initial:
+  - object: &etcd
+      apiVersion: v1
+      kind: Pod
+      metadata: {name: etcd-0, namespace: kube-system, uid: u-etcd-0, resourceVersion: "1", creationTimestamp: "2026-01-01T10:00:00Z"}
+    cells: [etcd-0, 1/1, Running, "0", "2h", 10.0.0.1]
+  - object:
+      apiVersion: v1
+      kind: Pod
+      metadata: {name: coredns-a, namespace: kube-system, uid: u-coredns-a, resourceVersion: "2", creationTimestamp: "2026-01-01T11:00:00Z"}
+    cells: [coredns-a, 1/1, Running, "0", "1h", 10.0.0.2]
+steps:
+  # restart: visible change in RESTARTS; AGE cell text changes too but is time-derived
+  - at: 1s
+    update:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata: {name: etcd-0, namespace: kube-system, uid: u-etcd-0, resourceVersion: "3", creationTimestamp: "2026-01-01T10:00:00Z"}
+        status: {containerStatuses: [{name: etcd, restartCount: 1}]}
+      cells: [etcd-0, 1/1, Running, "1", "2h1s", 10.0.0.1]
+    frame: true
+  # change outside displayed columns → hidden marker
+  - at: 2s
+    update:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata: {name: coredns-a, namespace: kube-system, uid: u-coredns-a, resourceVersion: "4", creationTimestamp: "2026-01-01T11:00:00Z", labels: {pod-template-hash: x}}
+      cells: [coredns-a, 1/1, Running, "0", "1h", 10.0.0.2]
+    frame: true
+  # resourceVersion-only update → no update at all
+  - at: 3s
+    update:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata: {name: coredns-a, namespace: kube-system, uid: u-coredns-a, resourceVersion: "5", creationTimestamp: "2026-01-01T11:00:00Z", labels: {pod-template-hash: x}}
+      cells: [coredns-a, 1/1, Running, "0", "1h", 10.0.0.2]
+    frame: true
+  # delete + recreate under the same name → tombstone (old uid) + added (new uid)
+  - at: 4s
+    delete:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata: {name: etcd-0, namespace: kube-system, uid: u-etcd-0}
+  - at: 4s
+    add:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata: {name: etcd-0, namespace: kube-system, uid: u-etcd-0-b, resourceVersion: "6", creationTimestamp: "2026-01-01T12:00:04Z"}
+      cells: [etcd-0, 0/1, ContainerCreating, "0", "0s", ""]
+    frame: true
+  # highlights of t=1s/2s expired; tombstone still present
+  - at: 7s
+    frame: true
+  # tombstone and added marker expired
+  - at: 10s
+    frame: true

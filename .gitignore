@@ -1,0 +1,9 @@
+# local toolchain caches (sandbox-friendly, see Makefile)
+/.cache/
+/bin/
+/build/bin/
+node_modules/
+/frontend/dist/
+.DS_Store
+/frontend/test-results/
+/frontend/playwright-report/

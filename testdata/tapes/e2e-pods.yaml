@@ -1,0 +1,27 @@
+# E2E tape: stable list with a late restart (t=2s) and a recreate (t=3s).
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+  - {name: Restarts, type: integer, priority: 0}
+  - {name: Age, type: date, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: api-0, namespace: prod, uid: e-api-0, labels: {app: api}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [api-0, Running, 0, 2h]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: api-1, namespace: prod, uid: e-api-1, labels: {app: api}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [api-1, Running, 0, 2h]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: etcd-0, namespace: kube-system, uid: e-etcd-0, labels: {app: etcd}, creationTimestamp: "2026-01-01T09:00:00Z"}, status: {phase: Running}}
+    cells: [etcd-0, Running, 0, 3h]
+steps:
+  - at: 2s
+    update:
+      object: {apiVersion: v1, kind: Pod, metadata: {name: api-1, namespace: prod, uid: e-api-1, labels: {app: api}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running, containerStatuses: [{name: c, restartCount: 1}]}}
+      cells: [api-1, Running, 1, 2h]
+  - at: 3s
+    delete:
+      object: {apiVersion: v1, kind: Pod, metadata: {name: api-0, namespace: prod, uid: e-api-0}}
+  - at: 3s
+    add:
+      object: {apiVersion: v1, kind: Pod, metadata: {name: api-0, namespace: prod, uid: e-api-0-b, labels: {app: api}, creationTimestamp: "2026-01-01T12:00:00Z"}, status: {phase: Pending}}
+      cells: [api-0, Pending, 0, 0s]

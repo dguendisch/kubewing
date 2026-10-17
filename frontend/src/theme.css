@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+/* Theme tokens: every color in the app comes from here (lint: no raw colors elsewhere). */
+@theme {
+  --color-bg: #0e1016;
+  --color-bg-elev: #161922;
+  --color-bg-hover: #1d2130;
+  --color-border: #262b3a;
+  --color-fg: #d6dae6;
+  --color-fg-muted: #8a91a6;
+  --color-accent: #6ea8ff;
+  --color-added: #3fb950;
+  --color-deleted: #f85149;
+  --color-changed: #d29922;
+  --color-hidden: #a371f7;
+  --color-prod: #da3633;
+  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+input { user-select: text; }

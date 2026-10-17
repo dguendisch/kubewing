@@ -1,0 +1,72 @@
+# User-defined columns (path, CEL expr, bytes), CEL filter, grep, numeric
+# descending sort, viewport windowing, and relist reconciliation.
+pipeline:
+  source: {resource: pods}
+  stages:
+    - filter: 'o.metadata.namespace != "kube-public"'
+    - grep: "-1"   # matches names; "nodash" is dropped
+    - sort: [-RESTARTS, NAME]
+  render:
+    columns:
+      - {name: NAMESPACE, path: metadata.namespace}
+      - {name: NAME, path: metadata.name}
+      - {name: RESTARTS, expr: 'o.status.containerStatuses.map(c, c.restartCount).sum()', type: number}
+      - {name: IMAGE, path: 'spec.containers[0].image'}
+      - {name: MEM, expr: 'o.metadata.annotations["mem"]', type: bytes}
+      - {name: AGE, path: metadata.creationTimestamp, type: age}
+initial:
+  - object:
+      metadata: {name: a-1, namespace: default, uid: a1, creationTimestamp: "2026-01-01T09:00:00Z", annotations: {mem: "1536"}}
+      spec: {containers: [{name: c, image: nginx:1.27}]}
+      status: {containerStatuses: [{name: c, restartCount: 2}, {name: d, restartCount: 1}]}
+  - object:
+      metadata: {name: b-1, namespace: default, uid: b1, creationTimestamp: "2026-01-01T09:00:00Z"}
+      spec: {containers: [{name: c, image: redis:7}]}
+      status: {containerStatuses: [{name: c, restartCount: 10}]}
+  - object:
+      metadata: {name: c-1, namespace: kube-public, uid: c1, creationTimestamp: "2026-01-01T09:00:00Z"}
+      spec: {containers: [{name: c, image: x}]}
+      status: {containerStatuses: [{name: c, restartCount: 99}]}
+  - object:
+      metadata: {name: nodash, namespace: default, uid: n1, creationTimestamp: "2026-01-01T09:00:00Z"}
+      spec: {containers: [{name: c, image: "y"}]}
+  - object:
+      metadata: {name: d-1, namespace: default, uid: d1, creationTimestamp: "2026-01-01T09:00:00Z", annotations: {mem: "3221225472"}}
+      spec: {containers: [{name: c, image: busybox}]}
+      status: {containerStatuses: [{name: c, restartCount: 3}]}
+steps:
+  # window of 2 rows starting at 1
+  - at: 0s
+    viewport: {offset: 1, limit: 2}
+    frame: true
+  # a-1 overtakes b-1 in the sort; window order changes, no cell change for b-1
+  - at: 1s
+    update:
+      object:
+        metadata: {name: a-1, namespace: default, uid: a1, creationTimestamp: "2026-01-01T09:00:00Z", annotations: {mem: "1536"}}
+        spec: {containers: [{name: c, image: nginx:1.27}]}
+        status: {containerStatuses: [{name: c, restartCount: 10}, {name: d, restartCount: 1}]}
+    frame: true
+  # an object moving out of the filter disappears without tombstone
+  - at: 2s
+    update:
+      object:
+        metadata: {name: d-1, namespace: kube-public, uid: d1, creationTimestamp: "2026-01-01T09:00:00Z"}
+        spec: {containers: [{name: c, image: busybox}]}
+        status: {containerStatuses: [{name: c, restartCount: 3}]}
+    viewport: {offset: 0, limit: 10}
+    frame: true
+  # relist after watch expiry: b-1 vanished (missed delete), e-1 appeared, a-1 unchanged
+  - at: 3s
+    relist:
+      - object:
+          metadata: {name: a-1, namespace: default, uid: a1, creationTimestamp: "2026-01-01T09:00:00Z", annotations: {mem: "1536"}}
+          spec: {containers: [{name: c, image: nginx:1.27}]}
+          status: {containerStatuses: [{name: c, restartCount: 10}, {name: d, restartCount: 1}]}
+      - object:
+          metadata: {name: e-1, namespace: default, uid: e1, creationTimestamp: "2026-01-01T12:00:03Z"}
+          spec: {containers: [{name: c, image: alpine}]}
+    frame: true
+  - at: 4s
+    error: 'pods is forbidden: User "viewer" cannot watch resource "pods"'
+    frame: true

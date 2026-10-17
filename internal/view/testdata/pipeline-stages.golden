@@ -1,0 +1,189 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "RESTARTS",
+      "type": "number"
+    },
+    {
+      "name": "IMAGE"
+    },
+    {
+      "name": "MEM",
+      "type": "bytes"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "b1",
+    "a1",
+    "d1"
+  ],
+  "rows": [
+    {
+      "key": "b1",
+      "cells": [
+        "default",
+        "b-1",
+        "10",
+        "redis:7",
+        "",
+        "2026-01-01T09:00:00Z"
+      ]
+    },
+    {
+      "key": "a1",
+      "cells": [
+        "default",
+        "a-1",
+        "3",
+        "nginx:1.27",
+        "1.5Ki",
+        "2026-01-01T09:00:00Z"
+      ]
+    },
+    {
+      "key": "d1",
+      "cells": [
+        "default",
+        "d-1",
+        "3",
+        "busybox",
+        "3.0Gi",
+        "2026-01-01T09:00:00Z"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 5
+  }
+}
+--- frame 1
+{
+  "seq": 2,
+  "total": 3,
+  "offset": 1,
+  "order": [
+    "a1",
+    "d1"
+  ]
+}
+--- frame 2
+{
+  "seq": 3,
+  "total": 3,
+  "offset": 1,
+  "order": [
+    "b1",
+    "d1"
+  ],
+  "rows": [
+    {
+      "key": "b1",
+      "cells": [
+        "default",
+        "b-1",
+        "10",
+        "redis:7",
+        "",
+        "2026-01-01T09:00:00Z"
+      ]
+    }
+  ]
+}
+--- frame 3
+{
+  "seq": 4,
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "a1",
+    "b1"
+  ],
+  "rows": [
+    {
+      "key": "a1",
+      "cells": [
+        "default",
+        "a-1",
+        "11",
+        "nginx:1.27",
+        "1.5Ki",
+        "2026-01-01T09:00:00Z"
+      ],
+      "changed": [
+        2
+      ]
+    }
+  ]
+}
+--- frame 4
+{
+  "seq": 5,
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "a1",
+    "b1",
+    "e1"
+  ],
+  "rows": [
+    {
+      "key": "b1",
+      "cells": [
+        "default",
+        "b-1",
+        "10",
+        "redis:7",
+        "",
+        "2026-01-01T09:00:00Z"
+      ],
+      "mark": "deleted"
+    },
+    {
+      "key": "e1",
+      "cells": [
+        "default",
+        "e-1",
+        "",
+        "alpine",
+        "",
+        "2026-01-01T12:00:03Z"
+      ],
+      "mark": "added"
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}
+--- frame 5
+{
+  "seq": 6,
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "a1",
+    "b1",
+    "e1"
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2,
+    "error": "pods is forbidden: User \"viewer\" cannot watch resource \"pods\""
+  }
+}

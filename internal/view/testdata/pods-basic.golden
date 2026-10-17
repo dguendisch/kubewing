@@ -1,0 +1,184 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    },
+    {
+      "name": "STATUS"
+    },
+    {
+      "name": "RESTARTS"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0"
+  ],
+  "rows": [
+    {
+      "key": "u-coredns-a",
+      "cells": [
+        "coredns-a",
+        "1/1",
+        "Running",
+        "0",
+        "2026-01-01T11:00:00Z"
+      ]
+    },
+    {
+      "key": "u-etcd-0",
+      "cells": [
+        "etcd-0",
+        "1/1",
+        "Running",
+        "0",
+        "2026-01-01T10:00:00Z"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}
+--- frame 1
+{
+  "seq": 2,
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0"
+  ],
+  "rows": [
+    {
+      "key": "u-etcd-0",
+      "cells": [
+        "etcd-0",
+        "1/1",
+        "Running",
+        "1",
+        "2026-01-01T10:00:00Z"
+      ],
+      "changed": [
+        3
+      ]
+    }
+  ]
+}
+--- frame 2
+{
+  "seq": 3,
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0"
+  ],
+  "rows": [
+    {
+      "key": "u-coredns-a",
+      "cells": [
+        "coredns-a",
+        "1/1",
+        "Running",
+        "0",
+        "2026-01-01T11:00:00Z"
+      ],
+      "hidden": true
+    }
+  ]
+}
+--- frame 3
+(no update)
+--- frame 4
+{
+  "seq": 4,
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0",
+    "u-etcd-0-b"
+  ],
+  "rows": [
+    {
+      "key": "u-etcd-0",
+      "cells": [
+        "etcd-0",
+        "1/1",
+        "Running",
+        "1",
+        "2026-01-01T10:00:00Z"
+      ],
+      "mark": "deleted"
+    },
+    {
+      "key": "u-etcd-0-b",
+      "cells": [
+        "etcd-0",
+        "0/1",
+        "ContainerCreating",
+        "0",
+        "2026-01-01T12:00:04Z"
+      ],
+      "mark": "added"
+    }
+  ]
+}
+--- frame 5
+{
+  "seq": 5,
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0",
+    "u-etcd-0-b"
+  ],
+  "rows": [
+    {
+      "key": "u-coredns-a",
+      "cells": [
+        "coredns-a",
+        "1/1",
+        "Running",
+        "0",
+        "2026-01-01T11:00:00Z"
+      ]
+    }
+  ]
+}
+--- frame 6
+{
+  "seq": 6,
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "u-coredns-a",
+    "u-etcd-0-b"
+  ],
+  "rows": [
+    {
+      "key": "u-etcd-0-b",
+      "cells": [
+        "etcd-0",
+        "0/1",
+        "ContainerCreating",
+        "0",
+        "2026-01-01T12:00:04Z"
+      ]
+    }
+  ]
+}
