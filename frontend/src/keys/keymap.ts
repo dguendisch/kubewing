@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export type FocusContext = "table" | "filter" | "detail" | "palette" | "dialog";
+export type FocusContext = "table" | "filter" | "detail" | "palette" | "dialog" | "switcher";
 
 export type CommandId =
   | "pane.splitRight"
@@ -12,10 +12,19 @@ export type CommandId =
   | "pane.close"
   | "pane.focusNext"
   | "pane.focusPrev"
+  | "pane.focusLeft"
+  | "pane.focusRight"
+  | "pane.focusUp"
+  | "pane.focusDown"
   | "tab.new"
   | "tab.close"
   | "tab.next"
   | "tab.prev"
+  | `tab.goto${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9}`
+  | "tab.mruNext"
+  | "tab.mruPrev"
+  | "tab.switcherCommit"
+  | "tab.switcherCancel"
   | "filter.focus"
   | "filter.blur"
   | "row.down"
@@ -37,15 +46,30 @@ export interface Binding {
 }
 
 export const defaultBindings: Binding[] = [
-  { key: "Meta+D", command: "pane.splitRight" },
-  { key: "Meta+Shift+D", command: "pane.splitDown" },
+  // deliberately swapped vs. iTerm: ⌘D stacks, ⌘⇧D goes side by side
+  { key: "Meta+D", command: "pane.splitDown" },
+  { key: "Meta+Shift+D", command: "pane.splitRight" },
   { key: "Meta+W", command: "pane.close" },
   { key: "Meta+]", command: "pane.focusNext" },
   { key: "Meta+[", command: "pane.focusPrev" },
+  { key: "Alt+Meta+ArrowLeft", command: "pane.focusLeft" },
+  { key: "Alt+Meta+ArrowRight", command: "pane.focusRight" },
+  { key: "Alt+Meta+ArrowUp", command: "pane.focusUp" },
+  { key: "Alt+Meta+ArrowDown", command: "pane.focusDown" },
   { key: "Meta+T", command: "tab.new" },
   { key: "Meta+Shift+W", command: "tab.close" },
   { key: "Meta+Shift+]", command: "tab.next" },
   { key: "Meta+Shift+[", command: "tab.prev" },
+  // ⌘1–⌘8 go to that tab, ⌘9 to the last one (browser/iTerm convention)
+  ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Binding => ({ key: `Meta+${n}`, command: `tab.goto${n}` })),
+  // MRU switching; releasing Ctrl commits (handled on keyup in useKeys)
+  { key: "Ctrl+Tab", command: "tab.mruNext" },
+  { key: "Ctrl+Shift+Tab", command: "tab.mruPrev" },
+  // ⌃ is usually still held while browsing the switcher
+  { key: "Escape", command: "tab.switcherCancel", when: ["switcher"] },
+  { key: "Ctrl+Escape", command: "tab.switcherCancel", when: ["switcher"] },
+  { key: "Enter", command: "tab.switcherCommit", when: ["switcher"] },
+  { key: "Ctrl+Enter", command: "tab.switcherCommit", when: ["switcher"] },
   { key: "Meta+O", command: "source.open" },
   { key: "/", command: "filter.focus", when: ["table"] },
   { key: "Meta+F", command: "filter.focus" },
@@ -58,7 +82,9 @@ export const defaultBindings: Binding[] = [
   { key: "PageDown", command: "row.pageDown", when: ["table"] },
   { key: "PageUp", command: "row.pageUp", when: ["table"] },
   { key: "G", command: "row.first", when: ["table"] },
+  { key: "Alt+ArrowUp", command: "row.first", when: ["table"] },
   { key: "Shift+G", command: "row.last", when: ["table"] },
+  { key: "Alt+ArrowDown", command: "row.last", when: ["table"] },
   { key: "Enter", command: "detail.open", when: ["table"] },
   { key: "Y", command: "detail.open", when: ["table"] },
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },

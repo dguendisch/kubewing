@@ -63,7 +63,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
    - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
    - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` / `viewerkubeconfig` subresources.
 1. **Safety model** — per-context color/label (prod = red), read-only mode per context, confirmation for any mutating action. Required before any multi-cluster writes later.
-1. **Splits & tabs** — iTerm semantics: `cmd+d` split side-by-side, `cmd+shift+d` split stacked.
+1. **Splits & tabs** — `cmd+d` split horizontal, `cmd+shift+d` split vertical.
 1. **Filter bar** — quick grep + label selector on the focused view (full stage editing comes with the palette).
 1. Keybindings and theme: sensible defaults + config files in `~/.kubewing/`; no settings UI yet.
 

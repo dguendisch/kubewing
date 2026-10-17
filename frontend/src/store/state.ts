@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import { leaf, paneIds, remove, split, type Layout } from "./layout";
+import { leaf, neighbor, paneIds, remove, split, type Direction, type Layout } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -45,6 +45,10 @@ export interface UIState {
   nextId: number;
   /** Default spec for new panes (current kube context). */
   defaults: PaneSpec;
+  /** Tab ids, most recently used first (see touchTab). */
+  mru: string[];
+  /** ⌃⇥ switcher while ⌃ is held: index into mru of the highlighted tab. */
+  switcher?: { index: number; restore: FocusContext };
 }
 
 export const initialSpec = (context = ""): PaneSpec => ({
@@ -64,7 +68,49 @@ export function initialState(context = ""): UIState {
     focus: "table",
     nextId: 2,
     defaults: spec,
+    mru: ["t1"],
   };
+}
+
+/**
+ * Keeps mru in sync with the tabs: drops closed tabs, appends new ones, and
+ * moves the active tab to the front, except while the switcher is browsing
+ * (only committing counts as use). A tab opening or closing mid-switch ends
+ * the switcher. Applied after every state update.
+ */
+export function touchTab(s: UIState): UIState {
+  const ids = s.tabs.map((t) => t.id);
+  let mru = s.mru.filter((id) => ids.includes(id));
+  for (const id of ids) if (!mru.includes(id)) mru.push(id);
+  if (s.switcher && (mru.length !== s.mru.length || mru.some((id, i) => id !== s.mru[i]))) {
+    s = switcherCancel(s);
+  }
+  const active = activeTab(s).id;
+  if (!s.switcher && mru[0] !== active) mru = [active, ...mru.filter((id) => id !== active)];
+  const same = mru.length === s.mru.length && mru.every((id, i) => id === s.mru[i]);
+  return same ? s : { ...s, mru };
+}
+
+/** ⌃⇥ / ⌃⇧⇥: opens the switcher on the previous (or least recent) tab, or moves within it. */
+export function switcherStep(s: UIState, delta: 1 | -1): UIState {
+  const n = s.mru.length;
+  if (n < 2) return s;
+  const from = s.switcher ? s.switcher.index : 0;
+  const index = (from + delta + n) % n;
+  const restore = s.switcher?.restore ?? s.focus;
+  return { ...s, switcher: { index, restore }, focus: "switcher", overlay: undefined };
+}
+
+/** Releasing ⌃ (or ⏎): activates the highlighted tab, which becomes most recent. */
+export function switcherCommit(s: UIState): UIState {
+  if (!s.switcher) return s;
+  const id = s.mru[s.switcher.index];
+  const i = s.tabs.findIndex((t) => t.id === id);
+  return { ...s, switcher: undefined, focus: "table", activeTab: i >= 0 ? i : s.activeTab };
+}
+
+export function switcherCancel(s: UIState): UIState {
+  return s.switcher ? { ...s, switcher: undefined, focus: s.switcher.restore } : s;
 }
 
 export const activeTab = (s: UIState): Tab => s.tabs[s.activeTab]!;
@@ -141,11 +187,31 @@ export function cycleTab(s: UIState, delta: number): UIState {
   return { ...s, activeTab: (s.activeTab + delta + n) % n, overlay: undefined, focus: "table" };
 }
 
+/** ⌘1–⌘8: that tab; ⌘9: the last tab. Out of range: unchanged. */
+export function gotoTab(s: UIState, n: number): UIState {
+  const i = n === 9 ? s.tabs.length - 1 : n - 1;
+  if (i < 0 || i >= s.tabs.length) return s;
+  return { ...s, activeTab: i, overlay: undefined, focus: "table", switcher: undefined };
+}
+
+/** The ⌘-digit that reaches tab i, if any (⌘9 is the last tab). */
+export function tabShortcut(i: number, count: number): number | undefined {
+  if (i < 8) return i + 1;
+  return i === count - 1 ? 9 : undefined;
+}
+
 export function cyclePane(s: UIState, delta: number): UIState {
   const ids = paneIds(activeTab(s).layout);
   const i = ids.indexOf(activeTab(s).focused);
   const focused = ids[(i + delta + ids.length) % ids.length]!;
   return withTab({ ...s, focus: "table" }, (t) => ({ ...t, focused }));
+}
+
+/** ⌘⌥arrows: focus the pane in that direction; stays put at the edge. */
+export function focusDirection(s: UIState, dir: Direction): UIState {
+  const t = activeTab(s);
+  const id = neighbor(t.layout, t.focused, dir);
+  return id ? withTab({ ...s, focus: "table" }, (x) => ({ ...x, focused: id })) : s;
 }
 
 export function focusPane(s: UIState, id: string): UIState {

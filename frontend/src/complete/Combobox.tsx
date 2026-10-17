@@ -21,9 +21,9 @@ interface Props {
  * real (non-fuzzy) match, and nothing is preselected for empty input.
  *
  * Focus selects the value, so typing replaces it. The list opens on typing
- * (or ↓ to browse). Keys: ↓/↑ (also ctrl+n/p) move, Tab accepts and stays,
- * Enter accepts and submits, Esc closes the list (a second Esc reaches the
- * dialog).
+ * (or ↓ to browse). Keys: ↓/↑ (also ctrl+n/p) move, ⌥↑/⌥↓ first/last, Tab
+ * accepts and stays, Enter accepts and submits, Esc closes the list (a
+ * second Esc reaches the dialog).
  */
 export function Combobox({ label, value, onChange, onSubmit, candidates, hint, placeholder, autoFocus, className }: Props) {
   const id = useId();
@@ -72,7 +72,11 @@ export function Combobox({ label, value, onChange, onSubmit, candidates, hint, p
         }}
         onKeyDown={(e) => {
           const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;
-          if (e.key === "ArrowDown" || (ctrl && e.key === "n")) {
+          if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown") && open && matches.length) {
+            // ⌥↑/⌥↓: first/last suggestion (closed list: caret to start/end as usual)
+            e.preventDefault();
+            setActive(e.key === "ArrowUp" ? 0 : matches.length - 1);
+          } else if (e.key === "ArrowDown" || (ctrl && e.key === "n")) {
             e.preventDefault();
             move(1);
           } else if (e.key === "ArrowUp" || (ctrl && e.key === "p")) {

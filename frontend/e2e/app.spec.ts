@@ -62,10 +62,11 @@ test("keyed diff: restart is a changed cell, recreate is remove + add", async ({
   ]);
 });
 
-test("cmd+d / cmd+shift+d split, cmd+w closes, focus stays valid", async ({ page }) => {
+test("cmd+shift+d / cmd+d split, cmd+w closes, focus stays valid", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("ControlOrMeta+D");
+  // swapped vs. iTerm: ⌘⇧D side by side, ⌘D stacked
   await page.keyboard.press("ControlOrMeta+Shift+D");
+  await page.keyboard.press("ControlOrMeta+D");
   let s = await inspect(page);
   expect(s.tabs[0]!.layout).toEqual({
     type: "split", dir: "row",
@@ -132,14 +133,14 @@ test("switching tabs keeps each tab's live table", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+T");
   await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
   await page.keyboard.press("ControlOrMeta+Shift+BracketLeft");
-  await expect(page.getByRole("tab", { selected: true })).toHaveText("e2e-pods");
+  await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName("e2e-pods");
   await expect.poll(async () => (await focused(page)).rows.length).toBe(3);
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
 });
 
 test("splits fill the tab width and the split pane keeps its data", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("ControlOrMeta+D");
+  await page.keyboard.press("ControlOrMeta+Shift+D");
   await expect.poll(async () => (await inspect(page)).panes.v1?.rows.length).toBe(3);
   const main = (await page.locator("main").boundingBox())!;
   const panes = await Promise.all(["v1", "v2"].map(async (id) => (await page.locator(`[data-pane=${id}]`).boundingBox())!));
@@ -154,6 +155,107 @@ test("unknown resource shows an error in the pane", async ({ page }) => {
   await page.getByRole("combobox", { name: "resource" }).fill("nope");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("alert")).toContainText("doesn't have a resource type");
+});
+
+test("cmd+opt+arrows move focus between tiles and stop at the edge", async ({ page }) => {
+  await openTape(page);
+  // v1 | (v2 / v3)
+  await page.keyboard.press("ControlOrMeta+Shift+D");
+  await page.keyboard.press("ControlOrMeta+D");
+  const at = async () => (await inspect(page)).focusedPane;
+  expect(await at()).toBe("v3");
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowUp");
+  expect(await at()).toBe("v2");
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+  expect(await at()).toBe("v1");
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft"); // edge: stays
+  expect(await at()).toBe("v1");
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowRight");
+  expect(await at()).toBe("v2");
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowDown");
+  expect(await at()).toBe("v3");
+  await expect(page.locator("[data-pane=v3]")).toHaveClass(/border-accent/);
+});
+
+test("opt+up / opt+down jump to the first / last row", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("Alt+ArrowDown");
+  expect((await focused(page)).selected).toBe(2);
+  await page.keyboard.press("Alt+ArrowUp");
+  expect((await focused(page)).selected).toBe(0);
+});
+
+test.describe("ctrl+tab MRU tab switching", () => {
+  /** Three tabs, used in order 1, 2, 3 (active): MRU = [3, 2, 1]. */
+  async function threeTabs(page: Page) {
+    await openTape(page);
+    await page.keyboard.press("ControlOrMeta+T");
+    await page.keyboard.press("ControlOrMeta+T");
+    expect((await inspect(page)).activeTab).toBe(2);
+  }
+  const active = async (page: Page) => (await inspect(page)).activeTab;
+
+  test("a quick tap flips between the two most recent tabs, without an overlay", async ({ page }) => {
+    await threeTabs(page);
+    await page.keyboard.press("Control+Tab");
+    expect(await active(page)).toBe(1);
+    await expect(page.getByRole("listbox", { name: "tab switcher" })).toBeHidden();
+    await page.keyboard.press("Control+Tab");
+    expect(await active(page)).toBe(2);
+    // MRU, not positional: going back from 3 skips over nothing, 1 is now least recent
+    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 2 (positional cycle counts as use)
+    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 1
+    await page.keyboard.press("Control+Tab");
+    expect(await active(page)).toBe(1); // tab 2, the previously used one
+  });
+
+  test("holding ctrl shows the switcher; tab steps back, release commits", async ({ page }) => {
+    await threeTabs(page);
+    await page.keyboard.down("Control");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    const sw = page.getByRole("listbox", { name: "tab switcher" });
+    await expect(sw).toBeVisible();
+    await expect(sw.getByRole("option")).toHaveCount(3);
+    await expect(sw.getByRole("option", { selected: true })).toContainText("⌘1"); // least recent = first tab
+    expect(await active(page)).toBe(2); // nothing switched while browsing
+    await page.keyboard.up("Control");
+    await expect(sw).toBeHidden();
+    expect(await active(page)).toBe(0);
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test("ctrl+shift+tab goes the other way; esc cancels", async ({ page }) => {
+    await threeTabs(page);
+    await page.keyboard.down("Control");
+    await page.keyboard.press("Shift+Tab");
+    const sw = page.getByRole("listbox", { name: "tab switcher" });
+    await expect(sw.getByRole("option", { selected: true })).toContainText("⌘1");
+    await page.keyboard.press("Escape");
+    await expect(sw).toBeHidden();
+    await page.keyboard.up("Control");
+    expect(await active(page)).toBe(2);
+    expect((await inspect(page)).overlays).toEqual([]);
+  });
+});
+
+test("cmd+1..9 jump to tabs (9 = last); tab headers show the shortcut", async ({ page }) => {
+  await openTape(page);
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ControlOrMeta+T"); // 4 tabs
+  const tabs = page.getByRole("tab");
+  await expect(tabs.nth(0)).toHaveAttribute("aria-keyshortcuts", "Meta+1");
+  await expect(tabs.nth(2)).toContainText("⌘3");
+  await expect(tabs.nth(3)).toHaveAttribute("aria-keyshortcuts", "Meta+4");
+  await page.keyboard.press("ControlOrMeta+1");
+  expect((await inspect(page)).activeTab).toBe(0);
+  await page.keyboard.press("ControlOrMeta+3");
+  expect((await inspect(page)).activeTab).toBe(2);
+  await page.keyboard.press("ControlOrMeta+9");
+  expect((await inspect(page)).activeTab).toBe(3);
+  await page.keyboard.press("ControlOrMeta+6"); // no 6th tab
+  expect((await inspect(page)).activeTab).toBe(3);
+  // the hint is decoration: accessible tab names stay the pane titles
+  for (let i = 0; i < 4; i++) await expect(tabs.nth(i)).toHaveAccessibleName("e2e-pods");
 });
 
 // ⌘O completion: data comes from the backend catalog (testdata/catalog.yaml),

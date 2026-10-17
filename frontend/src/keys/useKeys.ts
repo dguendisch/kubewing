@@ -18,7 +18,20 @@ export function useKeys() {
       }
       if (suppressed.has(c)) e.preventDefault();
     };
+    // the ⌃⇥ switcher commits when ⌃ is released, and must not outlive a lost window focus
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Control" && useUI.getState().switcher) dispatch("tab.switcherCommit");
+    };
+    const onBlur = () => {
+      if (useUI.getState().switcher) dispatch("tab.switcherCancel");
+    };
     window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
+    window.addEventListener("keyup", onKeyUp, { capture: true });
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKey, { capture: true });
+      window.removeEventListener("keyup", onKeyUp, { capture: true });
+      window.removeEventListener("blur", onBlur);
+    };
   }, []);
 }

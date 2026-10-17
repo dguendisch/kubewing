@@ -18,6 +18,8 @@
 }
 
 html, body, #root { height: 100%; margin: 0; }
+/* dark UI: without this WebKit draws light-scheme scrollbars (dark thumb on our dark bg) */
+:root { color-scheme: dark; }
 body {
   background: var(--color-bg);
   color: var(--color-fg);
@@ -28,3 +30,13 @@ body {
   overflow: hidden;
 }
 input { user-select: text; }
+
+/* Scrollbars (grid, detail, completion list): always visible, themed. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: var(--color-bg); }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-fg-muted) 55%, transparent);
+  border: 2px solid var(--color-bg);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-fg-muted); }

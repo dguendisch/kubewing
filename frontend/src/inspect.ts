@@ -14,7 +14,9 @@ export function inspect() {
     tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused })),
     focus: s.focus,
     focusedPane: tab.focused,
-    overlays: s.overlay ? [s.overlay.kind] : [],
+    overlays: [...(s.overlay ? [s.overlay.kind] : []), ...(s.switcher ? ["switcher"] : [])],
+    mru: s.mru,
+    switcher: s.switcher,
     overlay: s.overlay,
     panes: Object.fromEntries(
       Object.values(s.panes).map((p) => {

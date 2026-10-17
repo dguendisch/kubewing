@@ -7,6 +7,7 @@ import * as S from "./store/state";
  * accelerators and UI buttons all end up here.
  */
 export function dispatch(cmd: CommandId) {
+  if (cmd.startsWith("tab.goto")) return setUI((x) => S.gotoTab(x, Number(cmd.slice(8))));
   const s = useUI.getState();
   const pane = S.focusedPane(s);
   const total = pane.serverId ? paneData.get(pane.serverId).total : 0;
@@ -22,6 +23,14 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.cyclePane(x, 1));
     case "pane.focusPrev":
       return setUI((x) => S.cyclePane(x, -1));
+    case "pane.focusLeft":
+      return setUI((x) => S.focusDirection(x, "left"));
+    case "pane.focusRight":
+      return setUI((x) => S.focusDirection(x, "right"));
+    case "pane.focusUp":
+      return setUI((x) => S.focusDirection(x, "up"));
+    case "pane.focusDown":
+      return setUI((x) => S.focusDirection(x, "down"));
     case "tab.new":
       return setUI(S.newTab);
     case "tab.close":
@@ -30,6 +39,14 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.cycleTab(x, 1));
     case "tab.prev":
       return setUI((x) => S.cycleTab(x, -1));
+    case "tab.mruNext":
+      return setUI((x) => S.switcherStep(x, 1));
+    case "tab.mruPrev":
+      return setUI((x) => S.switcherStep(x, -1));
+    case "tab.switcherCommit":
+      return setUI(S.switcherCommit);
+    case "tab.switcherCancel":
+      return setUI(S.switcherCancel);
     case "filter.focus":
       return setUI((x) => ({ ...x, focus: "filter", overlay: undefined }));
     case "filter.blur":

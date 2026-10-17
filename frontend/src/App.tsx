@@ -1,6 +1,8 @@
 import { Detail } from "./components/Detail";
 import { LayoutView } from "./components/Layout";
 import { OpenSource } from "./components/OpenSource";
+import { TabSwitcher } from "./components/TabSwitcher";
+import { tabTitle } from "./components/tabTitle";
 import { useKeys } from "./keys/useKeys";
 import { setUI, useUI } from "./store/store";
 import * as S from "./store/state";
@@ -16,15 +18,22 @@ export function App() {
       <nav role="tablist" className="flex h-7 shrink-0 items-end gap-px bg-bg pl-20" style={{ ["--wails-draggable" as string]: "drag" }}>
         {tabs.map((t, i) => {
           const p = panes[t.focused];
+          const n = S.tabShortcut(i, tabs.length);
           return (
             <button
               key={t.id}
               role="tab"
               aria-selected={i === active}
+              aria-keyshortcuts={n ? `Meta+${n}` : undefined}
               onClick={() => setUI((s) => ({ ...s, activeTab: i }))}
-              className={`px-3 py-1 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"}`}
+              className={`flex items-baseline gap-2 px-3 py-1 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"}`}
             >
-              {p ? `${p.spec.resource}${p.spec.namespace ? ` · ${p.spec.namespace}` : ""}` : "…"}
+              {tabTitle(p)}
+              {n && (
+                <span aria-hidden className="text-[11px] text-fg-muted">
+                  ⌘{n}
+                </span>
+              )}
             </button>
           );
         })}
@@ -37,6 +46,7 @@ export function App() {
       </main>
       <Detail />
       <OpenSource />
+      <TabSwitcher />
     </div>
   );
 }

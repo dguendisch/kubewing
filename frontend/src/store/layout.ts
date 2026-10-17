@@ -39,3 +39,56 @@ export function valid(l: Layout): boolean {
   const ok = (n: Layout): boolean => n.type === "pane" || (n.children.length >= 2 && n.children.every(ok));
   return ok(l);
 }
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Normalized pane rectangles (unit square), matching the equal-share flex rendering. */
+export function rects(l: Layout, r: Rect = { x: 0, y: 0, w: 1, h: 1 }): Map<string, Rect> {
+  if (l.type === "pane") return new Map([[l.id, r]]);
+  const out = new Map<string, Rect>();
+  const n = l.children.length;
+  l.children.forEach((c, i) => {
+    const sub =
+      l.dir === "row"
+        ? { x: r.x + (r.w * i) / n, y: r.y, w: r.w / n, h: r.h }
+        : { x: r.x, y: r.y + (r.h * i) / n, w: r.w, h: r.h / n };
+    for (const [id, rr] of rects(c, sub)) out.set(id, rr);
+  });
+  return out;
+}
+
+export type Direction = "left" | "right" | "up" | "down";
+
+const EPS = 1e-9;
+
+/**
+ * The pane next to `from` in a direction (iTerm ⌘⌥arrows): it must lie beyond
+ * the edge and overlap on the other axis; most overlap wins, then the nearest.
+ * Undefined at the edge (no wrap-around).
+ */
+export function neighbor(l: Layout, from: string, dir: Direction): string | undefined {
+  const all = rects(l);
+  const a = all.get(from);
+  if (!a) return undefined;
+  const horizontal = dir === "left" || dir === "right";
+  let best: { id: string; overlap: number; dist: number } | undefined;
+  for (const [id, b] of all) {
+    if (id === from) continue;
+    const dist =
+      dir === "left" ? a.x - (b.x + b.w) : dir === "right" ? b.x - (a.x + a.w) : dir === "up" ? a.y - (b.y + b.h) : b.y - (a.y + a.h);
+    if (dist < -EPS) continue; // not beyond that edge
+    const overlap = horizontal
+      ? Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      : Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    if (overlap <= EPS) continue;
+    if (!best || dist < best.dist - EPS || (Math.abs(dist - best.dist) <= EPS && overlap > best.overlap + EPS)) {
+      best = { id, overlap, dist };
+    }
+  }
+  return best?.id;
+}

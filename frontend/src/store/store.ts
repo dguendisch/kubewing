@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import type { Transport } from "../transport/types";
 import { applyFrame, emptyPane, type PaneData } from "../grid/rowcache";
-import { initialState, orphanedServerPanes, type UIState } from "./state";
+import { initialState, orphanedServerPanes, touchTab, type UIState } from "./state";
 
 /**
  * UI state (layout, focus, overlays) lives in a React-subscribed store.
@@ -10,7 +10,8 @@ import { initialState, orphanedServerPanes, type UIState } from "./state";
  */
 export const useUI = create<UIState>(() => initialState());
 
-export const setUI = (f: (s: UIState) => UIState) => useUI.setState((s) => f(s), true);
+/** All UI updates go through here; touchTab keeps the MRU tab order in sync. */
+export const setUI = (f: (s: UIState) => UIState) => useUI.setState((s) => touchTab(f(s)), true);
 
 type Listener = (d: PaneData) => void;
 

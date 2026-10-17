@@ -14,7 +14,7 @@ import {
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { bridge, paneData } from "../store/store";
-import { layout, type ColorToken } from "./cells";
+import { layout, withAlpha, type ColorToken } from "./cells";
 import { rowAt, type PaneData } from "./rowcache";
 
 /** Reads a theme token (CSS variable) so the canvas uses the same palette as the DOM. */
@@ -36,7 +36,7 @@ function gridTheme(): Partial<Theme> {
     borderColor: token("border"),
     horizontalBorderColor: "transparent",
     accentColor: token("accent"),
-    accentLight: `color-mix(in srgb, ${token("accent")} 18%, transparent)`,
+    accentLight: withAlpha(token("accent"), 0.18), // not color-mix(): Glide can't blend it, see withAlpha
     fontFamily: getComputedStyle(document.body).fontFamily,
     baseFontStyle: "12px",
     headerFontStyle: "600 11px",

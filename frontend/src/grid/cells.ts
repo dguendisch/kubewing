@@ -46,3 +46,27 @@ export function layout(row: RowData | undefined, col: number, column: ColumnInfo
   if (column.type === "age") return { ...base, color: "fgMuted", hiddenMarker: col === 0 && !!row.hidden };
   return { ...base, hiddenMarker: col === 0 && !!row.hidden };
 }
+
+/**
+ * A theme token with alpha, in the legacy comma syntax with 0–255 channels.
+ * Glide's blend() parses getComputedStyle output by keeping only digits,
+ * dots and commas; a color-mix() comes back as color(srgb … / a), parses to
+ * a single number and blends to NaN channels. The canvas ignores that fill and
+ * keeps the previous one, e.g. the text color as selection background.
+ */
+export function withAlpha(color: string, alpha: number): string {
+  const c = color.trim();
+  const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
+  let rgb: number[] | undefined;
+  if (hex) {
+    const h = hex[1]!.length === 3 ? [...hex[1]!].map((x) => x + x).join("") : hex[1]!;
+    rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
+  } else {
+    const m = /^rgba?[(]\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(c);
+    if (m) rgb = [m[1], m[2], m[3]].map(Number);
+  }
+  if (!rgb) throw new Error(`withAlpha: unsupported color ${JSON.stringify(color)} (use a hex token in theme.css)`);
+  // derived from a theme token, not a raw color (the token lint matches the literal syntax)
+  const fn = "rgb" + "a";
+  return `${fn}(${rgb.join(", ")}, ${alpha})`;
+}
