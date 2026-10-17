@@ -12,7 +12,7 @@ export npm_config_cache := $(ROOT)/.cache/npm
 export PLAYWRIGHT_BROWSERS_PATH := $(ROOT)/.cache/ms-playwright
 NPM_BIN := frontend/node_modules/.bin
 
-.PHONY: deps frontend build run headless test test-go test-fe e2e golden-update lint
+.PHONY: deps frontend build app icon run headless test test-go test-fe e2e golden-update lint
 
 deps:
 	go mod download all
@@ -25,8 +25,17 @@ frontend:
 build: frontend
 	go build -o bin/kubewing .
 
-run: build
-	./bin/kubewing
+# macOS shows a bare binary as a generic "exec" in the Dock; a minimal bundle gives it the real icon.
+# Exec'ing the bundled binary (not `open`) keeps stdout/stderr and flags in this terminal.
+APP := bin/kubewing.app
+app: build
+	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
+	cp build/darwin/Info.plist $(APP)/Contents/
+	cp build/darwin/icons.icns $(APP)/Contents/Resources/
+	cp bin/kubewing $(APP)/Contents/MacOS/
+
+run: app
+	./$(APP)/Contents/MacOS/kubewing
 
 # Headless backend for browser dev / E2E: replays testdata/tapes (or uses kubeconfig without TAPES=).
 TAPES ?= testdata/tapes
@@ -55,3 +64,16 @@ golden-update:
 lint:
 	@test -z "$$(gofmt -l main.go internal)" || (gofmt -l main.go internal; exit 1)
 	cd frontend && node scripts/lint-tokens.mjs
+
+# build/appicon.svg is the source; the PNG and .icns are committed so builds need no rsvg-convert.
+# iconutil needs the system temp dir, so this cannot run inside the macOS sandbox.
+icon:
+	rsvg-convert -w 1024 -h 1024 build/appicon.svg -o build/appicon.png
+	cp build/appicon.svg frontend/public/favicon.svg
+	rm -rf bin/icons.iconset && mkdir -p bin/icons.iconset
+	for s in 16 32 128 256 512; do \
+	  rsvg-convert -w $$s -h $$s build/appicon.svg -o bin/icons.iconset/icon_$${s}x$${s}.png; \
+	  rsvg-convert -w $$((s*2)) -h $$((s*2)) build/appicon.svg -o bin/icons.iconset/icon_$${s}x$${s}@2x.png; \
+	done
+	iconutil -c icns bin/icons.iconset -o build/darwin/icons.icns
+	rm -rf bin/icons.iconset

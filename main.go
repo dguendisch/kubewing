@@ -21,6 +21,11 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Dock icon at runtime, so the plain `make build` binary shows it too (no .app bundle needed).
+//
+//go:embed build/appicon.png
+var appIcon []byte
+
 type wailsEmitter struct{ app *application.App }
 
 func (e *wailsEmitter) Emit(name string, data any) { e.app.Event.Emit(name, data) }
@@ -59,6 +64,7 @@ func main() {
 	a := application.New(application.Options{
 		Name:        "kubewing",
 		Description: "keyboard-driven Kubernetes UI",
+		Icon:        appIcon,
 		Services:    []application.Service{application.NewService(app.New(svc))},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
@@ -73,7 +79,7 @@ func main() {
 			// no toolbar: keeps the traffic lights inside the 28px tab strip (Inset adds one and makes the bar taller)
 			TitleBar: application.MacTitleBarHidden,
 		},
-		BackgroundColour: application.NewRGB(14, 16, 22),
+		BackgroundColour: application.NewRGB(30, 30, 30), // theme.css --color-bg
 		URL:              "/",
 	})
 	if err := a.Run(); err != nil {

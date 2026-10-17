@@ -23,7 +23,7 @@ Toolchain caches live in `.cache/` inside the repo (no global writes).
 
 ```sh
 make deps        # Go modules, npm packages, Playwright Chromium
-make run         # build and start the app
+make run         # build and start the app (as bin/kubewing.app, for the Dock icon)
 make test        # lint + Go (race) + frontend unit tests
 make e2e         # Playwright (Chromium) against the headless backend replaying testdata/tapes
 make headless    # bridge over WebSocket on :7777 replaying tapes + testdata/catalog.yaml (TAPES= for real kubeconfig)
