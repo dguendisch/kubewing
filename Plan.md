@@ -72,7 +72,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 1. **⌘O completion** — fuzzy completion for resource and namespace in the open dialog, built as a reusable completion provider (pure ranker + candidates) for the P1 command palette. cmdk not used here: it forces Enter onto the highlighted item, which breaks free-text submit; revisit for the palette itself.
 1. *(later)* object-name completion via metadata-only lists — first real consumer of a generic background-fetch layer.
 
-### P1 — "Shell parity" (v1.0)
+### P1 — "Shell parity" (v0.5)
 
 1. **Filtering & aggregating** — `groupBy`/`aggregate` pipeline stages and full stage support in UI: group-by, count, histogram; `cpu-gauge` column type (gradient badge).
 1. **Command palette** — tab-complete operations, targets, aliases, pipeline stages.
@@ -90,20 +90,22 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### P2— "Polishing"
 
-### P3 — "Operator power" (v2.0)
+### P3 — "Operator power" (v1.0)
 
-1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (also the context menu)
+1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
 1. **Ops pod on a node** - in two different flavors, without host mounting and with, configurable image
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**
-1. **k debug** - on arbitrary pods
-1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
-1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
-1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
-1. **Scratch apply** from files.
+1. **Session recording + saving** - allow to save a session (not every watch diff, but everything else displayed, for later forensics when one doesn't recall what was actually did on a cluster)
 1. **Persistent history** — on-disk history buffer (hours, survives restarts); requires secret encryption/exclusion first.
+1. **k debug** - on arbitrary pods with configurable image
+1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
+1. **Scratch apply** from files.
 1. **Multi-cluster operations** — replaces nested `for ns … for shoot …` loops. Builds on Gardener shoot-kubeconfig access + safety model (dry-run across targets first, then confirm).
 
-### P4 - "Nice to have" (v3.0)
+### P4 - "Nice to have" (v2.0)
+1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
+1. **Focus follows mouse**
+1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **Keybinding & theme UI** — editors on top of the P0 config files.
 
 ## Decisions

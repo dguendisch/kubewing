@@ -49,7 +49,10 @@ export function Pane({ id }: { id: string }) {
             <Terminal
               session={pane.term.session}
               focused={termFocused}
-              onInput={(d) => void bridge().sessionInput(pane.term!.session, b64encode(d)).catch(() => {})}
+              onInput={(d) => {
+                if (!pane.term!.typed) setUI((s) => S.termTyped(s, id));
+                void bridge().sessionInput(pane.term!.session, b64encode(d)).catch(() => {});
+              }}
               onResize={(c, r) => void bridge().sessionResize(pane.term!.session, c, r).catch(() => {})}
               onFocus={() => setUI((s) => S.focusPane(s, id))}
             />
@@ -72,9 +75,9 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
         {term.pod}/{term.container}
       </span>
       {term.exited !== undefined ? (
-        // only a session that never ran gets here: one that exited took its pane with it
+        // only a session that failed on its own gets here: one the user ended took its pane with it
         <span aria-label="session ended" className="ml-auto text-deleted">
-          {term.exited} · ⌘W closes
+          {/^\d+$/.test(term.exited) ? `exited ${term.exited}` : term.exited} · ⌃D closes
         </span>
       ) : null}
     </header>

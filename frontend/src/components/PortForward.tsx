@@ -4,7 +4,7 @@ import { bridge, setUI, usePortForwards, useUI } from "../store/store";
 import * as S from "../store/state";
 import { containerPorts, parsePorts } from "./ports";
 
-/** ⇧F: forward ports of the selected pod to 127.0.0.1 (pre-filled from its container ports). */
+/** f: forward ports of the selected pod to 127.0.0.1 (pre-filled from its container ports). */
 export function PortForwardDialog() {
   const overlay = useUI((s) => s.overlay);
   const serverId = useUI((s) => (s.overlay ? s.panes[s.overlay.pane]?.serverId : undefined));
@@ -85,7 +85,7 @@ export function PortForwardList() {
     <div role="dialog" aria-label="port-forwards" className="absolute top-16 left-1/2 z-30 flex w-[36rem] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-2xl">
       <div className="border-b border-border px-3 py-1 text-fg">port-forwards</div>
       {list.length === 0 ? (
-        <div className="px-3 py-2 text-fg-muted">none · ⇧F on a pod starts one</div>
+        <div className="px-3 py-2 text-fg-muted">none · f on a pod starts one</div>
       ) : (
         <ul role="listbox" aria-label="active port-forwards">
           {list.map((f, i) => (

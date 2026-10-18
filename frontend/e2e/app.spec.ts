@@ -720,7 +720,7 @@ test.describe("object actions", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("s opens a terminal pane below; keys go to the shell; ⌘W closes it and the session", async ({ page }) => {
+  test("s opens a terminal pane below; keys go to the shell; ⌘W is still the tab's", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
     await page.keyboard.press("s");
@@ -736,10 +736,16 @@ test.describe("object actions", () => {
     await expect.poll(() => termText(page)).toContain("echo j/k\necho j/k");
     expect((await inspect(page)).overlays).toEqual([]);
     expect((await focused(page)).selected).toBe(0); // the table selection didn't move
-    // ⌘ chords still reach the app
+    // ⌘ chords still reach the app: ⌘W closes the tab, as in a table pane (two panes, so it asks)
     await page.keyboard.press("ControlOrMeta+W");
-    await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
-    expect((await inspect(page)).focus).toBe("table");
+    expect((await inspect(page)).overlays).toEqual(["closeTab"]);
+    await page.keyboard.press("Escape");
+    expect((await inspect(page)).focus).toBe("terminal");
+    await page.keyboard.press("ControlOrMeta+W");
+    await page.keyboard.press("Enter");
+    const after = await inspect(page);
+    expect(after.tabs).toHaveLength(1);
+    expect(Object.values(after.panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
   });
 
   test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
@@ -753,6 +759,21 @@ test.describe("object actions", () => {
     const s = await inspect(page);
     expect(s.focus).toBe("table");
     expect(Object.keys(s.panes)).toHaveLength(1);
+  });
+
+  test("⌃⇧D closes the shell pane even when the shell ignores ⌃D", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("s");
+    await expect.poll(() => termText(page)).toContain("$");
+    await page.keyboard.type("x"); // the tape shell ignores ⌃D on a non-empty line, like a busy one
+    await page.keyboard.press("Control+D");
+    expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(true);
+    await page.keyboard.press("Control+Shift+D");
+    await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+    const s = await inspect(page);
+    expect(s.focus).toBe("table");
+    expect(s.tabs).toHaveLength(1);
   });
 
   test("exit in the shell closes the pane too", async ({ page }) => {
@@ -974,7 +995,8 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await page.keyboard.press("ControlOrMeta+Enter");
     await menu(page).getByRole("menuitem", { name: /exec shell/ }).click();
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
-    await page.keyboard.press("ControlOrMeta+W");
+    await expect.poll(() => page.locator("[data-terminal] .xterm-rows").innerText()).toContain("$");
+    await page.keyboard.press("Control+D"); // ends the shell, the pane goes with it
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     await page.keyboard.press("ControlOrMeta+Enter");
     await menu(page).getByRole("menuitem", { name: /delete/ }).click();

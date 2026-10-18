@@ -63,7 +63,11 @@ describe("resolve", () => {
     expect(resolve("Ctrl+D", "filter")).toBeUndefined(); // forward-delete in inputs
     expect(resolve("Ctrl+D", "forwards")).toBe("portforward.stop"); // the list keeps ⌃D for itself
     expect(resolve("Meta+W", "table")).toBe("tab.close");
-    expect(resolve("Meta+W", "terminal")).toBe("pane.close"); // ⌃D belongs to the shell there
+    expect(resolve("Meta+W", "terminal")).toBe("tab.close"); // the same in every pane kind
+    expect(resolve("Ctrl+D", "terminal")).toBeUndefined(); // the shell's EOF
+    expect(resolve("Ctrl+D", "ended")).toBe("pane.close"); // …until the shell has ended
+    expect(resolve("Meta+W", "ended")).toBe("tab.close");
+    expect(resolve("J", "ended")).toBeUndefined(); // no table to move in
     expect(resolve("Meta+ArrowRight", "table")).toBe("tab.next");
     expect(resolve("Meta+ArrowLeft", "table")).toBe("tab.prev");
     expect(resolve("Meta+ArrowRight", "filter")).toBeUndefined(); // start/end of line in inputs
@@ -85,13 +89,16 @@ describe("resolve", () => {
 });
 
 describe("terminal focus", () => {
-  it("only ⌘ chords and ⌃⇥ reach the app; everything else goes to the shell", () => {
+  it("only ⌘ chords, ⌃⇥ and ⌃⇧D reach the app; everything else goes to the shell", () => {
     expect(resolve("Meta+D", "terminal")).toBe("pane.splitDown");
-    expect(resolve("Meta+W", "terminal")).toBe("pane.close");
+    expect(resolve("Meta+W", "terminal")).toBe("tab.close");
     expect(resolve("Meta+ArrowRight", "terminal")).toBe("tab.next");
     expect(resolve("Alt+Meta+ArrowLeft", "terminal")).toBe("pane.focusLeft");
     expect(resolve("Ctrl+Tab", "terminal")).toBe("tab.mruNext");
     expect(resolve("Ctrl+Shift+Tab", "terminal")).toBe("tab.mruPrev");
+    expect(resolve("Ctrl+Shift+D", "terminal")).toBe("pane.close"); // a shell that ignores ⌃D
+    expect(resolve("Ctrl+Shift+D", "table")).toBe("pane.close");
+    expect(resolve("Ctrl+Shift+D", "filter")).toBeUndefined();
     for (const k of ["Ctrl+D", "Ctrl+C", "Escape", "J", "/", "Enter", "Alt+ArrowUp", "Ctrl+Escape"]) expect(resolve(k, "terminal")).toBeUndefined();
   });
   it("user bindings can't steal shell keys in a terminal either", () => {

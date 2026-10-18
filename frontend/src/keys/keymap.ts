@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "forwards", "menu", "help"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "forwards", "menu", "help"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -81,9 +81,10 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+D", command: "pane.splitDown" },
   { key: "Meta+Shift+D", command: "pane.splitRight" },
   // not global: ⌃D is forward-delete in text fields, and the shell's EOF in a terminal
-  { key: "Ctrl+D", command: "pane.close", when: ["table", "detail", "menu", "help"] },
-  // a terminal keeps ⌃D for the shell, so ⌘W closes the pane there instead of the tab
-  { key: "Meta+W", command: "pane.close", when: ["terminal"] },
+  // (once the shell has ended, "ended", there is no shell left to want it)
+  { key: "Ctrl+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended"] },
+  // the same in every pane kind, and the escape hatch from a shell that ignores ⌃D
+  { key: "Ctrl+Shift+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended", "terminal"] },
   { key: "Meta+]", command: "pane.focusNext" },
   { key: "Meta+[", command: "pane.focusPrev" },
   { key: "Alt+Meta+ArrowLeft", command: "pane.focusLeft" },
@@ -94,8 +95,8 @@ export const defaultBindings: Binding[] = [
   // more than one pane in the tab: the dispatcher asks first
   { key: "Meta+W", command: "tab.close" },
   // not global: ⌘←/⌘→ jump to the start/end of the line in text fields
-  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "forwards", "menu", "help"] },
-  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "forwards", "menu", "help"] },
+  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help"] },
+  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help"] },
   // ⌘1–⌘8 go to that tab, ⌘9 to the last one (browser/iTerm convention)
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Binding => ({ key: `Meta+${n}`, command: `tab.goto${n}` })),
   // MRU switching; releasing Ctrl commits (handled on keyup in useKeys)
@@ -153,7 +154,7 @@ export const defaultBindings: Binding[] = [
   { key: "ArrowUp", command: "row.up", when: ["forwards"] },
   { key: "Escape", command: "confirm.cancel", when: ["confirm"] },
   // not global: in the filter bar and the dialogs "?" is text being typed
-  { key: "?", command: "help.toggle", when: ["table", "detail", "forwards", "menu", "help"] },
+  { key: "?", command: "help.toggle", when: ["table", "detail", "ended", "forwards", "menu", "help"] },
   { key: "Escape", command: "detail.close", when: ["help"] },
 ];
 
@@ -205,11 +206,12 @@ export function chord(e: { key: string; code?: string; metaKey?: boolean; ctrlKe
 
 /**
  * In a terminal every key belongs to the shell (⌃C, ⌃D, Esc, arrows …);
- * only ⌘ chords and ⌃⇥ MRU switching reach the app.
+ * only ⌘ chords, ⌃⇥ MRU switching and ⌃⇧D (close a stuck shell's pane;
+ * terminals send it as plain ⌃D anyway) reach the app.
  */
 export function terminalReserved(key: string): boolean {
   const mods = key.split("+").slice(0, -1);
-  return !mods.includes("Meta") && !/^Ctrl(\+Shift)?\+Tab$/.test(key);
+  return !mods.includes("Meta") && !/^Ctrl(\+Shift)?\+Tab$/.test(key) && key !== "Ctrl+Shift+D";
 }
 
 /** Resolves a chord in a focus context; context-specific bindings win over global ones. */

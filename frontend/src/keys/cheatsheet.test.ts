@@ -24,9 +24,10 @@ describe("cheat sheet", () => {
 
   it("lists both keys of a command bound in two contexts", () => {
     const e = flat();
-    expect(e["close pane"]!.keys).toEqual(["⌃D", "⌘W"]);
-    expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "terminal"]);
     expect(e["describe"]!.keys).toEqual(["d", "⇧D"]);
+    expect(e["describe"]!.when).toEqual(["table", "detail"]);
+    expect(e["close pane"]!.keys).toEqual(["⌃D", "⌃⇧D"]);
+    expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "ended", "terminal"]); // terminal: ⌃⇧D only
   });
 
   it("collapses the nine tab jumps into a range", () => {
@@ -47,7 +48,7 @@ describe("cheat sheet", () => {
   it("follows keybindings.yaml and drops what the user unbound", () => {
     const { bindings } = mergeBindings(defaultBindings, [
       { key: "ctrl+k", command: "row.up", when: ["table"] },
-      { key: "?", command: "none", when: ["table", "detail", "forwards", "menu", "help"] },
+      { key: "?", command: "none", when: ["table", "detail", "ended", "forwards", "menu", "help"] },
     ]);
     const e = flat(cheatsheet(bindings));
     expect(e["next / previous row"]!.keys).toContain("⌃K");

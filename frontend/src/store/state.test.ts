@@ -289,9 +289,20 @@ describe("terminal panes", () => {
     expect(ids(b)).toEqual(["v1"]);
     expect(b.focus).toBe("table");
     expect(S.orphanedSessions(a, b)).toEqual(["s1"]);
-    // ⌃D after a failed command still ends the shell: any status closes the pane
-    expect(ids(apply(a, (x) => S.sessionEnded(x, "s1", "2")))).toEqual(["v1"]);
+    // ⌃D after a failed command still ends the shell: once typed into, any status closes the pane
+    const typed = apply(a, (x) => S.termTyped(x, "v2"));
+    expect(ids(apply(typed, (x) => S.sessionEnded(x, "s1", "2")))).toEqual(["v1"]);
     invariants(b);
+  });
+
+  it("a shell that fails before the first keystroke keeps its pane and output", () => {
+    const a = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    const b = apply(a, (x) => S.sessionEnded(x, "s1", "127"));
+    expect(ids(b)).toEqual(["v1", "v2"]);
+    expect(b.panes.v2!.term?.exited).toBe("127");
+    expect(S.orphanedSessions(a, b)).toEqual([]);
+    expect(S.termTyped(S.termTyped(a, "v2"), "v2").panes.v2!.term?.typed).toBe(true);
+    expect(S.termTyped(a, "v1")).toBe(a); // not a terminal
   });
 
   it("a session that never ran keeps its pane, with the reason", () => {
@@ -301,6 +312,10 @@ describe("terminal panes", () => {
     expect(b.panes.v2!.term?.exited).toBe("container app not found");
     expect(S.orphanedSessions(a, b)).toEqual([]);
     expect(S.sessionEnded(b, "gone", "0")).toBe(b); // unknown session
+    // the shell is gone, so its keys are the app's again: ⌃D closes the pane
+    expect(b.focus).toBe("ended");
+    expect(apply(apply(b, (x) => S.cyclePane(x, -1)), (x) => S.cyclePane(x, 1)).focus).toBe("ended");
+    invariants(b);
   });
 
   it("a session ending in a background tab leaves the active tab alone", () => {

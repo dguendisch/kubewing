@@ -35,6 +35,8 @@ export interface Term {
   context: string;
   /** Exit code or error once the session ended; the pane stays until closed. */
   exited?: string;
+  /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
+  typed?: boolean;
 }
 
 export interface Tab {
@@ -113,12 +115,14 @@ export function initialState(context = ""): UIState {
  */
 /**
  * The pane area's focus context follows the focused pane's kind: commands
- * only say "back to the pane" (table); a terminal pane makes it terminal.
+ * only say "back to the pane" (table); a terminal pane makes it terminal, or
+ * ended once its shell is gone (keys are the app's again, e.g. ⌃D closes).
  * Applied after every state update, like touchTab.
  */
 export function paneFocus(s: UIState): UIState {
-  if (s.focus !== "table" && s.focus !== "terminal") return s;
-  const want = focusedPane(s)?.term ? "terminal" : "table";
+  if (s.focus !== "table" && s.focus !== "terminal" && s.focus !== "ended") return s;
+  const term = focusedPane(s)?.term;
+  const want = !term ? "table" : term.exited === undefined ? "terminal" : "ended";
   return s.focus === want ? s : { ...s, focus: want };
 }
 
@@ -144,15 +148,23 @@ export function orphanedSessions(prev: UIState, next: UIState): string[] {
 }
 
 /**
- * An exec session ended. A shell that ran and exited (⌃D, `exit`, any status)
- * takes its pane with it; a session that failed to run keeps the pane, so the
- * reason stays on screen. Go sends an exit status, else an error message.
+ * An exec session ended. A shell the user ended (⌃D, `exit`, any status) takes
+ * its pane with it. One that failed on its own keeps the pane, so the reason
+ * stays on screen: an error message (it never ran), or a non-zero exit before
+ * the first keystroke (e.g. 127, or a pod printing why and exiting).
+ * Go sends an exit status, else an error message.
  */
 export function sessionEnded(s: UIState, session: string, exit: string): UIState {
   const pane = Object.values(s.panes).find((p) => p.term?.session === session);
   if (!pane) return s;
-  if (/^\d+$/.test(exit)) return closePane(s, pane.id);
+  if (exit === "0" || (/^\d+$/.test(exit) && pane.term!.typed)) return closePane(s, pane.id);
   return updatePane(s, pane.id, (p) => ({ ...p, term: { ...p.term!, exited: exit } }));
+}
+
+/** The user typed into a terminal pane (see Term.typed). */
+export function termTyped(s: UIState, paneId: string): UIState {
+  const t = s.panes[paneId]?.term;
+  return !t || t.typed ? s : updatePane(s, paneId, (p) => ({ ...p, term: { ...t, typed: true } }));
 }
 
 export function touchTab(s: UIState): UIState {
