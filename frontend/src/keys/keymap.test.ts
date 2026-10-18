@@ -59,8 +59,21 @@ describe("resolve", () => {
     expect(resolve("Ctrl+Tab", "switcher")).toBe("tab.mruNext"); // keeps stepping while ⌃ is held
     expect(resolve("Meta+F", "table")).toBe("filter.focus");
     expect(resolve("Meta+F", "detail")).toBeUndefined(); // Monaco's find
-    expect(resolve("Ctrl+D", "table")).toBe("object.delete");
+    expect(resolve("Ctrl+D", "table")).toBe("pane.close");
     expect(resolve("Ctrl+D", "filter")).toBeUndefined(); // forward-delete in inputs
+    expect(resolve("Ctrl+D", "forwards")).toBe("portforward.stop"); // the list keeps ⌃D for itself
+    expect(resolve("Meta+W", "table")).toBe("tab.close");
+    expect(resolve("Meta+W", "terminal")).toBe("pane.close"); // ⌃D belongs to the shell there
+    expect(resolve("Meta+ArrowRight", "table")).toBe("tab.next");
+    expect(resolve("Meta+ArrowLeft", "table")).toBe("tab.prev");
+    expect(resolve("Meta+ArrowRight", "filter")).toBeUndefined(); // start/end of line in inputs
+    expect(resolve("D", "table")).toBe("object.describe");
+    expect(resolve("D", "detail")).toBe("detail.toggleDiff"); // describe keeps ⇧D in the detail view
+    expect(resolve("Shift+D", "detail")).toBe("object.describe");
+    expect(resolve("F", "table")).toBe("object.portForward");
+    expect(resolve("Meta+Backspace", "table")).toBe("object.delete");
+    expect(resolve("Delete", "table")).toBe("object.delete");
+    expect(resolve("Meta+Backspace", "filter")).toBeUndefined(); // deleting a word in the filter
     expect(resolve("Escape", "confirm")).toBe("confirm.cancel");
     expect(resolve("Enter", "confirm")).toBeUndefined(); // submits the confirm form (strict: only once typed)
     expect(resolve("?", "table")).toBe("help.toggle");
@@ -75,6 +88,7 @@ describe("terminal focus", () => {
   it("only ⌘ chords and ⌃⇥ reach the app; everything else goes to the shell", () => {
     expect(resolve("Meta+D", "terminal")).toBe("pane.splitDown");
     expect(resolve("Meta+W", "terminal")).toBe("pane.close");
+    expect(resolve("Meta+ArrowRight", "terminal")).toBe("tab.next");
     expect(resolve("Alt+Meta+ArrowLeft", "terminal")).toBe("pane.focusLeft");
     expect(resolve("Ctrl+Tab", "terminal")).toBe("tab.mruNext");
     expect(resolve("Ctrl+Shift+Tab", "terminal")).toBe("tab.mruPrev");
@@ -105,6 +119,8 @@ describe("default keymap", () => {
     expect(prettyKey("Meta+Enter")).toBe("⌘⏎");
     expect(prettyKey("J")).toBe("j");
     expect(prettyKey("Shift+G")).toBe("⇧G");
+    expect(prettyKey("Meta+Backspace")).toBe("⌘⌫");
+    expect(prettyKey("Delete")).toBe("⌦");
     expect(prettyKey("?")).toBe("?");
   });
 });
@@ -115,6 +131,8 @@ describe("user keybindings", () => {
     expect(canonicalKey("Shift+Meta+D")).toBe("Meta+Shift+D");
     expect(canonicalKey("opt+up")).toBe("Alt+ArrowUp");
     expect(canonicalKey("ctrl+esc")).toBe("Ctrl+Escape");
+    expect(canonicalKey("cmd+backspace")).toBe("Meta+Backspace");
+    expect(canonicalKey("del")).toBe("Delete");
     expect(canonicalKey("j")).toBe("J");
     expect(canonicalKey("hyper+j")).toBeUndefined();
     expect(canonicalKey("cmd+")).toBeUndefined();

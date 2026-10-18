@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,7 +76,8 @@ func indent(s, pre string) string {
 }
 
 // Exec implements source.Actor: a tiny line-echo shell. "exit [n]" ends
-// the session with that code; "size" prints the last terminal size.
+// the session with that code, ⌃D at an empty prompt ends it like a real
+// shell; "size" prints the last terminal size.
 func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, _ []string, s source.ExecStreams) error {
 	var mu sync.Mutex
 	size := source.TerminalSize{}
@@ -110,6 +110,10 @@ func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, 
 					line = line[:len(line)-1]
 					fmt.Fprint(s.Stdout, "\b \b")
 				}
+			case 0x04: // ⌃D: EOF on an empty line, ignored otherwise
+				if len(line) == 0 {
+					return
+				}
 			default:
 				line = append(line, c)
 				_, _ = s.Stdout.Write([]byte{c}) // a TTY echoes
@@ -122,7 +126,7 @@ func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, 
 			return ctx.Err()
 		case l, ok := <-lines:
 			if !ok {
-				return io.EOF
+				return nil // stdin ended: the shell is done
 			}
 			f := strings.Fields(l)
 			switch {

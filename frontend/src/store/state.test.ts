@@ -282,4 +282,47 @@ describe("terminal panes", () => {
     expect(S.orphanedSessions(a, c)).toEqual([]);
     expect(S.orphanedSessions(c, apply(c, (x) => S.closeTab(x, 0)))).toEqual(["s1"]);
   });
+
+  it("a shell that exited closes its pane and releases the session", () => {
+    const a = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    const b = apply(a, (x) => S.sessionEnded(x, "s1", "0"));
+    expect(ids(b)).toEqual(["v1"]);
+    expect(b.focus).toBe("table");
+    expect(S.orphanedSessions(a, b)).toEqual(["s1"]);
+    // ⌃D after a failed command still ends the shell: any status closes the pane
+    expect(ids(apply(a, (x) => S.sessionEnded(x, "s1", "2")))).toEqual(["v1"]);
+    invariants(b);
+  });
+
+  it("a session that never ran keeps its pane, with the reason", () => {
+    const a = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    const b = apply(a, (x) => S.sessionEnded(x, "s1", "container app not found"));
+    expect(ids(b)).toEqual(["v1", "v2"]);
+    expect(b.panes.v2!.term?.exited).toBe("container app not found");
+    expect(S.orphanedSessions(a, b)).toEqual([]);
+    expect(S.sessionEnded(b, "gone", "0")).toBe(b); // unknown session
+  });
+
+  it("a session ending in a background tab leaves the active tab alone", () => {
+    let s = apply(S.initialState(), (x) => S.openTerminal(x, term("s1"))); // t1: v1 | v2(term)
+    s = apply(s, S.newTab); // t2 is active
+    s = apply(s, (x) => ({ ...x, focus: "filter" as const }));
+    const t2 = S.activeTab(s).id;
+    const after = apply(s, (x) => S.sessionEnded(x, "s1", "0"));
+    expect(S.activeTab(after).id).toBe(t2);
+    expect(after.focus).toBe("filter"); // the pane in use keeps focus
+    expect(after.tabs[0]!.layout).toEqual({ type: "pane", id: "v1" });
+    invariants(after);
+  });
+
+  it("the last pane of a background tab closes that tab, keeping the active one", () => {
+    let s = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    s = apply(s, (x) => S.closePane(x, "v1")); // t1 holds only the terminal now
+    s = apply(apply(s, S.newTab), S.newTab); // t1, t2, t3 (active)
+    const t3 = S.activeTab(s).id;
+    const after = apply(s, (x) => S.sessionEnded(x, "s1", "0"));
+    expect(after.tabs).toHaveLength(2);
+    expect(S.activeTab(after).id).toBe(t3);
+    invariants(after);
+  });
 });

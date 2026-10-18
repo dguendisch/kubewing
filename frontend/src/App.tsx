@@ -1,5 +1,5 @@
 import { ConfigErrors } from "./components/ConfigErrors";
-import { Confirm } from "./components/Confirm";
+import { Confirm, ConfirmCloseTab } from "./components/Confirm";
 import { ContextMenu } from "./components/ContextMenu";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
@@ -66,6 +66,7 @@ export function App() {
       <Detail />
       <OpenSource />
       <Confirm />
+      <ConfirmCloseTab />
       <PortForwardDialog />
       <PortForwardList />
       <ContextMenu />

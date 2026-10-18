@@ -15,10 +15,10 @@ describe("row actions menu", () => {
   it("a pod offers everything, with its table shortcuts", () => {
     const m = byCmd(menuFor(pod, undefined));
     expect(Object.values(m).filter((i) => i.disabled)).toEqual([]);
-    expect(m["object.describe"]!.shortcut).toBe("⇧D");
+    expect(m["object.describe"]!.shortcut).toBe("d");
     expect(m["object.exec"]!.shortcut).toBe("s");
-    expect(m["object.delete"]!.shortcut).toBe("⌃D");
-    expect(m["object.portForward"]!.shortcut).toBe("⇧F");
+    expect(m["object.delete"]!.shortcut).toBe("⌘⌫");
+    expect(m["object.portForward"]!.shortcut).toBe("f");
     expect(m["detail.open"]!.shortcut).toBe("⏎");
   });
 
@@ -45,7 +45,7 @@ describe("row actions menu", () => {
     const { bindings } = mergeBindings(defaultBindings, [
       { key: "x", command: "object.exec", when: ["table"] },
       { key: "s", command: "none", when: ["table"] },
-      { key: "Shift+D", command: "none", when: ["table", "detail"] },
+      { key: "d", command: "none", when: ["table"] },
     ]);
     const m = byCmd(menuFor(pod, undefined, bindings));
     expect(m["object.exec"]!.shortcut).toBe("x");

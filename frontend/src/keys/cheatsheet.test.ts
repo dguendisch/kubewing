@@ -19,6 +19,14 @@ describe("cheat sheet", () => {
     expect(e["next / previous pane"]!.keys).toEqual(["⌘]", "⌘["]);
     expect(e["first / last row"]!.keys).toEqual(["g", "⌥↑", "⇧G", "⌥↓"]);
     expect(e["this cheat sheet"]!.keys).toEqual(["?"]);
+    expect(e["delete…"]!.keys).toEqual(["⌘⌫", "⌦"]);
+  });
+
+  it("lists both keys of a command bound in two contexts", () => {
+    const e = flat();
+    expect(e["close pane"]!.keys).toEqual(["⌃D", "⌘W"]);
+    expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "terminal"]);
+    expect(e["describe"]!.keys).toEqual(["d", "⇧D"]);
   });
 
   it("collapses the nine tab jumps into a range", () => {

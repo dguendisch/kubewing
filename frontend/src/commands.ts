@@ -2,6 +2,7 @@ import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
 import type { ActionKind, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
+import { paneIds } from "./store/layout";
 import * as S from "./store/state";
 
 /**
@@ -35,8 +36,12 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.focusDirection(x, "down"));
     case "tab.new":
       return setUI(S.newTab);
-    case "tab.close":
-      return setUI((x) => S.closeTab(x));
+    case "tab.close": {
+      // a tab with splits is work: losing it to a stray ⌘W would be expensive
+      const tab = S.activeTab(s);
+      if (paneIds(tab.layout).length < 2) return setUI((x) => S.closeTab(x));
+      return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "closeTab", pane: pane.id, tabId: tab.id }));
+    }
     case "tab.next":
       return setUI((x) => S.cycleTab(x, 1));
     case "tab.prev":
@@ -135,6 +140,10 @@ export function dispatch(cmd: CommandId) {
     case "object.delete":
       return void prepareAction("delete");
     case "confirm.accept":
+      if (s.overlay?.kind === "closeTab") {
+        const i = s.tabs.findIndex((t) => t.id === s.overlay!.tabId);
+        return setUI((x) => (i < 0 ? S.closeOverlay(x) : S.closeTab(S.closeOverlay(x), i)));
+      }
       return void runConfirmed();
     case "confirm.cancel":
       return setUI(S.closeOverlay);

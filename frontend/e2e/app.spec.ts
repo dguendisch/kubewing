@@ -62,7 +62,7 @@ test("keyed diff: restart is a changed cell, recreate is remove + add", async ({
   ]);
 });
 
-test("cmd+shift+d / cmd+d split, cmd+w closes, focus stays valid", async ({ page }) => {
+test("cmd+shift+d / cmd+d split, ctrl+d closes, focus stays valid", async ({ page }) => {
   await openTape(page);
   // swapped vs. iTerm: ⌘⇧D side by side, ⌘D stacked
   await page.keyboard.press("ControlOrMeta+Shift+D");
@@ -75,10 +75,38 @@ test("cmd+shift+d / cmd+d split, cmd+w closes, focus stays valid", async ({ page
   expect(s.focusedPane).toBe("v3");
   // splits on the same source share data
   await expect.poll(async () => (await inspect(page)).panes.v3?.total).toBe(3);
-  await page.keyboard.press("ControlOrMeta+W");
+  await page.keyboard.press("Control+D");
   s = await inspect(page);
   expect(s.focusedPane).toBe("v2");
   expect(Object.keys(s.panes).sort()).toEqual(["v1", "v2"]);
+});
+
+test("cmd+w closes a single-pane tab, but asks when the tab has splits", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("ControlOrMeta+T"); // second tab, one pane
+  expect((await inspect(page)).tabs).toHaveLength(2);
+  await page.keyboard.press("ControlOrMeta+W");
+  let s = await inspect(page);
+  expect(s.tabs).toHaveLength(1);
+  expect(s.overlays).toEqual([]);
+  // a tab with two panes asks first; esc keeps it
+  await page.keyboard.press("ControlOrMeta+Shift+D");
+  await page.keyboard.press("ControlOrMeta+W");
+  s = await inspect(page);
+  expect(s.overlays).toEqual(["closeTab"]);
+  expect(s.focus).toBe("confirm");
+  await expect(page.getByRole("alertdialog", { name: "confirm close tab" })).toContainText("2 panes");
+  await page.keyboard.press("Escape");
+  s = await inspect(page);
+  expect(s.overlays).toEqual([]);
+  expect(Object.keys(s.panes).sort()).toEqual(["v1", "v3"]);
+  // ⏎ accepts; the last tab is replaced by a fresh one
+  await page.keyboard.press("ControlOrMeta+W");
+  await page.keyboard.press("Enter");
+  s = await inspect(page);
+  expect(s.overlays).toEqual([]);
+  expect(s.tabs).toHaveLength(1);
+  expect(Object.keys(s.panes)).toHaveLength(1);
 });
 
 test("filter bar: / focuses, grep narrows rows, esc returns to table", async ({ page }) => {
@@ -144,10 +172,11 @@ test("? in the filter bar is typed, not a shortcut", async ({ page }) => {
   expect((await inspect(page)).overlays).toEqual([]);
 });
 
-test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) => {  await openTape(page);
+test("tabs: cmd+t opens, cmd+right cycles; ARIA structure", async ({ page }) => {
+  await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
   expect((await inspect(page)).activeTab).toBe(1);
-  await page.keyboard.press("ControlOrMeta+Shift+BracketRight");
+  await page.keyboard.press("ControlOrMeta+ArrowRight");
   expect((await inspect(page)).activeTab).toBe(0);
   await expect(page.getByRole("tablist")).toMatchAriaSnapshot(`
     - tablist:
@@ -161,7 +190,7 @@ test("switching tabs keeps each tab's live table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
   await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
-  await page.keyboard.press("ControlOrMeta+Shift+BracketLeft");
+  await page.keyboard.press("ControlOrMeta+ArrowLeft");
   await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName("e2e-pods");
   await expect.poll(async () => (await focused(page)).rows.length).toBe(3);
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
@@ -232,8 +261,8 @@ test.describe("ctrl+tab MRU tab switching", () => {
     await page.keyboard.press("Control+Tab");
     expect(await active(page)).toBe(2);
     // MRU, not positional: going back from 3 skips over nothing, 1 is now least recent
-    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 2 (positional cycle counts as use)
-    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 1
+    await page.keyboard.press("ControlOrMeta+ArrowLeft"); // tab 2 (positional cycle counts as use)
+    await page.keyboard.press("ControlOrMeta+ArrowLeft"); // tab 1
     await page.keyboard.press("Control+Tab");
     expect(await active(page)).toBe(1); // tab 2, the previously used one
   });
@@ -453,7 +482,7 @@ test.describe("safety model", () => {
     for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
   }
 
-  test("labeled context: badge on pane and tab; ctrl+d confirms, esc cancels and restores focus", async ({ page }) => {
+  test("labeled context: badge on pane and tab; cmd+backspace confirms, esc cancels and restores focus", async ({ page }) => {
     await openStatic(page, "tape-dev");
     await expect(pane(page)).toHaveAttribute("data-context", "tape-dev");
     await expect(pane(page).getByLabel("context label")).toHaveText("DEV");
@@ -462,7 +491,7 @@ test.describe("safety model", () => {
 
     await select(page, "s-web-1"); // never deleted by any test
     const sel = (await focused(page)).selected;
-    await page.keyboard.press("Control+D");
+    await page.keyboard.press("ControlOrMeta+Backspace");
     const dialog = page.getByRole("alertdialog", { name: "confirm delete" });
     await expect(dialog).toMatchAriaSnapshot(`
       - alertdialog "confirm delete":
@@ -484,7 +513,8 @@ test.describe("safety model", () => {
     await openStatic(page);
     await expect(pane(page).getByLabel("context label")).toHaveCount(0); // no rule for "tape"
     await select(page, "s-web-2");
-    await page.keyboard.press("Control+D");
+    // the Delete key does the same as ⌘⌫
+    await page.keyboard.press("Delete");
     await page.getByRole("alertdialog", { name: "confirm delete" }).waitFor();
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await marks(page))["s-web-2"]).toBe("deleted");
@@ -495,7 +525,7 @@ test.describe("safety model", () => {
   test("strict context: delete needs the object name typed", async ({ page }) => {
     await openStatic(page, "tape-live");
     await select(page, "s-web-0");
-    await page.keyboard.press("Control+D");
+    await page.keyboard.press("ControlOrMeta+Backspace");
     const dialog = page.getByRole("alertdialog", { name: "confirm delete" });
     const input = dialog.getByRole("textbox", { name: "type to confirm" });
     await expect(input).toBeFocused();
@@ -514,7 +544,7 @@ test.describe("safety model", () => {
     await expect(pane(page).getByLabel("context label")).toHaveText("PROD");
     await expect(pane(page).getByLabel("read-only")).toHaveText("RO");
     const before = await marks(page);
-    await page.keyboard.press("Control+D");
+    await page.keyboard.press("ControlOrMeta+Backspace");
     await expect(pane(page).getByLabel("message")).toContainText("read-only context");
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     expect((await inspect(page)).overlays).toEqual([]);
@@ -642,10 +672,10 @@ test.describe("object actions", () => {
   }
   const termText = (page: Page) => page.locator("[data-terminal] .xterm-rows").innerText();
 
-  test("⇧D describes in Monaco; y back to yaml", async ({ page }) => {
+  test("d describes in Monaco; y back to yaml", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
-    await page.keyboard.press("Shift+D");
+    await page.keyboard.press("d");
     const dialog = page.getByRole("dialog", { name: "object detail" });
     await expect(dialog).toContainText("describe");
     await expect(dialog.locator(".view-lines")).toContainText("Name:         web-1");
@@ -663,7 +693,7 @@ test.describe("object actions", () => {
     // the look counter of the tape's fake "Looked" event, from the loaded describe (not the virtualized DOM)
     const count = async () =>
       Number(((await page.evaluate(() => (window as any).__kw.inspect().describe?.text)) ?? "").match(/\(x(\d+) over/)?.[1] ?? 0);
-    await page.keyboard.press("Shift+D");
+    await page.keyboard.press("d");
     await expect.poll(count).toBeGreaterThan(0);
     const n = await count();
     // d toggles to the diff without taking a new look
@@ -712,20 +742,34 @@ test.describe("object actions", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("exit in the shell marks the pane ended", async ({ page }) => {
+  test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("s");
+    await expect.poll(() => termText(page)).toContain("$");
+    // the tape's shell ends on EOF, like a real one
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+    const s = await inspect(page);
+    expect(s.focus).toBe("table");
+    expect(Object.keys(s.panes)).toHaveLength(1);
+  });
+
+  test("exit in the shell closes the pane too", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
     await page.keyboard.press("s");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("exit 2");
     await page.keyboard.press("Enter");
-    await expect(page.getByLabel("session ended")).toContainText("exited 2");
+    await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+    expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("⇧F forwards the pod's ports; ⌘⌥P lists them, ⌃D stops", async ({ page }) => {
+  test("f forwards the pod's ports; ⌘⌥P lists them, ⌃D stops", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
-    await page.keyboard.press("Shift+F");
+    await page.keyboard.press("f");
     const dialog = page.getByRole("dialog", { name: "port-forward" });
     await expect(dialog.getByRole("textbox", { name: "ports" })).toHaveValue("8080:8080 9090:9090");
     await dialog.getByRole("textbox", { name: "ports" }).fill("18080:8080");
@@ -758,7 +802,7 @@ test.describe("object actions", () => {
   test("invalid ports are rejected in the dialog", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
-    await page.keyboard.press("Shift+F");
+    await page.keyboard.press("f");
     const dialog = page.getByRole("dialog", { name: "port-forward" });
     await dialog.getByRole("textbox", { name: "ports" }).fill("80:abc");
     await page.keyboard.press("Enter");
@@ -779,7 +823,7 @@ test.describe("object actions", () => {
     await page.keyboard.press("s");
     await expect(page.getByLabel("message")).toContainText("read-only context");
     expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
-    await page.keyboard.press("Shift+D");
+    await page.keyboard.press("d");
     await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
   });
 });
@@ -812,12 +856,12 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - text: web-1 · pod · shop
         - menuitem "view YAML ⏎"
         - menuitem "diff to previous version · no previous version since watch start" [disabled]
-        - menuitem "describe ⇧D"
+        - menuitem "describe d"
         - separator
         - menuitem "exec shell s"
-        - menuitem "port-forward… ⇧F"
+        - menuitem "port-forward… f"
         - separator
-        - menuitem "delete… ⌃D"
+        - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
     // j skips the disabled diff entry: view YAML → describe

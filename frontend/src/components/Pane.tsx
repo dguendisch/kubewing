@@ -72,8 +72,9 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
         {term.pod}/{term.container}
       </span>
       {term.exited !== undefined ? (
-        <span aria-label="session ended" className={`ml-auto ${term.exited === "0" ? "text-fg-muted" : "text-deleted"}`}>
-          exited {term.exited} · ⌘W closes
+        // only a session that never ran gets here: one that exited took its pane with it
+        <span aria-label="session ended" className="ml-auto text-deleted">
+          {term.exited} · ⌘W closes
         </span>
       ) : null}
     </header>

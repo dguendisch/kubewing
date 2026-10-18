@@ -5,7 +5,7 @@ import { b64decode, sessions } from "../term/sessions";
 import type { PortForward } from "../transport/types";
 import { applyConfig } from "./config";
 import { clearRules } from "./rules";
-import { initialState, orphanedServerPanes, orphanedSessions, paneFocus, touchTab, updatePane, type UIState } from "./state";
+import { initialState, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 
 /**
  * UI state (layout, focus, overlays) lives in a React-subscribed store.
@@ -60,10 +60,7 @@ export function connect(t: Transport) {
     if (p.data) sessions.push(p.id, b64decode(p.data));
     if (p.exit !== undefined && p.exit !== "") {
       sessions.push(p.id, { exit: p.exit });
-      setUI((x) => {
-        const pane = Object.values(x.panes).find((q) => q.term?.session === p.id);
-        return pane ? updatePane(x, pane.id, (q) => ({ ...q, term: { ...q.term!, exited: p.exit } })) : x;
-      });
+      setUI((x) => sessionEnded(x, p.id, p.exit!));
     }
   });
   t.onPortForwards((l) => usePortForwards.setState({ list: l }, true));

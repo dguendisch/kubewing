@@ -80,7 +80,10 @@ export const defaultBindings: Binding[] = [
   // deliberately swapped vs. iTerm: ⌘D stacks, ⌘⇧D goes side by side
   { key: "Meta+D", command: "pane.splitDown" },
   { key: "Meta+Shift+D", command: "pane.splitRight" },
-  { key: "Meta+W", command: "pane.close" },
+  // not global: ⌃D is forward-delete in text fields, and the shell's EOF in a terminal
+  { key: "Ctrl+D", command: "pane.close", when: ["table", "detail", "menu", "help"] },
+  // a terminal keeps ⌃D for the shell, so ⌘W closes the pane there instead of the tab
+  { key: "Meta+W", command: "pane.close", when: ["terminal"] },
   { key: "Meta+]", command: "pane.focusNext" },
   { key: "Meta+[", command: "pane.focusPrev" },
   { key: "Alt+Meta+ArrowLeft", command: "pane.focusLeft" },
@@ -88,9 +91,11 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+Meta+ArrowUp", command: "pane.focusUp" },
   { key: "Alt+Meta+ArrowDown", command: "pane.focusDown" },
   { key: "Meta+T", command: "tab.new" },
-  { key: "Meta+Shift+W", command: "tab.close" },
-  { key: "Meta+Shift+]", command: "tab.next" },
-  { key: "Meta+Shift+[", command: "tab.prev" },
+  // more than one pane in the tab: the dispatcher asks first
+  { key: "Meta+W", command: "tab.close" },
+  // not global: ⌘←/⌘→ jump to the start/end of the line in text fields
+  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "forwards", "menu", "help"] },
+  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "forwards", "menu", "help"] },
   // ⌘1–⌘8 go to that tab, ⌘9 to the last one (browser/iTerm convention)
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Binding => ({ key: `Meta+${n}`, command: `tab.goto${n}` })),
   // MRU switching; releasing Ctrl commits (handled on keyup in useKeys)
@@ -123,8 +128,9 @@ export const defaultBindings: Binding[] = [
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
-  // k9s convention; the safety model decides whether and how to confirm
-  { key: "Ctrl+D", command: "object.delete", when: ["table"] },
+  // k9s binds ⌃D, but that's the pane/shell key here; ⌘⌫ is the macOS "move to trash" idiom
+  { key: "Meta+Backspace", command: "object.delete", when: ["table"] },
+  { key: "Delete", command: "object.delete", when: ["table"] },
   // context menu of the selected row (also right-click): every row action, generated from actions/registry.ts
   { key: "Meta+Enter", command: "object.menu", when: ["table"] },
   { key: "Escape", command: "detail.close", when: ["menu"] },
@@ -133,9 +139,11 @@ export const defaultBindings: Binding[] = [
   { key: "K", command: "row.up", when: ["menu"] },
   { key: "ArrowUp", command: "row.up", when: ["menu"] },
   { key: "Enter", command: "menu.run", when: ["menu"] },
-  { key: "Shift+D", command: "object.describe", when: ["table", "detail"] },
+  { key: "D", command: "object.describe", when: ["table"] },
+  // in the detail view d is the diff toggle, so describe keeps ⇧D there
+  { key: "Shift+D", command: "object.describe", when: ["detail"] },
   { key: "S", command: "object.exec", when: ["table"] },
-  { key: "Shift+F", command: "object.portForward", when: ["table"] },
+  { key: "F", command: "object.portForward", when: ["table"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
   { key: "Ctrl+D", command: "portforward.stop", when: ["forwards"] },
   { key: "Escape", command: "detail.close", when: ["forwards"] },
@@ -274,7 +282,7 @@ export function canonicalKey(k: string): string | undefined {
     if (!m) return undefined;
     mods.add(m);
   }
-  const named: Record<string, string> = { esc: "Escape", escape: "Escape", enter: "Enter", return: "Enter", tab: "Tab", space: "Space", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", pageup: "PageUp", pagedown: "PageDown" };
+  const named: Record<string, string> = { esc: "Escape", escape: "Escape", enter: "Enter", return: "Enter", tab: "Tab", space: "Space", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", pageup: "PageUp", pagedown: "PageDown", backspace: "Backspace", delete: "Delete", del: "Delete" };
   const k2 = key.length === 1 ? key.toUpperCase() : (named[key.toLowerCase()] ?? key);
   return [...modOrder.filter((m) => mods.has(m)), k2].join("+");
 }
@@ -296,7 +304,7 @@ export function collisions(bindings: Binding[]): string[] {
 
 const symbols: Record<string, string> = {
   Meta: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧",
-  Enter: "⏎", Escape: "esc", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "␣", Tab: "⇥",
+  Enter: "⏎", Escape: "esc", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "␣", Tab: "⇥", Backspace: "⌫", Delete: "⌦",
 };
 
 /** "Shift+D" → "⇧D", "Ctrl+D" → "⌃D", "S" → "s". */

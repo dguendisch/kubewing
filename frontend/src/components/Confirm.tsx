@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { dispatch } from "../commands";
+import { paneIds } from "../store/layout";
 import { useUI } from "../store/store";
 import { ruleColor } from "./safetyStyle";
 
@@ -60,6 +61,34 @@ function ConfirmDialog() {
         </button>
       )}
       <div className="text-fg-muted">⏎ {p.action.kind} · esc cancel</div>
+    </form>
+  );
+}
+
+/** ⌘W on a tab holding more than one pane. ⏎ closes it, Esc keeps it. */
+export function ConfirmCloseTab() {
+  const tabId = useUI((s) => (s.overlay?.kind === "closeTab" ? s.overlay.tabId : undefined));
+  const panes = useUI((s) => {
+    const t = s.tabs.find((x) => x.id === tabId);
+    return t ? paneIds(t.layout).length : 0;
+  });
+  if (!tabId) return null;
+  return (
+    <form
+      role="alertdialog"
+      aria-label="confirm close tab"
+      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-2xl"
+      onSubmit={(e) => {
+        e.preventDefault();
+        dispatch("confirm.accept");
+      }}
+    >
+      <h2 className="font-semibold text-fg">close tab?</h2>
+      <p className="text-fg">It holds {panes} panes.</p>
+      <button autoFocus type="submit" className="self-start rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15">
+        close tab
+      </button>
+      <div className="text-fg-muted">⏎ close · esc cancel</div>
     </form>
   );
 }

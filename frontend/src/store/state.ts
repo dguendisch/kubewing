@@ -46,8 +46,8 @@ export interface Tab {
 export interface Overlay {
   /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
-   *  help: the keyboard cheat sheet. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help";
+   *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
@@ -60,6 +60,8 @@ export interface Overlay {
   rowIndex?: number;
   pane: string;
   key?: string;
+  /** closeTab: the tab to close (not the index: tabs move while the dialog is open). */
+  tabId?: string;
   diff?: boolean;
   /** confirm: the prepared action. */
   pending?: Pending;
@@ -141,6 +143,18 @@ export function orphanedSessions(prev: UIState, next: UIState): string[] {
   return Object.values(prev.panes).flatMap((p) => (p.term && !live.has(p.term.session) ? [p.term.session] : []));
 }
 
+/**
+ * An exec session ended. A shell that ran and exited (⌃D, `exit`, any status)
+ * takes its pane with it; a session that failed to run keeps the pane, so the
+ * reason stays on screen. Go sends an exit status, else an error message.
+ */
+export function sessionEnded(s: UIState, session: string, exit: string): UIState {
+  const pane = Object.values(s.panes).find((p) => p.term?.session === session);
+  if (!pane) return s;
+  if (/^\d+$/.test(exit)) return closePane(s, pane.id);
+  return updatePane(s, pane.id, (p) => ({ ...p, term: { ...p.term!, exited: exit } }));
+}
+
 export function touchTab(s: UIState): UIState {
   const ids = s.tabs.map((t) => t.id);
   let mru = s.mru.filter((id) => ids.includes(id));
@@ -199,16 +213,22 @@ export function splitPane(s: UIState, dir: "row" | "column"): UIState {
 }
 
 export function closePane(s: UIState, id = activeTab(s).focused): UIState {
-  const t = activeTab(s);
+  const index = s.tabs.findIndex((t) => paneIds(t.layout).includes(id));
+  if (index < 0) return s;
+  const t = s.tabs[index]!;
   const ids = paneIds(t.layout);
   const layout = remove(t.layout, id);
   const panes = { ...s.panes };
   delete panes[id];
-  if (!layout) return closeTab({ ...s, panes }, s.activeTab, false);
+  if (!layout) return closeTab({ ...s, panes }, index, false);
   const idx = ids.indexOf(id);
   const rest = paneIds(layout);
   const focused = t.focused === id ? rest[Math.max(0, idx - 1)] ?? rest[0]! : t.focused;
-  return withTab({ ...s, panes, focus: "table", overlay: undefined }, () => ({ ...t, layout, focused }));
+  const tabs = [...s.tabs];
+  tabs[index] = { ...t, layout, focused };
+  // a pane closing on its own (an ended session) must not pull focus out of the pane in use
+  const moved = index === s.activeTab && t.focused === id;
+  return moved ? { ...s, tabs, panes, focus: "table", overlay: undefined } : { ...s, tabs, panes };
 }
 
 export function newTab(s: UIState): UIState {
@@ -241,6 +261,10 @@ export function closeTab(s: UIState, index = s.activeTab, dropPanes = true): UIS
       focus: "table",
       overlay: undefined,
     };
+  }
+  if (index !== s.activeTab) {
+    // another tab went away (a session ended there): stay where the user is
+    return { ...s, tabs, panes, activeTab: s.activeTab > index ? s.activeTab - 1 : s.activeTab };
   }
   return { ...s, tabs, panes, activeTab: Math.min(index, tabs.length - 1), focus: "table", overlay: undefined };
 }
@@ -307,10 +331,20 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
   return updatePane(s, p.id, (x) => ({ ...x, selected: Math.max(0, sel) }));
 }
 
+/** The focus context an overlay holds while it is open. */
+const overlayFocus: Record<Overlay["kind"], FocusContext> = {
+  detail: "detail",
+  open: "dialog",
+  confirm: "confirm",
+  closeTab: "confirm",
+  portforward: "dialog",
+  forwards: "forwards",
+  menu: "menu",
+  help: "help",
+};
+
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
-  const focus: FocusContext =
-    o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : o.kind === "menu" ? "menu" : o.kind === "help" ? "help" : "dialog";
-  return { ...s, overlay: { ...o, restore: s.focus }, focus };
+  return { ...s, overlay: { ...o, restore: s.focus }, focus: overlayFocus[o.kind] };
 }
 
 export function closeOverlay(s: UIState): UIState {
