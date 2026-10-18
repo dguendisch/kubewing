@@ -20,6 +20,9 @@ export interface Status {
   synced: boolean;
   objects: number;
   error?: string;
+  /** Objects the CEL filter failed on (a missing field is a plain no-match). */
+  filterErrors?: number;
+  filterError?: string;
 }
 
 export interface Frame {
@@ -58,6 +61,32 @@ export interface Detail {
 export interface ContextList {
   contexts: string[];
   current: string;
+}
+
+/** Mirrors bridge.Draft: a filter bar edit not applied yet. */
+export interface Draft {
+  field: "filter" | "labels";
+  value: string;
+}
+
+/** Mirrors view.Preview: what a draft would show, without applying it. */
+export interface Preview {
+  matched: number;
+  objects: number;
+  /** Lower bound: a wider label selector may match objects not loaded yet. */
+  atLeast?: boolean;
+  errors?: number;
+  error?: string;
+  /** Can't be applied (parse error, not a bool). */
+  invalid?: boolean;
+  /** 0-based position of a parse error, or -1. */
+  column: number;
+}
+
+/** Mirrors bridge.FieldKeys / view.FieldKey: keys at a path across a pane's objects. */
+export interface FieldKeys {
+  keys: { key: string; type: string; count: number }[];
+  objects: number;
 }
 
 /** Mirrors source.ResourceType. */
@@ -186,6 +215,10 @@ export interface PortForward {
 export interface Transport {
   open(pipelineYAML: string): Promise<OpenResult>;
   update(pane: string, pipelineYAML: string): Promise<void>;
+  /** Evaluates a draft filter/label selector against the pane's objects; changes nothing. */
+  preview(pane: string, draft: Draft): Promise<Preview>;
+  /** Keys at a dot path ("" = top level) across the pane's objects, for CEL completion. */
+  fieldKeys(pane: string, path: string): Promise<FieldKeys>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;
   resync(pane: string): Promise<void>;
   object(pane: string, key: string): Promise<Detail>;

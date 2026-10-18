@@ -8,6 +8,7 @@ import { bridge, paneData, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
 import { b64encode } from "../term/sessions";
+import { DraftField } from "./DraftField";
 import { ruleColor } from "./safetyStyle";
 
 /** One split pane: header (source + filter bar), live table, status line. */
@@ -148,55 +149,80 @@ function keyAt(p: S.PaneState): string | undefined {
 function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyRule; filterField?: S.FilterField }) {
   const input = useRef<HTMLInputElement>(null);
   const labelInput = useRef<HTMLInputElement>(null);
+  const celInput = useRef<HTMLInputElement>(null);
   const [grep, setGrep] = useState(pane.spec.grep);
-  const [labels, setLabels] = useState(pane.spec.labelSelector);
+  const fields = [input, labelInput, celInput];
 
-  // "filter" focus covers both fields: `/` lands in grep, `l` in labels; a click sets the field it lands in
+  // "filter" focus covers all fields: `/` lands in grep, `l` in labels, `c` in CEL; a click sets the field it lands in
   useEffect(() => {
     const active = document.activeElement;
-    const target = filterField === "labels" ? labelInput.current : filterField ? input.current : null;
-    if (target && active !== target) target.focus();
-    else if (!target && (active === input.current || active === labelInput.current)) (active as HTMLElement).blur();
+    const target = { grep: input, labels: labelInput, cel: celInput }[filterField ?? "grep"].current;
+    if (filterField && target && active !== target) target.focus();
+    else if (!filterField && fields.some((f) => f.current === active)) (active as HTMLElement).blur();
   }, [filterField]);
-  // moving between the two fields stays in "filter"
+  // moving between the fields stays in "filter"
   const onBlur = (e: React.FocusEvent) => {
-    if (e.relatedTarget === input.current || e.relatedTarget === labelInput.current) return;
+    if (fields.some((f) => f.current === e.relatedTarget)) return;
     setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
   };
+  const focus = (f: S.FilterField) => () => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: f }));
 
-  // debounce filter → pipeline update
+  // grep only narrows as you type, so it applies live (debounced)
   useEffect(() => {
-    if (grep === pane.spec.grep && labels === pane.spec.labelSelector) return;
-    const t = setTimeout(() => void applySpec(pane.id, { ...pane.spec, grep, labelSelector: labels }), 150);
+    if (grep === pane.spec.grep) return;
+    const t = setTimeout(() => void applySpec(pane.id, { ...pane.spec, grep }), 150);
     return () => clearTimeout(t);
-  }, [grep, labels]);
+  }, [grep]);
+  // the latest spec, for applies that land after other edits
+  const apply = (patch: Partial<S.PaneSpec>) => {
+    const cur = useUI.getState().panes[pane.id];
+    if (cur) void applySpec(pane.id, { ...cur.spec, ...patch });
+  };
 
+  const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
   const { context, resource, namespace } = pane.spec;
   return (
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
-      <span className="text-fg-muted">{context || pane.context || "(current)"}</span>
-      <span className="font-semibold text-accent">{resource}</span>
-      <span className="text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
+      <span className="shrink-0 text-fg-muted">{context || pane.context || "(current)"}</span>
+      <span className="shrink-0 font-semibold text-accent">{resource}</span>
+      <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
+      <span className="flex-1" />
       <input
         ref={input}
         aria-label="filter"
         placeholder="/ grep"
         value={grep}
         onChange={(e) => setGrep(e.target.value)}
-        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: "grep" }))}
+        onFocus={focus("grep")}
         onBlur={onBlur}
-        className="ml-auto w-48 rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent"
+        className={`w-48 ${field}`}
       />
-      <input
+      <DraftField
         ref={labelInput}
-        aria-label="label selector"
+        field="labels"
+        label="label selector"
         placeholder="l labels"
-        value={labels}
-        onChange={(e) => setLabels(e.target.value)}
-        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: "labels" }))}
+        applied={pane.spec.labelSelector}
+        serverId={pane.serverId}
+        focused={filterField === "labels"}
+        onApply={(labelSelector) => apply({ labelSelector })}
+        onFocus={focus("labels")}
         onBlur={onBlur}
-        className="w-36 rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent"
+        className={`w-36 ${field}`}
+      />
+      <DraftField
+        ref={celInput}
+        field="filter"
+        label="cel"
+        placeholder="c cel"
+        applied={pane.spec.filter}
+        serverId={pane.serverId}
+        focused={filterField === "cel"}
+        onApply={(filter) => apply({ filter })}
+        onFocus={focus("cel")}
+        onBlur={onBlur}
+        className={`w-36 truncate ${field}`}
       />
     </header>
   );
@@ -218,6 +244,11 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
       {st?.error ? <span className="text-deleted">{st.error}</span> : null}
+      {st?.filterErrors ? (
+        <span aria-label="filter errors" title={st.filterError} className="truncate text-deleted">
+          filter failed on {st.filterErrors}: {st.filterError}
+        </span>
+      ) : null}
       {pane.flash ? (
         <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
           {pane.flash.text}

@@ -28,7 +28,10 @@ export type CommandId =
   | "tab.switcherCancel"
   | "filter.focus"
   | "filter.focusLabels"
+  | "filter.focusCel"
   | "filter.blur"
+  | "filter.fromDetail"
+  | "filter.fromDetailNot"
   | "row.down"
   | "row.up"
   | "row.pageDown"
@@ -62,7 +65,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.new", "tab.close", "tab.next", "tab.prev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
-  "filter.focus", "filter.focusLabels", "filter.blur",
+  "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
   "source.open", "config.reload",
@@ -112,6 +115,7 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Shift+,", command: "config.reload" },
   { key: "/", command: "filter.focus", when: ["table"] },
   { key: "L", command: "filter.focusLabels", when: ["table"] },
+  { key: "C", command: "filter.focusCel", when: ["table"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },
@@ -131,6 +135,9 @@ export const defaultBindings: Binding[] = [
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
+  // the YAML line under the cursor becomes the pane's CEL filter
+  { key: "=", command: "filter.fromDetail", when: ["detail"] },
+  { key: "!", command: "filter.fromDetailNot", when: ["detail"] },
   // k9s binds ⌃D, but that's the pane/shell key here; ⌘⌫ is the macOS "move to trash" idiom
   { key: "Meta+Backspace", command: "object.delete", when: ["table"] },
   { key: "Delete", command: "object.delete", when: ["table"] },
@@ -188,7 +195,8 @@ function fromCode(code: string | undefined): string | undefined {
  * physical key (e.code): on macOS ⌥ changes the character (⌥P types "π"),
  * and ⇧ does too ("}" for ⇧]), but ⌘⌥P must still be Alt+Meta+P. Without
  * modifiers (or with only ⇧) the typed character counts, so "/" and "?" work
- * on any layout.
+ * on any layout. "?" and "!" need ⇧ on every common layout, so ⇧ is dropped
+ * for them.
  */
 export function chord(e: { key: string; code?: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; shiftKey?: boolean }): string {
   let key = e.key;
@@ -202,7 +210,7 @@ export function chord(e: { key: string; code?: string; metaKey?: boolean; ctrlKe
   }
   if (key === " ") key = "Space";
   const mods = { Ctrl: e.ctrlKey, Alt: e.altKey, Shift: e.shiftKey, Meta: e.metaKey };
-  const parts = modOrder.filter((m) => mods[m] && !(m === "Shift" && key === "?"));
+  const parts = modOrder.filter((m) => mods[m] && !(m === "Shift" && (key === "?" || key === "!")));
   return [...parts, key].join("+");
 }
 

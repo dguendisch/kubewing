@@ -48,6 +48,12 @@ const common: Monaco.editor.IEditorOptions = {
   contextmenu: true,
 };
 
+/**
+ * The YAML viewer currently shown and its cursor line (0-based), for
+ * commands that act on "the line under the cursor" (= / ! filters).
+ */
+export const cursor: { text?: string; line: number } = { line: 0 };
+
 interface Props {
   /** Shown text; with `original` the viewer is a side-by-side diff (original → value). */
   value: string;
@@ -72,7 +78,16 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
         const model = m.editor.createModel(value, language);
         const ed = m.editor.create(host.current, { ...common, model, ariaLabel: label });
         ed.focus();
-        dispose = () => (ed.dispose(), model.dispose());
+        if (language === "yaml") {
+          cursor.text = value;
+          cursor.line = 0;
+          ed.onDidChangeCursorPosition((e) => (cursor.line = e.position.lineNumber - 1));
+        }
+        dispose = () => {
+          if (cursor.text === value) cursor.text = undefined;
+          ed.dispose();
+          model.dispose();
+        };
       } else {
         const a = m.editor.createModel(original, language);
         const b = m.editor.createModel(value, language);

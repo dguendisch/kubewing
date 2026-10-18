@@ -27,6 +27,10 @@ describe("chord", () => {
     expect(chord({ key: "ArrowLeft", code: "ArrowLeft", metaKey: true, altKey: true })).toBe("Alt+Meta+ArrowLeft");
     // without modifiers the typed character counts (layouts where / is elsewhere)
     expect(chord({ key: "/", code: "Digit7", shiftKey: true })).toBe("Shift+/");
+    // "!" needs ⇧ everywhere: it's just "!"; with ⌘ it's the physical key
+    expect(chord({ key: "!", code: "Digit1", shiftKey: true })).toBe("!");
+    expect(resolve(chord({ key: "!", code: "Digit1", shiftKey: true }), "detail")).toBe("filter.fromDetailNot");
+    expect(resolve(chord({ key: "=", code: "Equal" }), "detail")).toBe("filter.fromDetail");
     expect(chord({ key: "j", code: "KeyJ" })).toBe("J");
     expect(resolve(chord({ key: "<", metaKey: true, shiftKey: true }), "table")).toBe("config.reload");
   });

@@ -43,6 +43,20 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ## Feature seed
 
+### Status
+
+Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
+
+Still open in P0:
+- History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
+- Native menu accelerators + WKWebView smoke suite.
+- Generated TS bindings check; golden-guard hook on `testdata/`.
+- Exec container picker (the pod's default container is used).
+
+Still open in P0.1:
+- Object-name completion.
+- Completion for a context picked in `⌘O` before any pane is open on it (shows a hint instead).
+
 ### P0 — "The Core" (v0.1)
 
 1. **Pipeline model** (see above) — source, filter/grep/sort stages, column render, serialization. `groupBy`/`aggregate` stages and the `cpu-gauge` column come with P1 (Filtering & aggregating).
@@ -59,12 +73,17 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 1. **Virtualized live table** — arbitrary resources, configurable typed columns, live updates.
    - Default columns from server-side Table output (`as=Table;g=meta.k8s.io;v=v1`) → kubectl columns + CRD `additionalPrinterColumns` for free; full objects in the same stream via `includeObject=Object`, so cells and objects always share a resourceVersion.
 1. **Basic object actions** — `describe` (+ events), view YAML, `exec` into a pod, `port-forward`, delete (confirmed).
-1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.
-   - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
-   - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` (default) / `viewerkubeconfig` subresources; read-only per context comes from the safety model.
 1. **Safety model** — per-context color/label (prod = red), read-only mode per context, confirmation for any mutating action. Required before any multi-cluster writes later.
 1. **Splits & tabs** — `cmd+d` split horizontal, `cmd+shift+d` split vertical.
-1. **Filter bar** — quick grep + label selector on the focused view (full stage editing comes with the palette).
+1. **Filter bar** — quick grep + label selector + one CEL filter on the focused view (full stage editing comes with the palette).
+   - Fields: `/` grep, `l` label selector, `c` CEL (`o` = the object). The CEL field widens to the header while focused; unfocused it's a truncated chip, so a hidden-rows filter is never invisible. Status line: `12 / 340 shown`.
+   - **Grep applies live** (debounced): every extra character only narrows the result.
+   - **Labels and CEL are drafts until `⏎`.** A half-typed value (`app=et`, `o.status.phase == "Run"`) is valid but matches nothing, so applying live would blank the table on every keystroke. While typing, Go dry-runs the draft against the pane's objects and the field shows the outcome: `→ 298 / 340`, a type problem (`string, not bool`), or a parse error with a caret. `⏎` applies (refused while invalid), an empty field + `⏎` clears, leaving the field keeps the draft and flags it `⏎ to apply`. Label previews are exact when the draft is at least as strict as the applied selector, else a lower bound (`≥ 298`): the wider set isn't loaded yet.
+   - **In-place stage updates.** A filter/grep change re-evaluates the match flag of the existing view instead of rebuilding it: the watch, normalized objects and diff state (prev, markers) survive. Only a source change (labels) re-subscribes.
+   - **Errors are visible.** Missing fields stay "no match" (heterogeneous lists); other evaluation errors count as no match and are reported in the status line (`3 errors`). CEL cost limit per evaluation.
+   - **Completion** for the CEL field: field paths taken from the source's live objects (`o.status.` → keys seen at that path, with how many objects have them; works for every CRD without OpenAPI) plus CEL macros/functions, through the ⌘O ranker.
+   - **From the detail view:** cursor on a YAML line, `=` sets the CEL filter to `<path> == <value>`, `!` to `!=`, and applies it at once (the expression is complete).
+   - `↑` in an empty CEL field recalls recent expressions for the resource type.
 1. Keybindings and theme: sensible defaults + config files in `~/.kubewing/`; no settings UI yet.
 
 ### P0.1 — "Completion"
@@ -100,6 +119,9 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 1. **k debug** - on arbitrary pods with configurable image
 1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
 1. **Scratch apply** from files.
+1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.
+   - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
+   - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` (default) / `viewerkubeconfig` subresources; read-only per context comes from the safety model.
 1. **Multi-cluster operations** — replaces nested `for ns … for shoot …` loops. Builds on Gardener shoot-kubeconfig access + safety model (dry-run across targets first, then confirm).
 
 ### P4 - "Nice to have" (v2.0)

@@ -117,8 +117,10 @@ describe("server pane lifetime", () => {
 
 describe("pipelineYAML", () => {
   it("serializes the pane spec", () => {
-    const y = S.pipelineYAML({ context: "c", resource: "po", namespace: "", labelSelector: "app=x", grep: "oom" });
+    const y = S.pipelineYAML({ context: "c", resource: "po", namespace: "", labelSelector: "app=x", grep: "oom", filter: "" });
     expect(JSON.parse(y)).toEqual({ source: { cluster: "c", resource: "po", labelSelector: "app=x" }, stages: [{ grep: "oom" }] });
+    const f = S.pipelineYAML({ context: "", resource: "po", namespace: "", labelSelector: "", grep: "oom", filter: 'o.status.phase == "Running"' });
+    expect(JSON.parse(f).stages).toEqual([{ filter: 'o.status.phase == "Running"' }, { grep: "oom" }]);
   });
 });
 

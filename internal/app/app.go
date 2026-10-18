@@ -28,6 +28,12 @@ func (a *App) Update(pane, pipelineYAML string) error              { return a.sv
 func (a *App) SetViewport(pane string, offset, limit int) error {
 	return a.svc.SetViewport(pane, offset, limit)
 }
+func (a *App) Preview(pane string, d bridge.Draft) (view.Preview, error) {
+	return a.svc.Preview(pane, d)
+}
+func (a *App) FieldKeys(pane, path string) (bridge.FieldKeys, error) {
+	return a.svc.FieldKeys(pane, path)
+}
 func (a *App) Resync(pane string) error                     { return a.svc.Resync(pane) }
 func (a *App) Object(pane, key string) (view.Detail, error) { return a.svc.Object(pane, key) }
 func (a *App) Close(pane string) error                      { return a.svc.Close(pane) }

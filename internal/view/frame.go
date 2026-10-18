@@ -52,4 +52,8 @@ type Status struct {
 	Synced  bool   `json:"synced"`
 	Objects int    `json:"objects"`
 	Error   string `json:"error,omitempty"`
+	// FilterErrors counts objects the filter failed on (other than a
+	// missing field); FilterError is one of the messages.
+	FilterErrors int    `json:"filterErrors,omitempty"`
+	FilterError  string `json:"filterError,omitempty"`
 }

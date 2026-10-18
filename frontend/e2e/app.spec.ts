@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string }; serverId?: string; total: number; selected: number; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string }; serverId?: string; total: number; selected: number; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -130,6 +130,10 @@ test("label selector: click or l focuses it and keeps focus while typing; tab mo
   expect((await inspect(page)).focus).toBe("filter");
   await page.keyboard.type("app=api");
   await expect(labels).toHaveValue("app=api");
+  // a draft until ⏎: the table is untouched, the preview counts what it would show
+  await expect(page.getByRole("status", { name: "labels draft" })).toContainText("→ 2 / 3");
+  expect((await focused(page)).total).toBe(3);
+  await page.keyboard.press("Enter");
   await expect.poll(async () => (await page.evaluate(() => {
     const kw = (window as unknown as { __kw: { inspect(): { focusedPane: string; panes: Record<string, { spec: { labelSelector: string } }> } } }).__kw;
     const s = kw.inspect();
@@ -151,6 +155,60 @@ test("label selector: click or l focuses it and keeps focus while typing; tab mo
   await page.keyboard.press("Escape");
   await page.keyboard.press("/");
   await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
+});
+
+test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("c");
+  const cel = page.getByLabel("cel", { exact: true });
+  await expect(cel).toBeFocused();
+  const preview = page.getByRole("status", { name: "cel draft" });
+  // an open string is a parse error with a caret; the table stays as it is
+  await page.keyboard.type('o.metadata.labels.app == "et');
+  await expect(preview).toContainText("^");
+  await expect(cel).toHaveAttribute("aria-invalid", "true");
+  // half-typed value: valid, matches nothing, still nothing applied
+  await page.keyboard.type('"');
+  await expect(preview).toContainText("→ 0 / 3");
+  expect((await focused(page)).total).toBe(3);
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type('cd"');
+  await expect(preview).toContainText("→ 1 / 3");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["etcd-0"]);
+  await expect(preview).toHaveCount(0); // applied: nothing pending
+  // a parse error is refused with the reason; the applied filter stays
+  await page.keyboard.type(" &&");
+  await expect(cel).toHaveAttribute("aria-invalid", "true");
+  await page.keyboard.press("Enter");
+  expect((await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
+  // empty + ⏎ clears
+  await cel.fill("");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).total).toBe(3);
+});
+
+test("cel filter completes field paths from the live objects", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("c");
+  await page.keyboard.type("o.metadata.la");
+  const list = page.getByRole("listbox", { name: "cel suggestions" });
+  await expect(list.getByRole("option").first()).toContainText("labels");
+  await expect(list.getByRole("option").first()).toContainText("map · 3/3");
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("cel", { exact: true })).toHaveValue("o.metadata.labels");
+});
+
+test("= in the YAML view filters by the field under the cursor", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("Enter"); // YAML of etcd-0
+  const dialog = page.getByRole("dialog", { name: "object detail" });
+  await expect(dialog).toContainText("app: etcd");
+  await dialog.getByText("app: etcd").click();
+  await page.keyboard.press("=");
+  await expect.poll(async () => (await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["etcd-0"]);
+  expect((await inspect(page)).overlays).toEqual([]);
 });
 
 test("j/k move selection, enter opens detail, d toggles diff, esc restores focus", async ({ page }) => {

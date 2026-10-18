@@ -62,6 +62,7 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("filter rows", "filter.focus"),
       row("filter by label selector", "filter.focusLabels"),
+      row("filter by CEL expression", "filter.focusCel"),
       row("leave the filter bar", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),
       row("page down / up", "row.pageDown", "row.pageUp"),
@@ -87,6 +88,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("back to YAML", "detail.showYaml"),
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
+      row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
       row("close", "detail.close"),
     ],
   },

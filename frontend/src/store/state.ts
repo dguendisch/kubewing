@@ -9,6 +9,8 @@ export interface PaneSpec {
   namespace: string; // "" = all
   labelSelector: string;
   grep: string;
+  /** CEL filter over the object `o` ("" = none). */
+  filter: string;
 }
 
 export interface PaneState {
@@ -71,7 +73,7 @@ export interface Overlay {
   restore: FocusContext;
 }
 
-export type FilterField = "grep" | "labels";
+export type FilterField = "grep" | "labels" | "cel";
 
 export interface UIState {
   tabs: Tab[];
@@ -96,6 +98,7 @@ export const initialSpec = (context = ""): PaneSpec => ({
   namespace: "",
   labelSelector: "",
   grep: "",
+  filter: "",
 });
 
 export function initialState(context = ""): UIState {
@@ -375,7 +378,8 @@ export function pipelineYAML(spec: PaneSpec): string {
   if (spec.namespace) source.namespace = spec.namespace;
   if (spec.labelSelector) source.labelSelector = spec.labelSelector;
   const p: Record<string, unknown> = { source };
-  if (spec.grep) p.stages = [{ grep: spec.grep }];
+  const stages = [...(spec.filter ? [{ filter: spec.filter }] : []), ...(spec.grep ? [{ grep: spec.grep }] : [])];
+  if (stages.length) p.stages = stages;
   return JSON.stringify(p);
 }
 

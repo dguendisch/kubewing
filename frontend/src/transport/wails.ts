@@ -9,6 +9,8 @@ export function wailsTransport(): Transport {
   return {
     open: (y) => call("Open", y),
     update: (p, y) => call("Update", p, y),
+    preview: (p, d) => call("Preview", p, d),
+    fieldKeys: (p, path) => call("FieldKeys", p, path),
     setViewport: (p, o, l) => call("SetViewport", p, o, l),
     resync: (p) => call("Resync", p),
     object: (p, k) => call("Object", p, k),

@@ -8,6 +8,7 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -220,6 +221,18 @@ func (s *Service) Update(paneID, pipelineYAML string) error {
 	}
 	pn.mu.Lock()
 	sameSource := pn.p.Source == p.Source
+	if sameSource && equalColumns(pn.p.Render.Columns, p.Render.Columns) {
+		// filter/grep/sort only: keep objects and diff state
+		err := pn.view.SetStages(p.Stages)
+		if err == nil {
+			pn.p = *p
+		}
+		pn.mu.Unlock()
+		if err == nil {
+			pn.poke()
+		}
+		return err
+	}
 	pn.mu.Unlock()
 	if !sameSource {
 		return fmt.Errorf("changing the source of a pane is not supported; open a new pane")
@@ -247,6 +260,55 @@ func (s *Service) Update(paneID, pipelineYAML string) error {
 	pn.mu.Unlock()
 	go s.pump(ctx, pn)
 	return nil
+}
+
+func equalColumns(a, b []pipeline.Column) bool { return slices.Equal(a, b) }
+
+// Draft is a filter bar edit not applied yet: Field is "filter" (CEL) or
+// "labels" (label selector).
+type Draft struct {
+	Field string `json:"field"`
+	Value string `json:"value"`
+}
+
+// Preview evaluates a draft against a pane's live objects without changing
+// the pane (the filter bar shows the outcome while typing).
+func (s *Service) Preview(paneID string, d Draft) (view.Preview, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return view.Preview{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	switch d.Field {
+	case "filter":
+		return pn.view.PreviewFilter(d.Value), nil
+	case "labels":
+		return pn.view.PreviewLabels(d.Value, pn.p.Source.LabelSelector), nil
+	}
+	return view.Preview{}, fmt.Errorf("unknown draft field %q", d.Field)
+}
+
+// FieldKeys lists the keys at a dot path across a pane's live objects (CEL
+// field completion). Path is relative to the object, "" for the top level.
+type FieldKeys struct {
+	Keys    []view.FieldKey `json:"keys"`
+	Objects int             `json:"objects"`
+}
+
+// FieldKeys returns completion candidates for the CEL filter field.
+func (s *Service) FieldKeys(paneID, path string) (FieldKeys, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return FieldKeys{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	keys, n := pn.view.FieldKeys(path, 200)
+	if keys == nil {
+		keys = []view.FieldKey{}
+	}
+	return FieldKeys{Keys: keys, Objects: n}, nil
 }
 
 // SetViewport sets the visible row window of a pane.

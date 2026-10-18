@@ -3,6 +3,8 @@ import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
 import type { ActionKind, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { paneIds } from "./store/layout";
+import { celFromLeaf, yamlLeaf } from "./complete/cel";
+import { cursor } from "./editor/Viewer";
 import * as S from "./store/state";
 
 /**
@@ -58,6 +60,11 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => ({ ...x, focus: "filter", filterField: "grep", overlay: undefined }));
     case "filter.focusLabels":
       return setUI((x) => ({ ...x, focus: "filter", filterField: "labels", overlay: undefined }));
+    case "filter.focusCel":
+      return setUI((x) => ({ ...x, focus: "filter", filterField: "cel", overlay: undefined }));
+    case "filter.fromDetail":
+    case "filter.fromDetailNot":
+      return filterFromDetail(cmd === "filter.fromDetail" ? "==" : "!=");
     case "filter.blur":
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
@@ -150,6 +157,23 @@ export function dispatch(cmd: CommandId) {
     case "confirm.cancel":
       return setUI(S.closeOverlay);
   }
+}
+
+/**
+ * = / ! in the YAML view: the field under the cursor, compared with its
+ * value, becomes the pane's CEL filter, applied at once (it's complete, so
+ * there's nothing to preview). The detail view closes onto the result.
+ */
+function filterFromDetail(op: "==" | "!=") {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "detail" || o.view === "describe" || o.diff) return;
+  const pane = useUI.getState().panes[o.pane];
+  if (!pane || cursor.text === undefined) return;
+  const leaf = yamlLeaf(cursor.text.split("\n"), cursor.line);
+  const expr = leaf && celFromLeaf(leaf, op);
+  if (!expr) return flash(pane.id, "no value on this line to filter by", true);
+  setUI(S.closeOverlay);
+  void applySpec(pane.id, { ...pane.spec, filter: expr });
 }
 
 /** Shows a short message in a pane's status line. */
