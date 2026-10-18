@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { commandIds, defaultBindings, mergeBindings } from "../keys/keymap";
 import type { RowInfo, SafetyRule } from "../transport/types";
-import { menuFor, prettyKey, rowActions } from "./registry";
+import { menuFor, rowActions } from "./registry";
 // the dispatcher's source, to check every menu command is handled
 import commandsSrc from "../commands.ts?raw";
 
@@ -60,12 +60,5 @@ describe("row actions menu", () => {
 
   it("every menu command is handled by the dispatcher", () => {
     for (const a of rowActions) expect(commandsSrc).toContain(`case "${a.command}"`);
-  });
-
-  it("pretty-prints chords", () => {
-    expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");
-    expect(prettyKey("Meta+Enter")).toBe("⌘⏎");
-    expect(prettyKey("J")).toBe("j");
-    expect(prettyKey("Shift+G")).toBe("⇧G");
   });
 });

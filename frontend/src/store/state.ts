@@ -45,8 +45,9 @@ export interface Tab {
 
 export interface Overlay {
   /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
-   *  portforward: ports dialog for a row's pod; forwards: list of port-forwards. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu";
+   *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
+   *  help: the keyboard cheat sheet. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
@@ -307,7 +308,8 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
 }
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
-  const focus: FocusContext = o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : o.kind === "menu" ? "menu" : "dialog";
+  const focus: FocusContext =
+    o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : o.kind === "menu" ? "menu" : o.kind === "help" ? "help" : "dialog";
   return { ...s, overlay: { ...o, restore: s.focus }, focus };
 }
 

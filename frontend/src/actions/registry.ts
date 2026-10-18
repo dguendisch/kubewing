@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { defaultBindings, type Binding, type CommandId } from "../keys/keymap";
+import { defaultBindings, prettyKey, type Binding, type CommandId } from "../keys/keymap";
 import type { RowInfo, SafetyRule } from "../transport/types";
 
 /**
@@ -54,18 +54,4 @@ export function menuFor(row: RowInfo, rule: SafetyRule | undefined, bindings: Bi
     const b = bindings.find((x) => x.command === a.command && (!x.when?.length || x.when.includes("table")));
     return { command: a.command, label: a.label, group: a.group, shortcut: b && prettyKey(b.key), disabled: ok === true ? undefined : ok };
   });
-}
-
-const symbols: Record<string, string> = {
-  Meta: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧",
-  Enter: "⏎", Escape: "esc", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "␣", Tab: "⇥",
-};
-
-/** "Shift+D" → "⇧D", "Ctrl+D" → "⌃D", "S" → "s". */
-export function prettyKey(key: string): string {
-  const parts = key.split("+");
-  const k = parts.pop()!;
-  const mods = parts.map((m) => symbols[m] ?? m).join("");
-  const name = symbols[k] ?? (k.length === 1 && !mods ? k.toLowerCase() : k);
-  return mods + name;
 }

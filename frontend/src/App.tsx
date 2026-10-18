@@ -4,6 +4,7 @@ import { ContextMenu } from "./components/ContextMenu";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
 import { Dock } from "./components/Dock";
+import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
@@ -69,6 +70,7 @@ export function App() {
       <PortForwardList />
       <ContextMenu />
       <TabSwitcher />
+      <Help />
     </div>
   );
 }

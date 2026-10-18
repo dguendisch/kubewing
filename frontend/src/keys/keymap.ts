@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "forwards", "menu"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "forwards", "menu", "help"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -51,7 +51,8 @@ export type CommandId =
   | "portforward.list"
   | "portforward.stop"
   | "confirm.accept"
-  | "confirm.cancel";
+  | "confirm.cancel"
+  | "help.toggle";
 
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
@@ -65,7 +66,7 @@ export const commandIds: readonly CommandId[] = [
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
-  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel",
+  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
 ];
 
 export interface Binding {
@@ -143,6 +144,9 @@ export const defaultBindings: Binding[] = [
   { key: "K", command: "row.up", when: ["forwards"] },
   { key: "ArrowUp", command: "row.up", when: ["forwards"] },
   { key: "Escape", command: "confirm.cancel", when: ["confirm"] },
+  // not global: in the filter bar and the dialogs "?" is text being typed
+  { key: "?", command: "help.toggle", when: ["table", "detail", "forwards", "menu", "help"] },
+  { key: "Escape", command: "detail.close", when: ["help"] },
 ];
 
 /**
@@ -288,4 +292,18 @@ export function collisions(bindings: Binding[]): string[] {
     }
   }
   return out;
+}
+
+const symbols: Record<string, string> = {
+  Meta: "⌘", Ctrl: "⌃", Alt: "⌥", Shift: "⇧",
+  Enter: "⏎", Escape: "esc", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "␣", Tab: "⇥",
+};
+
+/** "Shift+D" → "⇧D", "Ctrl+D" → "⌃D", "S" → "s". */
+export function prettyKey(key: string): string {
+  const parts = key.split("+");
+  const k = parts.pop()!;
+  const mods = parts.map((m) => symbols[m] ?? m).join("");
+  const name = symbols[k] ?? (k.length === 1 && !mods ? k.toLowerCase() : k);
+  return mods + name;
 }

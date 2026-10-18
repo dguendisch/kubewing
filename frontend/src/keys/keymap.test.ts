@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalKey, chord, collisions, commandIds, defaultBindings, mergeBindings, resolve, suppressedDefaults } from "./keymap";
+import { canonicalKey, chord, collisions, commandIds, defaultBindings, mergeBindings, prettyKey, resolve, suppressedDefaults } from "./keymap";
 
 describe("chord", () => {
   it("canonicalizes", () => {
@@ -63,6 +63,11 @@ describe("resolve", () => {
     expect(resolve("Ctrl+D", "filter")).toBeUndefined(); // forward-delete in inputs
     expect(resolve("Escape", "confirm")).toBe("confirm.cancel");
     expect(resolve("Enter", "confirm")).toBeUndefined(); // submits the confirm form (strict: only once typed)
+    expect(resolve("?", "table")).toBe("help.toggle");
+    expect(resolve("?", "help")).toBe("help.toggle"); // toggles back off
+    expect(resolve("Escape", "help")).toBe("detail.close");
+    expect(resolve("?", "filter")).toBeUndefined(); // typing a question mark into the filter
+    expect(resolve("?", "confirm")).toBeUndefined();
   });
 });
 
@@ -94,6 +99,13 @@ describe("default keymap", () => {
     // (that would make suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
     expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F"]);
+  });
+  it("pretty-prints chords", () => {
+    expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");
+    expect(prettyKey("Meta+Enter")).toBe("⌘⏎");
+    expect(prettyKey("J")).toBe("j");
+    expect(prettyKey("Shift+G")).toBe("⇧G");
+    expect(prettyKey("?")).toBe("?");
   });
 });
 

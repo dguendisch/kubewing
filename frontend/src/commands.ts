@@ -129,6 +129,9 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
+    case "help.toggle":
+      // from an open menu or port-forward list: that overlay closes, the sheet replaces it
+      return setUI((x) => (x.overlay?.kind === "help" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "help", pane: pane.id })));
     case "object.delete":
       return void prepareAction("delete");
     case "confirm.accept":

@@ -114,8 +114,37 @@ test("j/k move selection, enter opens detail, d toggles diff, esc restores focus
   expect((await focused(page)).selected).toBe(1);
 });
 
-test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) => {
+test("? shows the cheat sheet with the live keymap, esc closes it", async ({ page }) => {
   await openTape(page);
+  await page.keyboard.press("j");
+  await page.keyboard.press("?");
+  let s = await inspect(page);
+  expect(s.overlays).toEqual(["help"]);
+  expect(s.focus).toBe("help");
+  const sheet = page.getByRole("dialog", { name: "keyboard shortcuts" });
+  await expect(sheet).toContainText("split down");
+  await expect(sheet).toContainText("⌘1–⌘9");
+  await expect(sheet.getByText("exec shell")).toBeVisible();
+  // ? toggles it back off, leaving the table as it was
+  await page.keyboard.press("?");
+  expect((await inspect(page)).overlays).toEqual([]);
+  await page.keyboard.press("?");
+  await page.keyboard.press("Escape");
+  s = await inspect(page);
+  expect(s.overlays).toEqual([]);
+  expect(s.focus).toBe("table");
+  expect((await focused(page)).selected).toBe(1);
+});
+
+test("? in the filter bar is typed, not a shortcut", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("/");
+  await page.keyboard.type("?");
+  await expect.poll(async () => (await focused(page)).spec.grep).toBe("?");
+  expect((await inspect(page)).overlays).toEqual([]);
+});
+
+test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) => {  await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
   expect((await inspect(page)).activeTab).toBe(1);
   await page.keyboard.press("ControlOrMeta+Shift+BracketRight");
