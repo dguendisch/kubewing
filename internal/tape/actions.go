@@ -50,7 +50,19 @@ func (o *Opener) Describe(_ context.Context, _ string, res source.Resolved, name
 		}
 		status, _ := yaml.Marshal(u.Object["status"])
 		fmt.Fprintf(&b, "\nStatus:\n%s", indent(string(status), "  "))
-		b.WriteString("Events:       <none>\n")
+		// each describe is a "look": an event whose count and age change per
+		// look, so the describe diff has a real change (count) and noise (age)
+		o.mu.Lock()
+		if o.looks == nil {
+			o.looks = map[string]int{}
+		}
+		o.looks[namespace+"/"+name]++
+		n := o.looks[namespace+"/"+name]
+		o.mu.Unlock()
+		b.WriteString("Events:\n")
+		b.WriteString("  Type    Reason  Age                From     Message\n")
+		b.WriteString("  ----    ------  ----               ----     -------\n")
+		fmt.Fprintf(&b, "  Normal  Looked  %-17s  kubewing  described in a test\n", fmt.Sprintf("%ds (x%d over %dm)", n*7, n, n))
 		return b.String(), nil
 	}
 	return "", fmt.Errorf("%s %q not found", strings.ToLower(res.Kind), name)

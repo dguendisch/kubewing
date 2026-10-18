@@ -14,6 +14,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
 )
@@ -33,19 +34,69 @@ const (
 	sessionChunk = 32 << 10
 )
 
+// DescribeResult is one describe run of a row, plus the previous run (the
+// last time it was described in this session) for the describe diff.
+type DescribeResult struct {
+	Text string `json:"text"`
+	// PrevNorm / CurNorm are the previous and this run, normalized for
+	// diffing (relative times blanked, tables aligned); empty without a previous run.
+	PrevNorm string `json:"prevNorm,omitempty"`
+	CurNorm  string `json:"curNorm,omitempty"`
+	// PrevAt is when the previous run was taken (RFC 3339).
+	PrevAt string `json:"prevAt,omitempty"`
+}
+
+// describeKeep bounds the describe snapshots kept for diffing (LRU).
+const describeKeep = 200
+
+type describeSnap struct {
+	text string
+	at   time.Time
+	used uint64
+}
+
 // Describe returns `kubectl describe` output for one row. Read-only: no
-// token, allowed on read-only contexts.
-func (s *Service) Describe(paneID, key string) (string, error) {
+// token, allowed on read-only contexts. Each call is one "look": it is
+// diffed against the previous look at the same object (by context + UID,
+// so a recreated object starts fresh), then becomes the new baseline.
+func (s *Service) Describe(paneID, key string) (DescribeResult, error) {
 	if s.opts.Actor == nil {
-		return "", errors.New("describe is not available")
+		return DescribeResult{}, errors.New("describe is not available")
 	}
 	r, err := s.row(paneID, key)
 	if err != nil {
-		return "", err
+		return DescribeResult{}, err
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return s.opts.Actor.Describe(ctx, r.cluster, r.res, r.namespace(), r.name())
+	text, err := s.opts.Actor.Describe(ctx, r.cluster, r.res, r.namespace(), r.name())
+	if err != nil {
+		return DescribeResult{}, err
+	}
+	id := r.context + "/" + string(r.item.Object.GetUID())
+	if r.item.Object.GetUID() == "" {
+		id = r.context + "/" + r.namespace() + "/" + r.name()
+	}
+	res := DescribeResult{Text: text}
+	s.mu.Lock()
+	prev, ok := s.described[id]
+	s.useq++
+	s.described[id] = &describeSnap{text: text, at: s.opts.Clock.Now(), used: s.useq}
+	if len(s.described) > describeKeep {
+		var oldest string
+		for k, v := range s.described {
+			if oldest == "" || v.used < s.described[oldest].used {
+				oldest = k
+			}
+		}
+		delete(s.described, oldest)
+	}
+	s.mu.Unlock()
+	if ok {
+		res.PrevNorm, res.CurNorm = normalize.DescribePair(prev.text, text)
+		res.PrevAt = prev.at.UTC().Format(time.RFC3339)
+	}
+	return res, nil
 }
 
 // RowInfo is what the UI needs to offer actions for one row (context

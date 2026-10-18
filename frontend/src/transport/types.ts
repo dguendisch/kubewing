@@ -145,6 +145,15 @@ export interface RowInfo {
   ports?: number[];
 }
 
+/** Mirrors bridge.DescribeResult: one describe run plus, from the previous look, a normalized pair to diff. */
+export interface DescribeResult {
+  text: string;
+  prevNorm?: string;
+  curNorm?: string;
+  /** When the previous look was taken (RFC 3339). */
+  prevAt?: string;
+}
+
 /** Mirrors bridge.ExecResult. */
 export interface ExecResult {
   session: string;
@@ -192,8 +201,8 @@ export interface Transport {
   delete(token: string): Promise<void>;
   /** Identity and capabilities of a row (context menu, port-forward defaults). */
   rowInfo(pane: string, key: string): Promise<RowInfo>;
-  /** kubectl describe output for a row (read-only; no token). */
-  describe(pane: string, key: string): Promise<string>;
+  /** kubectl describe output for a row (read-only; no token); diffed against the previous look. */
+  describe(pane: string, key: string): Promise<DescribeResult>;
   /** Starts a prepared exec; container "" = the pod's default. */
   execStart(token: string, container: string, cols: number, rows: number): Promise<ExecResult>;
   sessionInput(id: string, data: string): Promise<void>;

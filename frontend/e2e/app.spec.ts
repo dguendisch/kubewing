@@ -627,6 +627,40 @@ test.describe("object actions", () => {
     expect((await inspect(page)).overlays).toEqual([]);
   });
 
+  test("describe diff: d compares with the previous look (times ignored), r takes a new look", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    const dialog = page.getByRole("dialog", { name: "object detail" });
+    // the look counter of the tape's fake "Looked" event, from the loaded describe (not the virtualized DOM)
+    const count = async () =>
+      Number(((await page.evaluate(() => (window as any).__kw.inspect().describe?.text)) ?? "").match(/\(x(\d+) over/)?.[1] ?? 0);
+    await page.keyboard.press("Shift+D");
+    await expect.poll(count).toBeGreaterThan(0);
+    const n = await count();
+    // d toggles to the diff without taking a new look
+    await page.keyboard.press("d");
+    if (n === 1) await expect(dialog).toContainText("nothing to compare yet"); // first look this session
+    await page.keyboard.press("d");
+    expect(await count()).toBe(n); // still the same look
+    // r: a new look; its diff against the previous one shows the count change only
+    await page.keyboard.press("r");
+    await expect.poll(count).toBe(n + 1);
+    await page.keyboard.press("d");
+    const diff = dialog.locator('[data-viewer="diff"]');
+    await expect(diff.locator(".monaco-diff-editor")).toBeVisible();
+    await expect(dialog).toContainText(/describe diff \(look \d+s ago → now, times ignored\)/);
+    await expect(diff.locator(".editor.original .view-lines")).toContainText(`(x${n})`);
+    await expect(diff.locator(".editor.modified .view-lines")).toContainText(`(x${n + 1})`);
+    // ages are blanked on both sides: no "7s"/"14s" anywhere
+    await expect(diff.locator(".view-lines").first()).not.toContainText(/\d+s \(x/);
+    // exactly one changed line pair (the event row)
+    await expect.poll(() => diff.locator(".line-insert, .char-insert").count()).toBeGreaterThan(0);
+    await page.keyboard.press("d");
+    await page.waitForTimeout(200);
+    expect(await count()).toBe(n + 1); // toggling back didn't take another look
+    await page.keyboard.press("Escape");
+  });
+
   test("s opens a terminal pane below; keys go to the shell; ⌘W closes it and the session", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");

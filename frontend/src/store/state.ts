@@ -49,6 +49,8 @@ export interface Overlay {
   kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
+  /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
+  describeGen?: number;
   /** forwards, menu: highlighted entry. */
   index?: number;
   /** menu: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */

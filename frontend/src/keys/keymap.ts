@@ -38,6 +38,7 @@ export type CommandId =
   | "detail.close"
   | "detail.toggleDiff"
   | "detail.showYaml"
+  | "detail.refresh"
   | "source.open"
   | "config.reload"
   | "object.delete"
@@ -61,7 +62,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.blur",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml",
+  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel",
@@ -120,6 +121,7 @@ export const defaultBindings: Binding[] = [
   { key: "Y", command: "detail.open", when: ["table"] },
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
+  { key: "R", command: "detail.refresh", when: ["detail"] },
   // k9s convention; the safety model decides whether and how to confirm
   { key: "Ctrl+D", command: "object.delete", when: ["table"] },
   // context menu of the selected row (also right-click): every row action, generated from actions/registry.ts

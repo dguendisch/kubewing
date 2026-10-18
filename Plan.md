@@ -92,6 +92,9 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### P3 — "Operator power" (v2.0)
 
+1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (also the context menu)
+1. **Ops pod on a node** - in two different flavors, without host mounting and with, configurable image
+1. **k debug** - on arbitrary pods
 1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
 1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).

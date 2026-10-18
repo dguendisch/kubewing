@@ -1,4 +1,5 @@
 import { rowAt } from "./grid/rowcache";
+import { shownDescribe } from "./components/Detail";
 import { useConfig } from "./store/config";
 import { paneData, useUI } from "./store/store";
 import * as S from "./store/state";
@@ -21,6 +22,7 @@ export function inspect() {
     mru: s.mru,
     switcher: s.switcher,
     overlay: s.overlay,
+    describe: s.overlay?.kind === "detail" && s.overlay.view === "describe" ? shownDescribe : undefined,
     panes: Object.fromEntries(
       Object.values(s.panes).map((p) => {
         const d = p.serverId ? paneData.get(p.serverId) : undefined;

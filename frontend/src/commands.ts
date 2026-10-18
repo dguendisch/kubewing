@@ -96,7 +96,7 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false } } : x));
     case "object.describe": {
       // from the table, or switching an open detail view to describe
-      if (s.overlay?.kind === "detail") return setUI((x) => ({ ...x, overlay: { ...x.overlay!, view: "describe", diff: false } }));
+      if (s.overlay?.kind === "detail") return setUI((x) => ({ ...x, overlay: { ...x.overlay!, view: "describe", diff: false, describeGen: (x.overlay!.describeGen ?? 0) + 1 } }));
       const key = selectedKey(pane);
       if (!key) return;
       return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "describe" }));
@@ -118,7 +118,13 @@ export function dispatch(cmd: CommandId) {
     case "detail.close":
       return setUI(S.closeOverlay);
     case "detail.toggleDiff":
-      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, view: "yaml" } } : x));
+      // in describe: diff against the previous describe; elsewhere the object diff
+      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff } } : x));
+    case "detail.refresh":
+      // re-run describe: the last run becomes the baseline of the diff
+      return setUI((x) =>
+        x.overlay?.kind === "detail" && x.overlay.view === "describe" ? { ...x, overlay: { ...x.overlay, describeGen: (x.overlay.describeGen ?? 0) + 1 } } : x,
+      );
     case "source.open":
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
     case "config.reload":

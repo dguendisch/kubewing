@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"context"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -122,7 +123,7 @@ func TestExecRefusedOnReadOnlyAndNonPods(t *testing.T) {
 		t.Errorf("exec on read-only: %v", err)
 	}
 	// describe and port-forward don't change the cluster: allowed on read-only
-	if d, err := svc.Describe(res.Pane, "s-web-0"); err != nil || !strings.Contains(d, "Name:         web-0") || !strings.Contains(d, "Events:") {
+	if d, err := svc.Describe(res.Pane, "s-web-0"); err != nil || !strings.Contains(d.Text, "Name:         web-0") || !strings.Contains(d.Text, "Events:") {
 		t.Errorf("describe on read-only: %q %v", d, err)
 	}
 	if _, err := svc.PortForwardStart(res.Pane, "s-web-0", []string{"8080"}); err != nil {
@@ -210,5 +211,69 @@ func TestRowInfo(t *testing.T) {
 	}
 	if _, err := svc.RowInfo(res.Pane, "nope"); err == nil {
 		t.Error("unknown key must fail")
+	}
+}
+
+// fakeDescriber returns scripted describe output per call (a tape.Opener otherwise).
+type fakeDescriber struct {
+	*tape.Opener
+	runs []string
+	n    int
+}
+
+func (f *fakeDescriber) Describe(context.Context, string, source.Resolved, string, string) (string, error) {
+	t := f.runs[min(f.n, len(f.runs)-1)]
+	f.n++
+	return t, nil
+}
+
+func TestDescribeDiffsAgainstThePreviousLook(t *testing.T) {
+	tp, err := tape.Load("../../testdata/tapes/e2e-static.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{"e2e-static": tp}}
+	fd := &fakeDescriber{Opener: op, runs: []string{
+		"Name:  web-0\nEvents:\n  Type    Reason  Age   From     Message\n  ----    ------  ----  ----     -------\n  Normal  Pulled  2m    kubelet  pulled",
+		"Name:  web-0\nEvents:\n  Type     Reason     Age   From     Message\n  ----     ------     ----  ----     -------\n  Normal   Pulled     7m    kubelet  pulled\n  Warning  OOMKilled  5s    kubelet  killed",
+	}}
+	log := &eventLog{events: map[string][]any{}}
+	cfg := config.Defaults("")
+	svc := New(source.NewRegistry(op), log, Options{Actor: fd, Config: &cfg})
+	res, err := svc.Open("source: {resource: e2e-static}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close(res.Pane)
+	svc.SetViewport(res.Pane, 0, 10)
+	waitRow(t, log, res.Pane, "s-web-0", func(view.RowData) bool { return true })
+
+	first, err := svc.Describe(res.Pane, "s-web-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.PrevNorm != "" || first.PrevAt != "" {
+		t.Errorf("first look has nothing to compare: %+v", first)
+	}
+	second, _ := svc.Describe(res.Pane, "s-web-0")
+	if second.PrevAt == "" || !strings.Contains(second.CurNorm, "OOMKilled") || strings.Contains(second.PrevNorm, "OOMKilled") {
+		t.Errorf("second look: %+v", second)
+	}
+	// the aged Pulled event is the same line on both sides (ages blanked, columns aligned)
+	line := func(text string) string {
+		for _, l := range strings.Split(text, "\n") {
+			if strings.Contains(l, "Pulled") {
+				return l
+			}
+		}
+		return ""
+	}
+	if line(second.PrevNorm) == "" || line(second.PrevNorm) != line(second.CurNorm) {
+		t.Errorf("aged event must match:\n%s\n---\n%s", second.PrevNorm, second.CurNorm)
+	}
+	// another object has its own baseline
+	other, _ := svc.Describe(res.Pane, "s-web-1")
+	if other.PrevNorm != "" {
+		t.Errorf("web-1's first look: %+v", other)
 	}
 }

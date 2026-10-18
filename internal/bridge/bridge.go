@@ -74,6 +74,9 @@ type Service struct {
 	guard    *safety.Guard
 	sessions map[string]*session
 	forwards map[string]*forward
+	// described: last describe run per object, for the describe diff
+	described map[string]*describeSnap
+	useq      uint64
 }
 
 // New creates a service.
@@ -84,7 +87,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, forwards: map[string]*forward{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if opts.Config != nil {
 		s.setConfig(*opts.Config)

@@ -29,6 +29,7 @@ type Opener struct {
 	live    map[*Tape]map[int]chan source.Event
 	nextID  int
 	deleted map[string]bool // uids deleted via Delete
+	looks   map[string]int  // describe calls per namespace/name (fake events)
 }
 
 // Resolve implements source.Opener.
