@@ -26,8 +26,8 @@ const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod
 
 export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true },
-  { command: "object.diff", label: "diff to previous version", group: "view", available: (r) => (r.hasPrev ? true : "no previous version since watch start") },
   { command: "object.describe", label: "describe", group: "view", available: live },
+  { command: "object.diff", label: "diff last change", group: "view", available: (r) => (r.hasPrev ? true : "no change seen yet") },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },

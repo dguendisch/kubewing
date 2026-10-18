@@ -26,7 +26,7 @@ describe("row actions menu", () => {
     const m = byCmd(menuFor(cm, undefined));
     expect(m["object.exec"]!.disabled).toBe("needs a pod, not configmap");
     expect(m["object.portForward"]!.disabled).toBe("needs a pod, not configmap");
-    expect(m["object.diff"]!.disabled).toBe("no previous version since watch start");
+    expect(m["object.diff"]!.disabled).toBe("no change seen yet");
     expect(m["object.describe"]!.disabled).toBeUndefined();
 
     const gone = byCmd(menuFor({ ...pod, deleted: true }, undefined));

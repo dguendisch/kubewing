@@ -71,11 +71,15 @@ export interface Overlay {
   restore: FocusContext;
 }
 
+export type FilterField = "grep" | "labels";
+
 export interface UIState {
   tabs: Tab[];
   activeTab: number;
   panes: Record<string, PaneState>;
   focus: FocusContext;
+  /** Which filter bar field "filter" focus means (default grep). */
+  filterField?: FilterField;
   overlay?: Overlay;
   nextId: number;
   /** Default spec for new panes (current kube context). */

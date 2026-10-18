@@ -55,7 +55,9 @@ export function dispatch(cmd: CommandId) {
     case "tab.switcherCancel":
       return setUI(S.switcherCancel);
     case "filter.focus":
-      return setUI((x) => ({ ...x, focus: "filter", overlay: undefined }));
+      return setUI((x) => ({ ...x, focus: "filter", filterField: "grep", overlay: undefined }));
+    case "filter.focusLabels":
+      return setUI((x) => ({ ...x, focus: "filter", filterField: "labels", overlay: undefined }));
     case "filter.blur":
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":

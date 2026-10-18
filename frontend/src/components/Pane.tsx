@@ -14,7 +14,7 @@ import { ruleColor } from "./safetyStyle";
 export function Pane({ id }: { id: string }) {
   const pane = useUI((s) => s.panes[id]);
   const isFocused = useUI((s) => S.activeTab(s).focused === id);
-  const filterFocused = useUI((s) => isFocused && s.focus === "filter");
+  const filterField = useUI((s) => (isFocused && s.focus === "filter" ? s.filterField ?? "grep" : undefined));
   const tableFocused = useUI((s) => isFocused && s.focus === "table" && !s.overlay);
 
   // open on mount / spec change of a table pane without server pane
@@ -59,7 +59,7 @@ export function Pane({ id }: { id: string }) {
           </div>
         </>
       ) : (
-        <TablePane pane={pane} id={id} rule={rule} filterFocused={filterFocused} tableFocused={tableFocused} />
+        <TablePane pane={pane} id={id} rule={rule} filterField={filterField} tableFocused={tableFocused} />
       )}
     </section>
   );
@@ -105,18 +105,18 @@ function TablePane({
   pane,
   id,
   rule,
-  filterFocused,
+  filterField,
   tableFocused,
 }: {
   pane: S.PaneState;
   id: string;
   rule?: SafetyRule;
-  filterFocused: boolean;
+  filterField?: S.FilterField;
   tableFocused: boolean;
 }) {
   return (
     <>
-      <Header pane={pane} rule={rule} filterFocused={filterFocused} />
+      <Header pane={pane} rule={rule} filterField={filterField} />
       <div className="relative min-h-0 flex-1">
         {pane.serverId ? (
           <Table
@@ -145,15 +145,24 @@ function keyAt(p: S.PaneState): string | undefined {
   return d.order[p.selected - d.offset];
 }
 
-function Header({ pane, rule, filterFocused }: { pane: S.PaneState; rule?: SafetyRule; filterFocused: boolean }) {
+function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyRule; filterField?: S.FilterField }) {
   const input = useRef<HTMLInputElement>(null);
+  const labelInput = useRef<HTMLInputElement>(null);
   const [grep, setGrep] = useState(pane.spec.grep);
   const [labels, setLabels] = useState(pane.spec.labelSelector);
 
+  // "filter" focus covers both fields: `/` lands in grep, `l` in labels; a click sets the field it lands in
   useEffect(() => {
-    if (filterFocused) input.current?.focus();
-    else input.current?.blur();
-  }, [filterFocused]);
+    const active = document.activeElement;
+    const target = filterField === "labels" ? labelInput.current : filterField ? input.current : null;
+    if (target && active !== target) target.focus();
+    else if (!target && (active === input.current || active === labelInput.current)) (active as HTMLElement).blur();
+  }, [filterField]);
+  // moving between the two fields stays in "filter"
+  const onBlur = (e: React.FocusEvent) => {
+    if (e.relatedTarget === input.current || e.relatedTarget === labelInput.current) return;
+    setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
+  };
 
   // debounce filter → pipeline update
   useEffect(() => {
@@ -175,17 +184,18 @@ function Header({ pane, rule, filterFocused }: { pane: S.PaneState; rule?: Safet
         placeholder="/ grep"
         value={grep}
         onChange={(e) => setGrep(e.target.value)}
-        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter" }))}
-        onBlur={() => setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s))}
+        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: "grep" }))}
+        onBlur={onBlur}
         className="ml-auto w-48 rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent"
       />
       <input
+        ref={labelInput}
         aria-label="label selector"
-        placeholder="-l app=…"
+        placeholder="l labels"
         value={labels}
         onChange={(e) => setLabels(e.target.value)}
-        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter" }))}
-        onBlur={() => setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s))}
+        onFocus={() => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: "labels" }))}
+        onBlur={onBlur}
         className="w-36 rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent"
       />
     </header>

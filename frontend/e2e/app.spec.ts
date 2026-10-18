@@ -122,6 +122,37 @@ test("filter bar: / focuses, grep narrows rows, esc returns to table", async ({ 
   expect((await inspect(page)).focus).toBe("table");
 });
 
+test("label selector: click or l focuses it and keeps focus while typing; tab moves between the filter fields", async ({ page }) => {
+  await openTape(page);
+  const labels = page.getByLabel("label selector");
+  await labels.click();
+  await expect(labels).toBeFocused();
+  expect((await inspect(page)).focus).toBe("filter");
+  await page.keyboard.type("app=api");
+  await expect(labels).toHaveValue("app=api");
+  await expect.poll(async () => (await page.evaluate(() => {
+    const kw = (window as unknown as { __kw: { inspect(): { focusedPane: string; panes: Record<string, { spec: { labelSelector: string } }> } } }).__kw;
+    const s = kw.inspect();
+    return s.panes[s.focusedPane]?.spec.labelSelector;
+  }))).toBe("app=api");
+  await expect(labels).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(labels).toBeFocused();
+  expect((await inspect(page)).focus).toBe("filter");
+  await page.keyboard.press("Escape");
+  expect((await inspect(page)).focus).toBe("table");
+  await expect(labels).not.toBeFocused();
+  // l from the table lands in the label field, / still in grep
+  await page.keyboard.press("l");
+  await expect(labels).toBeFocused();
+  await expect(labels).toHaveValue("app=api"); // l is not typed into the field
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("/");
+  await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
+});
+
 test("j/k move selection, enter opens detail, d toggles diff, esc restores focus", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");
@@ -876,8 +907,8 @@ test.describe("context menu (⌘⏎, right-click)", () => {
       - menu "actions for web-1":
         - text: web-1 · pod · shop
         - menuitem "view YAML ⏎"
-        - menuitem "diff to previous version · no previous version since watch start" [disabled]
         - menuitem "describe d"
+        - menuitem "diff last change · no change seen yet" [disabled]
         - separator
         - menuitem "exec shell s"
         - menuitem "port-forward… f"
@@ -885,8 +916,12 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j skips the disabled diff entry: view YAML → describe
+    // j/k skip the disabled diff entry: describe → exec shell → describe
     await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("describe");
+    await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("exec shell");
+    await page.keyboard.press("k");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("Enter");
     await expect(menu(page)).toHaveCount(0);
@@ -925,9 +960,9 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   test("a menu opening under a resting pointer keeps the first entry; moving the mouse still highlights", async ({ page }) => {
     await openSettled(page);
     const active = () => menu(page).locator("[data-active]").innerText();
-    // find where "describe" (3rd entry) appears, then park the pointer there
+    // find where "describe" (2nd entry) appears, then park the pointer there
     await page.keyboard.press("ControlOrMeta+Enter");
-    const item = (await menu(page).getByRole("menuitem").nth(2).boundingBox())!;
+    const item = (await menu(page).getByRole("menuitem").nth(1).boundingBox())!;
     await page.keyboard.press("Escape");
     await page.mouse.move(item.x + 40, item.y + item.height / 2);
     for (let i = 0; i < 3; i++) {

@@ -61,6 +61,7 @@ const sections: { title: string; rows: Row[] }[] = [
     title: "table",
     rows: [
       row("filter rows", "filter.focus"),
+      row("filter by label selector", "filter.focusLabels"),
       row("leave the filter bar", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),
       row("page down / up", "row.pageDown", "row.pageUp"),
@@ -71,7 +72,7 @@ const sections: { title: string; rows: Row[] }[] = [
     title: "object",
     rows: [
       row("view YAML", "detail.open"),
-      row("diff to previous version", "object.diff"),
+      row("diff last change", "object.diff"),
       row("describe", "object.describe"),
       row("exec shell", "object.exec"),
       row("port-forward…", "object.portForward"),

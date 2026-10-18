@@ -27,6 +27,7 @@ export type CommandId =
   | "tab.switcherCommit"
   | "tab.switcherCancel"
   | "filter.focus"
+  | "filter.focusLabels"
   | "filter.blur"
   | "row.down"
   | "row.up"
@@ -61,7 +62,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.new", "tab.close", "tab.next", "tab.prev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
-  "filter.focus", "filter.blur",
+  "filter.focus", "filter.focusLabels", "filter.blur",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
   "source.open", "config.reload",
@@ -110,6 +111,7 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+O", command: "source.open" },
   { key: "Meta+Shift+,", command: "config.reload" },
   { key: "/", command: "filter.focus", when: ["table"] },
+  { key: "L", command: "filter.focusLabels", when: ["table"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },
