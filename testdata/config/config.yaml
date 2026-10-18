@@ -1,0 +1,21 @@
+# Example ~/.kubewing/config.yaml (also the headless E2E config, see playwright.config.ts).
+# kubewing only reads this directory; it never writes to it.
+
+# themes/<name>.yaml; omit (or "default") for the built-in theme
+theme: e2e
+
+diff:
+  # extra noise rules on top of the built-in ones (resourceVersion, managedFields, heartbeats …);
+  # "*" matches every list element / map key, kinds optionally restricts a rule
+  ignore:
+    - {path: metadata.annotations.e2e\.kubewing/noise}
+
+# Per-context safety rules (glob on the kubeconfig context name), first match wins.
+#   label/color: shown on the pane frame, header and tab; color is a theme token or a color
+#   readOnly:    every mutation (delete, exec) is refused
+#   confirm:     actions that need confirmation; delete always does
+#   strict:      confirmation requires typing the object name
+contexts:
+  - {match: "*-prod", label: PROD, color: prod, readOnly: true}
+  - {match: "*-live", label: LIVE, color: changed, strict: true}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec]}

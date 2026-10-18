@@ -1,0 +1,2 @@
+# Theme tokens (see frontend/src/theme.css); unspecified tokens keep the default.
+accent: "#3b8eea"

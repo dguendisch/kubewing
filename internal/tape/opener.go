@@ -4,7 +4,11 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
+	"sync"
 	"time"
+
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/dguendisch/kubewing/internal/source"
 )
@@ -17,6 +21,14 @@ type Opener struct {
 	Speed float64
 	// Catalog optionally fakes the cluster's resource types and namespaces.
 	Catalog *Catalog
+
+	mu sync.Mutex
+	// live are the running replays per tape (a tape is reachable under its
+	// file name and its resource); Delete injects events into them, as a
+	// real cluster's watch would deliver.
+	live    map[*Tape]map[int]chan source.Event
+	nextID  int
+	deleted map[string]bool // uids deleted via Delete
 }
 
 // Resolve implements source.Opener.
@@ -50,28 +62,110 @@ func (o *Opener) Watch(ctx context.Context, _ string, res source.Resolved, k sou
 			return false
 		}
 	}
-	if !emit(t.InitialEvent()) {
+	inject, done := o.attach(t)
+	defer done()
+	if !emit(o.withoutDeleted(t.InitialEvent())) {
 		return
 	}
-	for _, s := range t.Steps {
-		ev, ok := t.Event(s)
-		if !ok {
-			continue
+	steps := t.Steps
+	for {
+		var next <-chan time.Time
+		if len(steps) > 0 {
+			off, _ := steps[0].Offset()
+			next = time.After(time.Until(start.Add(time.Duration(float64(off) / speed))))
 		}
-		off, _ := s.Offset()
-		wait := time.Until(start.Add(time.Duration(float64(off) / speed)))
-		if wait > 0 {
-			select {
-			case <-time.After(wait):
-			case <-ctx.Done():
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-inject:
+			if !emit(ev) {
+				return
+			}
+		case <-next:
+			ev, ok := t.Event(steps[0])
+			steps = steps[1:]
+			if ok && !emit(ev) {
 				return
 			}
 		}
-		if !emit(ev) {
-			return
+	}
+}
+
+func (o *Opener) attach(t *Tape) (<-chan source.Event, func()) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.live == nil {
+		o.live = map[*Tape]map[int]chan source.Event{}
+	}
+	if o.live[t] == nil {
+		o.live[t] = map[int]chan source.Event{}
+	}
+	o.nextID++
+	id, ch := o.nextID, make(chan source.Event, 16)
+	o.live[t][id] = ch
+	return ch, func() {
+		o.mu.Lock()
+		defer o.mu.Unlock()
+		delete(o.live[t], id)
+	}
+}
+
+// withoutDeleted drops objects deleted via Delete from a replayed relist,
+// so a new pane on the same tape doesn't resurrect them.
+func (o *Opener) withoutDeleted(ev source.Event) source.Event {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	items := ev.Items[:0:0]
+	for _, it := range ev.Items {
+		if !o.deleted[string(it.Object.GetUID())] {
+			items = append(items, it)
 		}
 	}
-	<-ctx.Done()
+	ev.Items = items
+	return ev
+}
+
+// ContextName implements source.Actor. Tapes replay on any cluster name,
+// so tests can open the same tape on differently configured contexts;
+// the current context ("") is "tape".
+func (o *Opener) ContextName(cluster string) (string, error) {
+	if cluster == "" {
+		return "tape", nil
+	}
+	return cluster, nil
+}
+
+// Delete implements source.Actor: running replays of the tape that holds
+// the object see it deleted. Objects are looked up in the tape's initial
+// state and steps (by uid, else namespace/name).
+func (o *Opener) Delete(_ context.Context, _ string, res source.Resolved, namespace, name string, uid k8stypes.UID) error {
+	var found *Object
+	var tape *Tape
+	for _, t := range o.Tapes {
+		if found = t.find(namespace, name, uid); found != nil {
+			tape = t
+			break
+		}
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if found == nil || o.deleted[string(uid)] {
+		return fmt.Errorf("%s %q not found", strings.ToLower(res.Kind), name)
+	}
+	if uid != "" {
+		if o.deleted == nil {
+			o.deleted = map[string]bool{}
+		}
+		o.deleted[string(uid)] = true
+	}
+	ev := source.Event{Type: source.Deleted, Item: found.Item()}
+	for _, ch := range o.live[tape] {
+		select {
+		case ch <- ev:
+		default: // a stuck replay misses it, like a dropped watch
+		}
+	}
+	return nil
 }
 
 // Catalog is a fake cluster API surface for completion (tapes/catalog.yaml).

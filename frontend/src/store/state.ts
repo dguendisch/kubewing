@@ -1,5 +1,6 @@
 import type { FocusContext } from "../keys/keymap";
-import { leaf, neighbor, paneIds, remove, split, type Direction, type Layout } from "./layout";
+import type { Pending } from "../transport/types";
+import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -13,12 +14,27 @@ export interface PaneSpec {
 export interface PaneState {
   id: string;
   spec: PaneSpec;
+  /** Context name the server pane resolved spec.context to (safety rules match on it). */
+  context?: string;
+  /** Short-lived status message (e.g. an action refused by the safety model). */
+  flash?: { text: string; error?: boolean };
+  /** Set for terminal panes (exec session) instead of a table. */
+  term?: Term;
   /** Server-side pane id once opened. */
   serverId?: string;
   /** An Open call is in flight. */
   opening?: boolean;
   error?: string;
   selected: number;
+}
+
+export interface Term {
+  session: string;
+  pod: string;
+  container: string;
+  context: string;
+  /** Exit code or error once the session ended; the pane stays until closed. */
+  exited?: string;
 }
 
 export interface Tab {
@@ -28,10 +44,18 @@ export interface Tab {
 }
 
 export interface Overlay {
-  kind: "detail" | "open";
+  /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
+   *  portforward: ports dialog for a row's pod; forwards: list of port-forwards. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards";
+  /** detail: which view; describe is fetched separately. */
+  view?: "yaml" | "describe";
+  /** forwards: highlighted row. */
+  index?: number;
   pane: string;
   key?: string;
   diff?: boolean;
+  /** confirm: the prepared action. */
+  pending?: Pending;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -78,6 +102,38 @@ export function initialState(context = ""): UIState {
  * (only committing counts as use). A tab opening or closing mid-switch ends
  * the switcher. Applied after every state update.
  */
+/**
+ * The pane area's focus context follows the focused pane's kind: commands
+ * only say "back to the pane" (table); a terminal pane makes it terminal.
+ * Applied after every state update, like touchTab.
+ */
+export function paneFocus(s: UIState): UIState {
+  if (s.focus !== "table" && s.focus !== "terminal") return s;
+  const want = focusedPane(s)?.term ? "terminal" : "table";
+  return s.focus === want ? s : { ...s, focus: want };
+}
+
+/** Opens a terminal pane for an exec session below the focused pane (⌘D direction) and focuses it. */
+export function openTerminal(s: UIState, term: Term, from = activeTab(s).focused): UIState {
+  const src = s.panes[from] ?? focusedPane(s);
+  const id = `v${s.nextId}`;
+  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, from, "column", id), focused: id }));
+  return {
+    ...next,
+    nextId: s.nextId + 1,
+    panes: { ...s.panes, [id]: { id, spec: { ...src.spec }, selected: 0, term, context: term.context } },
+    focus: "terminal",
+    overlay: undefined,
+  };
+}
+
+/** Exec sessions no pane references any more (closed panes, closed tabs). */
+export function orphanedSessions(prev: UIState, next: UIState): string[] {
+  if (prev.panes === next.panes) return [];
+  const live = new Set(Object.values(next.panes).map((p) => p.term?.session));
+  return Object.values(prev.panes).flatMap((p) => (p.term && !live.has(p.term.session) ? [p.term.session] : []));
+}
+
 export function touchTab(s: UIState): UIState {
   const ids = s.tabs.map((t) => t.id);
   let mru = s.mru.filter((id) => ids.includes(id));
@@ -200,6 +256,19 @@ export function tabShortcut(i: number, count: number): number | undefined {
   return i === count - 1 ? 9 : undefined;
 }
 
+/**
+ * Applies a layout rearranged by the user in dockview (divider drag, pane
+ * drag-and-drop). Only arrangements of the same panes are accepted; adding
+ * and removing panes always goes through the store's own commands.
+ */
+export function setLayout(s: UIState, layout: Layout): UIState {
+  const t = activeTab(s);
+  const have = paneIds(t.layout).sort();
+  const got = paneIds(layout).sort();
+  if (!valid(layout) || have.length !== got.length || have.some((id, i) => id !== got[i])) return s;
+  return withTab(s, () => ({ ...t, layout }));
+}
+
 export function cyclePane(s: UIState, delta: number): UIState {
   const ids = paneIds(activeTab(s).layout);
   const i = ids.indexOf(activeTab(s).focused);
@@ -232,7 +301,8 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
 }
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
-  return { ...s, overlay: { ...o, restore: s.focus }, focus: o.kind === "detail" ? "detail" : "dialog" };
+  const focus: FocusContext = o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : "dialog";
+  return { ...s, overlay: { ...o, restore: s.focus }, focus };
 }
 
 export function closeOverlay(s: UIState): UIState {

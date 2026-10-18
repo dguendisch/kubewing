@@ -1,4 +1,5 @@
 import { rowAt } from "./grid/rowcache";
+import { useConfig } from "./store/config";
 import { paneData, useUI } from "./store/store";
 import * as S from "./store/state";
 
@@ -9,7 +10,9 @@ import * as S from "./store/state";
 export function inspect() {
   const s = useUI.getState();
   const tab = S.activeTab(s);
+  const c = useConfig.getState();
   return {
+    config: { dir: c.config?.dir, errors: c.dismissed ? [] : c.errors, themeGen: c.themeGen },
     activeTab: s.activeTab,
     tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused })),
     focus: s.focus,
@@ -25,6 +28,7 @@ export function inspect() {
           p.id,
           {
             spec: p.spec,
+            term: p.term,
             pipeline: S.pipelineYAML(p.spec),
             serverId: p.serverId,
             error: p.error,

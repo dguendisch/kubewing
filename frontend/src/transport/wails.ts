@@ -1,5 +1,5 @@
 import { Call, Events } from "@wailsio/runtime";
-import type { Transport, FramePayload } from "./types";
+import type { Config, FramePayload, PortForward, SessionPayload, Transport } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
 const call = <T>(method: string, ...args: unknown[]) =>
@@ -15,6 +15,22 @@ export function wailsTransport(): Transport {
     close: (p) => call("Close", p),
     contexts: () => call("Contexts"),
     catalog: (c) => call("Catalog", c),
+    contextRule: (c) => call("ContextRule", c),
+    prepare: (k, p, key) => call("Prepare", k, p, key),
+    delete: (t) => call("Delete", t),
+    describe: (p, k) => call("Describe", p, k),
+    execStart: (t, c, cols, rows) => call("ExecStart", t, c, cols, rows),
+    sessionInput: (id, d) => call("SessionInput", id, d),
+    sessionResize: (id, c, r) => call("SessionResize", id, c, r),
+    sessionClose: (id) => call("SessionClose", id),
+    portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
+    portForwards: () => call("PortForwards"),
+    portForwardStop: (id) => call("PortForwardStop", id),
+    config: () => call("Config"),
+    reloadConfig: () => call("ReloadConfig"),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),
+    onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),
+    onSession: (cb) => Events.On("kw:session", (ev) => cb(ev.data as SessionPayload)),
+    onPortForwards: (cb) => Events.On("kw:portforwards", (ev) => cb(ev.data as PortForward[])),
   };
 }

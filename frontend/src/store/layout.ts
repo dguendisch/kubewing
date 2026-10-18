@@ -1,7 +1,8 @@
 /** Split layout tree, iTerm-style. Pure functions; see layout.test.ts. */
 export type Layout =
   | { type: "pane"; id: string }
-  | { type: "split"; dir: "row" | "column"; children: Layout[] };
+  /** sizes: relative weights per child (resized by dragging a divider); absent = equal shares. */
+  | { type: "split"; dir: "row" | "column"; children: Layout[]; sizes?: number[] };
 
 export const leaf = (id: string): Layout => ({ type: "pane", id });
 
@@ -18,7 +19,14 @@ export function split(l: Layout, target: string, dir: "row" | "column", newId: s
   if (idx >= 0 && l.dir === dir) {
     const children = [...l.children];
     children.splice(idx + 1, 0, leaf(newId));
-    return { ...l, children };
+    // the split pane gives half its share to the new one; the others keep theirs
+    let sizes = l.sizes;
+    if (sizes) {
+      sizes = [...sizes];
+      const half = sizes[idx]! / 2;
+      sizes.splice(idx, 1, half, half);
+    }
+    return withSizes({ ...l, children }, sizes);
   }
   return { ...l, children: l.children.map((c) => split(c, target, dir, newId)) };
 }
@@ -26,17 +34,56 @@ export function split(l: Layout, target: string, dir: "row" | "column", newId: s
 /** Removes a pane, collapsing single-child splits. Returns undefined if the tree is empty. */
 export function remove(l: Layout, target: string): Layout | undefined {
   if (l.type === "pane") return l.id === target ? undefined : l;
-  const children = l.children.map((c) => remove(c, target)).filter((c): c is Layout => c !== undefined);
-  if (children.length === 0) return undefined;
-  if (children.length === 1) return children[0];
-  return { ...l, children };
+  const kept = l.children.map((c, i) => [remove(c, target), l.sizes?.[i]] as const).filter(([c]) => c !== undefined);
+  if (kept.length === 0) return undefined;
+  if (kept.length === 1) return kept[0]![0];
+  // the remaining children keep their relative weights; a child that collapsed
+  // into a split with our direction is merged in, so the tree stays canonical
+  // (no same-direction nesting: dockview's grid can't express it)
+  const children: Layout[] = [];
+  const weights: number[] = [];
+  const own = l.sizes ? kept.map(([, w]) => w!) : kept.map(() => 1);
+  kept.forEach(([c], i) => {
+    if (c!.type === "split" && c!.dir === l.dir) {
+      shares(c!).forEach((f, j) => {
+        children.push(c!.children[j]!);
+        weights.push(own[i]! * f);
+      });
+    } else {
+      children.push(c!);
+      weights.push(own[i]!);
+    }
+  });
+  const sized = !!l.sizes || kept.some(([c]) => c!.type === "split" && c!.dir === l.dir && !!c!.sizes);
+  const merged = children.length !== kept.length;
+  return withSizes({ ...l, children }, sized || merged ? weights : undefined);
 }
 
-/** Validity: unique pane ids, splits have ≥2 children. */
+function withSizes(l: Extract<Layout, { type: "split" }>, sizes: number[] | undefined): Layout {
+  return sizes ? { ...l, sizes } : { type: l.type, dir: l.dir, children: l.children };
+}
+
+/** Child weights of a split, normalized to sum 1 (equal shares without sizes). */
+export function shares(l: Extract<Layout, { type: "split" }>): number[] {
+  const n = l.children.length;
+  const w = l.sizes?.length === n && l.sizes.every((x) => x > 0) ? l.sizes : Array<number>(n).fill(1);
+  const sum = w.reduce((a, b) => a + b, 0);
+  return w.map((x) => x / sum);
+}
+
+/**
+ * Validity: unique pane ids, splits have ≥2 children (and one positive size
+ * per child, if sized), and no split directly inside one with the same direction.
+ */
 export function valid(l: Layout): boolean {
   const ids = paneIds(l);
   if (new Set(ids).size !== ids.length) return false;
-  const ok = (n: Layout): boolean => n.type === "pane" || (n.children.length >= 2 && n.children.every(ok));
+  const ok = (n: Layout): boolean =>
+    n.type === "pane" ||
+    (n.children.length >= 2 &&
+      (!n.sizes || (n.sizes.length === n.children.length && n.sizes.every((x) => x > 0))) &&
+      n.children.every((c) => c.type === "pane" || c.dir !== n.dir) &&
+      n.children.every(ok));
   return ok(l);
 }
 
@@ -47,17 +94,18 @@ export interface Rect {
   h: number;
 }
 
-/** Normalized pane rectangles (unit square), matching the equal-share flex rendering. */
+/** Normalized pane rectangles (unit square), honoring split sizes like the rendering does. */
 export function rects(l: Layout, r: Rect = { x: 0, y: 0, w: 1, h: 1 }): Map<string, Rect> {
   if (l.type === "pane") return new Map([[l.id, r]]);
   const out = new Map<string, Rect>();
-  const n = l.children.length;
-  l.children.forEach((c, i) => {
+  let at = 0;
+  shares(l).forEach((f, i) => {
     const sub =
       l.dir === "row"
-        ? { x: r.x + (r.w * i) / n, y: r.y, w: r.w / n, h: r.h }
-        : { x: r.x, y: r.y + (r.h * i) / n, w: r.w, h: r.h / n };
-    for (const [id, rr] of rects(c, sub)) out.set(id, rr);
+        ? { x: r.x + r.w * at, y: r.y, w: r.w * f, h: r.h }
+        : { x: r.x, y: r.y + r.h * at, w: r.w, h: r.h * f };
+    at += f;
+    for (const [id, rr] of rects(l.children[i]!, sub)) out.set(id, rr);
   });
   return out;
 }

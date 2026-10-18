@@ -14,6 +14,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/app"
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
+	"github.com/dguendisch/kubewing/internal/config"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/tape"
 )
@@ -35,11 +36,13 @@ func main() {
 	tapes := flag.String("tapes", "", "headless only: replay scenario tapes from this directory instead of using kubeconfig")
 	speed := flag.Float64("speed", 1, "headless only: tape replay speed factor")
 	catalogFile := flag.String("catalog", "", "with -tapes: fake resource types/namespaces for completion (e.g. testdata/catalog.yaml)")
+	configDir := flag.String("config", "", "config directory (default: $KUBEWING_HOME or ~/.kubewing; headless: none)")
 	flag.Parse()
 
 	var opener interface {
 		source.Opener
 		source.Lister
+		source.Actor
 	} = source.NewClusterOpener()
 	if *tapes != "" {
 		o, err := loadTapes(*tapes, *speed)
@@ -53,7 +56,10 @@ func main() {
 		}
 		opener = o
 	}
-	opts := bridge.Options{Catalog: catalog.New(opener, catalog.Options{})}
+	opts := bridge.Options{Catalog: catalog.New(opener, catalog.Options{}), ConfigDir: *configDir, Actor: opener}
+	if opts.ConfigDir == "" && *headless == "" {
+		opts.ConfigDir = config.Dir()
+	}
 	if *headless != "" {
 		runHeadless(*headless, opener, opts, *tapes != "")
 		return
@@ -68,6 +74,7 @@ func main() {
 		Services:    []application.Service{application.NewService(app.New(svc))},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
+		OnShutdown:  svc.Shutdown, // exec sessions and port-forwards end with the app
 	})
 	emit.app = a
 	a.Window.NewWithOptions(application.WebviewWindowOptions{
@@ -89,15 +96,14 @@ func main() {
 
 func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTapes bool) {
 	hub := bridge.NewHub()
-	svc := bridge.New(source.NewRegistry(opener), hub, opts)
-	svc.Contexts = app.KubeContexts
+	api := app.New(bridge.New(source.NewRegistry(opener), hub, opts))
 	if fromTapes {
-		svc.Contexts = func() (bridge.ContextList, error) {
-			return bridge.ContextList{Contexts: []string{"tape"}, Current: "tape"}, nil
+		api.ContextsFn = func() (bridge.ContextList, error) {
+			return bridge.ContextList{Contexts: []string{"tape", "tape-dev", "tape-live", "tape-prod"}, Current: "tape"}, nil
 		}
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/kw-ws", hub.Handler(svc))
+	mux.Handle("/kw-ws", hub.Handler(api))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	log.Printf("kubewing headless bridge on ws://%s/kw-ws", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))

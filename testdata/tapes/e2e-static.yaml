@@ -1,0 +1,18 @@
+# E2E tape for object actions: a stable list without scripted steps, so
+# actions (delete …) are the only changes. Deletes persist for the lifetime
+# of the headless backend, so each test that deletes uses its own object.
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-0, namespace: shop, uid: s-web-0, creationTimestamp: "2026-01-01T10:00:00Z", annotations: {kubectl.kubernetes.io/default-container: sidecar}}, spec: {containers: [{name: app, ports: [{containerPort: 8080}]}, {name: sidecar}]}, status: {phase: Running}}
+    cells: [web-0, Running]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-1, namespace: shop, uid: s-web-1, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: web}}, spec: {containers: [{name: app, ports: [{containerPort: 8080}, {containerPort: 9090}]}, {name: sidecar}]}, status: {phase: Running}}
+    cells: [web-1, Running]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-2, namespace: shop, uid: s-web-2, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [web-2, Running]
+  # not a pod: exec and port-forward must be refused
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: cfg, namespace: shop, uid: s-cfg, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [cfg, ""]

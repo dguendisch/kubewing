@@ -637,6 +637,12 @@ func (v *View) Object(key string) (Detail, bool) {
 	return d, true
 }
 
+// Deleted reports whether a row key is a tombstone.
+func (v *View) Deleted(key string) bool {
+	e, ok := v.entries[key]
+	return ok && !e.deletedAt.IsZero()
+}
+
 // Item returns the source item for a row key (for actions).
 func (v *View) Item(key string) (source.Item, bool) {
 	e, ok := v.entries[key]

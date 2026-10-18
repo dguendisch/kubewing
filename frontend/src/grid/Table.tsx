@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef } from "react";
 import {
   DataEditor,
   GridCellKind,
@@ -13,6 +13,7 @@ import {
   CompactSelection,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
+import { useConfig } from "../store/config";
 import { bridge, paneData } from "../store/store";
 import { layout, withAlpha, type ColorToken } from "./cells";
 import { rowAt, type PaneData } from "./rowcache";
@@ -67,13 +68,15 @@ interface Props {
 export function Table({ serverId, selected, focused, onSelect, onActivate }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
-  const theme = useRef<Partial<Theme>>(gridTheme());
-  const colors = useRef<Record<string, string>>({});
   const [, force] = useReducer((x: number) => x + 1, 0);
-
-  if (Object.keys(colors.current).length === 0) {
-    for (const v of Object.values(colorVar)) colors.current[v] = token(v);
-  }
+  // the canvas can't use CSS variables: re-read the tokens whenever the theme changes
+  const themeGen = useConfig((s) => s.themeGen);
+  const { theme, colors } = useMemo(() => {
+    void themeGen;
+    const colors: Record<string, string> = {};
+    for (const v of [...Object.values(colorVar), "hidden"]) colors[v] = token(v);
+    return { theme: gridTheme(), colors };
+  }, [themeGen]);
 
   // subscribe to frames; repaint only damaged cells, re-render only on shape changes
   useEffect(() => {
@@ -132,15 +135,15 @@ export function Table({ serverId, selected, focused, onSelect, onActivate }: Pro
     if (l.tint) {
       ctx.save();
       ctx.globalAlpha = 0.16;
-      ctx.fillStyle = colors.current[l.tint]!;
+      ctx.fillStyle = colors[l.tint]!;
       ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
       ctx.restore();
     }
     if (l.hiddenMarker) {
-      ctx.fillStyle = colors.current["hidden"] ?? token("hidden");
+      ctx.fillStyle = colors["hidden"]!;
       ctx.fillRect(rect.x, rect.y + 3, 3, rect.height - 6);
     }
-    ctx.fillStyle = colors.current[colorVar[l.color]]!;
+    ctx.fillStyle = colors[colorVar[l.color]]!;
     ctx.font = `${t.baseFontStyle} ${t.fontFamily}`;
     ctx.textBaseline = "middle";
     const pad = t.cellHorizontalPadding;
@@ -180,7 +183,7 @@ export function Table({ serverId, selected, focused, onSelect, onActivate }: Pro
       headerHeight={24}
       getCellContent={getCellContent}
       drawCell={drawCell}
-      theme={theme.current}
+      theme={theme}
       onVisibleRegionChanged={onVisible}
       smoothScrollY
       rowSelect="single"

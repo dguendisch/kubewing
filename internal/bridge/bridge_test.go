@@ -20,6 +20,9 @@ type recorder struct {
 }
 
 func (r *recorder) Emit(event string, data any) {
+	if event != FrameEvent {
+		return
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.frames = append(r.frames, data.(FramePayload))

@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go/token"
 	"net/http"
+	"reflect"
 	"sync"
 
 	"github.com/coder/websocket"
@@ -52,8 +54,15 @@ func (h *Hub) Emit(event string, data any) {
 	}
 }
 
-// Handler serves the bridge for svc over WebSocket.
-func (h *Hub) Handler(svc *Service) http.Handler {
+// API is the object served over WebSocket (app.App, the same object Wails
+// binds); its exported methods are called by name via Dispatch. Close is
+// used to stop panes opened over a connection when it goes away.
+type API interface {
+	Close(pane string) error
+}
+
+// Handler serves api over WebSocket.
+func (h *Hub) Handler(api API) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"localhost:*", "127.0.0.1:*"}})
 		if err != nil {
@@ -73,7 +82,7 @@ func (h *Hub) Handler(svc *Service) http.Handler {
 			delete(h.clients, c)
 			h.mu.Unlock()
 			for id := range opened {
-				_ = svc.Close(id)
+				_ = api.Close(id)
 			}
 			c.CloseNow()
 		}()
@@ -95,7 +104,7 @@ func (h *Hub) Handler(svc *Service) http.Handler {
 			if err := wsjson.Read(ctx, c, &req); err != nil {
 				return
 			}
-			res, err := Dispatch(svc, req.Method, req.Args)
+			res, err := Dispatch(api, req.Method, req.Args)
 			if or, ok := res.(OpenResult); ok && err == nil {
 				opened[or.Pane] = true
 			}
@@ -118,87 +127,37 @@ func (h *Hub) Handler(svc *Service) http.Handler {
 	})
 }
 
-// Dispatch invokes a Service method by name with JSON args.
-func Dispatch(svc *Service, method string, args []json.RawMessage) (any, error) {
-	if method == "Contexts" {
-		if svc.Contexts == nil {
-			return ContextList{}, nil
-		}
-		return svc.Contexts()
+var errorType = reflect.TypeFor[error]()
+
+// Dispatch calls api's exported method by name, decoding each JSON arg into
+// the parameter's type. Methods return (T, error), error, T or nothing.
+func Dispatch(api any, method string, args []json.RawMessage) (any, error) {
+	m := reflect.ValueOf(api).MethodByName(method)
+	if !m.IsValid() || !token.IsExported(method) {
+		return nil, fmt.Errorf("unknown method %q", method)
 	}
-	str := func(i int) (string, error) {
-		var s string
-		if i >= len(args) {
-			return "", fmt.Errorf("%s: missing argument %d", method, i)
-		}
-		return s, json.Unmarshal(args[i], &s)
+	t := m.Type()
+	if t.IsVariadic() || len(args) != t.NumIn() {
+		return nil, fmt.Errorf("%s: want %d arguments, got %d", method, t.NumIn(), len(args))
 	}
-	num := func(i int) (int, error) {
-		var n int
-		if i >= len(args) {
-			return 0, fmt.Errorf("%s: missing argument %d", method, i)
+	in := make([]reflect.Value, len(args))
+	for i, raw := range args {
+		v := reflect.New(t.In(i))
+		if err := json.Unmarshal(raw, v.Interface()); err != nil {
+			return nil, fmt.Errorf("%s: argument %d: %w", method, i, err)
 		}
-		return n, json.Unmarshal(args[i], &n)
+		in[i] = v.Elem()
 	}
-	switch method {
-	case "Open":
-		y, err := str(0)
-		if err != nil {
-			return nil, err
+	var res any
+	var err error
+	for _, out := range m.Call(in) {
+		if out.Type() == errorType {
+			if !out.IsNil() {
+				err = out.Interface().(error)
+			}
+			continue
 		}
-		return svc.Open(y)
-	case "Update":
-		id, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		y, err := str(1)
-		if err != nil {
-			return nil, err
-		}
-		return nil, svc.Update(id, y)
-	case "SetViewport":
-		id, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		off, err := num(1)
-		if err != nil {
-			return nil, err
-		}
-		lim, err := num(2)
-		if err != nil {
-			return nil, err
-		}
-		return nil, svc.SetViewport(id, off, lim)
-	case "Resync":
-		id, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		return nil, svc.Resync(id)
-	case "Object":
-		id, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		k, err := str(1)
-		if err != nil {
-			return nil, err
-		}
-		return svc.Object(id, k)
-	case "Close":
-		id, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		return nil, svc.Close(id)
-	case "Catalog":
-		ctx, err := str(0)
-		if err != nil {
-			return nil, err
-		}
-		return svc.Catalog(ctx), nil
+		res = out.Interface()
 	}
-	return nil, fmt.Errorf("unknown method %q", method)
+	return res, err
 }

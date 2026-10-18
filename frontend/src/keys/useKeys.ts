@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { dispatch } from "../commands";
+import { useConfig } from "../store/config";
 import { useUI } from "../store/store";
 import { chord, resolve, suppressedDefaults } from "./keymap";
 
@@ -9,7 +10,11 @@ export function useKeys() {
     const suppressed = new Set(suppressedDefaults);
     const onKey = (e: KeyboardEvent) => {
       const c = chord(e);
-      const cmd = resolve(c, useUI.getState().focus);
+      // an open Monaco find widget closes on Esc before the detail view does
+      if (c === "Escape" && e.target instanceof Element && e.target.closest(".find-widget.visible")) return;
+      // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
+      if (c === "Meta+F" && e.target instanceof Element && e.target.closest(".monaco-editor")) return;
+      const cmd = resolve(c, useUI.getState().focus, useConfig.getState().bindings);
       if (cmd) {
         e.preventDefault();
         e.stopPropagation();

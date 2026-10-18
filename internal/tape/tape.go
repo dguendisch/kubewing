@@ -9,6 +9,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/pipeline"
@@ -108,6 +109,33 @@ func (t *Tape) Event(s Step) (source.Event, bool) {
 		return source.Event{Type: source.Error, Err: s.Error}, true
 	}
 	return source.Event{}, false
+}
+
+// find returns the latest version of an object in the tape (by uid, else
+// namespace/name), or nil.
+func (t *Tape) find(namespace, name string, uid k8stypes.UID) *Object {
+	var found *Object
+	match := func(o *Object) {
+		if o == nil {
+			return
+		}
+		it := o.Item()
+		if uid != "" {
+			if it.Object.GetUID() == uid {
+				found = o
+			}
+		} else if it.Object.GetName() == name && it.Object.GetNamespace() == namespace {
+			found = o
+		}
+	}
+	for i := range t.Initial {
+		match(&t.Initial[i])
+	}
+	for _, s := range t.Steps {
+		match(s.Add)
+		match(s.Update)
+	}
+	return found
 }
 
 func deepCopy(m map[string]any) map[string]any {

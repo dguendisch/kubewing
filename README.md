@@ -2,18 +2,25 @@
 
 Keyboard-driven native desktop UI for Kubernetes: `kubectl` + grep/watch/diff + tabs/splits. See [Plan.md](Plan.md).
 
-## Status: P0 step 1 (vertical slice) + P0.1 (completion)
+## Status: P0 (most of it) + P0.1 (completion)
 
 Works today:
 - Live table for any resource (`po`, `deploy.apps`, CRDs …) of any kubeconfig context; columns from server-side Table output.
 - One watch stream per source (`as=Table;includeObject=Object`): cells and objects come from the same resourceVersion.
 - Keyed diff by UID: changed cells, "changed, not visible" marker, added/deleted rows (delete + recreate = remove + add), AGE never counts as a change, noise (resourceVersion, managedFields, heartbeats) ignored.
-- Splits/tabs: `⌘D` split stacked, `⌘⇧D` split side by side (deliberately swapped vs. iTerm), `⌘W` close, `⌘T` new tab, `⌘1`–`⌘8` go to that tab and `⌘9` to the last (shown in the tab header), `⌘⇧[ ]` cycle tabs, `⌘[ ]` cycle panes, `⌘⌥←→↑↓` move to the tile in that direction. `⌃⇥` / `⌃⇧⇥` switch tabs in MRU order: a quick tap flips to the previous tab, and holding `⌃` shows a switcher (`⇥` steps, release commits, `Esc` cancels). Splits on the same source share one watch.
-- Filter bar (`/` grep, label selector), `j/k`, `g/G` or `⌥↑/⌥↓` first/last row, `⏎` YAML detail, `d` normalized diff to the previous version, `⌘O` open context/resource/namespace.
+- Splits/tabs (dockview): drag a divider to resize, drag a pane to rearrange; `⌘D` split stacked, `⌘⇧D` split side by side (deliberately swapped vs. iTerm), `⌘W` close, `⌘T` new tab, `⌘1`–`⌘8` go to that tab and `⌘9` to the last (shown in the tab header), `⌘⇧[ ]` cycle tabs, `⌘[ ]` cycle panes, `⌘⌥←→↑↓` move to the tile in that direction. `⌃⇥` / `⌃⇧⇥` switch tabs in MRU order: a quick tap flips to the previous tab, and holding `⌃` shows a switcher (`⇥` steps, release commits, `Esc` cancels). Splits on the same source share one watch.
+- Filter bar (`/` grep, label selector), `j/k`, `g/G` or `⌥↑/⌥↓` first/last row, `⌘O` open context/resource/namespace.
+- Detail view in a read-only Monaco editor: `⏎`/`y` YAML, `d` side-by-side diff of the previous vs. current normalized object, `⇧D` `kubectl describe` (with events), `⌘F` find, `Esc` closes.
+- Object actions: `⌃D` delete (UID precondition, so a recreated object of the same name is never hit), `s` exec into a pod (bash, else sh) in a terminal pane below (xterm.js; every key goes to the shell except `⌘` chords and `⌃⇥`; `⌘W` ends the session), `⇧F` port-forward on 127.0.0.1 (pre-filled from the container ports), `⌘⌥P` lists port-forwards (`⌃D` stops). Exec uses the `kubectl.kubernetes.io/default-container`, else the first container.
+- Safety model, decided in Go: per-context label and color on pane frame, header and tab; read-only contexts refuse delete and exec (describe and port-forward still work); delete always asks, other actions per rule; strict rules require typing the object name. Every mutation goes through a single-use, 60 s token bound to the exact object.
+- Config in `~/.kubewing/` (or `$KUBEWING_HOME`), read-only and optional; `⌘⇧,` reloads. Problems show in a banner and fall back to defaults. See [testdata/config/](testdata/config/) for a commented example:
+  - `config.yaml`: theme, extra diff ignore rules, per-context safety rules (`match` glob, `label`, `color`, `readOnly`, `confirm`, `strict`).
+  - `keybindings.yaml`: `{key: cmd+k, command: row.down, when: [table]}`; `command: none` unbinds.
+  - `themes/<name>.yaml`: overrides for the tokens in [theme.css](frontend/src/theme.css).
 - `⌘O` completion for resource and namespace: ranked by exact > prefix > substring > fuzzy over names, short names, singular and kind (`po`, `pdb`, `Deployment`). Suggestions show group, scope and short names, with the typed letters highlighted. A plural served by two groups (`machines`) completes to its qualified name. Fields open with their value selected; the list opens on typing (or `↓`). `⇥` completes, `⏎` completes and opens, `⌥↑/⌥↓` first/last suggestion, `Esc` closes the list, then the dialog. Unknown text still opens as typed.
 - Cluster catalog (resource types + namespaces per context), fetched in the background once a pane is open on that context. It never connects on its own, so it never triggers exec-plugin logins. Refreshed by metadata-only CRD/namespace watches, on resolve misses and every 5 min. Partial discovery (an aggregated API down) and forbidden namespace lists degrade to a hint.
 
-Not yet (rest of P0): exec, port-forward, describe/events, delete, Gardener tree, safety model, config files in `~/.kubewing/`, CEL filter UI, dockview, Monaco.
+Not yet (rest of P0): cluster navigator (context tree, clipboard kubeconfig import, Gardener garden → project → shoot tree with `adminkubeconfig`), history buffer (snapshots + deltas, budget, pinning), CEL filter UI, native menu accelerators + WKWebView smoke suite, generated TS bindings check, golden-guard hook. Exec container picker (the pod's default container is used).
 
 Not yet (P0.1): object-name completion; completion for a context picked in `⌘O` before any pane is open on it (shows a hint instead).
 
@@ -39,13 +46,18 @@ Browser dev against the headless backend: `make headless` and
 | `internal/pipeline` | pipeline model (source → stages → render), YAML (de)serialization |
 | `internal/expr` | CEL (cel-go, plus `sum()`) and dot paths |
 | `internal/normalize` | noise rules + content hash |
-| `internal/source` | Table list/watch, ref-counted shared registry, discovery + metadata-only lists/watches |
+| `internal/source` | Table list/watch, ref-counted shared registry, discovery + metadata-only lists/watches; actions (describe, delete, exec, port-forward) |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
+| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes); invalid parts reported, defaults used |
+| `internal/safety` | per-context rules, two-phase mutations (prepare → single-use token → execute) |
 | `internal/view` | pipeline over events → keyed diff → viewport frames |
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |
-| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog for completion (`testdata/catalog.yaml`) |
+| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog for completion (`testdata/catalog.yaml`); fake actions (echo shell, port-forward) |
 | `frontend/src` | React 19 + Compiler, Glide grid, zustand, transport (Wails / WS) |
 | `frontend/src/complete` | completion: pure ranker + candidate providers (reused by the P1 palette), combobox, catalog hook |
+| `frontend/src/store/dock.ts` | pure converters between the store's split tree (source of truth) and dockview's layout |
+| `frontend/src/editor` | Monaco, trimmed to a lazily loaded read-only YAML/text and diff viewer |
+| `frontend/src/term` | xterm.js terminal and exec session output store |
 
 ## Tests
 

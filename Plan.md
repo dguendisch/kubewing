@@ -45,7 +45,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### P0 — "The Core" (v0.1)
 
-1. **Pipeline model** (see above) — source, filter/sort/group stages, column render, serialization.
+1. **Pipeline model** (see above) — source, filter/grep/sort stages, column render, serialization. `groupBy`/`aggregate` stages and the `cpu-gauge` column come with P1 (Filtering & aggregating).
 1. **Watch-backed source layer** (client-go informers)
    - Shared informer registry keyed by (cluster, GVR, namespace, selector), ref-counted; stops when last view closes. Splits on the same cluster share it.
    - Strip `managedFields` via transform funcs; metadata-only informers where sufficient. Secrets are treated like any other resource.
@@ -61,7 +61,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 1. **Basic object actions** — `describe` (+ events), view YAML, `exec` into a pod, `port-forward`, delete (confirmed).
 1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.
    - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
-   - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` / `viewerkubeconfig` subresources.
+   - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` (default) / `viewerkubeconfig` subresources; read-only per context comes from the safety model.
 1. **Safety model** — per-context color/label (prod = red), read-only mode per context, confirmation for any mutating action. Required before any multi-cluster writes later.
 1. **Splits & tabs** — `cmd+d` split horizontal, `cmd+shift+d` split vertical.
 1. **Filter bar** — quick grep + label selector on the focused view (full stage editing comes with the palette).
@@ -74,7 +74,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### P1 — "Shell parity" (v1.0)
 
-1. **Filtering & aggregating** — full stage support in UI: group-by, count, histogram.
+1. **Filtering & aggregating** — `groupBy`/`aggregate` pipeline stages and full stage support in UI: group-by, count, histogram; `cpu-gauge` column type (gradient badge).
 1. **Command palette** — tab-complete operations, targets, aliases, pipeline stages.
 1. **Saved views / aliases / favorites** — transfer shell muscle memory (`kg` → `kubectl get`, `k get nodes -owide`, `tgd` → `gardenctl target garden landscape-dev`). Favorites = bookmarked clusters with a name.
 1. **Shell interop** — export the current pipeline as a `kubectl` + shell one-liner, and import one.

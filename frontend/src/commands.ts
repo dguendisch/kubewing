@@ -1,5 +1,6 @@
 import type { CommandId } from "./keys/keymap";
-import { bridge, paneData, setUI, useUI } from "./store/store";
+import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
+import type { ActionKind, Pending } from "./transport/types";
 import * as S from "./store/state";
 
 /**
@@ -52,8 +53,10 @@ export function dispatch(cmd: CommandId) {
     case "filter.blur":
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
+      if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
+      if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
@@ -64,20 +67,116 @@ export function dispatch(cmd: CommandId) {
     case "row.last":
       return setUI((x) => S.moveSelection(x, "last", total));
     case "detail.open": {
-      if (!pane.serverId) return;
-      const d = paneData.get(pane.serverId);
-      const key = d.order[pane.selected - d.offset];
+      const key = selectedKey(pane);
       if (!key) return;
-      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key }));
+      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml" }));
+    }
+    case "detail.showYaml":
+      return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false } } : x));
+    case "object.describe": {
+      // from the table, or switching an open detail view to describe
+      if (s.overlay?.kind === "detail") return setUI((x) => ({ ...x, overlay: { ...x.overlay!, view: "describe", diff: false } }));
+      const key = selectedKey(pane);
+      if (!key) return;
+      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "describe" }));
+    }
+    case "object.exec":
+      return void prepareAction("exec");
+    case "object.portForward": {
+      const key = selectedKey(pane);
+      if (!key) return;
+      return setUI((x) => S.openOverlay(x, { kind: "portforward", pane: pane.id, key }));
+    }
+    case "portforward.list":
+      return setUI((x) => (x.overlay?.kind === "forwards" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "forwards", pane: pane.id, index: 0 })));
+    case "portforward.stop": {
+      const f = usePortForwards.getState().list[s.overlay?.index ?? 0];
+      if (f) void bridge().portForwardStop(f.id).catch(() => {});
+      return;
     }
     case "detail.close":
       return setUI(S.closeOverlay);
     case "detail.toggleDiff":
-      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff } } : x));
+      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, view: "yaml" } } : x));
     case "source.open":
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
+    case "config.reload":
+      return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
+    case "object.delete":
+      return void prepareAction("delete");
+    case "confirm.accept":
+      return void runConfirmed();
+    case "confirm.cancel":
+      return setUI(S.closeOverlay);
   }
 }
+
+/** Shows a short message in a pane's status line. */
+export function flash(paneId: string, text: string, error = false) {
+  const f = { text, error };
+  setUI((x) => S.updatePane(x, paneId, (p) => ({ ...p, flash: f })));
+  setTimeout(() => setUI((x) => (x.panes[paneId]?.flash === f ? S.updatePane(x, paneId, (p) => ({ ...p, flash: undefined })) : x)), 5000);
+}
+
+/**
+ * Mutations are two-phase: Go checks the safety policy and issues a token
+ * (Prepare), the UI confirms if the rule asks for it, then the token is
+ * redeemed. Refusals (read-only context …) show in the pane's status line.
+ */
+async function prepareAction(kind: ActionKind) {
+  const s = useUI.getState();
+  const pane = S.focusedPane(s);
+  if (!pane.serverId) return;
+  const d = paneData.get(pane.serverId);
+  const key = d.order[pane.selected - d.offset];
+  if (!key) return;
+  try {
+    const pending = await bridge().prepare(kind, pane.serverId, key);
+    if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: pane.id, key, pending }));
+    else await execute(pane.id, pending);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+}
+
+async function runConfirmed() {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "confirm" || !o.pending) return;
+  setUI(S.closeOverlay);
+  try {
+    await execute(o.pane, o.pending);
+  } catch (e) {
+    flash(o.pane, errorText(e), true);
+  }
+}
+
+async function execute(paneId: string, p: Pending) {
+  switch (p.action.kind) {
+    case "delete":
+      await bridge().delete(p.token);
+      return flash(paneId, `deleted ${p.action.resource}/${p.action.name}`);
+    case "exec": {
+      const r = await bridge().execStart(p.token, "", 80, 24);
+      const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context };
+      return setUI((x) => S.openTerminal(x, term, paneId));
+    }
+  }
+}
+
+function selectedKey(pane: S.PaneState): string | undefined {
+  if (!pane.serverId || pane.term) return undefined;
+  const d = paneData.get(pane.serverId);
+  return d.order[pane.selected - d.offset];
+}
+
+function moveForward(s: S.UIState, delta: number): S.UIState {
+  const n = usePortForwards.getState().list.length;
+  if (!s.overlay || n === 0) return s;
+  const index = Math.max(0, Math.min(n - 1, (s.overlay.index ?? 0) + delta));
+  return { ...s, overlay: { ...s.overlay, index } };
+}
+
+const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 
 /** Applies a new spec to a pane: reuses the server pane if only stages changed. */
 export async function applySpec(paneId: string, spec: S.PaneSpec) {
@@ -93,6 +192,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec) {
       error: undefined,
       selected: 0,
       serverId: keep ? q.serverId : undefined,
+      context: keep ? q.context : undefined,
       opening: !keep,
     })),
   );
@@ -106,7 +206,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec) {
       bridge().close(res.pane).catch(() => {}); // superseded or pane closed meanwhile
       return;
     }
-    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, opening: false })));
+    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
   }

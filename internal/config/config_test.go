@@ -1,0 +1,151 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+
+	"github.com/dguendisch/kubewing/internal/normalize"
+)
+
+func write(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, content := range files {
+		p := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+func TestMissingDirIsDefaults(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "nope")
+	if diff := cmp.Diff(Defaults(dir), Load(dir)); diff != "" {
+		t.Error(diff)
+	}
+	if diff := cmp.Diff(Defaults(""), Load("")); diff != "" {
+		t.Error(diff)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("Load must never create the config dir")
+	}
+}
+
+func TestValid(t *testing.T) {
+	dir := write(t, map[string]string{
+		"config.yaml": `
+theme: solar
+diff:
+  ignore:
+    - {path: status.observedGeneration, kinds: [Deployment]}
+contexts:
+  - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec], strict: true}
+  - {match: "kind-*", label: kind, color: "#3b8eea"}
+`,
+		"keybindings.yaml": `
+- {key: "Meta+K", command: row.up, when: [table]}
+- {key: "J", command: none, when: [table]}
+`,
+		"themes/solar.yaml": `
+bg: "#002b36"
+accent: "rgb(203, 75, 22)"
+`,
+	})
+	got := Load(dir)
+	want := Effective{
+		Dir: dir,
+		Config: Config{
+			Theme: "solar",
+			Diff:  Diff{Ignore: []normalize.Rule{{Path: "status.observedGeneration", Kinds: []string{"Deployment"}}}},
+			Contexts: []ContextRule{
+				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec"}, Strict: true},
+				{Match: "kind-*", Label: "kind", Color: "#3b8eea"},
+			},
+		},
+		Keybindings: []Binding{
+			{Key: "Meta+K", Command: "row.up", When: []string{"table"}},
+			{Key: "J", Command: "none", When: []string{"table"}},
+		},
+		Theme:  map[string]string{"bg": "#002b36", "accent": "rgb(203, 75, 22)"},
+		Errors: []string{},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Error(diff)
+	}
+}
+
+// Broken parts are reported and dropped; everything else still applies.
+func TestPartiallyInvalid(t *testing.T) {
+	dir := write(t, map[string]string{
+		"config.yaml": `
+theme: missing
+colour: red
+diff:
+  ignore: [{path: ""}, {path: status.ok}]
+contexts:
+  - {match: "[", label: broken}
+  - {match: "a*", color: "not a color!"}
+  - {match: "b*", confirm: [reboot]}
+  - {label: nomatch}
+  - {match: "*", label: ok}
+`,
+		"keybindings.yaml": `
+- {key: "", command: row.up}
+- {key: "Meta+K", command: row.up}
+`,
+	})
+	got := Load(dir)
+	if diff := cmp.Diff([]ContextRule{{Match: "*", Label: "ok"}}, got.Config.Contexts); diff != "" {
+		t.Error(diff)
+	}
+	if diff := cmp.Diff([]normalize.Rule{{Path: "status.ok"}}, got.Config.Diff.Ignore); diff != "" {
+		t.Error(diff)
+	}
+	if diff := cmp.Diff([]Binding{{Key: "Meta+K", Command: "row.up"}}, got.Keybindings); diff != "" {
+		t.Error(diff)
+	}
+	if len(got.Theme) != 0 {
+		t.Errorf("theme: %v", got.Theme)
+	}
+	wantErrs := []string{
+		`unknown field "colour"`,
+		"diff.ignore[0]: path is required",
+		`contexts[0]: match "["`,
+		`contexts[1]: color "not a color!"`,
+		`contexts[2]: confirm: unknown action "reboot"`,
+		"contexts[3]: match is required",
+		"keybindings.yaml: [0]: key and command are required",
+		`theme "missing": themes/missing.yaml not found`,
+	}
+	if len(got.Errors) != len(wantErrs) {
+		t.Fatalf("errors:\n%s", strings.Join(got.Errors, "\n"))
+	}
+	for i, w := range wantErrs {
+		if !strings.Contains(got.Errors[i], w) {
+			t.Errorf("error %d: %q does not contain %q", i, got.Errors[i], w)
+		}
+	}
+}
+
+func TestBadTheme(t *testing.T) {
+	dir := write(t, map[string]string{
+		"config.yaml":      "theme: x\n",
+		"themes/x.yaml":    "bg: \"#000\"\nBad_Name: \"#fff\"\nfg: blue\n",
+		"keybindings.yaml": "not: a list\n",
+	})
+	got := Load(dir)
+	if diff := cmp.Diff(map[string]string{"bg": "#000"}, got.Theme); diff != "" {
+		t.Error(diff)
+	}
+	if len(got.Errors) != 3 {
+		t.Errorf("errors:\n%s", strings.Join(got.Errors, "\n"))
+	}
+}

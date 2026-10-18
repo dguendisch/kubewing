@@ -8,17 +8,26 @@ package bridge
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	k8stypes "k8s.io/apimachinery/pkg/types"
+
 	"github.com/dguendisch/kubewing/internal/catalog"
+	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
+	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/view"
 )
 
 // FrameEvent is the event name frames are emitted under.
 const FrameEvent = "kw:frame"
+
+// ConfigEvent is emitted with the new config.Effective after a reload.
+const ConfigEvent = "kw:config"
 
 // Emitter pushes events to the frontend.
 type Emitter interface {
@@ -42,13 +51,16 @@ type Options struct {
 	View    view.Options
 	// Catalog serves completion data; nil disables it (empty snapshots).
 	Catalog *catalog.Catalog
+	// ConfigDir is read by ReloadConfig ("" = no config files). New loads
+	// the config itself unless Config is set.
+	ConfigDir string
+	Config    *config.Effective
+	// Actor performs object actions (delete …); nil disables them.
+	Actor source.Actor
 }
 
 // Service manages panes.
 type Service struct {
-	// Contexts lists clusters (for the WebSocket transport).
-	Contexts func() (ContextList, error)
-
 	reg  *source.Registry
 	emit Emitter
 	opts Options
@@ -56,6 +68,12 @@ type Service struct {
 	mu    sync.Mutex
 	panes map[string]*pane
 	next  int
+	cfg   config.Effective
+	// norm applies the config's diff ignore rules to new views.
+	norm     *normalize.Normalizer
+	guard    *safety.Guard
+	sessions map[string]*session
+	forwards map[string]*forward
 }
 
 // New creates a service.
@@ -66,7 +84,50 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	return &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, forwards: map[string]*forward{}}
+	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
+	if opts.Config != nil {
+		s.setConfig(*opts.Config)
+	} else {
+		s.setConfig(config.Load(opts.ConfigDir))
+	}
+	return s
+}
+
+func (s *Service) setConfig(cfg config.Effective) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cfg = cfg
+	s.norm = normalize.New(cfg.Config.Diff.Ignore...)
+	s.guard.SetPolicy(safety.NewPolicy(cfg.Config.Contexts))
+}
+
+// viewOptions are the view options for a new pane.
+func (s *Service) viewOptions(namespaced bool) view.Options {
+	vo := s.opts.View
+	vo.Namespaced = namespaced
+	if vo.Normalizer == nil {
+		s.mu.Lock()
+		vo.Normalizer = s.norm
+		s.mu.Unlock()
+	}
+	return vo
+}
+
+// Config returns the effective user configuration.
+func (s *Service) Config() config.Effective {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg
+}
+
+// ReloadConfig re-reads the config files and emits ConfigEvent. Diff rules
+// apply to panes opened (or rebuilt by Update) afterwards.
+func (s *Service) ReloadConfig() config.Effective {
+	cfg := config.Load(s.opts.ConfigDir)
+	s.setConfig(cfg)
+	s.emit.Emit(ConfigEvent, cfg)
+	return cfg
 }
 
 type pane struct {
@@ -91,7 +152,10 @@ type FramePayload struct {
 
 // OpenResult describes a newly opened pane.
 type OpenResult struct {
-	Pane       string `json:"pane"`
+	Pane string `json:"pane"`
+	// Context is the resolved context name (the pipeline may say "" for
+	// the current one); safety rules match against it. "" if unknown.
+	Context    string `json:"context"`
 	Kind       string `json:"kind"`
 	Resource   string `json:"resource"`
 	Namespaced bool   `json:"namespaced"`
@@ -123,9 +187,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	if err != nil {
 		return OpenResult{}, err
 	}
-	vo := s.opts.View
-	vo.Namespaced = sub.Resolved.Namespaced && p.Source.AllNamespaces()
-	v, err := view.New(p, vo)
+	v, err := view.New(p, s.viewOptions(sub.Resolved.Namespaced && p.Source.AllNamespaces()))
 	if err != nil {
 		sub.Close()
 		return OpenResult{}, err
@@ -138,7 +200,8 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.panes[id] = pn
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
-	return OpenResult{Pane: id, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced}, nil
+	ctxName, _ := s.contextName(p.Source.Cluster)
+	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced}, nil
 }
 
 // Update replaces a pane's pipeline (e.g. filter bar edits). If the source
@@ -158,9 +221,7 @@ func (s *Service) Update(paneID, pipelineYAML string) error {
 	if !sameSource {
 		return fmt.Errorf("changing the source of a pane is not supported; open a new pane")
 	}
-	vo := s.opts.View
-	vo.Namespaced = pn.res.Namespaced && p.Source.AllNamespaces()
-	v, err := view.New(*p, vo)
+	v, err := view.New(*p, s.viewOptions(pn.res.Namespaced && p.Source.AllNamespaces()))
 	if err != nil {
 		return err
 	}
@@ -255,6 +316,107 @@ func (s *Service) Catalog(cluster string) catalog.Snapshot {
 		return catalog.Snapshot{Context: cluster, Resources: []source.ResourceType{}, Namespaces: []string{}}
 	}
 	return s.opts.Catalog.Get(cluster, false)
+}
+
+func (s *Service) contextName(cluster string) (string, error) {
+	if s.opts.Actor == nil {
+		return cluster, nil
+	}
+	return s.opts.Actor.ContextName(cluster)
+}
+
+// ContextRule returns the safety rule (label, color, read-only …) for a
+// pane's cluster ("" = current context).
+func (s *Service) ContextRule(cluster string) (safety.Rule, error) {
+	name, err := s.contextName(cluster)
+	if err != nil {
+		return safety.Rule{}, err
+	}
+	return s.guard.Rule(name), nil
+}
+
+// row is one object of a pane, resolved for an action.
+type row struct {
+	cluster string // as the pipeline names it ("" = current)
+	context string // resolved context name (safety rules match on it)
+	res     source.Resolved
+	typed   string // the pipeline's resource name
+	item    source.Item
+}
+
+func (r row) namespace() string { return r.item.Object.GetNamespace() }
+func (r row) name() string      { return r.item.Object.GetName() }
+func (r row) kind() string {
+	if k := r.item.Object.GetKind(); k != "" {
+		return k
+	}
+	return r.res.Kind
+}
+func (r row) isPod() bool { return r.kind() == "Pod" && r.item.Object.GetAPIVersion() == "v1" }
+
+// row resolves a live (non-tombstone) row of a pane.
+func (s *Service) row(paneID, key string) (row, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return row{}, err
+	}
+	pn.mu.Lock()
+	it, ok := pn.view.Item(key)
+	deleted := pn.view.Deleted(key)
+	r := row{cluster: pn.p.Source.Cluster, res: pn.res, typed: pn.p.Source.Resource, item: it}
+	pn.mu.Unlock()
+	if !ok || deleted {
+		return row{}, fmt.Errorf("object %s is gone", key)
+	}
+	if r.context, err = s.contextName(r.cluster); err != nil {
+		return row{}, err
+	}
+	return r, nil
+}
+
+// Prepare checks a mutating action on one row against the safety policy
+// and returns a single-use token for it. The action is built from Go's own
+// state (resolved context, resource, object identity), never from the caller.
+func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
+	if s.opts.Actor == nil {
+		return safety.Pending{}, fmt.Errorf("%s is not available", kind)
+	}
+	r, err := s.row(paneID, key)
+	if err != nil {
+		return safety.Pending{}, err
+	}
+	if kind == safety.Exec && !r.isPod() {
+		return safety.Pending{}, fmt.Errorf("exec needs a pod, not %s", strings.ToLower(r.kind()))
+	}
+	a := safety.Action{
+		Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),
+		Namespace: r.namespace(), Name: r.name(), UID: string(r.item.Object.GetUID()),
+	}
+	return s.guard.Prepare(a, r)
+}
+
+// Delete executes a prepared delete. The open watch shows the deletion.
+func (s *Service) Delete(token string) error {
+	a, target, err := s.guard.Redeem(token, safety.Delete)
+	if err != nil {
+		return err
+	}
+	r := target.(row)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return s.opts.Actor.Delete(ctx, r.cluster, r.res, a.Namespace, a.Name, k8stypes.UID(a.UID))
+}
+
+// resourceName is the qualified resource (deployments.apps), or the
+// pipeline's name if the source resolved no GVR (tapes).
+func resourceName(r source.Resolved, asTyped string) string {
+	switch {
+	case r.GVR.Resource == "":
+		return asTyped
+	case r.GVR.Group == "":
+		return r.GVR.Resource
+	}
+	return r.GVR.Resource + "." + r.GVR.Group
 }
 
 func (s *Service) pane(id string) (*pane, error) {

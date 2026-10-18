@@ -1,7 +1,9 @@
 @import "tailwindcss";
 
-/* Theme tokens: every color in the app comes from here (lint: no raw colors elsewhere). */
-@theme {
+/* Theme tokens: every color in the app comes from here (lint: no raw colors elsewhere).
+   "static": emit every token as a CSS variable, also those no utility class uses;
+   the canvas grid, Monaco and safety colors read them at runtime. */
+@theme static {
   --color-bg: #1e1e1e;
   --color-bg-elev: #252526;
   --color-bg-hover: #3c3c3c;
@@ -30,6 +32,20 @@ body {
   overflow: hidden;
 }
 input { user-select: text; }
+
+/* dockview (split layout): colors from the theme tokens above */
+.kw-dock {
+  --dv-group-view-background-color: var(--color-bg);
+  --dv-tabs-and-actions-container-background-color: var(--color-bg-elev);
+  --dv-separator-border: transparent;
+  --dv-paneview-header-border-color: var(--color-border);
+  --dv-sash-color: var(--color-border);
+  --dv-active-sash-color: var(--color-accent);
+  --dv-active-sash-transition-delay: 0s;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--color-accent) 25%, transparent);
+  --dv-drag-over-border-color: var(--color-accent);
+  --dv-border-radius: 0px;
+}
 
 /* Scrollbars (grid, detail, completion list): always visible, themed. */
 ::-webkit-scrollbar { width: 10px; height: 10px; }

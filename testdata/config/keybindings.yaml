@@ -1,0 +1,4 @@
+# Example ~/.kubewing/keybindings.yaml. Entries override the defaults for that key
+# in the given contexts (all contexts without `when`); `command: none` unbinds.
+# Keys: modifiers cmd/ctrl/alt(opt)/shift joined with "+", e.g. cmd+shift+d.
+- {key: "cmd+k", command: row.down, when: [table]}

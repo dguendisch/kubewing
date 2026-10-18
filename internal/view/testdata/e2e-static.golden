@@ -1,0 +1,61 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 4,
+  "offset": 0,
+  "order": [
+    "s-cfg",
+    "s-web-0",
+    "s-web-1",
+    "s-web-2"
+  ],
+  "rows": [
+    {
+      "key": "s-cfg",
+      "cells": [
+        "shop",
+        "cfg",
+        ""
+      ]
+    },
+    {
+      "key": "s-web-0",
+      "cells": [
+        "shop",
+        "web-0",
+        "Running"
+      ]
+    },
+    {
+      "key": "s-web-1",
+      "cells": [
+        "shop",
+        "web-1",
+        "Running"
+      ]
+    },
+    {
+      "key": "s-web-2",
+      "cells": [
+        "shop",
+        "web-2",
+        "Running"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 4
+  }
+}

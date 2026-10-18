@@ -11,6 +11,8 @@ function invariants(s: S.UIState) {
     expect(paneIds(t.layout)).toContain(t.focused); // focus always lands on an existing pane
     for (const id of paneIds(t.layout)) expect(s.panes[id]).toBeDefined();
   }
+  // the pane area's focus context matches the focused pane's kind
+  if (s.focus === "table" || s.focus === "terminal") expect(s.focus).toBe(S.focusedPane(s).term ? "terminal" : "table");
   const all = s.tabs.flatMap((t) => paneIds(t.layout)).sort();
   expect(Object.keys(s.panes).sort()).toEqual(all); // no leaked panes
   expect([...s.mru].sort()).toEqual(s.tabs.map((t) => t.id).sort()); // mru = exactly the open tabs
@@ -18,8 +20,8 @@ function invariants(s: S.UIState) {
   else expect(s.switcher.index).toBeLessThan(s.mru.length);
 }
 
-// what setUI does: every update is normalized by touchTab
-const apply = (s: S.UIState, f: (s: S.UIState) => S.UIState) => S.touchTab(f(s));
+// what setUI does: every update is normalized by touchTab and paneFocus
+const apply = (s: S.UIState, f: (s: S.UIState) => S.UIState) => S.paneFocus(S.touchTab(f(s)));
 
 describe("layout commands", () => {
   it("split right then down, iTerm semantics", () => {
@@ -64,6 +66,7 @@ describe("layout commands", () => {
       (s) => S.switcherCancel(s),
       (s) => S.focusDirection(s, (["left", "right", "up", "down"] as const)[Math.floor(rnd() * 4)]!),
       (s) => S.gotoTab(s, 1 + Math.floor(rnd() * 9)),
+      (s) => S.openTerminal(s, { session: `sx${s.nextId}`, pod: "p", container: "c", context: "k" }),
     );
     let s = S.initialState();
     for (let i = 0; i < 3000; i++) {
@@ -239,5 +242,44 @@ describe("⌘1–⌘9 tab shortcuts", () => {
     s = apply(s, (x) => S.gotoTab(x, 1));
     expect(s.switcher).toBeUndefined();
     expect(s.focus).toBe("table");
+  });
+});
+
+describe("terminal panes", () => {
+  const term = (id: string): S.Term => ({ session: id, pod: "web-0", container: "app", context: "kind" });
+
+  it("open below the source pane with terminal focus; focus follows the pane kind", () => {
+    let s = S.initialState();
+    s = apply(s, (x) => S.openTerminal(x, term("s1")));
+    const t = S.activeTab(s);
+    expect(t.layout).toEqual({ type: "split", dir: "column", children: [{ type: "pane", id: "v1" }, { type: "pane", id: "v2" }] });
+    expect(t.focused).toBe("v2");
+    expect(s.focus).toBe("terminal");
+    expect(s.panes.v2!.term?.session).toBe("s1");
+    s = apply(s, (x) => S.cyclePane(x, -1));
+    expect(s.focus).toBe("table");
+    s = apply(s, (x) => S.cyclePane(x, 1));
+    expect(s.focus).toBe("terminal");
+    // an overlay opened from a terminal restores terminal focus
+    s = apply(s, (x) => S.openOverlay(x, { kind: "forwards", pane: "v2" }));
+    expect(s.focus).toBe("forwards");
+    s = apply(s, S.closeOverlay);
+    expect(s.focus).toBe("terminal");
+  });
+
+  it("splitting a terminal pane opens a table, not a second view of the session", () => {
+    let s = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    s = apply(s, (x) => S.splitPane(x, "row"));
+    expect(S.focusedPane(s).term).toBeUndefined();
+    expect(s.focus).toBe("table");
+  });
+
+  it("sessions are released when no pane references them", () => {
+    const a = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    const b = apply(a, (x) => S.closePane(x));
+    expect(S.orphanedSessions(a, b)).toEqual(["s1"]);
+    const c = apply(a, S.newTab);
+    expect(S.orphanedSessions(a, c)).toEqual([]);
+    expect(S.orphanedSessions(c, apply(c, (x) => S.closeTab(x, 0)))).toEqual(["s1"]);
   });
 });

@@ -5,6 +5,8 @@ package app
 import (
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
+	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/view"
 )
@@ -31,6 +33,29 @@ func (a *App) Object(pane, key string) (view.Detail, error) { return a.svc.Objec
 func (a *App) Close(pane string) error                      { return a.svc.Close(pane) }
 func (a *App) Contexts() (bridge.ContextList, error)        { return a.ContextsFn() }
 func (a *App) Catalog(context string) catalog.Snapshot      { return a.svc.Catalog(context) }
+func (a *App) Config() config.Effective                     { return a.svc.Config() }
+func (a *App) ReloadConfig() config.Effective               { return a.svc.ReloadConfig() }
+func (a *App) ContextRule(cluster string) (safety.Rule, error) {
+	return a.svc.ContextRule(cluster)
+}
+func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
+	return a.svc.Prepare(kind, pane, key)
+}
+func (a *App) Delete(token string) error                 { return a.svc.Delete(token) }
+func (a *App) Describe(pane, key string) (string, error) { return a.svc.Describe(pane, key) }
+func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecResult, error) {
+	return a.svc.ExecStart(token, container, cols, rows)
+}
+func (a *App) SessionInput(id, data string) error { return a.svc.SessionInput(id, data) }
+func (a *App) SessionResize(id string, cols, rows int) error {
+	return a.svc.SessionResize(id, cols, rows)
+}
+func (a *App) SessionClose(id string) error { return a.svc.SessionClose(id) }
+func (a *App) PortForwardStart(pane, key string, ports []string) (bridge.PortForwardInfo, error) {
+	return a.svc.PortForwardStart(pane, key, ports)
+}
+func (a *App) PortForwards() []bridge.PortForwardInfo { return a.svc.PortForwards() }
+func (a *App) PortForwardStop(id string) error        { return a.svc.PortForwardStop(id) }
 
 // KubeContexts reads contexts from kubeconfig.
 func KubeContexts() (bridge.ContextList, error) {
