@@ -41,8 +41,9 @@ func (a *App) ContextRule(cluster string) (safety.Rule, error) {
 func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }
-func (a *App) Delete(token string) error                 { return a.svc.Delete(token) }
-func (a *App) Describe(pane, key string) (string, error) { return a.svc.Describe(pane, key) }
+func (a *App) Delete(token string) error                        { return a.svc.Delete(token) }
+func (a *App) Describe(pane, key string) (string, error)        { return a.svc.Describe(pane, key) }
+func (a *App) RowInfo(pane, key string) (bridge.RowInfo, error) { return a.svc.RowInfo(pane, key) }
 func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecResult, error) {
 	return a.svc.ExecStart(token, container, cols, rows)
 }

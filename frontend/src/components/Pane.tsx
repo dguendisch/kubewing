@@ -121,6 +121,11 @@ function TablePane({
             focused={tableFocused}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}
             onActivate={() => setUI((s) => S.openOverlay(S.focusPane(s, id), { kind: "detail", pane: id, key: keyAt(pane) }))}
+            onContextMenu={(row, x, y) => {
+              setUI((s) => S.updatePane(S.focusPane(s, id), id, (p) => ({ ...p, selected: row })));
+              const key = keyAt({ ...pane, selected: row });
+              if (key) setUI((s) => S.openOverlay(S.closeOverlay(s), { kind: "menu", pane: id, key, index: 0, rowIndex: row, at: { x, y } }));
+            }}
           />
         ) : null}
         {pane.error ? <div role="alert" className="absolute inset-x-0 top-0 p-3 text-deleted">{pane.error}</div> : null}

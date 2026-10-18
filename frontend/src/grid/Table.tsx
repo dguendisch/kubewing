@@ -13,6 +13,7 @@ import {
   CompactSelection,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
+import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
 import { bridge, paneData } from "../store/store";
 import { layout, withAlpha, type ColorToken } from "./cells";
@@ -59,13 +60,15 @@ interface Props {
   focused: boolean;
   onSelect: (row: number) => void;
   onActivate: () => void;
+  /** Right-click on a row: select it and open its context menu at (x, y) in the viewport. */
+  onContextMenu?: (row: number, x: number, y: number) => void;
 }
 
 /**
  * Live table. Data flows bridge → paneData → updateCells (no React render).
  * Only visible rows (+ overscan) are requested from Go.
  */
-export function Table({ serverId, selected, focused, onSelect, onActivate }: Props) {
+export function Table({ serverId, selected, focused, onSelect, onActivate, onContextMenu }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -77,6 +80,22 @@ export function Table({ serverId, selected, focused, onSelect, onActivate }: Pro
     for (const v of [...Object.values(colorVar), "hidden"]) colors[v] = token(v);
     return { theme: gridTheme(), colors };
   }, [themeGen]);
+
+  // lets overlays (context menu) anchor to a row; see actions/anchor.ts
+  useEffect(() => {
+    const header = 24;
+    rowLocators.set(serverId, {
+      row: (i) => {
+        const b = ref.current?.getBounds(0, i);
+        return b && { x: b.x, y: b.y, width: b.width, height: b.height };
+      },
+      viewport: () => {
+        const b = ref.current?.getBounds();
+        return b && { x: b.x, y: b.y + header, width: b.width, height: b.height - header };
+      },
+    });
+    return () => void rowLocators.delete(serverId);
+  }, [serverId]);
 
   // subscribe to frames; repaint only damaged cells, re-render only on shape changes
   useEffect(() => {
@@ -194,6 +213,10 @@ export function Table({ serverId, selected, focused, onSelect, onActivate }: Pro
         if (r !== undefined) onSelect(r);
       }}
       onCellActivated={onActivate}
+      onCellContextMenu={([, row], e) => {
+        e.preventDefault(); // no webview context menu
+        onContextMenu?.(row, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
+      }}
       keybindings={{ search: false, selectAll: false, copy: true, downFill: false, rightFill: false, clear: false }}
       getCellsForSelection
     />

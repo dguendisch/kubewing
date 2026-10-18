@@ -132,6 +132,19 @@ export interface Pending {
   typeToConfirm?: string;
 }
 
+/** Mirrors bridge.RowInfo: identity and capabilities of one row (no object content). */
+export interface RowInfo {
+  key: string;
+  kind: string;
+  name: string;
+  namespace?: string;
+  deleted?: boolean;
+  hasPrev?: boolean;
+  pod?: boolean;
+  containers?: string[];
+  ports?: number[];
+}
+
 /** Mirrors bridge.ExecResult. */
 export interface ExecResult {
   session: string;
@@ -177,6 +190,8 @@ export interface Transport {
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */
   delete(token: string): Promise<void>;
+  /** Identity and capabilities of a row (context menu, port-forward defaults). */
+  rowInfo(pane: string, key: string): Promise<RowInfo>;
   /** kubectl describe output for a row (read-only; no token). */
   describe(pane: string, key: string): Promise<string>;
   /** Starts a prepared exec; container "" = the pod's default. */

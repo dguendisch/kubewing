@@ -18,6 +18,7 @@ export function wailsTransport(): Transport {
     contextRule: (c) => call("ContextRule", c),
     prepare: (k, p, key) => call("Prepare", k, p, key),
     delete: (t) => call("Delete", t),
+    rowInfo: (p, k) => call("RowInfo", p, k),
     describe: (p, k) => call("Describe", p, k),
     execStart: (t, c, cols, rows) => call("ExecStart", t, c, cols, rows),
     sessionInput: (id, d) => call("SessionInput", id, d),

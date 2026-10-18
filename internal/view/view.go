@@ -637,6 +637,12 @@ func (v *View) Object(key string) (Detail, bool) {
 	return d, true
 }
 
+// HasPrev reports whether a row has a previous version (for the detail diff).
+func (v *View) HasPrev(key string) bool {
+	e, ok := v.entries[key]
+	return ok && e.prev != nil
+}
+
 // Deleted reports whether a row key is a tombstone.
 func (v *View) Deleted(key string) bool {
 	e, ok := v.entries[key]

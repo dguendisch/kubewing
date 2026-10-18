@@ -48,6 +48,59 @@ func (s *Service) Describe(paneID, key string) (string, error) {
 	return s.opts.Actor.Describe(ctx, r.cluster, r.res, r.namespace(), r.name())
 }
 
+// RowInfo is what the UI needs to offer actions for one row (context
+// menu): identity and capabilities, never the object itself.
+type RowInfo struct {
+	Key       string `json:"key"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Deleted   bool   `json:"deleted,omitempty"`
+	// HasPrev: a previous version exists, so the diff view has something to show.
+	HasPrev bool `json:"hasPrev,omitempty"`
+	// Pod is true for v1 Pods (exec, port-forward).
+	Pod        bool     `json:"pod,omitempty"`
+	Containers []string `json:"containers,omitempty"`
+	// Ports are the declared container ports (port-forward defaults).
+	Ports []int64 `json:"ports,omitempty"`
+}
+
+// RowInfo describes one row, including tombstones.
+func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return RowInfo{}, err
+	}
+	pn.mu.Lock()
+	it, ok := pn.view.Item(key)
+	deleted, hasPrev := pn.view.Deleted(key), pn.view.HasPrev(key)
+	r := row{cluster: pn.p.Source.Cluster, res: pn.res, typed: pn.p.Source.Resource, item: it}
+	pn.mu.Unlock()
+	if !ok {
+		return RowInfo{}, fmt.Errorf("object %s not found", key)
+	}
+	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Pod: r.isPod()}
+	if info.Pod {
+		info.Containers = containers(r)
+		info.Ports = containerPorts(r)
+	}
+	return info, nil
+}
+
+func containerPorts(r row) []int64 {
+	list, _, _ := unstructured.NestedSlice(r.item.Object.Object, "spec", "containers")
+	var out []int64
+	for _, c := range list {
+		ports, _, _ := unstructured.NestedSlice(asMap(c), "ports")
+		for _, p := range ports {
+			if n, ok, _ := unstructured.NestedInt64(asMap(p), "containerPort"); ok && !slices.Contains(out, n) {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
 // SessionPayload is one SessionEvent.
 type SessionPayload struct {
 	ID   string `json:"id"`

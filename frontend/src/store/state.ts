@@ -46,11 +46,15 @@ export interface Tab {
 export interface Overlay {
   /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards";
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
-  /** forwards: highlighted row. */
+  /** forwards, menu: highlighted entry. */
   index?: number;
+  /** menu: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */
+  at?: { x: number; y: number };
+  /** menu: the row it belongs to, for anchoring. */
+  rowIndex?: number;
   pane: string;
   key?: string;
   diff?: boolean;
@@ -301,7 +305,7 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
 }
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
-  const focus: FocusContext = o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : "dialog";
+  const focus: FocusContext = o.kind === "detail" ? "detail" : o.kind === "confirm" ? "confirm" : o.kind === "forwards" ? "forwards" : o.kind === "menu" ? "menu" : "dialog";
   return { ...s, overlay: { ...o, restore: s.focus }, focus };
 }
 

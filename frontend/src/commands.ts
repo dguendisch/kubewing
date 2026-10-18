@@ -1,6 +1,7 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
 import type { ActionKind, Pending } from "./transport/types";
+import { useMenu } from "./actions/registry";
 import * as S from "./store/state";
 
 /**
@@ -54,9 +55,11 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
+      if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
+      if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
@@ -70,6 +73,24 @@ export function dispatch(cmd: CommandId) {
       const key = selectedKey(pane);
       if (!key) return;
       return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml" }));
+    }
+    case "object.diff": {
+      const key = selectedKey(pane);
+      if (!key) return;
+      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml", diff: true }));
+    }
+    case "object.menu": {
+      const key = selectedKey(pane);
+      if (!key) return;
+      return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "menu", pane: pane.id, key, index: 0, rowIndex: pane.selected }));
+    }
+    case "menu.run": {
+      const o = s.overlay;
+      if (o?.kind !== "menu") return;
+      const item = useMenu.getState().items[o.index ?? 0];
+      if (!item || item.disabled) return;
+      setUI(S.closeOverlay);
+      return dispatch(item.command); // runs on the selected row, exactly like its shortcut
     }
     case "detail.showYaml":
       return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false } } : x));
@@ -167,6 +188,20 @@ function selectedKey(pane: S.PaneState): string | undefined {
   if (!pane.serverId || pane.term) return undefined;
   const d = paneData.get(pane.serverId);
   return d.order[pane.selected - d.offset];
+}
+
+/** Moves the menu highlight, skipping disabled entries. */
+function moveMenu(s: S.UIState, delta: number): S.UIState {
+  const items = useMenu.getState().items;
+  if (!s.overlay || items.length === 0) return s;
+  let i = s.overlay.index ?? 0;
+  for (let n = 0; n < items.length; n++) {
+    const j = i + delta;
+    if (j < 0 || j >= items.length) break;
+    i = j;
+    if (!items[i]!.disabled) return { ...s, overlay: { ...s.overlay, index: i } };
+  }
+  return s;
 }
 
 function moveForward(s: S.UIState, delta: number): S.UIState {

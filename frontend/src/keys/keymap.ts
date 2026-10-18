@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "forwards"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "forwards", "menu"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -41,6 +41,9 @@ export type CommandId =
   | "source.open"
   | "config.reload"
   | "object.delete"
+  | "object.diff"
+  | "object.menu"
+  | "menu.run"
   | "object.describe"
   | "object.exec"
   | "object.portForward"
@@ -60,7 +63,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml",
   "source.open", "config.reload",
-  "object.delete", "object.describe", "object.exec", "object.portForward",
+  "object.delete", "object.diff", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel",
 ];
 
@@ -119,6 +122,14 @@ export const defaultBindings: Binding[] = [
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   // k9s convention; the safety model decides whether and how to confirm
   { key: "Ctrl+D", command: "object.delete", when: ["table"] },
+  // context menu of the selected row (also right-click): every row action, generated from actions/registry.ts
+  { key: "Meta+Enter", command: "object.menu", when: ["table"] },
+  { key: "Escape", command: "detail.close", when: ["menu"] },
+  { key: "J", command: "row.down", when: ["menu"] },
+  { key: "ArrowDown", command: "row.down", when: ["menu"] },
+  { key: "K", command: "row.up", when: ["menu"] },
+  { key: "ArrowUp", command: "row.up", when: ["menu"] },
+  { key: "Enter", command: "menu.run", when: ["menu"] },
   { key: "Shift+D", command: "object.describe", when: ["table", "detail"] },
   { key: "S", command: "object.exec", when: ["table"] },
   { key: "Shift+F", command: "object.portForward", when: ["table"] },

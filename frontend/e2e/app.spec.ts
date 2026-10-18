@@ -720,3 +720,177 @@ test.describe("object actions", () => {
     await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
   });
 });
+
+test.describe("context menu (⌘⏎, right-click)", () => {
+  async function openStatic(page: Page, context = "") {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    if (context) await page.getByRole("combobox", { name: "context" }).selectOption(context);
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "e2e-static" && p.status?.synced && p.rows.some((r) => r.key === "s-web-1");
+    }).toBe(true);
+  }
+  async function select(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+  }
+  const menu = (page: Page) => page.getByRole("menu");
+
+  test("⌘⏎ lists every row action with its shortcut; ⏎ runs the highlighted one", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(menu(page)).toMatchAriaSnapshot(`
+      - menu "actions for web-1":
+        - text: web-1 · pod · shop
+        - menuitem "view YAML ⏎"
+        - menuitem "diff to previous version · no previous version since watch start" [disabled]
+        - menuitem "describe ⇧D"
+        - separator
+        - menuitem "exec shell s"
+        - menuitem "port-forward… ⇧F"
+        - separator
+        - menuitem "delete… ⌃D"
+    `);
+    expect((await inspect(page)).focus).toBe("menu");
+    // j skips the disabled diff entry: view YAML → describe
+    await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("describe");
+    await page.keyboard.press("Enter");
+    await expect(menu(page)).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
+    await page.keyboard.press("Escape");
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
+  // layout tests use e2e-pods: no test deletes from it, so its rows are stable once
+  // its scripted steps (restart at 2s, recreate at 3s) are done
+  async function openSettled(page: Page) {
+    await openTape(page);
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toContain("e-api-0-b");
+  }
+
+  test("⌘⏎ anchors the menu to the selected row (below it, flush with the row)", async ({ page }) => {
+    await openSettled(page);
+    const grid = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const rowBottom = (i: number) => grid.y + 24 + (i + 1) * 22; // header 24px, rows 22px (no scrolling: 4 rows)
+    const tops: number[] = [];
+    for (const i of [0, 2]) {
+      await page.keyboard.press("g");
+      for (let n = 0; n < i; n++) await page.keyboard.press("j");
+      await expect.poll(async () => (await focused(page)).selected).toBe(i);
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(menu(page)).toHaveAttribute("data-placement", "below");
+      const m = (await menu(page).boundingBox())!;
+      expect(Math.abs(m.y - rowBottom(i))).toBeLessThan(3);
+      expect(Math.abs(m.x - grid.x)).toBeLessThan(3);
+      tops.push(m.y);
+      await page.keyboard.press("Escape");
+    }
+    expect(tops[1]! - tops[0]!).toBeCloseTo(44, -1); // it follows the selection: two rows down
+  });
+
+  test("a menu opening under a resting pointer keeps the first entry; moving the mouse still highlights", async ({ page }) => {
+    await openSettled(page);
+    const active = () => menu(page).locator("[data-active]").innerText();
+    // find where "describe" (3rd entry) appears, then park the pointer there
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const item = (await menu(page).getByRole("menuitem").nth(2).boundingBox())!;
+    await page.keyboard.press("Escape");
+    await page.mouse.move(item.x + 40, item.y + item.height / 2);
+    for (let i = 0; i < 3; i++) {
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(menu(page)).toBeVisible();
+      await page.waitForTimeout(100); // let any hover events fire
+      expect(await active()).toContain("view YAML");
+      await page.keyboard.press("Escape");
+    }
+    // real movement inside the open menu highlights what's under the pointer
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await page.mouse.move(item.x + 60, item.y + item.height / 2, { steps: 4 });
+    await expect.poll(active).toContain("describe");
+  });
+
+  test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {
+    await openSettled(page);
+    // stack a split below so the table's last row sits low in the window, with room above it
+    await page.setViewportSize({ width: 1400, height: 560 });
+    await page.keyboard.press("ControlOrMeta+D"); // split: the new (bottom) pane is focused
+    // the split's fresh relist has no tombstone for the recreated pod, so it may have one row less
+    await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
+    const last = (await focused(page)).total - 1;
+    await page.keyboard.press("Shift+G"); // its last row, near the window bottom
+    await expect.poll(async () => (await focused(page)).selected).toBe(last);
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(menu(page)).toHaveAttribute("data-placement", "above");
+    const m = (await menu(page).boundingBox())!;
+    const pane = (await page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"] canvas`).first().boundingBox())!;
+    const rowTop = pane.y + 24 + last * 22;
+    expect(Math.abs(m.y + m.height - rowTop)).toBeLessThan(3); // its bottom edge meets the row's top
+    expect(m.y).toBeGreaterThanOrEqual(0);
+  });
+
+  test("esc closes and restores focus and selection; j/k don't move the table meanwhile", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    const sel = (await focused(page)).selected;
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await page.keyboard.press("j");
+    await page.keyboard.press("j");
+    await page.keyboard.press("Escape");
+    await expect(menu(page)).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+    expect((await focused(page)).selected).toBe(sel);
+  });
+
+  test("non-pods and read-only contexts get disabled entries with the reason", async ({ page }) => {
+    await openStatic(page, "tape-prod");
+    await select(page, "s-cfg");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toHaveAttribute("aria-disabled", "true");
+    await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toContainText("needs a pod, not configmap");
+    await page.keyboard.press("Escape");
+    await select(page, "s-web-1");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(menu(page).getByRole("menuitem", { name: /delete/ })).toContainText("read-only context");
+    await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toContainText("read-only context");
+    await expect(menu(page).getByRole("menuitem", { name: /port-forward/ })).not.toHaveAttribute("aria-disabled");
+  });
+
+  test("menu actions go through the same paths: exec opens a terminal, delete still confirms", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await menu(page).getByRole("menuitem", { name: /exec shell/ }).click();
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await page.keyboard.press("ControlOrMeta+W");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await menu(page).getByRole("menuitem", { name: /delete/ }).click();
+    const confirm = page.getByRole("alertdialog", { name: "confirm delete" });
+    await expect(confirm).toContainText("delete e2e-static/web-1");
+    await page.keyboard.press("Escape"); // web-1 must survive: other tests use it
+    await expect(confirm).toHaveCount(0);
+  });
+
+  test("right-click selects the row and opens the menu at the pointer; click runs", async ({ page }) => {
+    await openStatic(page);
+    const rows = (await focused(page)).rows;
+    const idx = rows.findIndex((r) => r.key === "s-web-1");
+    const grid = page.locator("section[data-pane] canvas").first();
+    const box = (await grid.boundingBox())!;
+    // header 24px, rows 22px
+    const y = box.y + 24 + idx * 22 + 11;
+    await page.mouse.click(box.x + 60, y, { button: "right" });
+    await expect(menu(page)).toBeVisible();
+    expect((await focused(page)).selected).toBe(idx);
+    const mb = (await menu(page).boundingBox())!;
+    expect(Math.abs(mb.x - (box.x + 60))).toBeLessThan(4);
+    await menu(page).getByRole("menuitem", { name: /view YAML/ }).click();
+    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-1");
+  });
+});

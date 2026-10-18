@@ -184,3 +184,31 @@ func TestShutdownEndsEverything(t *testing.T) {
 
 // the opener used by deleteSetup must implement every action
 var _ source.Actor = (*tape.Opener)(nil)
+
+func TestRowInfo(t *testing.T) {
+	svc, log, res := deleteSetup(t, nil)
+	waitRow(t, log, res.Pane, "s-cfg", func(view.RowData) bool { return true })
+	pod, err := svc.RowInfo(res.Pane, "s-web-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !pod.Pod || pod.Kind != "Pod" || pod.Name != "web-1" || pod.Namespace != "shop" || pod.Deleted || pod.HasPrev ||
+		strings.Join(pod.Containers, ",") != "app,sidecar" || len(pod.Ports) != 2 || pod.Ports[0] != 8080 || pod.Ports[1] != 9090 {
+		t.Errorf("pod: %+v", pod)
+	}
+	cm, _ := svc.RowInfo(res.Pane, "s-cfg")
+	if cm.Pod || cm.Kind != "ConfigMap" || cm.Containers != nil || cm.Ports != nil {
+		t.Errorf("configmap: %+v", cm)
+	}
+	p, _ := svc.Prepare("delete", res.Pane, "s-web-2")
+	if err := svc.Delete(p.Token); err != nil {
+		t.Fatal(err)
+	}
+	waitRow(t, log, res.Pane, "s-web-2", func(r view.RowData) bool { return r.Mark == view.MarkDeleted })
+	if gone, err := svc.RowInfo(res.Pane, "s-web-2"); err != nil || !gone.Deleted {
+		t.Errorf("tombstone: %+v %v", gone, err)
+	}
+	if _, err := svc.RowInfo(res.Pane, "nope"); err == nil {
+		t.Error("unknown key must fail")
+	}
+}
