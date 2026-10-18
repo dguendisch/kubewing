@@ -2,10 +2,9 @@ import { useEffect, useState } from "react";
 import { applySpec } from "../commands";
 import { Combobox } from "../complete/Combobox";
 import { findResource, namespaceCandidates, resourceCandidates } from "../complete/complete";
-import { useCatalog } from "../complete/useCatalog";
+import { useCatalog, type CatalogState } from "../complete/useCatalog";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
-import type { Catalog } from "../transport/types";
 
 /** ⌘O: choose context / resource / namespace for the focused pane. */
 export function OpenSource() {
@@ -90,7 +89,10 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
 }
 
 /** Why completion may be incomplete; undefined when it's complete. */
-function hint(cat: Catalog, list: "resources" | "namespaces"): string | undefined {
+function hint(cat: CatalogState, list: "resources" | "namespaces"): string | undefined {
+  // say nothing until the backend has answered: the reply is usually immediate and a
+  // hint shown for one frame only makes the dialog grow and shrink as it opens
+  if (!cat.ready) return undefined;
   if (cat.loading) return "loading…";
   if (cat.gen === 0) return "no completion until a pane is open on this context";
   const err = cat.errors?.[list];

@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { bridge } from "../store/store";
 import type { Catalog } from "../transport/types";
 
-const empty = (context: string): Catalog => ({ context, resources: [], namespaces: [], loading: false, gen: 0 });
+/** Catalog plus whether a backend reply has arrived yet (before that, nothing about it is known). */
+export type CatalogState = Catalog & { ready: boolean };
+
+const empty = (context: string): CatalogState => ({ context, resources: [], namespaces: [], loading: false, gen: 0, ready: false });
 
 /** Poll interval while the backend is still fetching. */
 const LOADING_POLL_MS = 250;
@@ -12,8 +15,8 @@ const LOADING_POLL_MS = 250;
  * The backend fills it in asynchronously; this polls only while it loads.
  * The catalog is sent whole: a few hundred types, filtered client-side.
  */
-export function useCatalog(context: string, active: boolean): Catalog {
-  const [cat, setCat] = useState<Catalog>(() => empty(context));
+export function useCatalog(context: string, active: boolean): CatalogState {
+  const [cat, setCat] = useState<CatalogState>(() => empty(context));
   useEffect(() => {
     if (!active) return;
     let stop = false;
@@ -24,10 +27,10 @@ export function useCatalog(context: string, active: boolean): Catalog {
         .then(
           (c) => {
             if (stop) return;
-            setCat((prev) => (prev.context === c.context && prev.gen === c.gen && c.gen !== 0 ? prev : c));
+            setCat((prev) => (prev.context === c.context && prev.gen === c.gen && c.gen !== 0 ? prev : { ...c, ready: true }));
             if (c.loading) timer = setTimeout(load, LOADING_POLL_MS);
           },
-          () => !stop && setCat(empty(context)),
+          () => !stop && setCat({ ...empty(context), ready: true }),
         );
     setCat((prev) => (prev.context === context ? prev : empty(context)));
     load();
