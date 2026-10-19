@@ -4,7 +4,7 @@ import type { ActionKind, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
-import { cursor } from "./editor/Viewer";
+import { cursor, useDiffNav } from "./editor/Viewer";
 import * as S from "./store/state";
 
 /**
@@ -136,6 +136,9 @@ export function dispatch(cmd: CommandId) {
     case "detail.toggleDiff":
       // in describe: diff against the previous describe; elsewhere the object diff
       return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff } } : x));
+    case "diff.next":
+    case "diff.prev":
+      return useDiffNav.getState().go?.(cmd === "diff.next" ? "next" : "previous");
     case "detail.toggleWrap":
       return setUI((x) => ({ ...x, wrap: !x.wrap }));
     case "detail.refresh":

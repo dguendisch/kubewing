@@ -8,7 +8,10 @@ import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
+import { dispatch } from "./commands";
+import { prettyKey } from "./keys/keymap";
 import { useKeys } from "./keys/useKeys";
+import { useConfig } from "./store/config";
 import { useRules } from "./store/rules";
 import { setUI, usePortForwards, useUI } from "./store/store";
 import * as S from "./store/state";
@@ -20,6 +23,9 @@ export function App() {
   const panes = useUI((s) => s.panes);
   const rules = useRules();
   const forwards = usePortForwards((s) => s.list.length);
+  // the live key (keybindings.yaml may rebind or unbind it)
+  const listKey = useConfig((c) => c.bindings.find((b) => b.command === "portforward.list"));
+  const listKeyText = listKey && prettyKey(listKey.key);
   const tab = tabs[active]!;
   return (
     <div className="relative flex h-full flex-col">
@@ -49,9 +55,15 @@ export function App() {
           +
         </button>
         {forwards ? (
-          <span aria-label="active port-forwards" title="⌘⌥P lists port-forwards" className="ml-auto self-center px-3 text-fg-muted">
+          <button
+            type="button"
+            aria-label="active port-forwards"
+            title={`port-forwards${listKeyText ? ` (${listKeyText})` : ""}`}
+            className="ml-auto self-center rounded px-3 text-fg-muted hover:text-fg"
+            onClick={() => dispatch("portforward.list")}
+          >
             ⇄ {forwards}
-          </span>
+          </button>
         ) : null}
       </nav>
       <ConfigErrors />

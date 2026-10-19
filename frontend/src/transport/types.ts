@@ -174,6 +174,16 @@ export interface RowInfo {
   pod?: boolean;
   containers?: string[];
   ports?: number[];
+  /** The declared container ports in spec order (port-forward completion). */
+  portInfo?: PortInfo[];
+}
+
+/** Mirrors bridge.PortInfo. */
+export interface PortInfo {
+  port: number;
+  name?: string;
+  protocol?: string;
+  container: string;
 }
 
 /** Mirrors bridge.DescribeResult: one describe run plus, from the previous look, a normalized pair to diff. */

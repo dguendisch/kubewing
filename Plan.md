@@ -109,6 +109,7 @@ Still open in P0.1:
 1. **Decoders** — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 
 ### P2— "Polishing"
+1. **github actions build pipelines**
 
 ### P3 — "Operator power" (v1.0)
 

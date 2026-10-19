@@ -16,7 +16,8 @@ initial:
 steps:
   - at: 2s
     update:
-      object: {apiVersion: v1, kind: Pod, metadata: {name: api-1, namespace: prod, uid: e-api-1, labels: {app: api}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running, containerStatuses: [{name: c, restartCount: 1}]}}
+      # two changes far apart (an annotation at the top, the restart at the bottom): the diff view steps between them
+      object: {apiVersion: v1, kind: Pod, metadata: {name: api-1, namespace: prod, uid: e-api-1, labels: {app: api}, annotations: {restarted-by: kubelet}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running, containerStatuses: [{name: c, restartCount: 1}]}}
       cells: [api-1, Running, 1, 2h]
   - at: 3s
     delete:

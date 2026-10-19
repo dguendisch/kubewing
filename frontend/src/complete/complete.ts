@@ -14,6 +14,8 @@ export interface Candidate {
   detail?: string;
   /** Alternative spellings that match (short names, singular, kind). */
   aliases?: string[];
+  /** Shown but can't be picked; the reason (e.g. "port-forward is TCP only"). */
+  disabled?: string;
 }
 
 export interface Match {

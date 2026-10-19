@@ -44,6 +44,8 @@ export type CommandId =
   | "detail.showYaml"
   | "detail.refresh"
   | "detail.toggleWrap"
+  | "diff.next"
+  | "diff.prev"
   | "source.open"
   | "config.reload"
   | "object.delete"
@@ -69,7 +71,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap",
+  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
@@ -138,6 +140,9 @@ export const defaultBindings: Binding[] = [
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
   { key: "W", command: "detail.toggleWrap", when: ["detail"] },
+  // next/previous change in a diff (vim-like, as in the table); no-ops elsewhere
+  { key: "J", command: "diff.next", when: ["detail"] },
+  { key: "K", command: "diff.prev", when: ["detail"] },
   // the YAML line under the cursor becomes the pane's CEL filter
   { key: "=", command: "filter.fromDetail", when: ["detail"] },
   { key: "!", command: "filter.fromDetailNot", when: ["detail"] },
@@ -160,11 +165,11 @@ export const defaultBindings: Binding[] = [
   { key: "S", command: "object.exec", when: ["table"] },
   { key: "F", command: "object.portForward", when: ["table"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
-  { key: "Ctrl+D", command: "portforward.stop", when: ["forwards"] },
+  // the same keys as the running forwards in the f dialog: ↑/↓ pick, x or ⌫ stops
+  { key: "X", command: "portforward.stop", when: ["forwards"] },
+  { key: "Backspace", command: "portforward.stop", when: ["forwards"] },
   { key: "Escape", command: "detail.close", when: ["forwards"] },
-  { key: "J", command: "row.down", when: ["forwards"] },
   { key: "ArrowDown", command: "row.down", when: ["forwards"] },
-  { key: "K", command: "row.up", when: ["forwards"] },
   { key: "ArrowUp", command: "row.up", when: ["forwards"] },
   { key: "Escape", command: "confirm.cancel", when: ["confirm"] },
   // not global: in the filter bar and the dialogs "?" is text being typed

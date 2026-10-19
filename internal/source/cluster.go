@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	kjson "k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
@@ -323,7 +324,9 @@ type decoded struct {
 }
 
 // decodeTableOrList accepts a meta.k8s.io Table (preferred) or, for
-// resources without Table support, a plain list or single object.
+// resources without Table support, a plain list or single object. Objects
+// keep whole numbers as int64 (as client-go's unstructured decoding does,
+// and as tapes from YAML have them), not encoding/json's float64.
 func decodeTableOrList(body []byte) (decoded, error) {
 	var head struct {
 		Kind string `json:"kind"`
@@ -342,7 +345,7 @@ func decodeTableOrList(body []byte) (decoded, error) {
 		}
 		for _, r := range t.Rows {
 			u := &unstructured.Unstructured{}
-			if err := json.Unmarshal(r.Object.Raw, &u.Object); err != nil {
+			if err := kjson.Unmarshal(r.Object.Raw, &u.Object); err != nil {
 				return decoded{}, err
 			}
 			StripManagedFields(u)
@@ -351,7 +354,7 @@ func decodeTableOrList(body []byte) (decoded, error) {
 		return d, nil
 	}
 	u := &unstructured.Unstructured{}
-	if err := json.Unmarshal(body, &u.Object); err != nil {
+	if err := kjson.Unmarshal(body, &u.Object); err != nil {
 		return decoded{}, err
 	}
 	if u.IsList() {

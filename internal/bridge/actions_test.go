@@ -3,6 +3,7 @@ package bridge
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -194,8 +195,12 @@ func TestRowInfo(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !pod.Pod || pod.Kind != "Pod" || pod.Name != "web-1" || pod.Namespace != "shop" || pod.Deleted || pod.HasPrev ||
-		strings.Join(pod.Containers, ",") != "app,sidecar" || len(pod.Ports) != 2 || pod.Ports[0] != 8080 || pod.Ports[1] != 9090 {
+		strings.Join(pod.Containers, ",") != "app,sidecar" || fmt.Sprint(pod.Ports) != "[8080 9090 5353]" {
 		t.Errorf("pod: %+v", pod)
+	}
+	// name, protocol (TCP when unset) and container of each declared port, in spec order
+	if want := "[{8080 http TCP app} {9090 metrics TCP app} {5353 dns UDP sidecar}]"; fmt.Sprint(pod.PortInfo) != want {
+		t.Errorf("portInfo = %v, want %s", pod.PortInfo, want)
 	}
 	cm, _ := svc.RowInfo(res.Pane, "s-cfg")
 	if cm.Pod || cm.Kind != "ConfigMap" || cm.Containers != nil || cm.Ports != nil {

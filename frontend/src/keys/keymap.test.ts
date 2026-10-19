@@ -65,7 +65,11 @@ describe("resolve", () => {
     expect(resolve("Meta+F", "detail")).toBeUndefined(); // Monaco's find
     expect(resolve("Ctrl+D", "table")).toBe("pane.close");
     expect(resolve("Ctrl+D", "filter")).toBeUndefined(); // forward-delete in inputs
-    expect(resolve("Ctrl+D", "forwards")).toBe("portforward.stop"); // the list keeps ⌃D for itself
+    expect(resolve("X", "forwards")).toBe("portforward.stop"); // x or ⌫ stops, as in the f dialog
+    expect(resolve("Backspace", "forwards")).toBe("portforward.stop");
+    expect(resolve("Ctrl+D", "forwards")).toBeUndefined();
+    expect(resolve("J", "forwards")).toBeUndefined(); // arrows only
+    expect(resolve("ArrowDown", "forwards")).toBe("row.down");
     expect(resolve("Meta+W", "table")).toBe("tab.close");
     expect(resolve("Meta+W", "terminal")).toBe("tab.close"); // the same in every pane kind
     expect(resolve("Ctrl+D", "terminal")).toBeUndefined(); // the shell's EOF

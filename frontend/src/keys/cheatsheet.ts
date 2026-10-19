@@ -90,6 +90,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
       row("wrap long lines on / off", "detail.toggleWrap"),
+      row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
       row("close", "detail.close"),
     ],

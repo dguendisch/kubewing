@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
+import { create } from "zustand";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
 import { useUI } from "../store/store";
+import { changeIndex } from "./diffnav";
 import { loadMonaco, type MonacoApi } from "./load";
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
@@ -55,6 +57,12 @@ const common: Monaco.editor.IEditorOptions = {
  */
 export const cursor: { text?: string; line: number } = { line: 0 };
 
+/**
+ * The diff editor currently shown: which change the cursor is at (1-based,
+ * 0 before the first) of how many, and how to move (j/k, header buttons).
+ */
+export const useDiffNav = create<{ index: number; total: number; go?: (target: "next" | "previous") => void }>(() => ({ index: 0, total: 0 }));
+
 interface Props {
   /** Shown text; with `original` the viewer is a side-by-side diff (original → value). */
   value: string;
@@ -102,8 +110,32 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
         const ed = m.editor.createDiffEditor(host.current, { ...common, ...wordWrap(useUI.getState().wrap), renderSideBySide: true, originalEditable: false, ariaLabel: label });
         editor.current = ed;
         ed.setModel({ original: a, modified: b });
-        ed.getModifiedEditor().focus();
-        dispose = () => (ed.dispose(), a.dispose(), b.dispose());
+        const mod = ed.getModifiedEditor();
+        mod.focus();
+        // first line of each change on the modified side (a pure deletion: the line after it)
+        const starts = () => (ed.getLineChanges() ?? []).map((c) => c.modifiedStartLineNumber || c.modifiedEndLineNumber + 1);
+        const sync = () => {
+          const s = starts();
+          useDiffNav.setState({ total: s.length, index: changeIndex(s, mod.getPosition()?.lineNumber ?? 1) });
+        };
+        let first = true;
+        const subs = [
+          ed.onDidUpdateDiff(() => {
+            // the diff is computed async: land on the first change once it's there
+            if (first && starts().length) ed.goToDiff("next");
+            first = false;
+            sync();
+          }),
+          mod.onDidChangeCursorPosition(sync),
+        ];
+        useDiffNav.setState({ index: 0, total: 0, go: (t) => ed.goToDiff(t) });
+        dispose = () => {
+          subs.forEach((d) => d.dispose());
+          useDiffNav.setState({ index: 0, total: 0, go: undefined });
+          ed.dispose();
+          a.dispose();
+          b.dispose();
+        };
       }
     });
     return () => {

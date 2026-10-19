@@ -95,3 +95,26 @@ func TestDecodePlainList(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 }
+
+// Whole numbers stay int64 as in tapes (YAML) and client-go; plain
+// encoding/json would make them float64, which int-typed readers (container
+// ports) silently skip.
+func TestDecodeKeepsInts(t *testing.T) {
+	table := `{"kind":"Table","apiVersion":"meta.k8s.io/v1","metadata":{"resourceVersion":"1"},"columnDefinitions":[],"rows":[{"cells":[],"object":
+		{"apiVersion":"v1","kind":"Pod","metadata":{"name":"p"},"spec":{"containers":[{"name":"c","ports":[{"containerPort":8080}]}]},"status":{"ratio":0.5}}}]}`
+	list := `{"kind":"PodList","apiVersion":"v1","metadata":{},"items":[{"apiVersion":"v1","kind":"Pod","metadata":{"name":"p"},"spec":{"containers":[{"name":"c","ports":[{"containerPort":8080}]}]},"status":{"ratio":0.5}}]}`
+	for name, body := range map[string]string{"table": table, "list": list} {
+		d, err := decodeTableOrList([]byte(body))
+		if err != nil || len(d.items) != 1 {
+			t.Fatalf("%s: %v %+v", name, err, d)
+		}
+		o := d.items[0].Object.Object
+		port := o["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)["ports"].([]any)[0].(map[string]any)["containerPort"]
+		if _, ok := port.(int64); !ok {
+			t.Errorf("%s: containerPort is %T, want int64", name, port)
+		}
+		if r := o["status"].(map[string]any)["ratio"]; r != 0.5 {
+			t.Errorf("%s: ratio = %#v, want float64 0.5", name, r)
+		}
+	}
+}

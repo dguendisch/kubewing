@@ -9,10 +9,13 @@ columns:
 initial:
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-0, namespace: shop, uid: s-web-0, creationTimestamp: "2026-01-01T10:00:00Z", annotations: {kubectl.kubernetes.io/default-container: sidecar}}, spec: {containers: [{name: app, ports: [{containerPort: 8080}]}, {name: sidecar}]}, status: {phase: Running}}
     cells: [web-0, Running]
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-1, namespace: shop, uid: s-web-1, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: web}}, spec: {containers: [{name: app, ports: [{containerPort: 8080}, {containerPort: 9090}]}, {name: sidecar}]}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-1, namespace: shop, uid: s-web-1, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: web}}, spec: {containers: [{name: app, ports: [{containerPort: 8080, name: http}, {containerPort: 9090, name: metrics}]}, {name: sidecar, ports: [{containerPort: 5353, name: dns, protocol: UDP}]}]}, status: {phase: Running}}
     cells: [web-1, Running]
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-2, namespace: shop, uid: s-web-2, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
     cells: [web-2, Running]
+  # one declared port, below 1000 (port-forward prefills 8443:443); never deleted
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-3, namespace: shop, uid: s-web-3, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {containers: [{name: app, ports: [{containerPort: 443, name: https}]}]}, status: {phase: Running}}
+    cells: [web-3, Running]
   # not a pod: exec and port-forward must be refused
   # its data is one long line without spaces (YAML can't fold it): wider than the detail view (word wrap)
   - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: cfg, namespace: shop, uid: s-cfg, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {settings: '{"replicas":3,"image":"registry.example.com/team/app@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","args":["--listen=0.0.0.0:8080","--log-level=debug","--feature-gates=AllAlpha=false,AllBeta=true","--extra-config=kubelet.max-pods=110,kubelet.eviction-hard=memory.available<100Mi,nodefs.available<10%"]}'}}

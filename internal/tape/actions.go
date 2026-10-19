@@ -158,7 +158,8 @@ func (e ExitError) Error() string   { return fmt.Sprintf("command terminated wit
 func (e ExitError) ExitStatus() int { return int(e) }
 
 // PortForward implements source.Actor: reports the requested ports (a
-// random local port for ":remote") without listening.
+// random local port for ":remote") without listening. Like an unprivileged
+// process on macOS/Linux it can't bind local ports below 1024.
 func (o *Opener) PortForward(_ context.Context, _, _, _ string, ports []string) (*source.Forward, error) {
 	f := &source.Forward{}
 	for i, p := range ports {
@@ -173,6 +174,9 @@ func (o *Opener) PortForward(_ context.Context, _, _, _ string, ports []string) 
 		l, _ := strconv.ParseUint(local, 10, 16)
 		if l == 0 {
 			l = uint64(40000 + i)
+		}
+		if l < 1024 {
+			return nil, fmt.Errorf("unable to listen on port %d: listen tcp4 127.0.0.1:%d: bind: permission denied", l, l)
 		}
 		f.Ports = append(f.Ports, source.Port{Local: uint16(l), Remote: uint16(r)})
 	}

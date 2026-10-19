@@ -783,6 +783,31 @@ test.describe("detail view (Monaco)", () => {
     await expect(dialog.locator('[data-viewer="single"]')).toBeVisible();
   });
 
+  test("diff: ↑/↓ buttons and j/k step through the changes; the cursor starts on the first", async ({ page }) => {
+    await openApi1(page);
+    const dialog = page.getByRole("dialog", { name: "object detail" });
+    await page.keyboard.press("d");
+    const pos = dialog.getByRole("status", { name: "change position" });
+    // two changes: the annotation (top) and the restart's containerStatuses (bottom)
+    await expect(pos).toHaveText("1 / 2");
+    await page.keyboard.press("j");
+    await expect(pos).toHaveText("2 / 2");
+    await page.keyboard.press("j"); // wraps around, like VS Code
+    await expect(pos).toHaveText("1 / 2");
+    await page.keyboard.press("k");
+    await expect(pos).toHaveText("2 / 2");
+    await dialog.getByRole("button", { name: "previous change" }).click();
+    await expect(pos).toHaveText("1 / 2");
+    await dialog.getByRole("button", { name: "next change" }).click();
+    await expect(pos).toHaveText("2 / 2");
+    expect((await inspect(page)).focus).toBe("detail"); // the buttons don't take the focus
+    await page.keyboard.press("k"); // so the keys still work
+    await expect(pos).toHaveText("1 / 2");
+    // back in the yaml view there is no change navigation
+    await page.keyboard.press("d");
+    await expect(dialog.getByRole("button", { name: "next change" })).toHaveCount(0);
+  });
+
   test("⌘F opens Monaco's find (not the pane filter); esc closes find, then the view", async ({ page }) => {
     await openApi1(page);
     await page.keyboard.press("ControlOrMeta+F");
@@ -932,13 +957,39 @@ test.describe("object actions", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("f forwards the pod's ports; ⌘⌥P lists them, ⌃D stops", async ({ page }) => {
+  test("f forwards the pod's ports; ⌥⌘P lists them, ⌫ stops", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
     await page.keyboard.press("f");
     const dialog = page.getByRole("dialog", { name: "port-forward" });
-    await expect(dialog.getByRole("textbox", { name: "ports" })).toHaveValue("8080:8080 9090:9090");
-    await dialog.getByRole("textbox", { name: "ports" }).fill("18080:8080");
+    const ports = dialog.getByRole("combobox", { name: "ports" });
+    // several declared ports: nothing prefilled, a list to pick from instead
+    await expect(ports).toHaveValue("");
+    const declared = dialog.getByRole("listbox", { name: "declared ports" });
+    await expect(declared.getByRole("option")).toHaveText(["8080http · TCP · app", "9090metrics · TCP · app", "5353dns · UDP · sidecar · can't forward"]);
+    // the UDP-only port is listed but can't be picked: the highlight skips it
+    await expect(declared.getByRole("option", { name: /5353/ })).toHaveAttribute("aria-disabled", "true");
+    await page.keyboard.press("ArrowUp"); // wraps from the first to the last forwardable one
+    await expect(declared.getByRole("option", { selected: true })).toContainText("9090");
+    // typing a name filters; ⏎ picks, and a picked port isn't offered again
+    await page.keyboard.type("met");
+    await expect(declared.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(ports).toHaveValue("9090:9090 ");
+    await expect(declared.getByRole("option")).toHaveText(["8080http · TCP · app", "5353dns · UDP · sidecar · can't forward"]);
+    // after a pick nothing is highlighted, and the hint says ⏎ forwards now; ↓ picks another
+    await expect(declared.getByRole("option", { selected: true })).toHaveCount(0);
+    await expect(dialog).toContainText("↓ pick a port · ⏎ forward on 127.0.0.1");
+    await page.keyboard.press("ArrowDown");
+    await expect(declared.getByRole("option", { selected: true })).toContainText("8080");
+    await expect(dialog).toContainText("⏎ add the highlighted port");
+    await page.keyboard.press("ArrowUp"); // wraps (the UDP port is skipped): still 8080, the only one left
+    await expect(declared.getByRole("option", { selected: true })).toContainText("8080");
+    await page.keyboard.press("Escape"); // an open list closes first, the dialog stays
+    await expect(declared).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    // a typed spec still works as before
+    await ports.fill("18080:8080");
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
     await expect(page.getByLabel("message")).toContainText("127.0.0.1:18080 → 8080");
@@ -948,11 +999,74 @@ test.describe("object actions", () => {
     await expect(list.getByRole("option")).toHaveCount(1);
     await expect(list.getByRole("option").first()).toContainText("shop/web-1");
     expect((await inspect(page)).focus).toBe("forwards");
-    await page.keyboard.press("Control+D");
+    await page.keyboard.press("x");
     await expect(list).toHaveCount(0);
     await expect(page.getByLabel("active port-forwards")).toHaveCount(0);
     await page.keyboard.press("Escape");
     expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test("f again shows the pod's running forwards (✕ stops) and doesn't offer their ports; the ⇄ badge opens the list", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("f");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    await dialog.getByRole("combobox", { name: "ports" }).fill("9090");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    // reopened: the running forward is listed, 9090 is no longer offered
+    await page.keyboard.press("f");
+    const running = dialog.getByRole("listbox", { name: "running port-forwards" });
+    await expect(running).toContainText("→ 9090");
+    const declared = dialog.getByRole("listbox", { name: "declared ports" });
+    await expect(declared.getByRole("option")).toHaveText(["8080http · TCP · app", "5353dns · UDP · sidecar · can't forward"]);
+    await dialog.getByRole("button", { name: /^stop 127\.0\.0\.1:\d+ → 9090$/ }).click();
+    await expect(running).toHaveCount(0);
+    await expect(dialog.getByRole("combobox", { name: "ports" })).toBeFocused(); // ✕ doesn't take the focus
+    await expect(page.getByLabel("active port-forwards")).toHaveCount(0);
+    // keyboard: ⇧⇥ from the ports field into the running forwards, ↑/↓ pick, ⌫ stops, esc back
+    const ports = dialog.getByRole("combobox", { name: "ports" });
+    for (const p of ["8080", "9090"]) {
+      await ports.fill(p);
+      await page.keyboard.press("Enter");
+      await expect(dialog).toHaveCount(0);
+      await page.keyboard.press("f");
+    }
+    await expect(running.getByRole("option")).toHaveCount(2);
+    await page.keyboard.press("Shift+Tab");
+    await expect(running).toBeFocused();
+    await expect(running.getByRole("option", { selected: true })).toContainText("→ 8080");
+    await page.keyboard.press("j"); // arrows only: j does nothing
+    await expect(running.getByRole("option", { selected: true })).toContainText("→ 8080");
+    await page.keyboard.press("ArrowDown");
+    await expect(running.getByRole("option", { selected: true })).toContainText("→ 9090");
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("Backspace"); // stops 8080
+    await expect(running.getByRole("option")).toHaveCount(1);
+    await expect(running.getByRole("option", { selected: true })).toContainText("→ 9090");
+    await page.keyboard.press("Escape"); // back to the field, the dialog stays
+    await expect(ports).toBeFocused();
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("Control+D"); // not a stop key any more: nothing happens, the pane stays
+    await expect(running.getByRole("option")).toHaveCount(1);
+    await page.keyboard.press("x"); // in the list x stops; typed in the field it would be text
+    await expect(running).toHaveCount(0);
+    await expect(ports).toBeFocused(); // the last one gone: back in the field
+    await expect(ports).toHaveValue(""); // the x didn't land in the field
+    expect(Object.keys((await inspect(page)).panes)).toHaveLength(1);
+    // the badge: a button that opens the list of all forwards, ✕ stops there too
+    await dialog.getByRole("combobox", { name: "ports" }).fill("8080");
+    await page.keyboard.press("Enter");
+    const badge = page.getByRole("button", { name: "active port-forwards" });
+    await expect(badge).toHaveText("⇄ 1");
+    await expect(badge).toHaveAttribute("title", "port-forwards (⌥⌘P)"); // the live key, in macOS modifier order
+    await badge.click();
+    const list = page.getByRole("dialog", { name: "port-forwards" });
+    await expect(list).toContainText("shop/web-1");
+    await list.getByRole("button", { name: /^stop .* → 8080$/ }).click();
+    await expect(list).toContainText("none");
+    await expect(badge).toHaveCount(0);
   });
 
   test("⌘⌥P opens the list as macOS delivers it (⌥ turns P into π)", async ({ page }) => {
@@ -970,9 +1084,98 @@ test.describe("object actions", () => {
     await select(page, "s-web-1");
     await page.keyboard.press("f");
     const dialog = page.getByRole("dialog", { name: "port-forward" });
-    await dialog.getByRole("textbox", { name: "ports" }).fill("80:abc");
+    await dialog.getByRole("combobox", { name: "ports" }).fill("80:abc");
     await page.keyboard.press("Enter");
     await expect(dialog.getByRole("alert")).toContainText('invalid port "80:abc"');
+  });
+
+  test("a pod with a single declared port gets it prefilled, without a list; a low port gets a local one above 8000", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("f");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    const ports = dialog.getByRole("combobox", { name: "ports" });
+    await expect(ports).toHaveValue("8443:443"); // 443 needs root locally
+    await expect(dialog.getByRole("listbox", { name: "declared ports" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("one port: ⏎ picks it, ⏎ again forwards; two: ⏎, ↓ ⏎, then ⏎ forwards both", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    const ports = dialog.getByRole("combobox", { name: "ports" });
+    // the ports arrive asynchronously: wait for the list before pressing keys
+    const highlighted = dialog.getByRole("listbox", { name: "declared ports" }).getByRole("option", { selected: true });
+    // one: the first port is highlighted when the dialog opens
+    await page.keyboard.press("f");
+    await expect(highlighted).toContainText("8080");
+    await page.keyboard.press("Enter");
+    await expect(ports).toHaveValue("8080:8080 ");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByLabel("message")).toContainText("→ 8080");
+    // two: stop the first forward so both ports are offered again
+    const stop = async () => {
+      await page.getByRole("button", { name: "active port-forwards" }).click();
+      const list = page.getByRole("dialog", { name: "port-forwards" });
+      while ((await list.getByRole("option").count()) > 0) await page.keyboard.press("x");
+      await page.keyboard.press("Escape");
+    };
+    await stop();
+    await page.keyboard.press("f");
+    await expect(highlighted).toContainText("8080");
+    await page.keyboard.press("Enter"); // 8080
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter"); // 9090
+    await expect(ports).toHaveValue("8080:8080 9090:9090 ");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByLabel("message")).toContainText("→ 8080, 127.0.0.1:9090 → 9090");
+    // each port is its own forward: listed and stopped on its own, in both dialogs
+    await expect(page.getByRole("button", { name: "active port-forwards" })).toHaveText("⇄ 2");
+    await page.keyboard.press("f");
+    const running = dialog.getByRole("listbox", { name: "running port-forwards" });
+    await expect(running.getByRole("option")).toHaveText([/→ 8080✕$/, /→ 9090✕$/]);
+    await page.keyboard.press("Escape");
+    await stop();
+  });
+
+  test("ports picked together that partly fail: the good ones start, the failed ones stay with the error", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    await page.keyboard.press("f");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    const ports = dialog.getByRole("combobox", { name: "ports" });
+    await ports.fill("9090 80:8080"); // 80 locally needs root
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("alert")).toHaveText(/^80:8080: .*permission denied/);
+    await expect(ports).toHaveValue("80:8080 "); // only the failed one is left to fix
+    await expect(dialog.getByRole("listbox", { name: "running port-forwards" }).getByRole("option")).toHaveText([/→ 9090✕$/]);
+    await page.keyboard.press("Shift+Tab");
+    await page.keyboard.press("x");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("a forward that fails shows its error with the port list closed", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1"); // several ports: the list is open while typing
+    await page.keyboard.press("f");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    const declared = dialog.getByRole("listbox", { name: "declared ports" });
+    // the list is open while picking; a typed local port below 1024 can't be bound
+    await expect(declared).toBeVisible();
+    await dialog.getByRole("combobox", { name: "ports" }).fill("80:8080"); // a local:remote spec matches no entry: ⏎ submits
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText("permission denied");
+    await expect(declared).toHaveCount(0); // closed: the error isn't covered
+    await dialog.getByRole("combobox", { name: "ports" }).fill(""); // typing again opens it
+    await expect(declared).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
   });
 
   test("not a pod: exec and port-forward are refused", async ({ page }) => {

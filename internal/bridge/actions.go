@@ -114,6 +114,16 @@ type RowInfo struct {
 	Containers []string `json:"containers,omitempty"`
 	// Ports are the declared container ports (port-forward defaults).
 	Ports []int64 `json:"ports,omitempty"`
+	// PortInfo details them for the port-forward dialog's completion.
+	PortInfo []PortInfo `json:"portInfo,omitempty"`
+}
+
+// PortInfo is one declared container port.
+type PortInfo struct {
+	Port      int64  `json:"port"`
+	Name      string `json:"name,omitempty"`
+	Protocol  string `json:"protocol,omitempty"` // TCP if unset, as Kubernetes defaults it
+	Container string `json:"container"`
 }
 
 // RowInfo describes one row, including tombstones.
@@ -133,20 +143,40 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Pod: r.isPod()}
 	if info.Pod {
 		info.Containers = containers(r)
-		info.Ports = containerPorts(r)
+		info.PortInfo = portInfo(r)
+		for _, p := range info.PortInfo {
+			if !slices.Contains(info.Ports, p.Port) {
+				info.Ports = append(info.Ports, p.Port)
+			}
+		}
 	}
 	return info, nil
 }
 
-func containerPorts(r row) []int64 {
+// portInfo lists the declared container ports in spec order.
+func portInfo(r row) []PortInfo {
 	list, _, _ := unstructured.NestedSlice(r.item.Object.Object, "spec", "containers")
-	var out []int64
+	var out []PortInfo
 	for _, c := range list {
+		cname, _, _ := unstructured.NestedString(asMap(c), "name")
 		ports, _, _ := unstructured.NestedSlice(asMap(c), "ports")
 		for _, p := range ports {
-			if n, ok, _ := unstructured.NestedInt64(asMap(p), "containerPort"); ok && !slices.Contains(out, n) {
-				out = append(out, n)
+			// int64 from the cluster source; float64 would be plain encoding/json
+			var n int64
+			switch v := asMap(p)["containerPort"].(type) {
+			case int64:
+				n = v
+			case float64:
+				n = int64(v)
+			default:
+				continue
 			}
+			name, _, _ := unstructured.NestedString(asMap(p), "name")
+			proto, _, _ := unstructured.NestedString(asMap(p), "protocol")
+			if proto == "" {
+				proto = "TCP"
+			}
+			out = append(out, PortInfo{Port: n, Name: name, Protocol: proto, Container: cname})
 		}
 	}
 	return out
