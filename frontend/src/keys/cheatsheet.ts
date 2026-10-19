@@ -89,6 +89,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("back to YAML", "detail.showYaml"),
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
+      row("wrap long lines on / off", "detail.toggleWrap"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
       row("close", "detail.close"),
     ],

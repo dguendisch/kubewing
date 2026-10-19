@@ -90,6 +90,8 @@ export interface UIState {
   mru: string[];
   /** ⌃⇥ switcher while ⌃ is held: index into mru of the highlighted tab. */
   switcher?: { index: number; restore: FocusContext };
+  /** Detail view (Monaco) wraps long lines; session-wide, toggled with w. */
+  wrap: boolean;
 }
 
 /** Namespace a context starts in: the kubeconfig's, else "" (all). "" = the current context. */
@@ -117,6 +119,7 @@ export function initialState(context = "", namespace = ""): UIState {
     nextId: 2,
     defaults: spec,
     mru: ["t1"],
+    wrap: true,
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
+import { useUI } from "../store/store";
 import { loadMonaco, type MonacoApi } from "./load";
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
@@ -67,6 +68,11 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
+  const wrap = useUI((s) => s.wrap);
+  const editor = useRef<{ updateOptions(o: Monaco.editor.IEditorOptions): void }>(undefined);
+  // wordWrapOverride1, not wordWrap: with accessibility support on, Monaco forces wrapping
+  // for text dominated by long lines unless the override says otherwise
+  const wordWrap = (on: boolean): Monaco.editor.IEditorOptions => ({ wordWrap: on ? "on" : "off", wordWrapOverride1: on ? "on" : "off", wrappingIndent: "indent" });
 
   useEffect(() => {
     let disposed = false;
@@ -76,7 +82,8 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
       defineTheme(m);
       if (original === undefined) {
         const model = m.editor.createModel(value, language);
-        const ed = m.editor.create(host.current, { ...common, model, ariaLabel: label });
+        const ed = m.editor.create(host.current, { ...common, ...wordWrap(useUI.getState().wrap), model, ariaLabel: label });
+        editor.current = ed;
         ed.focus();
         if (language === "yaml") {
           cursor.text = value;
@@ -91,7 +98,9 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
       } else {
         const a = m.editor.createModel(original, language);
         const b = m.editor.createModel(value, language);
-        const ed = m.editor.createDiffEditor(host.current, { ...common, renderSideBySide: true, originalEditable: false, ariaLabel: label });
+        // diffWordWrap follows wordWrap ("inherit")
+        const ed = m.editor.createDiffEditor(host.current, { ...common, ...wordWrap(useUI.getState().wrap), renderSideBySide: true, originalEditable: false, ariaLabel: label });
+        editor.current = ed;
         ed.setModel({ original: a, modified: b });
         ed.getModifiedEditor().focus();
         dispose = () => (ed.dispose(), a.dispose(), b.dispose());
@@ -99,13 +108,17 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
     });
     return () => {
       disposed = true;
+      editor.current = undefined;
       dispose();
     };
   }, [value, original, language, mode]);
+
+  // toggling wrap keeps the editor (cursor, scroll position)
+  useEffect(() => editor.current?.updateOptions(wordWrap(wrap)), [wrap]);
 
   useEffect(() => {
     if (themeGen) void loadMonaco().then(defineTheme);
   }, [themeGen]);
 
-  return <div ref={host} data-viewer={mode} className="h-full w-full" />;
+  return <div ref={host} data-viewer={mode} data-wrap={wrap} className="h-full w-full" />;
 }

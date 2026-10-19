@@ -992,6 +992,30 @@ test.describe("object actions", () => {
     await page.keyboard.press("d");
     await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
   });
+  test("long lines wrap by default; w toggles it for the session, also in describe", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-cfg");
+    await page.keyboard.press("Enter");
+    const viewer = page.locator('[data-viewer="single"]');
+    await expect(viewer.locator(".view-lines")).toContainText("replicas");
+    // wrapped: the long data line fits, the horizontal slider fills its track; unwrapped the view scrolls
+    const overflow = () =>
+      viewer.evaluate((el) => {
+        const track = el.querySelector(".scrollbar.horizontal") as HTMLElement, slider = track.querySelector(".slider") as HTMLElement;
+        return slider.offsetWidth < track.offsetWidth - 1;
+      });
+    await expect(viewer).toHaveAttribute("data-wrap", "true");
+    await expect.poll(overflow).toBe(false);
+    await page.keyboard.press("w");
+    await expect(viewer).toHaveAttribute("data-wrap", "false");
+    await expect.poll(overflow).toBe(true);
+    // the choice holds for describe and for the next object
+    await page.keyboard.press("Shift+D");
+    await expect(page.locator('[data-viewer="single"]')).toHaveAttribute("data-wrap", "false");
+    await page.keyboard.press("w");
+    await expect(page.locator('[data-viewer="single"]')).toHaveAttribute("data-wrap", "true");
+    await page.keyboard.press("Escape");
+  });
 });
 
 test.describe("context menu (⌘⏎, right-click)", () => {

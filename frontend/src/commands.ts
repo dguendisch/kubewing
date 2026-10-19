@@ -136,6 +136,8 @@ export function dispatch(cmd: CommandId) {
     case "detail.toggleDiff":
       // in describe: diff against the previous describe; elsewhere the object diff
       return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff } } : x));
+    case "detail.toggleWrap":
+      return setUI((x) => ({ ...x, wrap: !x.wrap }));
     case "detail.refresh":
       // re-run describe: the last run becomes the baseline of the diff
       return setUI((x) =>

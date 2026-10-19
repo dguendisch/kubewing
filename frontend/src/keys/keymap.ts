@@ -43,6 +43,7 @@ export type CommandId =
   | "detail.toggleDiff"
   | "detail.showYaml"
   | "detail.refresh"
+  | "detail.toggleWrap"
   | "source.open"
   | "config.reload"
   | "object.delete"
@@ -68,7 +69,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
+  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
@@ -136,6 +137,7 @@ export const defaultBindings: Binding[] = [
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
+  { key: "W", command: "detail.toggleWrap", when: ["detail"] },
   // the YAML line under the cursor becomes the pane's CEL filter
   { key: "=", command: "filter.fromDetail", when: ["detail"] },
   { key: "!", command: "filter.fromDetailNot", when: ["detail"] },

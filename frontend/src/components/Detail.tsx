@@ -77,7 +77,7 @@ export function Detail() {
               ? "diff (prev → current, normalized)"
               : "yaml"}
         </span>
-        <span className="ml-auto">{describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · ⌘F find · esc: close</span>
+        <span className="ml-auto">{describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · w: wrap · ⌘F find · esc: close</span>
       </div>
       <div className="min-h-0 flex-1">
         {describe ? (
