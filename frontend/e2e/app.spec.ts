@@ -256,6 +256,17 @@ test("⌘C copies the selected row's name; in a text field it stays the native c
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("xyz");
 });
 
+test("⌘O: picking a context that sets a namespace in the kubeconfig prefills it", async ({ page }) => {
+  await ready(page);
+  await page.keyboard.press("ControlOrMeta+O");
+  const ns = page.getByRole("combobox", { name: "namespace" });
+  await expect(ns).toHaveValue(""); // the current context (tape) sets none
+  await page.getByLabel("context").selectOption("tape-dev");
+  await expect(ns).toHaveValue("prod");
+  await page.getByLabel("context").selectOption("tape-live");
+  await expect(ns).toHaveValue("");
+});
+
 test("j/k move selection, enter opens detail, d toggles diff, esc restores focus", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");

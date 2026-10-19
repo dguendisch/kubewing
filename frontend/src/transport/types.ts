@@ -61,6 +61,8 @@ export interface Detail {
 export interface ContextList {
   contexts: string[];
   current: string;
+  /** Namespace a context sets in the kubeconfig, for those that set one. */
+  namespaces?: Record<string, string>;
 }
 
 /** Mirrors bridge.Draft: a filter bar edit not applied yet. */

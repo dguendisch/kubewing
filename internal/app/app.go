@@ -68,9 +68,9 @@ func (a *App) PortForwardStop(id string) error        { return a.svc.PortForward
 
 // KubeContexts reads contexts from kubeconfig.
 func KubeContexts() (bridge.ContextList, error) {
-	names, cur, err := source.Contexts()
+	names, cur, ns, err := source.Contexts()
 	if err != nil {
 		return bridge.ContextList{}, err
 	}
-	return bridge.ContextList{Contexts: names, Current: cur}, nil
+	return bridge.ContextList{Contexts: names, Current: cur, Namespaces: ns}, nil
 }

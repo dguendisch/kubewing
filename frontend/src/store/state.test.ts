@@ -343,3 +343,18 @@ describe("terminal panes", () => {
     invariants(after);
   });
 });
+
+describe("contextNamespace", () => {
+  const list = { contexts: ["a", "b"], current: "a", namespaces: { a: "shoot--x" } };
+  it("uses the namespace the kubeconfig context sets, else all", () => {
+    expect(S.contextNamespace(list, "")).toBe("shoot--x"); // "" = current context
+    expect(S.contextNamespace(list, "a")).toBe("shoot--x");
+    expect(S.contextNamespace(list, "b")).toBe("");
+    expect(S.contextNamespace(undefined, "")).toBe("");
+  });
+  it("seeds the first pane and the defaults for new panes", () => {
+    const s = S.initialState("", "shoot--x");
+    expect(s.panes.v1!.spec.namespace).toBe("shoot--x");
+    expect(s.defaults.namespace).toBe("shoot--x");
+  });
+});

@@ -2,10 +2,10 @@ import { create } from "zustand";
 import type { Transport } from "../transport/types";
 import { applyFrame, emptyPane, type PaneData } from "../grid/rowcache";
 import { b64decode, sessions } from "../term/sessions";
-import type { PortForward } from "../transport/types";
+import type { ContextList, PortForward } from "../transport/types";
 import { applyConfig } from "./config";
 import { clearRules } from "./rules";
-import { initialState, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
+import { contextNamespace, initialState, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 
 /**
  * UI state (layout, focus, overlays) lives in a React-subscribed store.
@@ -13,6 +13,9 @@ import { initialState, orphanedServerPanes, orphanedSessions, paneFocus, session
  * and repaint via Glide's updateCells, bypassing re-render.
  */
 export const useUI = create<UIState>(() => initialState());
+
+/** Kubeconfig contexts: loaded before the first render, re-read on every ⌘O. */
+export const useContexts = create<{ list?: ContextList }>(() => ({}));
 
 /** All UI updates go through here; touchTab keeps the MRU tab order in sync. */
 export const setUI = (f: (s: UIState) => UIState) => useUI.setState((s) => paneFocus(touchTab(f(s))), true);
@@ -82,6 +85,18 @@ export function connect(t: Transport) {
       sessions.drop(id);
     }
   });
+}
+
+/**
+ * Loads the kubeconfig contexts. Called once before the first render: the
+ * first pane then starts in the current context's namespace, if it sets one.
+ * Without a readable kubeconfig everything starts in all namespaces.
+ */
+export async function loadContexts() {
+  const list = await bridge().contexts().catch(() => undefined);
+  useContexts.setState({ list });
+  const ns = contextNamespace(list, "");
+  if (ns) useUI.setState(initialState("", ns), true);
 }
 
 export function bridge(): Transport {

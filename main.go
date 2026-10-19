@@ -99,7 +99,8 @@ func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTap
 	api := app.New(bridge.New(source.NewRegistry(opener), hub, opts))
 	if fromTapes {
 		api.ContextsFn = func() (bridge.ContextList, error) {
-			return bridge.ContextList{Contexts: []string{"tape", "tape-dev", "tape-live", "tape-prod"}, Current: "tape"}, nil
+			// tape-dev sets a namespace like a kubeconfig context can (e2e: new panes start in it)
+			return bridge.ContextList{Contexts: []string{"tape", "tape-dev", "tape-live", "tape-prod"}, Current: "tape", Namespaces: map[string]string{"tape-dev": "prod"}}, nil
 		}
 	}
 	mux := http.NewServeMux()

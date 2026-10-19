@@ -3,7 +3,7 @@ import { applySpec } from "../commands";
 import { Combobox } from "../complete/Combobox";
 import { findResource, namespaceCandidates, resourceCandidates } from "../complete/complete";
 import { useCatalog, type CatalogState } from "../complete/useCatalog";
-import { bridge, setUI, useUI } from "../store/store";
+import { bridge, setUI, useContexts, useUI } from "../store/store";
 import * as S from "../store/state";
 
 /** ⌘O: choose context / resource / namespace for the focused pane. */
@@ -16,12 +16,14 @@ export function OpenSource() {
 }
 
 function OpenDialog({ pane }: { pane: S.PaneState }) {
-  const [contexts, setContexts] = useState<string[]>([]);
+  const list = useContexts((c) => c.list);
+  const contexts = [...(list?.contexts ?? [])].sort();
   const [spec, setSpec] = useState<S.PaneSpec>(pane.spec);
   const cat = useCatalog(spec.context, true);
 
+  // re-read on every open: contexts added to the kubeconfig meanwhile show up
   useEffect(() => {
-    bridge().contexts().then((c) => setContexts(c.contexts.sort()), () => setContexts([]));
+    bridge().contexts().then((list) => useContexts.setState({ list }), () => {});
   }, []);
 
   const submit = (next = spec) => {
@@ -46,7 +48,7 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
     >
       <label className="flex flex-col gap-1 text-fg-muted">
         context
-        <select aria-label="context" className={field} value={spec.context} onChange={(e) => setSpec({ ...spec, context: e.target.value })}>
+        <select aria-label="context" className={field} value={spec.context} onChange={(e) => setSpec({ ...spec, context: e.target.value, namespace: S.contextNamespace(list, e.target.value) })}>
           <option value="">(current)</option>
           {contexts.map((c) => (
             <option key={c}>{c}</option>

@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { Pending } from "../transport/types";
+import type { ContextList, Pending } from "../transport/types";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
@@ -92,17 +92,23 @@ export interface UIState {
   switcher?: { index: number; restore: FocusContext };
 }
 
-export const initialSpec = (context = ""): PaneSpec => ({
+/** Namespace a context starts in: the kubeconfig's, else "" (all). "" = the current context. */
+export function contextNamespace(list: ContextList | undefined, context: string): string {
+  if (!list) return "";
+  return list.namespaces?.[context || list.current] ?? "";
+}
+
+export const initialSpec = (context = "", namespace = ""): PaneSpec => ({
   context,
   resource: "pods",
-  namespace: "",
+  namespace,
   labelSelector: "",
   grep: "",
   filter: "",
 });
 
-export function initialState(context = ""): UIState {
-  const spec = initialSpec(context);
+export function initialState(context = "", namespace = ""): UIState {
+  const spec = initialSpec(context, namespace);
   return {
     tabs: [{ id: "t1", layout: leaf("v1"), focused: "v1" }],
     activeTab: 0,

@@ -371,6 +371,9 @@ func (s *Service) Close(paneID string) error {
 type ContextList struct {
 	Contexts []string `json:"contexts"`
 	Current  string   `json:"current"`
+	// Namespaces holds the namespace a context sets, for those that set one;
+	// new panes on that context start in it.
+	Namespaces map[string]string `json:"namespaces,omitempty"`
 }
 
 // Catalog returns completion data for a context ("" = current). It never

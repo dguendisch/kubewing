@@ -41,16 +41,21 @@ func Kubeconfig() clientcmd.ClientConfig {
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{})
 }
 
-// Contexts lists kubeconfig contexts and the current one.
-func Contexts() (names []string, current string, err error) {
+// Contexts lists kubeconfig contexts, the current one, and the namespace
+// each context sets (only those that set one).
+func Contexts() (names []string, current string, namespaces map[string]string, err error) {
 	raw, err := Kubeconfig().RawConfig()
 	if err != nil {
-		return nil, "", err
+		return nil, "", nil, err
 	}
-	for n := range raw.Contexts {
+	namespaces = map[string]string{}
+	for n, c := range raw.Contexts {
 		names = append(names, n)
+		if c != nil && c.Namespace != "" {
+			namespaces[n] = c.Namespace
+		}
 	}
-	return names, raw.CurrentContext, nil
+	return names, raw.CurrentContext, namespaces, nil
 }
 
 // Connect builds a cluster connection for a context ("" = current).
