@@ -74,6 +74,7 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("view YAML", "detail.open"),
       row("diff last change", "object.diff"),
+      row("copy name", "object.copyName"),
       row("describe", "object.describe"),
       row("exec shell", "object.exec"),
       row("port-forward…", "object.portForward"),

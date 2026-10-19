@@ -28,6 +28,7 @@ export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true },
   { command: "object.describe", label: "describe", group: "view", available: live },
   { command: "object.diff", label: "diff last change", group: "view", available: (r) => (r.hasPrev ? true : "no change seen yet") },
+  { command: "object.copyName", label: "copy name", group: "view", available: () => true },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },

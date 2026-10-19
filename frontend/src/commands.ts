@@ -93,6 +93,8 @@ export function dispatch(cmd: CommandId) {
       if (!key) return;
       return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml", diff: true }));
     }
+    case "object.copyName":
+      return void copyName(pane);
     case "object.menu": {
       const key = selectedKey(pane);
       if (!key) return;
@@ -174,6 +176,19 @@ function filterFromDetail(op: "==" | "!=") {
   if (!expr) return flash(pane.id, "no value on this line to filter by", true);
   setUI(S.closeOverlay);
   void applySpec(pane.id, { ...pane.spec, filter: expr });
+}
+
+/** ⌘C in the table: the selected object's name (as kubectl takes it). */
+async function copyName(pane: S.PaneState) {
+  const key = selectedKey(pane);
+  if (!key || !pane.serverId) return;
+  try {
+    const { name } = await bridge().rowInfo(pane.serverId, key);
+    await bridge().copyText(name);
+    flash(pane.id, `copied ${name}`);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
 }
 
 /** Shows a short message in a pane's status line. */

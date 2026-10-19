@@ -241,6 +241,21 @@ test("= in the YAML view filters by the field under the cursor", async ({ page }
   expect((await inspect(page)).overlays).toEqual([]);
 });
 
+test("⌘C copies the selected row's name; in a text field it stays the native copy", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openTape(page);
+  await page.keyboard.press("j"); // api-0
+  await page.keyboard.press("ControlOrMeta+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("api-0");
+  await expect(page.getByRole("status", { name: "pane status" })).toContainText("copied api-0");
+  // in the grep field ⌘C copies the field's selection, not the row
+  await page.keyboard.press("/");
+  await page.keyboard.type("xyz");
+  await page.keyboard.press("ControlOrMeta+A");
+  await page.keyboard.press("ControlOrMeta+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("xyz");
+});
+
 test("j/k move selection, enter opens detail, d toggles diff, esc restores focus", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");
@@ -997,6 +1012,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "view YAML ⏎"
         - menuitem "describe d"
         - menuitem "diff last change · no change seen yet" [disabled]
+        - menuitem "copy name ⌘C"
         - separator
         - menuitem "exec shell s"
         - menuitem "port-forward… f"
@@ -1004,11 +1020,11 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j/k skip the disabled diff entry: describe → exec shell → describe
+    // j/k skip the disabled diff entry: describe → copy name → describe
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("j");
-    await expect(menu(page).locator("[data-active]")).toContainText("exec shell");
+    await expect(menu(page).locator("[data-active]")).toContainText("copy name");
     await page.keyboard.press("k");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("Enter");

@@ -245,6 +245,8 @@ export interface Transport {
   portForwardStart(pane: string, key: string, ports: string[]): Promise<PortForward>;
   portForwards(): Promise<PortForward[]>;
   portForwardStop(id: string): Promise<void>;
+  /** Puts text on the system clipboard. */
+  copyText(text: string): Promise<void>;
   config(): Promise<Config>;
   reloadConfig(): Promise<Config>;
   onFrame(cb: (p: FramePayload) => void): () => void;

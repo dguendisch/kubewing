@@ -1,4 +1,4 @@
-import { Call, Events } from "@wailsio/runtime";
+import { Call, Clipboard, Events } from "@wailsio/runtime";
 import type { Config, FramePayload, PortForward, SessionPayload, Transport } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
@@ -29,6 +29,7 @@ export function wailsTransport(): Transport {
     portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
     portForwards: () => call("PortForwards"),
     portForwardStop: (id) => call("PortForwardStop", id),
+    copyText: async (t) => void (await Clipboard.SetText(t)),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),

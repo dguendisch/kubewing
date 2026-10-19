@@ -47,6 +47,7 @@ export type CommandId =
   | "config.reload"
   | "object.delete"
   | "object.diff"
+  | "object.copyName"
   | "object.menu"
   | "menu.run"
   | "object.describe"
@@ -69,7 +70,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
 ];
 
@@ -143,6 +144,8 @@ export const defaultBindings: Binding[] = [
   { key: "Delete", command: "object.delete", when: ["table"] },
   // context menu of the selected row (also right-click): every row action, generated from actions/registry.ts
   { key: "Meta+Enter", command: "object.menu", when: ["table"] },
+  // table only: in fields, Monaco and terminals ⌘C stays the native copy
+  { key: "Meta+C", command: "object.copyName", when: ["table"] },
   { key: "Escape", command: "detail.close", when: ["menu"] },
   { key: "J", command: "row.down", when: ["menu"] },
   { key: "ArrowDown", command: "row.down", when: ["menu"] },

@@ -69,6 +69,8 @@ export function wsTransport(url: string): Transport {
     portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
     portForwards: () => call("PortForwards"),
     portForwardStop: (id) => call("PortForwardStop", id),
+    // browser/test build: the page's clipboard
+    copyText: (t) => navigator.clipboard.writeText(t),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
     onFrame: (cb) => {
