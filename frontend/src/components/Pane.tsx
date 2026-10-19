@@ -9,6 +9,7 @@ import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
 import { b64encode } from "../term/sessions";
 import { DraftField } from "./DraftField";
+import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 
 /** One split pane: header (source + filter bar), live table, status line. */
@@ -167,12 +168,17 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   };
   const focus = (f: S.FilterField) => () => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: f }));
 
-  // grep only narrows as you type, so it applies live (debounced)
+  // grep applies live (debounced), except a negated term still being typed:
+  // that one waits for a space, ⏎ or leaving the field (see liveGrep)
+  const [complete, setComplete] = useState(false);
+  const live = liveGrep(grep);
+  const held = live.pendingFrom >= 0 && !complete ? grep.slice(live.pendingFrom) : "";
+  const grepNow = held ? live.apply : grep;
   useEffect(() => {
-    if (grep === pane.spec.grep) return;
-    const t = setTimeout(() => void applySpec(pane.id, { ...pane.spec, grep }), 150);
+    if (grepNow === pane.spec.grep) return;
+    const t = setTimeout(() => apply({ grep: grepNow }), 150);
     return () => clearTimeout(t);
-  }, [grep]);
+  }, [grepNow]);
   // the latest spec, for applies that land after other edits
   const apply = (patch: Partial<S.PaneSpec>) => {
     const cur = useUI.getState().panes[pane.id];
@@ -188,16 +194,34 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       <span className="shrink-0 font-semibold text-accent">{resource}</span>
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
       <span className="flex-1" />
-      <input
-        ref={input}
-        aria-label="filter"
-        placeholder="/ grep"
-        value={grep}
-        onChange={(e) => setGrep(e.target.value)}
-        onFocus={focus("grep")}
-        onBlur={onBlur}
-        className={`w-48 ${field}`}
-      />
+      <div className="relative">
+        <input
+          ref={input}
+          aria-label="filter"
+          placeholder="/ grep"
+          title={'terms must all match · !x excludes · "a b" is one term'}
+          value={grep}
+          onChange={(e) => {
+            setGrep(e.target.value);
+            setComplete(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") setComplete(true);
+          }}
+          onFocus={focus("grep")}
+          onBlur={(e) => {
+            setComplete(true);
+            onBlur(e);
+          }}
+          className={`w-48 ${field} ${held ? "border-dashed" : ""}`}
+        />
+        {/* same drop-down hint as the label and CEL drafts */}
+        {held && filterField === "grep" ? (
+          <div role="status" aria-label="grep draft" className="absolute top-full right-0 z-30 mt-px whitespace-nowrap border border-border bg-bg-elev px-1 text-fg-muted">
+            {held} · ⏎ apply
+          </div>
+        ) : null}
+      </div>
       <DraftField
         ref={labelInput}
         field="labels"

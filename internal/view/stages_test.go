@@ -1,6 +1,7 @@
 package view
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -159,5 +160,22 @@ func TestFieldKeys(t *testing.T) {
 	}
 	if keys, _ := v.FieldKeys("status.nope", 0); len(keys) != 0 {
 		t.Fatalf("keys = %+v", keys)
+	}
+}
+
+func TestGrepTerms(t *testing.T) {
+	cases := map[string][]string{
+		"api":             {"api-0", "api-1"},
+		"api !pending":    {"api-0"},
+		"!running":        {"api-1"},
+		"!api !etcd":      nil,
+		`"api-0 running"`: {"api-0"}, // a phrase across cells
+		"running !":       {"api-0", "etcd-0"},
+	}
+	for grep, want := range cases {
+		v := stageView(t, pipeline.Stage{Grep: grep})
+		if got := names(v); !slices.Equal(got, want) {
+			t.Errorf("grep %q: rows = %v, want %v", grep, got, want)
+		}
 	}
 }

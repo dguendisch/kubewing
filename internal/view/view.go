@@ -92,7 +92,7 @@ type View struct {
 	p    pipeline.Pipeline
 
 	filters []*expr.Program
-	greps   []string
+	greps   []pipeline.GrepTerm
 	sortBy  [][]string // raw sort specs, resolved against cols
 
 	userCols bool
@@ -156,7 +156,7 @@ func New(p pipeline.Pipeline, opts Options) (*View, error) {
 
 type stages struct {
 	filters []*expr.Program
-	greps   []string
+	greps   []pipeline.GrepTerm
 	sortBy  [][]string
 }
 
@@ -171,7 +171,7 @@ func compileStages(in []pipeline.Stage) (stages, error) {
 			}
 			st.filters = append(st.filters, prg)
 		case s.Grep != "":
-			st.greps = append(st.greps, strings.ToLower(s.Grep))
+			st.greps = append(st.greps, pipeline.ParseGrep(s.Grep)...)
 		case len(s.Sort) > 0:
 			st.sortBy = append(st.sortBy, s.Sort)
 		}
@@ -441,9 +441,10 @@ func (v *View) evalMatch(e *entry) {
 	}
 }
 
-// matches applies filters (all must be true) and greps (all must occur in
-// the rendered row). The error is the first evaluation failure, if any.
-func matches(obj map[string]any, cells []string, filters []*expr.Program, greps []string) (bool, error) {
+// matches applies filters (all must be true) and grep terms (each must
+// occur in the rendered row, or for a negated term must not). The error is
+// the first evaluation failure, if any.
+func matches(obj map[string]any, cells []string, filters []*expr.Program, greps []pipeline.GrepTerm) (bool, error) {
 	for _, f := range filters {
 		ok, err := f.Bool(obj)
 		if err != nil || !ok {
@@ -453,7 +454,7 @@ func matches(obj map[string]any, cells []string, filters []*expr.Program, greps 
 	if len(greps) > 0 {
 		row := strings.ToLower(strings.Join(cells, " "))
 		for _, g := range greps {
-			if !strings.Contains(row, g) {
+			if strings.Contains(row, g.Text) == g.Not {
 				return false, nil
 			}
 		}

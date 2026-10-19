@@ -33,6 +33,7 @@ const remember = (v: string) => {
  * filter that is valid but half-typed (`app=et`, `phase == "Run"`) would
  * otherwise blank the table on every keystroke. While typing, Go dry-runs
  * the draft against the pane's objects and the field shows the outcome.
+ * ⏎ or leaving the field applies it.
  * The CEL field completes field paths from the live objects.
  */
 export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftField(
@@ -171,7 +172,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
         aria-invalid={!!preview?.invalid && pending}
         aria-autocomplete={cel ? "list" : undefined}
         aria-expanded={cel ? !!list : undefined}
-        title={!focused && draft ? draft : undefined}
+        title={!focused && draft ? (status ? `${draft}\n${status}` : draft) : undefined}
         placeholder={placeholder}
         autoComplete="off"
         spellCheck={false}
@@ -186,18 +187,22 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
         onFocus={onFocus}
         onBlur={(e) => {
           setList(undefined);
+          // leaving the field applies it, like ⏎ (an invalid draft stays, marked red);
+          // the window losing focus (app switch) is not leaving the field
+          if (pending && document.hasFocus()) void apply();
           onBlur(e);
         }}
         className={`${className} ${wide ? "w-full" : ""} ${pending ? "border-dashed" : ""} ${preview?.invalid && pending ? "border-deleted" : ""}`}
       />
       {/* while suggestions are open the draft is mid-word: its status would only cover the list */}
-      {status && (focused || pending) && !list ? (
+      {/* unfocused, a pending draft shows only as the dashed (or red) border, with the status as tooltip */}
+      {status && focused && !list ? (
         <div
           role="status"
           aria-label={`${field === "filter" ? "cel" : "labels"} draft`}
           className={`absolute top-full right-0 z-30 mt-px whitespace-nowrap border border-border bg-bg-elev px-1 ${preview?.invalid ? "text-deleted" : "text-fg-muted"}`}
         >
-          {focused && preview?.invalid && preview.column >= 0 ? <Caret text={draft} column={preview.column} /> : null}
+          {preview?.invalid && preview.column >= 0 ? <Caret text={draft} column={preview.column} /> : null}
           {status}
         </div>
       ) : null}

@@ -35,7 +35,8 @@ func (s Source) AllNamespaces() bool { return s.Namespace == "" || s.Namespace =
 type Stage struct {
 	// Filter is a CEL expression over the object `o`; objects evaluating to false are dropped.
 	Filter string `json:"filter,omitempty"`
-	// Grep is a case-insensitive substring match on the rendered row.
+	// Grep matches the rendered row, case-insensitively: space-separated
+	// terms that must all occur, "!x" for must not (see ParseGrep).
 	Grep string `json:"grep,omitempty"`
 	// Sort lists column names; a leading "-" sorts descending.
 	Sort []string `json:"sort,omitempty"`

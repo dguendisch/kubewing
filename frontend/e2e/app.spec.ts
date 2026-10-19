@@ -122,6 +122,24 @@ test("filter bar: / focuses, grep narrows rows, esc returns to table", async ({ 
   expect((await inspect(page)).focus).toBe("table");
 });
 
+test("grep: !x excludes; a negated term applies once finished, so typing it never blanks the table", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("/");
+  const totals: number[] = [];
+  for (const ch of "!etc") {
+    await page.keyboard.type(ch);
+    await page.waitForTimeout(250); // slower than the debounce
+    totals.push((await focused(page)).total);
+  }
+  expect(totals).toEqual([3, 3, 3, 3]);
+  await expect(page.getByRole("status", { name: "grep draft" })).toContainText("!etc · ⏎ apply");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-0", "api-1"]);
+  // a following term applies the negated one as well; quotes make a phrase
+  await page.getByLabel("filter", { exact: true }).fill('"api-1" !etcd');
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-1"]);
+});
+
 test("label selector: click or l focuses it and keeps focus while typing; tab moves between the filter fields", async ({ page }) => {
   await openTape(page);
   const labels = page.getByLabel("label selector");
@@ -182,10 +200,22 @@ test("cel filter: c focuses, a draft previews without touching the table, ⏎ ap
   await expect(cel).toHaveAttribute("aria-invalid", "true");
   await page.keyboard.press("Enter");
   expect((await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
+  // the error only shows while the field has focus; unfocused, the red border and tooltip remain
+  await page.keyboard.press("Escape");
+  await expect(preview).toHaveCount(0);
+  await expect(cel).toHaveAttribute("aria-invalid", "true");
+  await expect(cel).toHaveAttribute("title", /Syntax error/);
+  await page.keyboard.press("c");
+  await expect(preview).toContainText("Syntax error");
   // empty + ⏎ clears
   await cel.fill("");
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await focused(page)).total).toBe(3);
+  // leaving the field applies a valid draft, like ⏎
+  await cel.fill('o.metadata.labels.app == "api"');
+  await page.keyboard.press("Escape");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-0", "api-1"]);
+  await expect(cel).not.toHaveClass(/border-dashed/);
 });
 
 test("cel filter completes field paths from the live objects", async ({ page }) => {
