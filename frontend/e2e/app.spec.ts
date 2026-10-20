@@ -135,6 +135,9 @@ test("grep: !x excludes; a negated term applies once finished, so typing it neve
   await expect(page.getByRole("status", { name: "grep draft" })).toContainText("!etc · ⏎ apply");
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-0", "api-1"]);
+  // ⏎ also goes back to the list, like esc
+  expect((await inspect(page)).focus).toBe("table");
+  await expect(page.getByLabel("filter", { exact: true })).not.toBeFocused();
   // a following term applies the negated one as well; quotes make a phrase
   await page.getByLabel("filter", { exact: true }).fill('"api-1" !etcd');
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-1"]);

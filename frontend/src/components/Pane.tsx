@@ -206,7 +206,11 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
             setComplete(false);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") setComplete(true);
+            // ⏎ applies and goes back to the list, like esc
+            if (e.key === "Enter") {
+              setComplete(true);
+              setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
+            }
           }}
           onFocus={focus("grep")}
           onBlur={(e) => {
