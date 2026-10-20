@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { b64decode, b64encode, sessions } from "./sessions";
+import { b64decode, b64encode, DEFAULT_SCROLLBACK, sessions } from "./sessions";
 
 describe("sessions", () => {
   it("buffers output until a terminal attaches, then streams", () => {
@@ -35,14 +35,24 @@ describe("sessions", () => {
     sessions.drop("s3");
   });
 
-  it("bounds the buffer, keeping the newest output", () => {
+  it("bounds the buffer by the scrollback, keeping the newest output", () => {
     const chunk = new Uint8Array(100 * 1024);
-    for (let i = 0; i < 5; i++) sessions.push("s2", chunk);
-    let n = 0;
-    sessions.attach("s2", (c) => (n += c instanceof Uint8Array ? c.length : 0));
-    expect(n).toBeLessThanOrEqual(256 * 1024);
-    expect(n).toBeGreaterThan(0);
-    sessions.drop("s2");
+    const kept = (id: string) => {
+      let n = 0;
+      sessions.attach(id, (c) => (n += c instanceof Uint8Array ? c.length : 0));
+      sessions.drop(id);
+      return n;
+    };
+    // the default (10k lines) keeps about 2 MB
+    for (let i = 0; i < 30; i++) sessions.push("s2", chunk);
+    const n = kept("s2");
+    expect(n).toBeLessThanOrEqual(DEFAULT_SCROLLBACK * 200);
+    expect(n).toBeGreaterThan(1.8 * 1024 * 1024);
+    // a smaller scrollback keeps less
+    sessions.setScrollback(1000);
+    for (let i = 0; i < 30; i++) sessions.push("s2", chunk);
+    expect(kept("s2")).toBeLessThanOrEqual(1000 * 200);
+    sessions.setScrollback(DEFAULT_SCROLLBACK);
   });
 
   it("base64 round-trips UTF-8", () => {

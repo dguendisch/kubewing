@@ -1,5 +1,6 @@
 import { rowAt } from "./grid/rowcache";
 import { shownDescribe } from "./components/Detail";
+import { openTerminals } from "./term/Terminal";
 import { useConfig } from "./store/config";
 import { paneData, useUI } from "./store/store";
 import * as S from "./store/state";
@@ -23,6 +24,13 @@ export function inspect() {
     switcher: s.switcher,
     overlay: s.overlay,
     describe: s.overlay?.kind === "detail" && s.overlay.view === "describe" ? shownDescribe : undefined,
+    // per session: scrollback setting, lines held (screen + scrollback) and the oldest line's text
+    terminals: Object.fromEntries(
+      [...openTerminals].map(([id, t]) => {
+        const b = t.buffer.active;
+        return [id, { scrollback: t.options.scrollback, lines: b.length, first: b.getLine(0)?.translateToString(true) }];
+      }),
+    ),
     panes: Object.fromEntries(
       Object.values(s.panes).map((p) => {
         const d = p.serverId ? paneData.get(p.serverId) : undefined;

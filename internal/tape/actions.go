@@ -77,7 +77,7 @@ func indent(s, pre string) string {
 
 // Exec implements source.Actor: a tiny line-echo shell. "exit [n]" ends
 // the session with that code, ⌃D at an empty prompt ends it like a real
-// shell; "size" prints the last terminal size.
+// shell; "size" prints the last terminal size, "seq N" prints 1…N.
 func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, _ []string, s source.ExecStreams) error {
 	var mu sync.Mutex
 	size := source.TerminalSize{}
@@ -139,6 +139,13 @@ func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, 
 					return ExitError(code)
 				}
 				return nil
+			case len(f) == 2 && f[0] == "seq": // "seq N": N numbered lines (scrollback tests)
+				n, _ := strconv.Atoi(f[1])
+				var b strings.Builder
+				for i := 1; i <= n; i++ {
+					fmt.Fprintf(&b, "%d\r\n", i)
+				}
+				fmt.Fprint(s.Stdout, b.String())
 			case len(f) > 0 && f[0] == "size":
 				mu.Lock()
 				fmt.Fprintf(s.Stdout, "%dx%d\r\n", size.Cols, size.Rows)

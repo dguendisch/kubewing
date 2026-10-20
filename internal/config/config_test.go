@@ -50,6 +50,7 @@ contexts:
   - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec], strict: true}
   - {match: "kind-*", label: kind, color: "#3b8eea"}
 debug: {image: nicolaka/netshoot, profile: netadmin}
+terminal: {scrollback: 50000}
 `,
 		"keybindings.yaml": `
 - {key: "Meta+K", command: row.up, when: [table]}
@@ -70,7 +71,8 @@ accent: "rgb(203, 75, 22)"
 				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec"}, Strict: true},
 				{Match: "kind-*", Label: "kind", Color: "#3b8eea"},
 			},
-			Debug: Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},
+			Debug:    Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},
+			Terminal: Terminal{Scrollback: 50000},
 		},
 		Keybindings: []Binding{
 			{Key: "Meta+K", Command: "row.up", When: []string{"table"}},
@@ -99,6 +101,7 @@ contexts:
   - {label: nomatch}
   - {match: "*", label: ok}
 debug: {image: busybox, profile: root}
+terminal: {scrollback: 5}
 `,
 		"keybindings.yaml": `
 - {key: "", command: row.up}
@@ -122,6 +125,9 @@ debug: {image: busybox, profile: root}
 	if got.Config.Debug != (Debug{Image: "busybox"}) {
 		t.Errorf("debug: %+v", got.Config.Debug)
 	}
+	if got.Config.Terminal.Scrollback != DefaultScrollback {
+		t.Errorf("out-of-range scrollback must fall back to the default: %d", got.Config.Terminal.Scrollback)
+	}
 	wantErrs := []string{
 		`unknown field "colour"`,
 		"diff.ignore[0]: path is required",
@@ -129,6 +135,7 @@ debug: {image: busybox, profile: root}
 		`contexts[1]: color "not a color!"`,
 		`contexts[2]: confirm: unknown action "reboot"`,
 		"contexts[3]: match is required",
+		"terminal.scrollback: 5 is not between 100 and 1000000 lines",
 		`debug.profile: unknown profile "root"`,
 		"keybindings.yaml: [0]: key and command are required",
 		`theme "missing": themes/missing.yaml not found`,

@@ -9,18 +9,29 @@
 type Chunk = Uint8Array | { exit: number | string };
 type Listener = (chunk: Chunk) => void;
 
-const MAX_BUFFER = 256 * 1024;
+/** Default terminal scrollback (lines), as config.DefaultScrollback. */
+export const DEFAULT_SCROLLBACK = 10_000;
+
+/** Bytes kept per scrollback line: generous for colored output (escape sequences). */
+const BYTES_PER_LINE = 200;
 
 class Sessions {
   private listeners = new Map<string, Listener>();
   private transcript = new Map<string, Chunk[]>();
   private sizes = new Map<string, number>();
+  /** Transcript bound per session; follows the scrollback (setScrollback). */
+  private max = DEFAULT_SCROLLBACK * BYTES_PER_LINE;
+
+  /** The transcript holds about as much as the terminal's scrollback (config.yaml terminal.scrollback). */
+  setScrollback(lines: number) {
+    this.max = lines * BYTES_PER_LINE;
+  }
 
   push(id: string, chunk: Chunk) {
     const buf = this.transcript.get(id) ?? [];
     buf.push(chunk);
     let size = (this.sizes.get(id) ?? 0) + (chunk instanceof Uint8Array ? chunk.length : 0);
-    while (size > MAX_BUFFER && buf.length > 1) {
+    while (size > this.max && buf.length > 1) {
       const first = buf.shift()!;
       if (first instanceof Uint8Array) size -= first.length;
     }

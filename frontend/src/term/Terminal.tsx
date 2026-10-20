@@ -4,7 +4,10 @@ import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
 import { useConfig } from "../store/config";
-import { sessions } from "./sessions";
+import { DEFAULT_SCROLLBACK, sessions } from "./sessions";
+
+/** Open terminals by session, for the test introspection hook (inspect.ts). */
+export const openTerminals = new Map<string, XTerm>();
 
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
 
@@ -40,6 +43,7 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<XTerm>(undefined);
   const themeGen = useConfig((s) => s.themeGen);
+  const scrollback = useConfig((s) => s.config?.config.terminal?.scrollback ?? DEFAULT_SCROLLBACK);
   const cb = useRef({ onInput, onResize, onExit, onFocus });
   cb.current = { onInput, onResize, onExit, onFocus };
 
@@ -48,7 +52,7 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
       fontFamily: getComputedStyle(document.body).fontFamily,
       fontSize: 12,
       cursorBlink: true,
-      scrollback: 5000,
+      scrollback,
       theme: theme(),
       macOptionIsMeta: true,
     });
@@ -56,6 +60,7 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
     t.loadAddon(fit);
     t.open(host.current!);
     term.current = t;
+    openTerminals.set(session, t);
     // false = xterm ignores the key; the app's capture-phase handler has it already
     t.attachCustomKeyEventHandler((e) => !(e.type === "keydown" && resolve(chord(e), "terminal")));
     const subs = [t.onData((d) => cb.current.onInput(d)), t.onResize(({ cols, rows }) => cb.current.onResize(cols, rows))];
@@ -80,6 +85,7 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
       detach();
       ro.disconnect();
       subs.forEach((s) => s.dispose());
+      if (openTerminals.get(session) === t) openTerminals.delete(session);
       t.dispose();
       term.current = undefined;
     };
@@ -93,6 +99,11 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
   useEffect(() => {
     if (term.current && themeGen) term.current.options.theme = theme();
   }, [themeGen]);
+
+  // ⌘⇧, applies a changed scrollback to open terminals too
+  useEffect(() => {
+    if (term.current) term.current.options.scrollback = scrollback;
+  }, [scrollback]);
 
   return <div ref={host} data-terminal={session} className="h-full w-full overflow-hidden p-1" />;
 }

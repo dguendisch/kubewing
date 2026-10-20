@@ -923,6 +923,26 @@ test.describe("object actions", () => {
     expect(Object.values(after.panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
   });
 
+  test("the terminal keeps terminal.scrollback lines (config.yaml: 20000), more than the old 5000", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
+    await expect.poll(() => termText(page)).toContain("$");
+    await page.keyboard.type("seq 12000");
+    await page.keyboard.press("Enter");
+    const term = async () => {
+      const s = await inspect(page);
+      const id = (s.panes[s.focusedPane] as unknown as { term: { session: string } }).term.session;
+      return (s as unknown as { terminals: Record<string, { scrollback: number; lines: number; first?: string }> }).terminals[id]!;
+    };
+    await expect.poll(async () => (await term()).lines).toBeGreaterThan(12000);
+    const t = await term();
+    expect(t.scrollback).toBe(20000);
+    expect(t.first).toBe("tape shell in shop/web-3"); // nothing dropped yet: the first line is still there
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
   test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");

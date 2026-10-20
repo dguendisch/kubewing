@@ -26,3 +26,8 @@ contexts:
 #   profile: general (default), baseline, restricted, netadmin or sysadmin
 debug:
   image: nicolaka/netshoot
+
+# terminal panes (exec, debug)
+#   scrollback: lines kept beyond the screen (default 10000, 100 … 1000000)
+terminal:
+  scrollback: 20000

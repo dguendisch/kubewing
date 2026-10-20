@@ -42,7 +42,21 @@ type Config struct {
 	// Contexts are per-context safety rules; the first matching rule wins.
 	Contexts []ContextRule `json:"contexts"`
 	Debug    Debug         `json:"debug"`
+	Terminal Terminal      `json:"terminal"`
 }
+
+// Terminal configures terminal panes (exec, debug).
+type Terminal struct {
+	// Scrollback is how many lines a terminal keeps beyond the screen.
+	Scrollback int `json:"scrollback"`
+}
+
+// Scrollback bounds and default (lines).
+const (
+	DefaultScrollback = 10000
+	MinScrollback     = 100
+	MaxScrollback     = 1_000_000
+)
 
 // Debug configures debug containers (kubectl debug).
 type Debug struct {
@@ -100,7 +114,7 @@ type Effective struct {
 func Defaults(dir string) Effective {
 	return Effective{
 		Dir:         dir,
-		Config:      Config{Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}},
+		Config:      Config{Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}, Terminal: Terminal{Scrollback: DefaultScrollback}},
 		Keybindings: []Binding{},
 		Theme:       map[string]string{},
 		Errors:      []string{},
@@ -134,6 +148,13 @@ func Load(dir string) Effective {
 			e.Config.Contexts = append(e.Config.Contexts, r)
 		}
 		e.Config.Theme = c.Theme
+		switch n := c.Terminal.Scrollback; {
+		case n == 0: // unset: the default
+		case n < MinScrollback || n > MaxScrollback:
+			errf("config.yaml", "terminal.scrollback: %d is not between %d and %d lines", n, MinScrollback, MaxScrollback)
+		default:
+			e.Config.Terminal.Scrollback = n
+		}
 		e.Config.Debug.Image = c.Debug.Image
 		if p := c.Debug.Profile; p != "" && !slices.Contains(DebugProfiles, p) {
 			errf("config.yaml", "debug.profile: unknown profile %q (known: %v)", p, DebugProfiles)
