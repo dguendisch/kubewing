@@ -6,6 +6,7 @@ import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursor, useDiffNav } from "./editor/Viewer";
 import * as S from "./store/state";
+import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -70,10 +71,12 @@ export function dispatch(cmd: CommandId) {
     case "row.down":
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
+      if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
+      if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
@@ -102,6 +105,7 @@ export function dispatch(cmd: CommandId) {
     }
     case "menu.run": {
       const o = s.overlay;
+      if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
       if (!item || item.disabled) return;
@@ -207,6 +211,8 @@ export function flash(paneId: string, text: string, error = false) {
  * Mutations are two-phase: Go checks the safety policy and issues a token
  * (Prepare), the UI confirms if the rule asks for it, then the token is
  * redeemed. Refusals (read-only context …) show in the pane's status line.
+ * An exec into a pod with more than one container it could enter asks which
+ * one in between (the default highlighted, so e ⏎ is the old e).
  */
 async function prepareAction(kind: ActionKind) {
   const s = useUI.getState();
@@ -217,10 +223,34 @@ async function prepareAction(kind: ActionKind) {
   if (!key) return;
   try {
     const pending = await bridge().prepare(kind, pane.serverId, key);
-    if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: pane.id, key, pending }));
-    else await execute(pane.id, pending);
+    if (kind === "exec") {
+      const containers = containerChoices((await bridge().rowInfo(pane.serverId, key)).containerInfo ?? []);
+      if (needsPicker(containers)) {
+        return setUI((x) => S.openOverlay(x, { kind: "container", pane: pane.id, key, pending, containers, index: initialChoice(containers) }));
+      }
+    }
+    await proceed(pane.id, key, pending);
   } catch (e) {
     flash(pane.id, errorText(e), true);
+  }
+}
+
+/** A prepared action, its container (exec) picked: confirm if the rule asks for it, else run. */
+async function proceed(paneId: string, key: string, pending: Pending, container = "") {
+  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container }));
+  else await execute(paneId, pending, container);
+}
+
+/** ⏎ or a click in the container picker. */
+export async function pickContainer(name: string | undefined) {
+  const o = useUI.getState().overlay;
+  const c = o?.containers?.find((x) => x.name === name);
+  if (o?.kind !== "container" || !o.pending || !o.key || !c || c.disabled) return;
+  setUI(S.closeOverlay);
+  try {
+    await proceed(o.pane, o.key, o.pending, c.name);
+  } catch (e) {
+    flash(o.pane, errorText(e), true);
   }
 }
 
@@ -229,19 +259,19 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending);
+    await execute(o.pane, o.pending, o.container);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending) {
+async function execute(paneId: string, p: Pending, container = "") {
   switch (p.action.kind) {
     case "delete":
       await bridge().delete(p.token);
       return flash(paneId, `deleted ${p.action.resource}/${p.action.name}`);
     case "exec": {
-      const r = await bridge().execStart(p.token, "", 80, 24);
+      const r = await bridge().execStart(p.token, container, 80, 24);
       const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context };
       return setUI((x) => S.openTerminal(x, term, paneId));
     }
@@ -266,6 +296,13 @@ function moveMenu(s: S.UIState, delta: number): S.UIState {
     if (!items[i]!.disabled) return { ...s, overlay: { ...s.overlay, index: i } };
   }
   return s;
+}
+
+function moveContainer(s: S.UIState, delta: number): S.UIState {
+  const o = s.overlay;
+  if (!o?.containers) return s;
+  const index = moveChoice(o.containers, o.index ?? 0, delta);
+  return index === o.index ? s : { ...s, overlay: { ...o, index } };
 }
 
 function moveForward(s: S.UIState, delta: number): S.UIState {

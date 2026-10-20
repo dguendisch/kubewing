@@ -49,8 +49,6 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 
 Still open in P0:
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
-- Generated TS bindings check; golden-guard hook on `testdata/`.
-- Exec container picker (the pod's default container is used).
 
 Still open in P0.1:
 - Object-name completion.
@@ -132,6 +130,7 @@ Still open in P0.1:
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **Keybinding & theme UI** — editors on top of the P0 config files.
 1. **WKWebView smoke suite** — a few tests against the real app for what Chromium/Playwright can't reach: native menu accelerators (⌘W closes a tab, not the window; ⌘R doesn't reload; ⌘P opens no print dialog), menu clicks reaching the dispatcher, IME input in the filter fields. Needs a native harness (XCUITest or an in-app test hook sending real key events); Playwright has no WKWebView driver.
+1. Generated TS bindings check; golden-guard hook on `testdata/`.
 
 ## Decisions
 

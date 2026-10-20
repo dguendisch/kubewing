@@ -1,5 +1,6 @@
 import type { FocusContext } from "../keys/keymap";
 import type { ContextList, Pending } from "../transport/types";
+import type { ContainerChoice } from "../components/containers";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
@@ -50,13 +51,14 @@ export interface Tab {
 export interface Overlay {
   /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
-   *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab";
+   *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes;
+   *  container: which container a prepared exec enters. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
   describeGen?: number;
-  /** forwards, menu: highlighted entry. */
+  /** forwards, menu, container: highlighted entry. */
   index?: number;
   /** menu: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */
   at?: { x: number; y: number };
@@ -67,8 +69,12 @@ export interface Overlay {
   /** closeTab: the tab to close (not the index: tabs move while the dialog is open). */
   tabId?: string;
   diff?: boolean;
-  /** confirm: the prepared action. */
+  /** confirm, container: the prepared action. */
   pending?: Pending;
+  /** container: the pod's containers to pick from. */
+  containers?: ContainerChoice[];
+  /** confirm: the container a prepared exec enters ("" or unset = the pod's default). */
+  container?: string;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -368,6 +374,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   portforward: "dialog",
   forwards: "forwards",
   menu: "menu",
+  // a menu too: the same keys (j/k, ⏎, Esc)
+  container: "menu",
   help: "help",
 };
 

@@ -174,9 +174,23 @@ export interface RowInfo {
   hasPrev?: boolean;
   pod?: boolean;
   containers?: string[];
+  /** Every container exec can enter, for the picker. */
+  containerInfo?: ContainerInfo[];
   ports?: number[];
   /** The declared container ports in spec order (port-forward completion). */
   portInfo?: PortInfo[];
+}
+
+/** Mirrors bridge.ContainerInfo. */
+export interface ContainerInfo {
+  name: string;
+  /** sidecar: an init container with restartPolicy Always; ephemeral: kubectl debug. */
+  kind: "container" | "init" | "sidecar" | "ephemeral";
+  /** From the pod status; undefined = not reported. */
+  state?: "running" | "waiting" | "terminated";
+  reason?: string;
+  /** The one exec picks without a choice. */
+  default?: boolean;
 }
 
 /** Mirrors bridge.PortInfo. */

@@ -1,5 +1,6 @@
 import { ConfigErrors } from "./components/ConfigErrors";
 import { Confirm, ConfirmCloseTab } from "./components/Confirm";
+import { ContainerPicker } from "./components/ContainerPicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
@@ -82,6 +83,7 @@ export function App() {
       <PortForwardDialog />
       <PortForwardList />
       <ContextMenu />
+      <ContainerPicker />
       <TabSwitcher />
       <Help />
     </div>

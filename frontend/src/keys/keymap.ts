@@ -162,7 +162,7 @@ export const defaultBindings: Binding[] = [
   { key: "D", command: "object.describe", when: ["table"] },
   // in the detail view d is the diff toggle, so describe keeps ⇧D there
   { key: "Shift+D", command: "object.describe", when: ["detail"] },
-  { key: "S", command: "object.exec", when: ["table"] },
+  { key: "E", command: "object.exec", when: ["table"] },
   { key: "F", command: "object.portForward", when: ["table"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
   // the same keys as the running forwards in the f dialog: ↑/↓ pick, x or ⌫ stops

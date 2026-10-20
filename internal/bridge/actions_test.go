@@ -107,6 +107,17 @@ func TestExecDefaultContainerAndClose(t *testing.T) {
 	if _, err := svc.ExecStart(p.Token, "nope", 0, 0); err == nil || !strings.Contains(err.Error(), "no container") {
 		t.Errorf("unknown container: %v", err)
 	}
+	// an init container (here a native sidecar) can be entered by name, as with kubectl exec -c
+	p, _ = svc.Prepare("exec", res.Pane, "s-web-4")
+	side, err := svc.ExecStart(p.Token, "proxy", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if side.Container != "proxy" || strings.Join(side.Others, ",") != "app,worker,setup,proxy" {
+		t.Errorf("sidecar exec: %+v", side)
+	}
+	waitOutput(t, log, side.Session, func(out, _ string) bool { return strings.Contains(out, "web-4:proxy$ ") })
+	_ = svc.SessionClose(side.Session)
 	waitOutput(t, log, er.Session, func(out, _ string) bool { return strings.Contains(out, "$ ") })
 	if err := svc.SessionClose(er.Session); err != nil {
 		t.Fatal(err)
@@ -201,6 +212,20 @@ func TestRowInfo(t *testing.T) {
 	// name, protocol (TCP when unset) and container of each declared port, in spec order
 	if want := "[{8080 http TCP app} {9090 metrics TCP app} {5353 dns UDP sidecar}]"; fmt.Sprint(pod.PortInfo) != want {
 		t.Errorf("portInfo = %v, want %s", pod.PortInfo, want)
+	}
+	// web-1 has no container statuses: state unknown; the first container is the default
+	if want := "[{app container   true} {sidecar container   false}]"; fmt.Sprint(pod.ContainerInfo) != want {
+		t.Errorf("web-1 containerInfo = %v, want %s", pod.ContainerInfo, want)
+	}
+	// containers first, then init containers (restartPolicy Always = sidecar), with their state
+	multi, _ := svc.RowInfo(res.Pane, "s-web-4")
+	if want := "[{app container running  true} {worker container waiting CrashLoopBackOff false} {setup init terminated Completed false} {proxy sidecar running  false}]"; fmt.Sprint(multi.ContainerInfo) != want {
+		t.Errorf("web-4 containerInfo = %v, want %s", multi.ContainerInfo, want)
+	}
+	// the annotation picks the default
+	web0, _ := svc.RowInfo(res.Pane, "s-web-0")
+	if c := web0.ContainerInfo; len(c) != 2 || c[0].Default || !c[1].Default {
+		t.Errorf("web-0 default container: %+v", c)
 	}
 	cm, _ := svc.RowInfo(res.Pane, "s-cfg")
 	if cm.Pod || cm.Kind != "ConfigMap" || cm.Containers != nil || cm.Ports != nil {

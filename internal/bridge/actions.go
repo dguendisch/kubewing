@@ -112,6 +112,8 @@ type RowInfo struct {
 	// Pod is true for v1 Pods (exec, port-forward).
 	Pod        bool     `json:"pod,omitempty"`
 	Containers []string `json:"containers,omitempty"`
+	// ContainerInfo lists every container exec can enter, for the picker.
+	ContainerInfo []ContainerInfo `json:"containerInfo,omitempty"`
 	// Ports are the declared container ports (port-forward defaults).
 	Ports []int64 `json:"ports,omitempty"`
 	// PortInfo details them for the port-forward dialog's completion.
@@ -124,6 +126,20 @@ type PortInfo struct {
 	Name      string `json:"name,omitempty"`
 	Protocol  string `json:"protocol,omitempty"` // TCP if unset, as Kubernetes defaults it
 	Container string `json:"container"`
+}
+
+// ContainerInfo is one container of a pod (exec picker).
+type ContainerInfo struct {
+	Name string `json:"name"`
+	// Kind is "container", "init", "sidecar" (an init container with
+	// restartPolicy Always) or "ephemeral" (kubectl debug).
+	Kind string `json:"kind"`
+	// State from the pod status: running, waiting or terminated; "" = not reported.
+	State string `json:"state,omitempty"`
+	// Reason of a waiting/terminated state (CrashLoopBackOff, Completed …).
+	Reason string `json:"reason,omitempty"`
+	// Default is the container exec picks when none is given.
+	Default bool `json:"default,omitempty"`
 }
 
 // RowInfo describes one row, including tombstones.
@@ -143,6 +159,11 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Pod: r.isPod()}
 	if info.Pod {
 		info.Containers = containers(r)
+		info.ContainerInfo = podContainers(r)
+		def := defaultContainer(r, info.ContainerInfo)
+		for i := range info.ContainerInfo {
+			info.ContainerInfo[i].Default = info.ContainerInfo[i].Name == def
+		}
 		info.PortInfo = portInfo(r)
 		for _, p := range info.PortInfo {
 			if !slices.Contains(info.Ports, p.Port) {
@@ -196,7 +217,7 @@ type ExecResult struct {
 	Container string   `json:"container"`
 	Pod       string   `json:"pod"`
 	Context   string   `json:"context"`
-	Others    []string `json:"containers"` // all containers of the pod, for a picker
+	Others    []string `json:"containers"` // every container exec can enter (see podContainers)
 }
 
 type session struct {
@@ -214,16 +235,21 @@ var ExecShell = []string{"sh", "-c", "command -v bash >/dev/null 2>&1 && exec ba
 
 // ExecStart redeems a prepared exec and starts a TTY session in the pod.
 // container "" picks the kubectl.kubernetes.io/default-container annotation,
-// else the first container.
+// else the first container. Init, sidecar and ephemeral containers can be
+// named too, as with kubectl exec -c.
 func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.Exec)
 	if err != nil {
 		return ExecResult{}, err
 	}
 	r := target.(row)
-	all := containers(r)
+	cs := podContainers(r)
+	all := make([]string, len(cs))
+	for i, c := range cs {
+		all[i] = c.Name
+	}
 	if container == "" {
-		container = defaultContainer(r, all)
+		container = defaultContainer(r, cs)
 	} else if len(all) > 0 && !slices.Contains(all, container) {
 		return ExecResult{}, fmt.Errorf("pod %s has no container %q (has %s)", a.Name, container, strings.Join(all, ", "))
 	}
@@ -277,19 +303,66 @@ func containers(r row) []string {
 	return out
 }
 
+// podContainers lists a pod's containers, then its init and ephemeral
+// containers, in spec order, with their state from the pod status.
+func podContainers(r row) []ContainerInfo {
+	obj := r.item.Object.Object
+	state := map[string]ContainerInfo{}
+	for _, f := range []string{"containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"} {
+		list, _, _ := unstructured.NestedSlice(obj, "status", f)
+		for _, s := range list {
+			name, _, _ := unstructured.NestedString(asMap(s), "name")
+			st := asMap(asMap(s)["state"])
+			for _, k := range []string{"running", "waiting", "terminated"} {
+				if v, ok := st[k]; ok {
+					reason, _, _ := unstructured.NestedString(asMap(v), "reason")
+					state[name] = ContainerInfo{State: k, Reason: reason}
+					break
+				}
+			}
+		}
+	}
+	kinds := map[string]string{"containers": "container", "initContainers": "init", "ephemeralContainers": "ephemeral"}
+	var out []ContainerInfo
+	for _, f := range []string{"containers", "initContainers", "ephemeralContainers"} {
+		list, _, _ := unstructured.NestedSlice(obj, "spec", f)
+		for _, c := range list {
+			name, _, _ := unstructured.NestedString(asMap(c), "name")
+			if name == "" {
+				continue
+			}
+			kind := kinds[f]
+			if p, _, _ := unstructured.NestedString(asMap(c), "restartPolicy"); kind == "init" && p == "Always" {
+				kind = "sidecar"
+			}
+			out = append(out, ContainerInfo{Name: name, Kind: kind, State: state[name].State, Reason: state[name].Reason})
+		}
+	}
+	return out
+}
+
 func asMap(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
 }
 
-func defaultContainer(r row, all []string) string {
-	if d := r.item.Object.GetAnnotations()["kubectl.kubernetes.io/default-container"]; d != "" && (len(all) == 0 || slices.Contains(all, d)) {
+// defaultContainer is the kubectl.kubernetes.io/default-container annotation
+// if it names one of cs, else the first regular container.
+func defaultContainer(r row, cs []ContainerInfo) string {
+	d := r.item.Object.GetAnnotations()["kubectl.kubernetes.io/default-container"]
+	if len(cs) == 0 {
 		return d
 	}
-	if len(all) > 0 {
-		return all[0]
+	first := ""
+	for _, c := range cs {
+		if d != "" && c.Name == d {
+			return d
+		}
+		if first == "" && c.Kind == "container" {
+			first = c.Name
+		}
 	}
-	return ""
+	return first
 }
 
 func (s *Service) session(id string) (*session, error) {

@@ -825,7 +825,8 @@ test.describe("detail view (Monaco)", () => {
   });
 });
 
-// Object actions on the static tape: web-1 (2 containers, ports 8080/9090), cfg (a ConfigMap).
+// Object actions on the static tape: web-1 (2 containers, ports 8080/9090), web-3 (1 container),
+// web-4 (init, sidecar, crash-looping and running containers), cfg (a ConfigMap).
 test.describe("object actions", () => {
   async function openStatic(page: Page, context = "") {
     await ready(page);
@@ -893,16 +894,17 @@ test.describe("object actions", () => {
     await page.keyboard.press("Escape");
   });
 
-  test("s opens a terminal pane below; keys go to the shell; ⌘W is still the tab's", async ({ page }) => {
+  // web-3 has a single container: e goes straight to its shell
+  test("e opens a terminal pane below; keys go to the shell; ⌘W is still the tab's", async ({ page }) => {
     await openStatic(page);
-    await select(page, "s-web-1");
-    await page.keyboard.press("s");
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     const s = await inspect(page);
     const termPane = s.panes[s.focusedPane] as unknown as { term?: { session: string; pod: string; container: string } };
-    expect(termPane.term).toMatchObject({ pod: "web-1", container: "app" });
-    await expect(page.locator("section[data-pane] header").filter({ hasText: "exec" })).toContainText("web-1/app");
-    await expect.poll(() => termText(page)).toContain("web-1:app$");
+    expect(termPane.term).toMatchObject({ pod: "web-3", container: "app" });
+    await expect(page.locator("section[data-pane] header").filter({ hasText: "exec" })).toContainText("web-3/app");
+    await expect.poll(() => termText(page)).toContain("web-3:app$");
     // j and / are table keys; in a terminal they are just typed
     await page.keyboard.type("echo j/k");
     await page.keyboard.press("Enter");
@@ -923,8 +925,8 @@ test.describe("object actions", () => {
 
   test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
     await openStatic(page);
-    await select(page, "s-web-1");
-    await page.keyboard.press("s");
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
     await expect.poll(() => termText(page)).toContain("$");
     // the tape's shell ends on EOF, like a real one
     await page.keyboard.press("Control+D");
@@ -936,8 +938,8 @@ test.describe("object actions", () => {
 
   test("⌃⇧D closes the shell pane even when the shell ignores ⌃D", async ({ page }) => {
     await openStatic(page);
-    await select(page, "s-web-1");
-    await page.keyboard.press("s");
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("x"); // the tape shell ignores ⌃D on a non-empty line, like a busy one
     await page.keyboard.press("Control+D");
@@ -951,13 +953,78 @@ test.describe("object actions", () => {
 
   test("exit in the shell closes the pane too", async ({ page }) => {
     await openStatic(page);
-    await select(page, "s-web-1");
-    await page.keyboard.press("s");
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("exit 2");
     await page.keyboard.press("Enter");
     await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     expect((await inspect(page)).focus).toBe("table");
+  });
+  test("e on a pod with several containers asks which one; the default is highlighted", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-4");
+    await page.keyboard.press("e");
+    const picker = page.getByRole("menu", { name: "exec into web-4" });
+    await expect(picker).toMatchAriaSnapshot(`
+      - menu "exec into web-4":
+        - text: exec into web-4
+        - menuitem "app running · default"
+        - menuitem "worker CrashLoopBackOff" [disabled]
+        - menuitem "setup init · Completed" [disabled]
+        - menuitem "proxy sidecar · running"
+        - text: ⏎ exec · esc cancel
+    `);
+    expect((await inspect(page)).focus).toBe("menu");
+    await expect(picker.locator("[data-active]")).toContainText("app");
+    // j skips the containers that aren't running; at the end it stays
+    await page.keyboard.press("j");
+    await expect(picker.locator("[data-active]")).toContainText("proxy");
+    await page.keyboard.press("j");
+    await expect(picker.locator("[data-active]")).toContainText("proxy");
+    await page.keyboard.press("Enter");
+    await expect(picker).toHaveCount(0);
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    const s = await inspect(page);
+    expect((s.panes[s.focusedPane] as unknown as { term?: { container: string } }).term).toMatchObject({ container: "proxy" });
+    await expect.poll(() => termText(page)).toContain("web-4:proxy$");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("container picker: e ⏎ enters the default; esc cancels without a session", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-4");
+    const sel = (await focused(page)).selected;
+    await page.keyboard.press("e");
+    const picker = page.getByRole("menu", { name: "exec into web-4" });
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(picker).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+    expect((await focused(page)).selected).toBe(sel);
+    expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+    // the same key twice: the highlighted default
+    await page.keyboard.press("e");
+    await expect(picker).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("web-4:app$");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("container picker, then the confirmation naming the container (dev context)", async ({ page }) => {
+    await openStatic(page, "tape-dev");
+    await select(page, "s-web-1");
+    await page.keyboard.press("e");
+    const picker = page.getByRole("menu", { name: "exec into web-1" });
+    await picker.getByRole("menuitem", { name: /sidecar/ }).click();
+    const confirm = page.getByRole("alertdialog", { name: "confirm exec" });
+    await expect(confirm).toContainText("exec e2e-static/web-1 -n shop on tape-dev (container sidecar)");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("web-1:sidecar$");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
   });
 
   test("f forwards the pod's ports; ⌥⌘P lists them, ⌫ stops", async ({ page }) => {
@@ -1184,7 +1251,7 @@ test.describe("object actions", () => {
   test("not a pod: exec and port-forward are refused", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-cfg");
-    await page.keyboard.press("s");
+    await page.keyboard.press("e");
     await expect(page.getByLabel("message")).toContainText("exec needs a pod, not configmap");
     expect((await inspect(page)).focus).toBe("table");
   });
@@ -1192,7 +1259,7 @@ test.describe("object actions", () => {
   test("read-only context: exec refused; describe still works", async ({ page }) => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-1");
-    await page.keyboard.press("s");
+    await page.keyboard.press("e");
     await expect(page.getByLabel("message")).toContainText("read-only context");
     expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     await page.keyboard.press("d");
@@ -1255,7 +1322,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name ⌘C"
         - separator
-        - menuitem "exec shell s"
+        - menuitem "exec shell e"
         - menuitem "port-forward… f"
         - separator
         - menuitem "delete… ⌘⌫"
@@ -1374,6 +1441,9 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await select(page, "s-web-1");
     await page.keyboard.press("ControlOrMeta+Enter");
     await menu(page).getByRole("menuitem", { name: /exec shell/ }).click();
+    // web-1 has two containers: the same picker as e
+    await page.getByRole("menu", { name: "exec into web-1" }).waitFor();
+    await page.keyboard.press("Enter");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     await expect.poll(() => page.locator("[data-terminal] .xterm-rows").innerText()).toContain("$");
     await page.keyboard.press("Control+D"); // ends the shell, the pane goes with it

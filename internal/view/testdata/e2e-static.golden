@@ -12,14 +12,15 @@
       "name": "STATUS"
     }
   ],
-  "total": 5,
+  "total": 6,
   "offset": 0,
   "order": [
     "s-cfg",
     "s-web-0",
     "s-web-1",
     "s-web-2",
-    "s-web-3"
+    "s-web-3",
+    "s-web-4"
   ],
   "rows": [
     {
@@ -61,10 +62,18 @@
         "web-3",
         "Running"
       ]
+    },
+    {
+      "key": "s-web-4",
+      "cells": [
+        "shop",
+        "web-4",
+        "Running"
+      ]
     }
   ],
   "status": {
     "synced": true,
-    "objects": 5
+    "objects": 6
   }
 }
