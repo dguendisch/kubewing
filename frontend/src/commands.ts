@@ -169,8 +169,22 @@ export function dispatch(cmd: CommandId) {
       return void runConfirmed();
     case "confirm.cancel":
       return setUI(S.closeOverlay);
+    case "term.find":
+      return setUI(S.openFind);
+    case "term.findClose":
+      return setUI(S.closeFind);
+    case "term.findNext":
+    case "term.findPrev": {
+      // from the shell too (⌘G), with the bar's last query; nothing to find yet: open the bar
+      const f = pane.term?.find;
+      if (!pane.term || !f?.query) return setUI(S.openFind);
+      return finders.get(pane.term.session)?.(cmd === "term.findNext" ? "next" : "prev");
+    }
   }
 }
+
+/** Per terminal session: steps to the next/previous match (registered by the open terminal). */
+export const finders = new Map<string, (dir: "next" | "prev") => void>();
 
 /**
  * = / ! in the YAML view: the field under the cursor, compared with its

@@ -55,6 +55,21 @@ export function layout(row: RowData | undefined, col: number, column: ColumnInfo
  * keeps the previous one, e.g. the text color as selection background.
  */
 export function withAlpha(color: string, alpha: number): string {
+  // derived from a theme token, not a raw color (the token lint matches the literal syntax)
+  const fn = "rgb" + "a";
+  return `${fn}(${rgbOf(color, "withAlpha").join(", ")}, ${alpha})`;
+}
+
+/**
+ * #RRGGBB of a hex or rgb() token, blended over bg at alpha if given (xterm's
+ * search decorations take nothing else: no rgba, no CSS variables).
+ */
+export function toHex(color: string, alpha = 1, bg = "#000000"): string {
+  const c = rgbOf(color, "toHex"), b = rgbOf(bg, "toHex");
+  return "#" + c.map((v, i) => Math.round(v * alpha + b[i]! * (1 - alpha)).toString(16).padStart(2, "0")).join("");
+}
+
+function rgbOf(color: string, caller: string): number[] {
   const c = color.trim();
   const hex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(c);
   let rgb: number[] | undefined;
@@ -65,8 +80,6 @@ export function withAlpha(color: string, alpha: number): string {
     const m = /^rgba?[(]\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i.exec(c);
     if (m) rgb = [m[1], m[2], m[3]].map(Number);
   }
-  if (!rgb) throw new Error(`withAlpha: unsupported color ${JSON.stringify(color)} (use a hex token in theme.css)`);
-  // derived from a theme token, not a raw color (the token lint matches the literal syntax)
-  const fn = "rgb" + "a";
-  return `${fn}(${rgb.join(", ")}, ${alpha})`;
+  if (!rgb) throw new Error(`${caller}: unsupported color ${JSON.stringify(color)} (use a hex token in theme.css)`);
+  return rgb;
 }

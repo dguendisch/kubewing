@@ -61,6 +61,10 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Filter by CEL", "filter.focusCel"],
       null,
       ["Toggle Line Wrap", "detail.toggleWrap"],
+      null,
+      ["Find in Terminal", "term.find"],
+      ["Find Next", "term.findNext"],
+      ["Find Previous", "term.findPrev"],
     ],
   },
   {

@@ -8,6 +8,7 @@ import { bridge, paneData, setUI, useUI } from "../store/store";
 import { bottomCorners, paneIds } from "../store/layout";
 import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
+import { FindBar } from "../term/FindBar";
 import { b64encode } from "../term/sessions";
 import { DraftField } from "./DraftField";
 import { liveGrep } from "./grep";
@@ -31,6 +32,8 @@ export function Pane({ id }: { id: string }) {
     if (pane && !pane.term && !pane.serverId && !pane.opening && !pane.error) void applySpec(id, pane.spec);
   }, [id, pane?.serverId, pane?.opening, pane?.error]);
   const termFocused = useUI((s) => isFocused && s.focus === "terminal" && !s.overlay);
+  // the terminal's find results, shown in its find bar
+  const [findResult, setFindResult] = useState<{ index: number; count: number }>();
 
   // closing happens in the store once no UI pane references the server pane (see connect)
 
@@ -55,9 +58,12 @@ export function Pane({ id }: { id: string }) {
         <>
           <TermHeader pane={pane} term={pane.term} rule={rule} />
           <div className="relative min-h-0 flex-1 bg-bg">
+            <FindBar paneId={id} result={findResult} />
             <Terminal
               session={pane.term.session}
               focused={termFocused}
+              find={pane.term.find}
+              onFindResult={setFindResult}
               onInput={(d) => {
                 if (!pane.term!.typed) setUI((s) => S.termTyped(s, id));
                 void bridge().sessionInput(pane.term!.session, b64encode(d)).catch(() => {});

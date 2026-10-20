@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "forwards", "menu", "help"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -61,7 +61,11 @@ export type CommandId =
   | "portforward.stop"
   | "confirm.accept"
   | "confirm.cancel"
-  | "help.toggle";
+  | "help.toggle"
+  | "term.find"
+  | "term.findNext"
+  | "term.findPrev"
+  | "term.findClose";
 
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
@@ -76,6 +80,7 @@ export const commandIds: readonly CommandId[] = [
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.debug", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
+  "term.find", "term.findNext", "term.findPrev", "term.findClose",
 ];
 
 export interface Binding {
@@ -177,6 +182,13 @@ export const defaultBindings: Binding[] = [
   // not global: in the filter bar and the dialogs "?" is text being typed
   { key: "?", command: "help.toggle", when: ["table", "detail", "ended", "forwards", "menu", "help"] },
   { key: "Escape", command: "detail.close", when: ["help"] },
+  // find in a terminal (as Monaco's): ⌘F opens the bar, ⌘G / ⌘⇧G step, Esc closes back to the shell
+  { key: "Meta+F", command: "term.find", when: ["terminal", "ended", "termfind"] },
+  { key: "Meta+G", command: "term.findNext", when: ["terminal", "ended", "termfind"] },
+  { key: "Meta+Shift+G", command: "term.findPrev", when: ["terminal", "ended", "termfind"] },
+  { key: "Enter", command: "term.findNext", when: ["termfind"] },
+  { key: "Shift+Enter", command: "term.findPrev", when: ["termfind"] },
+  { key: "Escape", command: "term.findClose", when: ["termfind"] },
 ];
 
 /**

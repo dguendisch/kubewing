@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAge, layout, withAlpha } from "./cells";
+import { formatAge, layout, toHex, withAlpha } from "./cells";
 
 const now = Date.parse("2026-01-01T12:00:00Z");
 
@@ -53,5 +53,18 @@ describe("withAlpha", () => {
   it("rejects formats Glide would mis-blend instead of silently rendering garbage", () => {
     expect(() => withAlpha("color-mix(in srgb, red 18%, transparent)", 1)).toThrow(/unsupported/);
     expect(() => withAlpha("oklch(0.7 0.1 250)", 1)).toThrow(/unsupported/);
+  });
+});
+
+describe("toHex", () => {
+  it("passes hex through, converts rgb(), blends alpha over a background", () => {
+    expect(toHex("#6ea8ff")).toBe("#6ea8ff");
+    expect(toHex("#abc")).toBe("#aabbcc");
+    expect(toHex("rgb(203, 75, 22)")).toBe("#cb4b16");
+    expect(toHex("#ffffff", 0.5, "#000000")).toBe("#808080");
+    expect(toHex("#6ea8ff", 0.25, "#101418")).toBe("#283952");
+  });
+  it("refuses colors xterm can't take", () => {
+    expect(() => toHex("oklch(70% 0.1 250)")).toThrow(/toHex: unsupported color/);
   });
 });

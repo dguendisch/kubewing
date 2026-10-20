@@ -97,6 +97,14 @@ const sections: { title: string; rows: Row[] }[] = [
     ],
   },
   {
+    title: "terminal",
+    rows: [
+      row("find", "term.find"),
+      row("next / previous match", "term.findNext", "term.findPrev"),
+      row("close find", "term.findClose"),
+    ],
+  },
+  {
     title: "port-forwards",
     rows: [
       row("list port-forwards", "portforward.list"),

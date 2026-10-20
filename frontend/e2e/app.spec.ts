@@ -943,6 +943,59 @@ test.describe("object actions", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
   });
 
+  test("⌘F finds in the terminal (as Monaco's find): live, ⏎ / ⇧⏎ / ⌘G step, options, esc back to the shell", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("e");
+    await expect.poll(() => termText(page)).toContain("$");
+    await page.keyboard.type("seq 300");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("300");
+    await page.keyboard.press("ControlOrMeta+F");
+    const bar = page.getByRole("search", { name: "find in terminal" });
+    const field = bar.getByRole("textbox", { name: "find" });
+    await expect(field).toBeFocused();
+    expect((await inspect(page)).focus).toBe("termfind");
+    // live: lines containing 25 — 25, 125, 225, 250 … 259
+    await page.keyboard.type("25");
+    await expect(bar.getByLabel("matches")).toHaveText(/^\d+ of 13$/);
+    const at = async () => Number((await bar.getByLabel("matches").innerText()).split(" ")[0]);
+    const first = await at();
+    await page.keyboard.press("Enter"); // ⏎: next, not typed into the field and not sent to the shell
+    await expect.poll(at).toBe((first % 13) + 1);
+    await expect(field).toHaveValue("25");
+    await page.keyboard.press("Shift+Enter");
+    await expect.poll(at).toBe(first);
+    await page.keyboard.press("ControlOrMeta+G");
+    await expect.poll(at).toBe((first % 13) + 1);
+    // whole word: only the line "25" itself
+    await bar.getByRole("button", { name: /whole word/ }).click();
+    await expect(bar.getByLabel("matches")).toHaveText("1 of 1");
+    await expect(field).toBeFocused(); // toggles keep the focus in the field
+    await bar.getByRole("button", { name: /whole word/ }).click();
+    // regex (⌥⌘R): lines that are exactly 2 digits starting with 9 — 90 … 99
+    await field.fill("^9\\d$");
+    await page.keyboard.press("Alt+Meta+R");
+    await expect(bar.getByRole("button", { name: /regular expression/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(bar.getByLabel("matches")).toHaveText(/ of 10$/);
+    await field.fill("no such text");
+    await expect(bar.getByLabel("matches")).toHaveText("no results");
+    // Esc: bar closed, the shell has the keys again
+    await page.keyboard.press("Escape");
+    await expect(bar).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("terminal");
+    await page.keyboard.type("echo back");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("$ echo back\necho back"); // the tape shell echoes the line
+    // ⌘F again: the last query and options are still there
+    await page.keyboard.press("ControlOrMeta+F");
+    await expect(field).toHaveValue("no such text");
+    await expect(bar.getByRole("button", { name: /regular expression/ })).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
   test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");

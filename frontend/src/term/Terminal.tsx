@@ -1,6 +1,10 @@
 import { useEffect, useRef } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
+import { SearchAddon, type ISearchOptions } from "@xterm/addon-search";
+import { finders } from "../commands";
+import { toHex } from "../grid/cells";
+import type { TermFind } from "../store/state";
 import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
 import { useConfig } from "../store/config";
@@ -25,9 +29,25 @@ function theme(): ITheme {
   };
 }
 
+/** Match highlights from theme tokens; xterm takes #RRGGBB only. */
+function decorations(): ISearchOptions["decorations"] {
+  const bg = token("bg");
+  return {
+    matchBackground: toHex(token("changed"), 0.3, bg),
+    matchOverviewRuler: toHex(token("changed")),
+    activeMatchBackground: toHex(token("accent"), 0.55, bg),
+    activeMatchBorder: toHex(token("accent")),
+    activeMatchColorOverviewRuler: toHex(token("accent")),
+  };
+}
+
 interface Props {
   session: string;
   focused: boolean;
+  /** The pane's find bar state; a changed query or option searches again. */
+  find?: TermFind;
+  /** Find results: index of the active match (-1 = over the highlight limit), count. */
+  onFindResult?: (r: { index: number; count: number }) => void;
   onInput: (data: string) => void;
   onResize: (cols: number, rows: number) => void;
   onExit?: (code: number | string) => void;
@@ -39,13 +59,16 @@ interface Props {
  * app's ⌘ chords (see keymap.terminalReserved), which xterm lets through to
  * the global handler. Output streams from `sessions`, bypassing React.
  */
-export function Terminal({ session, focused, onInput, onResize, onExit, onFocus }: Props) {
+export function Terminal({ session, focused, find, onFindResult, onInput, onResize, onExit, onFocus }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<XTerm>(undefined);
+  const search = useRef<SearchAddon>(undefined);
   const themeGen = useConfig((s) => s.themeGen);
   const scrollback = useConfig((s) => s.config?.config.terminal?.scrollback ?? DEFAULT_SCROLLBACK);
-  const cb = useRef({ onInput, onResize, onExit, onFocus });
-  cb.current = { onInput, onResize, onExit, onFocus };
+  const cb = useRef({ onInput, onResize, onExit, onFocus, onFindResult });
+  cb.current = { onInput, onResize, onExit, onFocus, onFindResult };
+  const findRef = useRef(find);
+  findRef.current = find;
 
   useEffect(() => {
     const t = new XTerm({
@@ -55,9 +78,21 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
       scrollback,
       theme: theme(),
       macOptionIsMeta: true,
+      allowProposedApi: true, // search decorations (all matches highlighted)
     });
     const fit = new FitAddon();
     t.loadAddon(fit);
+    const sa = new SearchAddon({ highlightLimit: 2000 });
+    t.loadAddon(sa);
+    search.current = sa;
+    const opts = (f: TermFind): ISearchOptions => ({ caseSensitive: f.caseSensitive, wholeWord: f.wholeWord, regex: f.regex, decorations: decorations() });
+    finders.set(session, (dir) => {
+      const f = findRef.current;
+      if (!f?.query) return;
+      if (dir === "next") sa.findNext(f.query, opts(f));
+      else sa.findPrevious(f.query, opts(f));
+    });
+    sa.onDidChangeResults((r) => cb.current.onFindResult?.({ index: r.resultIndex, count: r.resultCount }));
     t.open(host.current!);
     term.current = t;
     openTerminals.set(session, t);
@@ -86,6 +121,8 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
       ro.disconnect();
       subs.forEach((s) => s.dispose());
       if (openTerminals.get(session) === t) openTerminals.delete(session);
+      finders.delete(session);
+      search.current = undefined;
       t.dispose();
       term.current = undefined;
     };
@@ -96,9 +133,35 @@ export function Terminal({ session, focused, onInput, onResize, onExit, onFocus 
     else term.current?.blur();
   }, [focused]);
 
+  // the find bar closed: back to the prompt, as Monaco returns to the cursor (a match may be far up)
+  const findOpen = !!find?.open;
+  useEffect(() => {
+    if (!findOpen) term.current?.scrollToBottom();
+  }, [findOpen]);
+
   useEffect(() => {
     if (term.current && themeGen) term.current.options.theme = theme();
   }, [themeGen]);
+
+  // live search: a changed query or option searches again from where the view is (incremental, as Monaco);
+  // closing the bar removes the highlights
+  const q = find?.open ? find.query : "";
+  useEffect(() => {
+    const sa = search.current;
+    if (!sa) return;
+    if (!q) {
+      sa.clearDecorations();
+      term.current?.clearSelection();
+      cb.current.onFindResult?.({ index: -1, count: 0 });
+      return;
+    }
+    const f = findRef.current!;
+    // addon bug (0.16): findNext stores the new options before comparing them with the last ones,
+    // so a changed option alone never re-counts or re-highlights; clearing resets its cached term
+    sa.clearDecorations();
+    const found = sa.findNext(q, { caseSensitive: f.caseSensitive, wholeWord: f.wholeWord, regex: f.regex, decorations: decorations(), incremental: true });
+    if (!found) cb.current.onFindResult?.({ index: -1, count: 0 });
+  }, [q, find?.caseSensitive, find?.wholeWord, find?.regex]);
 
   // ⌘⇧, applies a changed scrollback to open terminals too
   useEffect(() => {

@@ -42,6 +42,38 @@ export interface Term {
   exited?: string;
   /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
   typed?: boolean;
+  /** The find bar (⌘F); kept while closed, so ⌘F reopens with the last query. */
+  find?: TermFind;
+}
+
+export interface TermFind {
+  open: boolean;
+  query: string;
+  caseSensitive: boolean;
+  wholeWord: boolean;
+  regex: boolean;
+}
+
+export const noFind: TermFind = { open: false, query: "", caseSensitive: false, wholeWord: false, regex: false };
+
+/** ⌘F in a terminal pane: opens its find bar (or refocuses it) and focuses the field. */
+export function openFind(s: UIState): UIState {
+  const p = focusedPane(s);
+  if (!p?.term) return s;
+  const find = { ...(p.term.find ?? noFind), open: true };
+  return { ...updatePane(s, p.id, (q) => ({ ...q, term: { ...q.term!, find } })), focus: "termfind" };
+}
+
+/** Esc in the find field: closes the bar, focus back to the shell (or the ended pane). */
+export function closeFind(s: UIState): UIState {
+  const p = focusedPane(s);
+  if (!p?.term?.find?.open) return s.focus === "termfind" ? { ...s, focus: "terminal" } : s;
+  const next = updatePane(s, p.id, (q) => ({ ...q, term: { ...q.term!, find: { ...q.term!.find!, open: false } } }));
+  return { ...next, focus: "terminal" }; // paneFocus turns it into "ended" for a finished session
+}
+
+export function updateFind(s: UIState, paneId: string, f: (x: TermFind) => TermFind): UIState {
+  return updatePane(s, paneId, (q) => (q.term ? { ...q, term: { ...q.term, find: f(q.term.find ?? noFind) } } : q));
 }
 
 export interface Tab {
@@ -147,7 +179,9 @@ export function initialState(context = "", namespace = ""): UIState {
  * Applied after every state update, like touchTab.
  */
 export function paneFocus(s: UIState): UIState {
-  if (s.focus !== "table" && s.focus !== "terminal" && s.focus !== "ended") return s;
+  // the find field belongs to the focused terminal pane's open bar; otherwise it's the pane's own context
+  if (s.focus === "termfind" && focusedPane(s)?.term?.find?.open) return s;
+  if (s.focus !== "table" && s.focus !== "terminal" && s.focus !== "ended" && s.focus !== "termfind") return s;
   const term = focusedPane(s)?.term;
   const want = !term ? "table" : term.exited === undefined ? "terminal" : "ended";
   return s.focus === want ? s : { ...s, focus: want };
