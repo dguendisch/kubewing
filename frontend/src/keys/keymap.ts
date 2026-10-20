@@ -55,6 +55,7 @@ export type CommandId =
   | "menu.run"
   | "object.describe"
   | "object.exec"
+  | "object.debug"
   | "object.portForward"
   | "portforward.list"
   | "portforward.stop"
@@ -73,7 +74,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.debug", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
 ];
 
@@ -163,6 +164,7 @@ export const defaultBindings: Binding[] = [
   // in the detail view d is the diff toggle, so describe keeps ⇧D there
   { key: "Shift+D", command: "object.describe", when: ["detail"] },
   { key: "E", command: "object.exec", when: ["table"] },
+  { key: "B", command: "object.debug", when: ["table"] },
   { key: "F", command: "object.portForward", when: ["table"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
   // the same keys as the running forwards in the f dialog: ↑/↓ pick, x or ⌫ stops

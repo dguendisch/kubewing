@@ -151,6 +151,23 @@ func (o *Opener) Exec(ctx context.Context, _, namespace, pod, container string, 
 	}
 }
 
+// Debug implements source.Actor: one pull progress line, then the echo
+// shell in the debug container (prompt pod:name). The pod is not changed.
+// An image starting with "fail/" fails like one that can't be pulled.
+func (o *Opener) Debug(ctx context.Context, cluster, namespace, pod string, d source.DebugSpec, s source.ExecStreams) error {
+	if d.Progress != nil {
+		d.Progress(fmt.Sprintf("Pulling: Pulling image %q", d.Image))
+	}
+	if strings.HasPrefix(d.Image, "fail/") {
+		return fmt.Errorf("debug container %s: ImagePullBackOff: Back-off pulling image %q", d.Name, d.Image)
+	}
+	if d.Started != nil {
+		d.Started()
+	}
+	fmt.Fprintf(s.Stdout, "debug %s (%s, profile %s, target %q)\r\n", d.Name, d.Image, d.Profile, d.Target)
+	return o.Exec(ctx, cluster, namespace, pod, d.Name, nil, s)
+}
+
 // ExitError is a non-zero exit of the tape shell (mirrors exec's CodeExitError).
 type ExitError int
 

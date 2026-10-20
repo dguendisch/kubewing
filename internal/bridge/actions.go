@@ -2,10 +2,12 @@ package bridge
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"slices"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/dguendisch/kubewing/internal/config"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
@@ -254,6 +257,15 @@ func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult
 		return ExecResult{}, fmt.Errorf("pod %s has no container %q (has %s)", a.Name, container, strings.Join(all, ", "))
 	}
 
+	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+		return s.opts.Actor.Exec(ctx, r.cluster, a.Namespace, a.Name, container, ExecShell, st)
+	})
+	return ExecResult{Session: id, Container: container, Pod: a.Name, Context: a.Context, Others: all}, nil
+}
+
+// startSession runs a TTY session (exec, debug) in the background: output
+// goes out as SessionEvents, the last one carrying the exit.
+func (s *Service) startSession(cols, rows int, run func(context.Context, source.ExecStreams) error) string {
 	s.mu.Lock()
 	s.next++
 	id := fmt.Sprintf("s%d", s.next)
@@ -272,13 +284,110 @@ func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult
 		s.emit.Emit(SessionEvent, SessionPayload{ID: id, Data: base64.StdEncoding.EncodeToString(b)})
 	})
 	go func() {
-		err := s.opts.Actor.Exec(ctx, r.cluster, a.Namespace, a.Name, container, ExecShell, source.ExecStreams{Stdin: inR, Stdout: out, Resize: ss.resize})
+		err := run(ctx, source.ExecStreams{Stdin: inR, Stdout: out, Resize: ss.resize})
 		out.Close()
 		_ = inR.Close()
 		s.endSession(ss)
 		s.emit.Emit(SessionEvent, SessionPayload{ID: id, Exit: exitText(ctx, err)})
 	}()
-	return ExecResult{Session: id, Container: container, Pod: a.Name, Context: a.Context, Others: all}, nil
+	return id
+}
+
+// DebugOptions configure a debug container (kubectl debug --image,
+// --target, --profile).
+type DebugOptions struct {
+	Image string `json:"image"`
+	// Target shares that container's processes; "" = the pod's default container, "-" = none.
+	Target string `json:"target"`
+	// Profile: one of config.DebugProfiles; "" = general.
+	Profile string `json:"profile"`
+}
+
+// DebugResult describes a started debug session.
+type DebugResult struct {
+	Session string `json:"session"`
+	// Container is the new ephemeral container's name.
+	Container string `json:"container"`
+	Target    string `json:"target,omitempty"`
+	Image     string `json:"image"`
+	Pod       string `json:"pod"`
+	Context   string `json:"context"`
+}
+
+// DebugStart redeems a prepared debug and starts a session in a new
+// ephemeral container: output shows while the image is pulled, then the
+// container's TTY. The container stays in the pod after the session ends.
+func (s *Service) DebugStart(token string, o DebugOptions, cols, rows int) (DebugResult, error) {
+	a, target, err := s.guard.Redeem(token, safety.Debug)
+	if err != nil {
+		return DebugResult{}, err
+	}
+	r := target.(row)
+	o.Image = strings.TrimSpace(o.Image)
+	if o.Image == "" || strings.ContainsAny(o.Image, " \t") {
+		return DebugResult{}, fmt.Errorf("debug needs an image (e.g. busybox), not %q", o.Image)
+	}
+	if o.Profile == "" {
+		o.Profile = "general"
+	}
+	if !slices.Contains(config.DebugProfiles, o.Profile) {
+		return DebugResult{}, fmt.Errorf("unknown profile %q (known: %s)", o.Profile, strings.Join(config.DebugProfiles, ", "))
+	}
+	cs := podContainers(r)
+	switch o.Target {
+	case "-":
+		o.Target = ""
+	case "":
+		o.Target = defaultContainer(r, cs)
+	default:
+		if !slices.ContainsFunc(cs, func(c ContainerInfo) bool { return c.Name == o.Target && c.Kind != "ephemeral" }) {
+			return DebugResult{}, fmt.Errorf("pod %s has no container %q to target", a.Name, o.Target)
+		}
+	}
+	name := debugName(cs)
+	// remembered once it runs: a typo or an image that can't be pulled isn't offered again
+	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+		dim := func(format string, args ...any) { fmt.Fprintf(st.Stdout, "\x1b[2m"+format+"\x1b[0m\r\n", args...) }
+		dim("starting %s (%s) in %s …", name, o.Image, a.Name)
+		spec := source.DebugSpec{
+			Name: name, Image: o.Image, Target: o.Target, Profile: o.Profile,
+			Progress: func(line string) { dim("%s", line) },
+			// remembered once it runs: a typo or an image that can't be pulled isn't offered again
+			Started: func() {
+				if err := s.opts.History.AddDebugImage(o.Image); err != nil {
+					log.Printf("history: %v", err)
+				}
+			},
+		}
+		return s.opts.Actor.Debug(ctx, r.cluster, a.Namespace, a.Name, spec, st)
+	})
+	return DebugResult{Session: id, Container: name, Target: o.Target, Image: o.Image, Pod: a.Name, Context: a.Context}, nil
+}
+
+// DebugImages are the images of recently started debug containers, newest first.
+func (s *Service) DebugImages() []string { return s.opts.History.Get().DebugImages }
+
+// RemoveDebugImage forgets an image (✕ or ⇧⌫ in the debug dialog) and returns what's left.
+func (s *Service) RemoveDebugImage(image string) ([]string, error) {
+	if err := s.opts.History.RemoveDebugImage(image); err != nil {
+		return nil, err
+	}
+	return s.DebugImages(), nil
+}
+
+// debugName is a container name not used in the pod yet, as kubectl picks it.
+func debugName(cs []ContainerInfo) string {
+	for {
+		b := make([]byte, 5)
+		_, _ = rand.Read(b)
+		n := "debugger-"
+		for _, c := range b {
+			n += string("bcdfghjklmnpqrstvwxz2456789"[int(c)%27])
+		}
+		if !slices.ContainsFunc(cs, func(c ContainerInfo) bool { return c.Name == n }) {
+			return n
+		}
+	}
 }
 
 func exitText(ctx context.Context, err error) string {

@@ -77,6 +77,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("copy name", "object.copyName"),
       row("describe", "object.describe"),
       row("exec shell", "object.exec"),
+      row("debug container…", "object.debug"),
       row("port-forward…", "object.portForward"),
       row("delete…", "object.delete"),
       row("all actions for the row", "object.menu"),

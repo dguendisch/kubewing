@@ -57,6 +57,13 @@ func (a *App) RowInfo(pane, key string) (bridge.RowInfo, error) { return a.svc.R
 func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecResult, error) {
 	return a.svc.ExecStart(token, container, cols, rows)
 }
+func (a *App) DebugStart(token string, o bridge.DebugOptions, cols, rows int) (bridge.DebugResult, error) {
+	return a.svc.DebugStart(token, o, cols, rows)
+}
+func (a *App) DebugImages() []string { return a.svc.DebugImages() }
+func (a *App) RemoveDebugImage(image string) ([]string, error) {
+	return a.svc.RemoveDebugImage(image)
+}
 func (a *App) SessionInput(id, data string) error { return a.svc.SessionInput(id, data) }
 func (a *App) SessionResize(id string, cols, rows int) error {
 	return a.svc.SessionResize(id, cols, rows)

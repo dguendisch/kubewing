@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, Pending } from "./transport/types";
+import type { ActionKind, DebugOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -123,6 +123,8 @@ export function dispatch(cmd: CommandId) {
     }
     case "object.exec":
       return void prepareAction("exec");
+    case "object.debug":
+      return void prepareAction("debug");
     case "object.portForward": {
       const key = selectedKey(pane);
       if (!key) return;
@@ -223,6 +225,7 @@ async function prepareAction(kind: ActionKind) {
   if (!key) return;
   try {
     const pending = await bridge().prepare(kind, pane.serverId, key);
+    if (kind === "debug") return setUI((x) => S.openOverlay(x, { kind: "debug", pane: pane.id, key, pending }));
     if (kind === "exec") {
       const containers = containerChoices((await bridge().rowInfo(pane.serverId, key)).containerInfo ?? []);
       if (needsPicker(containers)) {
@@ -235,10 +238,26 @@ async function prepareAction(kind: ActionKind) {
   }
 }
 
-/** A prepared action, its container (exec) picked: confirm if the rule asks for it, else run. */
-async function proceed(paneId: string, key: string, pending: Pending, container = "") {
-  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container }));
-  else await execute(paneId, pending, container);
+/** A prepared action, its container (exec) or options (debug) picked: confirm if the rule asks for it, else run. */
+async function proceed(paneId: string, key: string, pending: Pending, container = "", debug?: DebugOptions) {
+  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug }));
+  else await execute(paneId, pending, container, debug);
+}
+
+/**
+ * The debug dialog's ⏎. Go validates image, target and profile; a refusal
+ * (no image, unknown container) is returned so the dialog can stay open with it.
+ */
+export async function submitDebug(opts: DebugOptions): Promise<string | undefined> {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "debug" || !o.pending || !o.key) return;
+  if (!opts.image.trim()) return "an image is needed, e.g. busybox";
+  setUI(S.closeOverlay);
+  try {
+    await proceed(o.pane, o.key, o.pending, "", opts);
+  } catch (e) {
+    flash(o.pane, errorText(e), true);
+  }
 }
 
 /** ⏎ or a click in the container picker. */
@@ -259,13 +278,13 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o.container);
+    await execute(o.pane, o.pending, o.container, o.debug);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending, container = "") {
+async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions) {
   switch (p.action.kind) {
     case "delete":
       await bridge().delete(p.token);
@@ -273,6 +292,12 @@ async function execute(paneId: string, p: Pending, container = "") {
     case "exec": {
       const r = await bridge().execStart(p.token, container, 80, 24);
       const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context };
+      return setUI((x) => S.openTerminal(x, term, paneId));
+    }
+    case "debug": {
+      if (!debug) return;
+      const r = await bridge().debugStart(p.token, debug, 80, 24);
+      const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context, debug: { image: r.image, target: r.target } };
       return setUI((x) => S.openTerminal(x, term, paneId));
     }
   }

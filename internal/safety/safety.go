@@ -22,10 +22,13 @@ import (
 const (
 	Delete = "delete"
 	Exec   = "exec"
+	// Debug adds an ephemeral container to a pod (it stays in the pod spec
+	// for the pod's lifetime) and attaches to it.
+	Debug = "debug"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec}
+var mutating = []string{Delete, Exec, Debug}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {

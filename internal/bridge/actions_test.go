@@ -307,3 +307,94 @@ func TestDescribeDiffsAgainstThePreviousLook(t *testing.T) {
 		t.Errorf("web-1's first look: %+v", other)
 	}
 }
+
+func TestDebugSession(t *testing.T) {
+	svc, log, res := deleteSetup(t, []config.ContextRule{{Match: "tape", Confirm: []string{"debug"}}})
+	waitRow(t, log, res.Pane, "s-web-0", func(view.RowData) bool { return true })
+	if _, err := svc.DebugStart("forged", DebugOptions{Image: "busybox"}, 0, 0); err == nil {
+		t.Fatal("debug without a prepared token must be refused")
+	}
+	p, err := svc.Prepare("debug", res.Pane, "s-web-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.NeedsConfirm || p.Summary != "debug e2e-static/web-0 -n shop on tape" {
+		t.Errorf("prepared: %+v", p)
+	}
+	// an exec token doesn't start a debug container
+	ep, _ := svc.Prepare("exec", res.Pane, "s-web-0")
+	if _, err := svc.DebugStart(ep.Token, DebugOptions{Image: "busybox"}, 0, 0); err == nil || !strings.Contains(err.Error(), "issued for exec") {
+		t.Errorf("exec token for debug: %v", err)
+	}
+	// target "" = the default container (annotated: sidecar), profile "" = general
+	dr, err := svc.DebugStart(p.Token, DebugOptions{Image: " nicolaka/netshoot "}, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if dr.Pod != "web-0" || dr.Target != "sidecar" || dr.Image != "nicolaka/netshoot" || !strings.HasPrefix(dr.Container, "debugger-") || len(dr.Container) != 14 {
+		t.Errorf("debug result: %+v", dr)
+	}
+	out, _ := waitOutput(t, log, dr.Session, func(out, _ string) bool { return strings.HasSuffix(out, "web-0:"+dr.Container+"$ ") })
+	if !strings.Contains(out, "starting "+dr.Container+" (nicolaka/netshoot) in web-0") || !strings.Contains(out, `Pulling: Pulling image "nicolaka/netshoot"`) ||
+		!strings.Contains(out, `profile general, target "sidecar"`) {
+		t.Errorf("output: %q", out)
+	}
+	input(t, svc, dr.Session, "exit\r")
+	if _, exit := waitOutput(t, log, dr.Session, func(_, exit string) bool { return exit != "" }); exit != "0" {
+		t.Errorf("exit = %q", exit)
+	}
+	if got := svc.DebugImages(); fmt.Sprint(got) != "[nicolaka/netshoot]" {
+		t.Errorf("history after a started debug: %v", got)
+	}
+
+	// no target, another profile
+	p, _ = svc.Prepare("debug", res.Pane, "s-web-1")
+	dr, err = svc.DebugStart(p.Token, DebugOptions{Image: "busybox", Target: "-", Profile: "netadmin"}, 0, 0)
+	if err != nil || dr.Target != "" {
+		t.Fatalf("untargeted: %+v %v", dr, err)
+	}
+	waitOutput(t, log, dr.Session, func(out, _ string) bool { return strings.Contains(out, `profile netadmin, target ""`) })
+	_ = svc.SessionClose(dr.Session)
+
+	// a container that can't start: the session ends with the reason
+	p, _ = svc.Prepare("debug", res.Pane, "s-web-1")
+	dr, _ = svc.DebugStart(p.Token, DebugOptions{Image: "fail/nope"}, 0, 0)
+	if _, exit := waitOutput(t, log, dr.Session, func(_, exit string) bool { return exit != "" }); !strings.Contains(exit, "ImagePullBackOff") {
+		t.Errorf("failed start: exit %q", exit)
+	}
+	// busybox started (newest first); the image that never ran isn't remembered
+	if got := svc.DebugImages(); fmt.Sprint(got) != "[busybox nicolaka/netshoot]" {
+		t.Errorf("history: %v", got)
+	}
+	if left, err := svc.RemoveDebugImage("busybox"); err != nil || fmt.Sprint(left) != "[nicolaka/netshoot]" {
+		t.Errorf("remove: %v %v", left, err)
+	}
+
+	for _, c := range []struct {
+		o    DebugOptions
+		want string
+	}{
+		{DebugOptions{Image: ""}, "needs an image"},
+		{DebugOptions{Image: "a b"}, "needs an image"},
+		{DebugOptions{Image: "busybox", Profile: "root"}, `unknown profile "root"`},
+		{DebugOptions{Image: "busybox", Target: "nope"}, `no container "nope" to target`},
+	} {
+		p, _ := svc.Prepare("debug", res.Pane, "s-web-1")
+		if _, err := svc.DebugStart(p.Token, c.o, 0, 0); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%+v: %v, want %q", c.o, err, c.want)
+		}
+	}
+}
+
+func TestDebugRefusedOnReadOnlyAndNonPods(t *testing.T) {
+	svc, log, res := deleteSetup(t, []config.ContextRule{{Match: "tape", ReadOnly: true}})
+	waitRow(t, log, res.Pane, "s-cfg", func(view.RowData) bool { return true })
+	if _, err := svc.Prepare("debug", res.Pane, "s-web-0"); err == nil || !strings.Contains(err.Error(), "read-only") {
+		t.Errorf("debug on read-only: %v", err)
+	}
+	svc2, log2, res2 := deleteSetup(t, nil)
+	waitRow(t, log2, res2.Pane, "s-cfg", func(view.RowData) bool { return true })
+	if _, err := svc2.Prepare("debug", res2.Pane, "s-cfg"); err == nil || !strings.Contains(err.Error(), "debug needs a pod, not configmap") {
+		t.Errorf("debug on a configmap: %v", err)
+	}
+}

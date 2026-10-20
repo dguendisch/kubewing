@@ -79,10 +79,16 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
       <span className="text-fg-muted">{pane.context}</span>
-      <span className="font-semibold text-accent">exec</span>
+      <span className="font-semibold text-accent">{term.debug ? "debug" : "exec"}</span>
       <span>
         {term.pod}/{term.container}
       </span>
+      {term.debug ? (
+        <span className="text-fg-muted">
+          {term.debug.image}
+          {term.debug.target ? ` · target ${term.debug.target}` : ""}
+        </span>
+      ) : null}
       {term.exited !== undefined ? (
         // only a session that failed on its own gets here: one the user ended took its pane with it
         <span aria-label="session ended" className="ml-auto text-deleted">

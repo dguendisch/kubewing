@@ -37,6 +37,7 @@ func main() {
 	speed := flag.Float64("speed", 1, "headless only: tape replay speed factor")
 	catalogFile := flag.String("catalog", "", "with -tapes: fake resource types/namespaces for completion (e.g. testdata/catalog.yaml)")
 	configDir := flag.String("config", "", "config directory (default: $KUBEWING_HOME or ~/.kubewing; headless: none)")
+	stateDir := flag.String("state", "", "where history.yaml (recent debug images) is written (default: the config directory; headless: none, kept in memory)")
 	flag.Parse()
 
 	var opener interface {
@@ -60,6 +61,10 @@ func main() {
 	if opts.ConfigDir == "" && *headless == "" {
 		opts.ConfigDir = config.Dir()
 	}
+	if *stateDir == "" && *headless == "" {
+		*stateDir = opts.ConfigDir
+	}
+	opts.History = config.OpenHistory(*stateDir)
 	if *headless != "" {
 		runHeadless(*headless, opener, opts, *tapes != "")
 		return

@@ -56,6 +56,8 @@ type Options struct {
 	// the config itself unless Config is set.
 	ConfigDir string
 	Config    *config.Effective
+	// History remembers recent debug images; nil = in memory only.
+	History *config.HistoryStore
 	// Actor performs object actions (delete …); nil disables them.
 	Actor source.Actor
 }
@@ -90,6 +92,9 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	}
 	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
+	if s.opts.History == nil {
+		s.opts.History = config.OpenHistory("")
+	}
 	if opts.Config != nil {
 		s.setConfig(*opts.Config)
 	} else {
@@ -453,8 +458,8 @@ func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
 	if err != nil {
 		return safety.Pending{}, err
 	}
-	if kind == safety.Exec && !r.isPod() {
-		return safety.Pending{}, fmt.Errorf("exec needs a pod, not %s", strings.ToLower(r.kind()))
+	if (kind == safety.Exec || kind == safety.Debug) && !r.isPod() {
+		return safety.Pending{}, fmt.Errorf("%s needs a pod, not %s", kind, strings.ToLower(r.kind()))
 	}
 	a := safety.Action{
 		Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),

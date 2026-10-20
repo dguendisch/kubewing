@@ -1,5 +1,6 @@
 # Example ~/.kubewing/config.yaml (also the headless E2E config, see playwright.config.ts).
-# kubewing only reads this directory; it never writes to it.
+# kubewing only reads these files; the one it writes there is its own history.yaml
+# (recent debug images; E2E writes it elsewhere, see -state in playwright.config.ts).
 
 # themes/<name>.yaml; omit (or "default") for the built-in theme
 theme: e2e
@@ -12,10 +13,16 @@ diff:
 
 # Per-context safety rules (glob on the kubeconfig context name), first match wins.
 #   label/color: shown on the pane frame, header and tab; color is a theme token or a color
-#   readOnly:    every mutation (delete, exec) is refused
+#   readOnly:    every mutation (delete, exec, debug) is refused
 #   confirm:     actions that need confirmation; delete always does
 #   strict:      confirmation requires typing the object name
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
-  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec]}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug]}
+
+# b (debug container, as kubectl debug): defaults of the dialog
+#   image:   prefilled (else the last image that started)
+#   profile: general (default), baseline, restricted, netadmin or sysadmin
+debug:
+  image: nicolaka/netshoot

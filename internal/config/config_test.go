@@ -49,6 +49,7 @@ diff:
 contexts:
   - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec], strict: true}
   - {match: "kind-*", label: kind, color: "#3b8eea"}
+debug: {image: nicolaka/netshoot, profile: netadmin}
 `,
 		"keybindings.yaml": `
 - {key: "Meta+K", command: row.up, when: [table]}
@@ -69,6 +70,7 @@ accent: "rgb(203, 75, 22)"
 				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec"}, Strict: true},
 				{Match: "kind-*", Label: "kind", Color: "#3b8eea"},
 			},
+			Debug: Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},
 		},
 		Keybindings: []Binding{
 			{Key: "Meta+K", Command: "row.up", When: []string{"table"}},
@@ -96,6 +98,7 @@ contexts:
   - {match: "b*", confirm: [reboot]}
   - {label: nomatch}
   - {match: "*", label: ok}
+debug: {image: busybox, profile: root}
 `,
 		"keybindings.yaml": `
 - {key: "", command: row.up}
@@ -115,6 +118,10 @@ contexts:
 	if len(got.Theme) != 0 {
 		t.Errorf("theme: %v", got.Theme)
 	}
+	// an unknown profile falls back to kubectl's default; the image still applies
+	if got.Config.Debug != (Debug{Image: "busybox"}) {
+		t.Errorf("debug: %+v", got.Config.Debug)
+	}
 	wantErrs := []string{
 		`unknown field "colour"`,
 		"diff.ignore[0]: path is required",
@@ -122,6 +129,7 @@ contexts:
 		`contexts[1]: color "not a color!"`,
 		`contexts[2]: confirm: unknown action "reboot"`,
 		"contexts[3]: match is required",
+		`debug.profile: unknown profile "root"`,
 		"keybindings.yaml: [0]: key and command are required",
 		`theme "missing": themes/missing.yaml not found`,
 	}

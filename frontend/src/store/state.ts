@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { ContextList, Pending } from "../transport/types";
+import type { ContextList, DebugOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
@@ -36,6 +36,8 @@ export interface Term {
   pod: string;
   container: string;
   context: string;
+  /** A debug container (kubectl debug), not an exec. */
+  debug?: { image: string; target?: string };
   /** Exit code or error once the session ended; the pane stays until closed. */
   exited?: string;
   /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
@@ -52,8 +54,9 @@ export interface Overlay {
   /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes;
-   *  container: which container a prepared exec enters. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container";
+   *  container: which container a prepared exec enters;
+   *  debug: image, target and profile of a prepared debug container. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
@@ -75,6 +78,8 @@ export interface Overlay {
   containers?: ContainerChoice[];
   /** confirm: the container a prepared exec enters ("" or unset = the pod's default). */
   container?: string;
+  /** confirm: the options of a prepared debug. */
+  debug?: DebugOptions;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -372,6 +377,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   confirm: "confirm",
   closeTab: "confirm",
   portforward: "dialog",
+  debug: "dialog",
   forwards: "forwards",
   menu: "menu",
   // a menu too: the same keys (j/k, ⏎, Esc)

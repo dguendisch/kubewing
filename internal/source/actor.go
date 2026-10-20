@@ -24,6 +24,10 @@ type Actor interface {
 	Delete(ctx context.Context, cluster string, res Resolved, namespace, name string, uid k8stypes.UID) error
 	// Exec runs cmd in a pod container with a TTY until it exits or ctx ends.
 	Exec(ctx context.Context, cluster, namespace, pod, container string, cmd []string, s ExecStreams) error
+	// Debug adds an ephemeral container to a pod, like `kubectl debug -it`,
+	// waits until it runs and attaches to it with a TTY until it exits or ctx
+	// ends. The container stays in the pod spec (terminated) afterwards.
+	Debug(ctx context.Context, cluster, namespace, pod string, d DebugSpec, s ExecStreams) error
 	// PortForward forwards local ports on 127.0.0.1 to a pod ("8080:80",
 	// ":80" for a random local port) until Stop.
 	PortForward(ctx context.Context, cluster, namespace, pod string, ports []string) (*Forward, error)
@@ -35,6 +39,23 @@ type ExecStreams struct {
 	Stdout io.Writer
 	// Resize delivers terminal size changes; closed when the session ends.
 	Resize <-chan TerminalSize
+}
+
+// DebugSpec describes a debug container.
+type DebugSpec struct {
+	// Name of the new ephemeral container (unique in the pod).
+	Name  string
+	Image string
+	// Target shares that container's process namespace ("" = none).
+	Target string
+	// Profile is a kubectl debug --profile value (general, netadmin …).
+	Profile string
+	// Started is called once the container runs, before attaching.
+	Started func()
+	// Progress reports what happens until then, one line each: the
+	// container's waiting reason and the kubelet's events for it (Pulling
+	// image …, Pulled …), as kubectl debug shows them.
+	Progress func(line string)
 }
 
 // TerminalSize is a terminal's size in cells.

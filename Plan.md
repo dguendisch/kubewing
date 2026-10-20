@@ -116,7 +116,6 @@ Still open in P0.1:
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**
 1. **Session recording + saving** - allow to save a session (not every watch diff, but everything else displayed, for later forensics when one doesn't recall what was actually did on a cluster)
 1. **Persistent history** — on-disk history buffer (hours, survives restarts); requires secret encryption/exclusion first.
-1. **k debug** - on arbitrary pods with configurable image
 1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
 1. **Scratch apply** from files.
 1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.

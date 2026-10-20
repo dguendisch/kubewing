@@ -1027,6 +1027,171 @@ test.describe("object actions", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
   });
 
+  // b: debug container. The tape fake runs the echo shell in it (prompt pod:debugger-xxxxx) and fails images "fail/…".
+  test("b asks for the image (prefilled from config.yaml), target and profile; the shell opens below", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1"); // never deleted (web-0 is, by an earlier test)
+    await page.keyboard.press("b");
+    const dialog = page.getByRole("dialog", { name: "debug container" });
+    const image = dialog.getByRole("combobox", { name: "image" });
+    await expect(image).toHaveValue("nicolaka/netshoot");
+    await expect(image).toBeFocused();
+    // focusing doesn't open the suggestions; typing or ↓ does
+    await expect(image).toHaveAttribute("aria-expanded", "false");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("dialog");
+    await image.fill("busybox:1.36");
+    // target and profile are completion fields too: the pod's default container is preselected
+    const target = dialog.getByRole("combobox", { name: "target" });
+    await expect(target).toHaveValue("app");
+    await page.keyboard.press("Tab"); // the image list is open from typing: ⇥ accepts there and stays
+    await target.focus();
+    await page.keyboard.press("ArrowDown"); // every container, with kind, state and the default
+    await expect(dialog.getByRole("listbox", { name: "target suggestions" }).getByRole("option")).toHaveText(["appdefault", "sidecar"]); // web-1 reports no state
+    await target.pressSequentially("sid");
+    await page.keyboard.press("Tab"); // completes to the match
+    await expect(target).toHaveValue("sidecar");
+    const profile = dialog.getByRole("combobox", { name: "profile" });
+    await expect(profile).toHaveValue("general");
+    await profile.focus();
+    await page.keyboard.press("ArrowDown");
+    const profiles = dialog.getByRole("listbox", { name: "profile suggestions" });
+    await expect(profiles.getByRole("option")).toHaveCount(5);
+    // a narrow field: every name stays readable (the long hints give way), no sideways scrolling
+    for (const name of await profiles.locator("li > span:first-child").all()) {
+      expect(await name.evaluate((el) => el.scrollWidth <= el.clientWidth && el.clientWidth > 0)).toBe(true);
+    }
+    expect(await profiles.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await profile.pressSequentially("net");
+    await expect(dialog).not.toContainText("SYS_PTRACE"); // a half-typed name has no hint
+    // ⏎ on the highlighted suggestion only takes it; the dialog stays
+    await page.keyboard.press("Enter");
+    await expect(profile).toHaveValue("netadmin");
+    await expect(dialog.getByRole("listbox", { name: "profile suggestions" })).toHaveCount(0);
+    await expect(dialog).toContainText("NET_ADMIN + NET_RAW");
+    // the next ⏎ starts (from any field)
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    const s = await inspect(page);
+    const term = (s.panes[s.focusedPane] as unknown as { term: { container: string; debug?: { image: string; target?: string } } }).term;
+    expect(term.container).toMatch(/^debugger-[a-z0-9]{5}$/);
+    expect(term.debug).toEqual({ image: "busybox:1.36", target: "sidecar" });
+    const header = page.locator("section[data-pane] header").filter({ hasText: "debug" });
+    await expect(header).toContainText(`web-1/${term.container}`);
+    await expect(header).toContainText("busybox:1.36 · target sidecar");
+    await expect.poll(() => termText(page)).toContain(`web-1:${term.container}$`);
+    // what the kubelet reports until the container runs (image pull …)
+    expect(await termText(page)).toContain('Pulling: Pulling image "busybox:1.36"');
+    expect(await termText(page)).toContain('profile netadmin, target "sidecar"');
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("debug: images that started are offered next time (history); esc cancels", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("b");
+    const dialog = page.getByRole("dialog", { name: "debug container" });
+    const image = dialog.getByRole("combobox", { name: "image" });
+    await image.fill("alpine:3.20");
+    await image.press("Enter");
+    await expect.poll(() => termText(page)).toContain("$");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    // a failed image isn't remembered
+    await page.keyboard.press("b");
+    await image.fill("fail/nope");
+    await image.press("Enter");
+    await expect(page.getByLabel("session ended")).toContainText("ImagePullBackOff");
+    await page.keyboard.press("Control+D"); // the pane stays with the reason until closed
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    await page.keyboard.press("b");
+    await expect(image).toHaveValue("nicolaka/netshoot"); // the configured default still wins
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toHaveCount(0);
+    await page.keyboard.press("ArrowDown"); // ↓ browses them
+    const offered = await dialog.getByRole("listbox", { name: "image suggestions" }).getByRole("option").allInnerTexts();
+    expect(offered[0]).toContain("nicolaka/netshoot");
+    expect(offered[0]).toContain("config.yaml");
+    expect(offered.some((o) => o.includes("alpine:3.20"))).toBe(true);
+    expect(offered.some((o) => o.includes("fail/nope"))).toBe(false);
+    // history entries have a ✕ (mouse only: keys are typing here); the configured image belongs to config.yaml
+    const list = dialog.getByRole("listbox", { name: "image suggestions" });
+    await expect(list.getByRole("button", { name: "remove nicolaka/netshoot" })).toHaveCount(0);
+    await expect(list.getByRole("button", { name: "remove alpine:3.20" })).toBeVisible();
+    // ✕ removes it at once; the list stays open, the field keeps focus and its text
+    await list.getByRole("button", { name: "remove busybox:1.36" }).click(); // from the first debug test
+    await expect(list).not.toContainText("busybox:1.36");
+    await expect(list).toContainText("alpine:3.20");
+    await expect(image).toBeFocused();
+    await expect(image).toHaveValue("nicolaka/netshoot");
+    // gone for good: the next dialog doesn't offer it either
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await page.keyboard.press("b");
+    await expect(image).toBeFocused(); // b opens the dialog after a round trip: ↓ before that would go to the table
+    await page.keyboard.press("ArrowDown");
+    await expect(list).toContainText("alpine:3.20");
+    await expect(list).not.toContainText("busybox:1.36");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    // ⏎ on a suggestion takes it into the field and closes the list; nothing starts yet
+    await image.fill("nicolaka");
+    await expect(list.getByRole("option", { selected: true })).toContainText("nicolaka/netshoot");
+    await page.keyboard.press("Enter");
+    await expect(image).toHaveValue("nicolaka/netshoot");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    // an empty image is refused in the dialog
+    await image.fill(" ");
+    await image.press("Enter");
+    await expect(dialog.getByRole("alert")).toHaveText("an image is needed, e.g. busybox");
+    // as in ⌘O: an open suggestion list closes first, the next Esc closes the dialog
+    await page.keyboard.press("Escape");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+    expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+  });
+
+  test("debug on a dev context: the confirmation names image, profile and target", async ({ page }) => {
+    await openStatic(page, "tape-dev");
+    await select(page, "s-web-1");
+    await page.keyboard.press("b");
+    const dialog = page.getByRole("dialog", { name: "debug container" });
+    // a typo is refused in the dialog; an empty target is none
+    const target = dialog.getByRole("combobox", { name: "target" });
+    await target.fill("nope");
+    await target.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText('no container "nope" to target (app, sidecar; empty = none)');
+    await target.fill("");
+    await target.press("Enter");
+    const confirm = page.getByRole("alertdialog", { name: "confirm debug" });
+    await expect(confirm).toContainText("debug e2e-static/web-1 -n shop on tape-dev (image nicolaka/netshoot, profile general)");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain('target ""');
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("debug is refused on read-only contexts and non-pods, without a dialog", async ({ page }) => {
+    await openStatic(page, "tape-prod");
+    await select(page, "s-web-1");
+    await page.keyboard.press("b");
+    await expect(page.getByLabel("message")).toContainText("read-only context");
+    await expect(page.getByRole("dialog", { name: "debug container" })).toHaveCount(0);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "context" }).selectOption("tape-dev");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).rows.some((r) => r.key === "s-cfg")).toBe(true);
+    await select(page, "s-cfg");
+    await page.keyboard.press("b");
+    await expect(page.getByLabel("message")).toContainText("debug needs a pod, not configmap");
+  });
+
   test("f forwards the pod's ports; ⌥⌘P lists them, ⌫ stops", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
@@ -1323,6 +1488,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "copy name ⌘C"
         - separator
         - menuitem "exec shell e"
+        - menuitem "debug container… b"
         - menuitem "port-forward… f"
         - separator
         - menuitem "delete… ⌘⌫"

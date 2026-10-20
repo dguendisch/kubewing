@@ -16,6 +16,8 @@ export interface Candidate {
   aliases?: string[];
   /** Shown but can't be picked; the reason (e.g. "port-forward is TCP only"). */
   disabled?: string;
+  /** Can be removed from the list (history): a ✕ (see Combobox onRemove). */
+  removable?: boolean;
 }
 
 export interface Match {

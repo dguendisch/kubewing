@@ -134,12 +134,22 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[] };
+  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;
   errors: string[];
 }
+
+/** Mirrors config.Debug: defaults of the debug dialog. */
+export interface DebugConfig {
+  image?: string;
+  profile?: DebugProfile;
+}
+
+/** kubectl debug --profile values (config.DebugProfiles). */
+export const debugProfiles = ["general", "baseline", "restricted", "netadmin", "sysadmin"] as const;
+export type DebugProfile = (typeof debugProfiles)[number];
 
 /** Mirrors safety.Rule: the effective safety rule for one context. */
 export interface SafetyRule {
@@ -151,7 +161,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec";
+export type ActionKind = "delete" | "exec" | "debug";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -219,6 +229,26 @@ export interface ExecResult {
   containers: string[];
 }
 
+/** Mirrors bridge.DebugOptions. */
+export interface DebugOptions {
+  image: string;
+  /** "" = the pod's default container, "-" = none. */
+  target: string;
+  /** "" = general. */
+  profile: string;
+}
+
+/** Mirrors bridge.DebugResult. */
+export interface DebugResult {
+  session: string;
+  /** The new ephemeral container. */
+  container: string;
+  target?: string;
+  image: string;
+  pod: string;
+  context: string;
+}
+
 /** Mirrors bridge.SessionPayload: output (base64) or, last, the exit. */
 export interface SessionPayload {
   id: string;
@@ -265,6 +295,12 @@ export interface Transport {
   describe(pane: string, key: string): Promise<DescribeResult>;
   /** Starts a prepared exec; container "" = the pod's default. */
   execStart(token: string, container: string, cols: number, rows: number): Promise<ExecResult>;
+  /** Starts a prepared debug: a new ephemeral container, attached once it runs. */
+  debugStart(token: string, opts: DebugOptions, cols: number, rows: number): Promise<DebugResult>;
+  /** Images of recently started debug containers, newest first (history.yaml). */
+  debugImages(): Promise<string[]>;
+  /** Forgets one; returns what's left. */
+  removeDebugImage(image: string): Promise<string[]>;
   sessionInput(id: string, data: string): Promise<void>;
   sessionResize(id: string, cols: number, rows: number): Promise<void>;
   sessionClose(id: string): Promise<void>;

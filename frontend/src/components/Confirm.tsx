@@ -18,6 +18,7 @@ export function Confirm() {
 function ConfirmDialog() {
   const p = useUI((s) => s.overlay!.pending!);
   const container = useUI((s) => s.overlay!.container);
+  const debug = useUI((s) => s.overlay!.debug);
   const [typed, setTyped] = useState("");
   const ok = !p.typeToConfirm || typed === p.typeToConfirm;
   const color = ruleColor(p.rule);
@@ -44,6 +45,7 @@ function ConfirmDialog() {
       <p id="confirm-summary" className="text-fg select-text">
         {p.summary}
         {container ? ` (container ${container})` : null}
+        {debug ? ` (image ${debug.image}, profile ${debug.profile || "general"}${debug.target && debug.target !== "-" ? `, target ${debug.target}` : ""})` : null}
       </p>
       {p.typeToConfirm ? (
         <label className="flex flex-col gap-1 text-fg-muted">

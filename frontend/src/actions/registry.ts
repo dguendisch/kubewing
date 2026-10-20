@@ -30,6 +30,7 @@ export const rowActions: RowAction[] = [
   { command: "object.diff", label: "diff last change", group: "view", available: (r) => (r.hasPrev ? true : "no change seen yet") },
   { command: "object.copyName", label: "copy name", group: "view", available: () => true },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
+  { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },
 ];

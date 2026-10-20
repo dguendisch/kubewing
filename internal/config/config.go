@@ -1,6 +1,7 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
 // (config.yaml, keybindings.yaml, themes/*.yaml). kubewing only reads them:
-// it never creates or writes anything there. Missing files mean defaults;
+// the one file it writes there is its own history.yaml (see HistoryStore).
+// Missing files mean defaults;
 // invalid parts fall back to defaults and are reported in Effective.Errors,
 // so one typo never prevents the app from starting.
 package config
@@ -40,7 +41,19 @@ type Config struct {
 	Diff  Diff   `json:"diff"`
 	// Contexts are per-context safety rules; the first matching rule wins.
 	Contexts []ContextRule `json:"contexts"`
+	Debug    Debug         `json:"debug"`
 }
+
+// Debug configures debug containers (kubectl debug).
+type Debug struct {
+	// Image prefills the debug dialog, e.g. "nicolaka/netshoot".
+	Image string `json:"image,omitempty"`
+	// Profile is the default security profile (see DebugProfiles); "" = general.
+	Profile string `json:"profile,omitempty"`
+}
+
+// DebugProfiles are kubectl debug's --profile values.
+var DebugProfiles = []string{"general", "baseline", "restricted", "netadmin", "sysadmin"}
 
 // Diff configures change detection.
 type Diff struct {
@@ -49,7 +62,7 @@ type Diff struct {
 }
 
 // Actions that a context rule can require confirmation for.
-var Actions = []string{"delete", "exec"}
+var Actions = []string{"delete", "exec", "debug"}
 
 // ContextRule applies to kubeconfig contexts whose name matches Match.
 type ContextRule struct {
@@ -121,6 +134,12 @@ func Load(dir string) Effective {
 			e.Config.Contexts = append(e.Config.Contexts, r)
 		}
 		e.Config.Theme = c.Theme
+		e.Config.Debug.Image = c.Debug.Image
+		if p := c.Debug.Profile; p != "" && !slices.Contains(DebugProfiles, p) {
+			errf("config.yaml", "debug.profile: unknown profile %q (known: %v)", p, DebugProfiles)
+		} else {
+			e.Config.Debug.Profile = p
+		}
 	}
 
 	var bs []Binding

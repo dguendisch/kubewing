@@ -44,6 +44,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Copy Name", "object.copyName"],
       null,
       ["Exec Shell", "object.exec"],
+      ["Debug Container…", "object.debug"],
       ["Port-Forward…", "object.portForward"],
       ["Port-Forwards", "portforward.list"],
       null,
