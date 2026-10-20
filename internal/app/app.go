@@ -16,6 +16,8 @@ type App struct {
 	svc *bridge.Service
 	// Contexts lists available clusters; overridable for tests.
 	ContextsFn func() (bridge.ContextList, error)
+	// MenuFn installs the native menu (see menu.go); nil without one (headless, tests).
+	MenuFn func([]Menu)
 }
 
 // New wraps a service.
@@ -65,6 +67,14 @@ func (a *App) PortForwardStart(pane, key string, ports []string) (bridge.PortFor
 }
 func (a *App) PortForwards() []bridge.PortForwardInfo { return a.svc.PortForwards() }
 func (a *App) PortForwardStop(id string) error        { return a.svc.PortForwardStop(id) }
+
+// SetMenu replaces the native menu's command menus; the frontend builds them
+// from its merged keymap (keys/appMenu.ts) and resends them on config changes.
+func (a *App) SetMenu(menus []Menu) {
+	if a.MenuFn != nil {
+		a.MenuFn(menus)
+	}
+}
 
 // KubeContexts reads contexts from kubeconfig.
 func KubeContexts() (bridge.ContextList, error) {

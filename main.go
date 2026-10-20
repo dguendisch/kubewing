@@ -67,16 +67,20 @@ func main() {
 
 	emit := &wailsEmitter{}
 	svc := bridge.New(source.NewRegistry(opener), emit, opts)
+	api := app.New(svc)
 	a := application.New(application.Options{
 		Name:        "kubewing",
 		Description: "keyboard-driven Kubernetes UI",
 		Icon:        appIcon,
-		Services:    []application.Service{application.NewService(app.New(svc))},
+		Services:    []application.Service{application.NewService(api)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		OnShutdown:  svc.Shutdown, // exec sessions and port-forwards end with the app
 	})
 	emit.app = a
+	// before the frontend sends its menus (and should it never): no ⌘W "Close Window", no ⌘R "Reload"
+	a.Menu.Set(app.BaseMenu(nil, emit.Emit))
+	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emit.Emit)) }
 	a.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:  "kubewing",
 		Width:  1400,

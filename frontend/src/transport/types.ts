@@ -1,4 +1,5 @@
 // Mirrors internal/view/frame.go and internal/bridge/bridge.go.
+import type { Menu as AppMenu } from "../keys/appMenu";
 export type ColumnType = "" | "number" | "bytes" | "age";
 
 export interface ColumnInfo {
@@ -261,8 +262,12 @@ export interface Transport {
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
   reloadConfig(): Promise<Config>;
+  /** Installs the native menu's command menus (macOS app; a no-op headless). */
+  setMenu(menus: AppMenu[]): Promise<void>;
   onFrame(cb: (p: FramePayload) => void): () => void;
   onConfig(cb: (c: Config) => void): () => void;
   onSession(cb: (p: SessionPayload) => void): () => void;
   onPortForwards(cb: (l: PortForward[]) => void): () => void;
+  /** A native menu item was chosen: its command id. */
+  onCommand(cb: (command: string) => void): () => void;
 }

@@ -73,6 +73,7 @@ export function wsTransport(url: string): Transport {
     copyText: (t) => navigator.clipboard.writeText(t),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
+    setMenu: (m) => call("SetMenu", m),
     onFrame: (cb) => {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
@@ -89,5 +90,7 @@ export function wsTransport(url: string): Transport {
       forwardListeners.add(cb);
       return () => forwardListeners.delete(cb);
     },
+    // no native menu in the browser
+    onCommand: () => () => {},
   };
 }

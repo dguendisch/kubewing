@@ -1,0 +1,57 @@
+package app
+
+import "github.com/wailsapp/wails/v3/pkg/application"
+
+// MenuItem is one command entry of the native menu (frontend: keys/appMenu.ts).
+type MenuItem struct {
+	Label       string `json:"label"`
+	Command     string `json:"command"`
+	Accelerator string `json:"accelerator,omitempty"`
+}
+
+// Menu is one top-level menu; a nil item is a separator.
+type Menu struct {
+	Title string      `json:"title"`
+	Items []*MenuItem `json:"items"`
+}
+
+// MenuHost installs the native application menu; nil when there is none (headless).
+type MenuHost interface {
+	SetApplicationMenu(*application.Menu)
+}
+
+// CommandEvent carries a clicked menu item's command id back to the dispatcher.
+const CommandEvent = "kw:command"
+
+// BaseMenu is the macOS menu before the frontend sends its own, and the frame
+// around it after: app menu, Edit (text fields need its ⌘C/⌘V/⌘A/⌘Z in
+// WKWebView) and Window. Wails' default would add ⌘W "Close Window" (quitting
+// the app with its sessions, since the last window closing terminates it) and
+// ⌘R "Reload" (losing all UI state): kubewing binds ⌘W to "close tab" and
+// suppresses reload.
+func BaseMenu(commands []Menu, emit func(name string, data any)) *application.Menu {
+	m := application.NewMenu()
+	m.AddRole(application.AppMenu)
+	m.AddRole(application.EditMenu)
+	for _, c := range commands {
+		sub := m.AddSubmenu(c.Title)
+		for _, it := range c.Items {
+			if it == nil {
+				sub.AddSeparator()
+				continue
+			}
+			item := sub.Add(it.Label)
+			if it.Accelerator != "" {
+				item.SetAccelerator(it.Accelerator)
+			}
+			cmd := it.Command
+			item.OnClick(func(*application.Context) { emit(CommandEvent, cmd) })
+		}
+	}
+	window := m.AddSubmenu("Window")
+	window.AddRole(application.Minimise)
+	window.AddRole(application.Zoom)
+	window.AddSeparator()
+	window.AddRole(application.ToggleFullscreen)
+	return m
+}

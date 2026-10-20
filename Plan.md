@@ -49,7 +49,6 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 
 Still open in P0:
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
-- Native menu accelerators + WKWebView smoke suite.
 - Generated TS bindings check; golden-guard hook on `testdata/`.
 - Exec container picker (the pod's default container is used).
 
@@ -110,6 +109,7 @@ Still open in P0.1:
 
 ### P2— "Polishing"
 1. **github actions build pipelines**
+1. **Pane drag & drop** — drag a pane by its header onto another pane's edge or centre (or the tab's outer edges) to rearrange the split; keyboard equivalent to swap/move the focused pane (e.g. `⌘⇧⌥arrows`). The receiving end already exists: dockview's drop targets and overlays are on (`disableDnd` unset), and `Dock` + `setLayout` take user rearrangements back into the store. Missing is the drag source: dockview only starts drags from a group's tab header, which we hide because each pane draws its own header. Options: make our pane header the drag handle (custom tab component rendered as the header, or a drag source wired to dockview's panel transfer), or show dockview's header only while ⌥ is held. Use `dndStrategy: 'pointer'` if HTML5 DnD is unreliable in WKWebView. Dropping onto the tab strip (move a pane to another tab) is a follow-up.
 
 ### P3 — "Operator power" (v1.0)
 
@@ -131,6 +131,7 @@ Still open in P0.1:
 1. **Focus follows mouse**
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **Keybinding & theme UI** — editors on top of the P0 config files.
+1. **WKWebView smoke suite** — a few tests against the real app for what Chromium/Playwright can't reach: native menu accelerators (⌘W closes a tab, not the window; ⌘R doesn't reload; ⌘P opens no print dialog), menu clicks reaching the dispatcher, IME input in the filter fields. Needs a native harness (XCUITest or an in-app test hook sending real key events); Playwright has no WKWebView driver.
 
 ## Decisions
 

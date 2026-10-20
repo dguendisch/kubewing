@@ -3,7 +3,9 @@ import type { Transport } from "../transport/types";
 import { applyFrame, emptyPane, type PaneData } from "../grid/rowcache";
 import { b64decode, sessions } from "../term/sessions";
 import type { ContextList, PortForward } from "../transport/types";
-import { applyConfig } from "./config";
+import { menuSpec } from "../keys/appMenu";
+import type { Binding } from "../keys/keymap";
+import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
 import { contextNamespace, initialState, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 
@@ -73,6 +75,12 @@ export function connect(t: Transport) {
     applyConfig(c);
   });
   t.config().then(applyConfig, () => {});
+  // the native menu follows the merged keymap (keybindings.yaml); its clicks are dispatched in useKeys
+  const sendMenu = (b: Binding[]) => void t.setMenu(menuSpec(b)).catch(() => {});
+  sendMenu(useConfig.getState().bindings);
+  useConfig.subscribe((next, prev) => {
+    if (next.bindings !== prev.bindings) sendMenu(next.bindings);
+  });
   // A server pane lives as long as UI state references it, not as long as a
   // component is mounted: hidden tabs and panes re-parented by a split keep their data.
   useUI.subscribe((next, prev) => {

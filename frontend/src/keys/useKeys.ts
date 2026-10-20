@@ -1,10 +1,13 @@
 import { useEffect } from "react";
 import { dispatch } from "../commands";
 import { useConfig } from "../store/config";
-import { useUI } from "../store/store";
-import { chord, resolve, suppressedDefaults } from "./keymap";
+import { bridge, useUI } from "../store/store";
+import { chord, commandIds, resolve, suppressedDefaults, type CommandId } from "./keymap";
 
-/** Owns all shortcuts: resolves keydown via the keymap and suppresses webview defaults. */
+/**
+ * Owns all shortcuts: resolves keydown via the keymap and suppresses webview
+ * defaults. Native menu items (keys/appMenu.ts) arrive here too, as command ids.
+ */
 export function useKeys() {
   useEffect(() => {
     const suppressed = new Set(suppressedDefaults);
@@ -30,6 +33,10 @@ export function useKeys() {
     const onBlur = () => {
       if (useUI.getState().switcher) dispatch("tab.switcherCancel");
     };
+    const known = new Set<string>(commandIds);
+    const offMenu = bridge().onCommand((c) => {
+      if (known.has(c)) dispatch(c as CommandId);
+    });
     window.addEventListener("keydown", onKey, { capture: true });
     window.addEventListener("keyup", onKeyUp, { capture: true });
     window.addEventListener("blur", onBlur);
@@ -37,6 +44,7 @@ export function useKeys() {
       window.removeEventListener("keydown", onKey, { capture: true });
       window.removeEventListener("keyup", onKeyUp, { capture: true });
       window.removeEventListener("blur", onBlur);
+      offMenu();
     };
   }, []);
 }
