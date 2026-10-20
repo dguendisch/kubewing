@@ -140,3 +140,10 @@ export function neighbor(l: Layout, from: string, dir: Direction): string | unde
   }
   return best?.id;
 }
+
+/** The window's bottom corners a pane touches: macOS rounds those, so the pane's frame has to follow. */
+export function bottomCorners(l: Layout, id: string): { left: boolean; right: boolean } {
+  const r = rects(l).get(id);
+  if (!r || r.y + r.h < 1 - EPS) return { left: false, right: false };
+  return { left: r.x <= EPS, right: r.x + r.w >= 1 - EPS };
+}

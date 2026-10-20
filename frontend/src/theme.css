@@ -33,13 +33,21 @@ body {
 }
 input { user-select: text; }
 
+/* The macOS window's corner radius (Tahoe: 16px), less the 1px between the window edge and a pane's
+   frame, so the frame of a pane in a bottom corner follows the window's curve. Set by the app shell
+   (class "kw-mac", main.tsx); square elsewhere (browser dev, E2E). */
+:root { --kw-window-radius: 0px; }
+:root.kw-mac { --kw-window-radius: 15px; }
+
 /* dockview (split layout): colors from the theme tokens above */
 .kw-dock {
   --dv-group-view-background-color: var(--color-bg);
   --dv-tabs-and-actions-container-background-color: var(--color-bg-elev);
   --dv-separator-border: transparent;
   --dv-paneview-header-border-color: var(--color-border);
-  --dv-sash-color: var(--color-border);
+  /* the 4px sash overlaps the panes' frames (each pane draws its own): painted at rest it hides
+     the focused pane's accent edge along the seam, so only the hover/drag color shows */
+  --dv-sash-color: transparent;
   --dv-active-sash-color: var(--color-accent);
   --dv-active-sash-transition-delay: 0s;
   --dv-drag-over-background-color: color-mix(in srgb, var(--color-accent) 25%, transparent);

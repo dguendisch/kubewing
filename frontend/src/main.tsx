@@ -6,6 +6,8 @@ import { connect, loadContexts } from "./store/store";
 import { createTransport } from "./transport";
 import "./theme.css";
 
+// the macOS app window rounds its corners; panes in them follow (theme.css --kw-window-radius)
+if (import.meta.env.VITE_KW_TRANSPORT !== "ws" && /Mac/.test(navigator.platform)) document.documentElement.classList.add("kw-mac");
 connect(await createTransport());
 await loadContexts();
 

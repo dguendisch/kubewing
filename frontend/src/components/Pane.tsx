@@ -5,6 +5,7 @@ import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useUI } from "../store/store";
+import { bottomCorners, paneIds } from "../store/layout";
 import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
 import { b64encode } from "../term/sessions";
@@ -16,6 +17,12 @@ import { ruleColor } from "./safetyStyle";
 export function Pane({ id }: { id: string }) {
   const pane = useUI((s) => s.panes[id]);
   const isFocused = useUI((s) => S.activeTab(s).focused === id);
+  // macOS rounds the window's bottom corners: a pane in one follows the curve, so its frame isn't cut off
+  const corners = useUI((s) => {
+    const t = s.tabs.find((x) => paneIds(x.layout).includes(id));
+    const c = t && bottomCorners(t.layout, id);
+    return `${c?.left ? "rounded-bl-(--kw-window-radius)" : ""} ${c?.right ? "rounded-br-(--kw-window-radius)" : ""}`;
+  });
   const filterField = useUI((s) => (isFocused && s.focus === "filter" ? s.filterField ?? "grep" : undefined));
   const tableFocused = useUI((s) => isFocused && s.focus === "table" && !s.overlay);
 
@@ -40,7 +47,7 @@ export function Pane({ id }: { id: string }) {
       data-pane={id}
       data-context={pane.context}
       aria-label={`pane ${pane.spec.resource}`}
-      className={`flex h-full min-h-0 w-full min-w-0 flex-col ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
+      className={`flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${corners} ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
       style={color ? { borderColor: color } : undefined}
       onMouseDown={() => setUI((s) => S.focusPane(s, id))}
     >

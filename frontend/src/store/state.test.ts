@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leaf, neighbor, paneIds, rects, split, valid, type Layout } from "./layout";
+import { bottomCorners, leaf, neighbor, paneIds, rects, split, valid, type Layout } from "./layout";
 import * as S from "./state";
 
 const ids = (s: S.UIState) => paneIds(S.activeTab(s).layout);
@@ -356,5 +356,22 @@ describe("contextNamespace", () => {
     const s = S.initialState("", "shoot--x");
     expect(s.panes.v1!.spec.namespace).toBe("shoot--x");
     expect(s.defaults.namespace).toBe("shoot--x");
+  });
+});
+
+describe("bottomCorners (macOS rounds the window's bottom corners)", () => {
+  // ┌────┬────┐
+  // │ v1 │ v2 │
+  // │    ├────┤
+  // │    │ v3 │
+  // └────┴────┘
+  const l: Layout = split(split(leaf("v1"), "v1", "row", "v2"), "v2", "column", "v3");
+
+  it("marks only the corners a pane touches", () => {
+    expect(bottomCorners(leaf("a"), "a")).toEqual({ left: true, right: true });
+    expect(bottomCorners(l, "v1")).toEqual({ left: true, right: false });
+    expect(bottomCorners(l, "v2")).toEqual({ left: false, right: false });
+    expect(bottomCorners(l, "v3")).toEqual({ left: false, right: true });
+    expect(bottomCorners(l, "gone")).toEqual({ left: false, right: false });
   });
 });
