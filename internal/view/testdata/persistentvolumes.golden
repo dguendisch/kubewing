@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "pv-1",
+    "pv-3",
+    "pv-2"
+  ],
+  "rows": [
+    {
+      "key": "pv-1",
+      "cells": [
+        "",
+        "pv-etcd-main",
+        "Bound"
+      ]
+    },
+    {
+      "key": "pv-3",
+      "cells": [
+        "",
+        "pv-old",
+        "Released"
+      ]
+    },
+    {
+      "key": "pv-2",
+      "cells": [
+        "",
+        "pv-spare",
+        "Available"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

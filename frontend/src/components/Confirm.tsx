@@ -46,7 +46,7 @@ function ConfirmDialog() {
       <p id="confirm-summary" className="text-fg select-text">
         {p.summary}
         {container ? ` (container ${container})` : null}
-        {ops ? ` (image ${ops.image}, namespace ${ops.namespace || "default"}${ops.chroot ? ", chroot /host" : ops.hostRoot ? ", host root at /host" : ""}${ops.hostNetwork ? ", host network" : ""})` : null}
+        {ops ? ` (image ${ops.image}, namespace ${ops.namespace || "default"}${ops.chroot ? ", chroot /host" : ops.hostRoot ? ", host root at /host" : ""}${ops.hostNetwork ? ", host network" : ""}${ops.pv ? `, ${ops.pv} at ${ops.mountPath}${ops.readOnly ? " (ro)" : ""}` : ""}${ops.yaml ? ", edited YAML" : ""})` : null}
         {debug ? ` (image ${debug.image}, profile ${debug.profile || "general"}${debug.target && debug.target !== "-" ? `, target ${debug.target}` : ""})` : null}
       </p>
       {p.typeToConfirm ? (

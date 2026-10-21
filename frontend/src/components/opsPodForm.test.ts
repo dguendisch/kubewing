@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { NodeInfo } from "../transport/types";
-import { checkOpsPod, initialOpsPod, nodeCandidates, nodeDetail, opsImageSuggestions, opsNamespaceCandidates, opsPodHint } from "./opsPodForm";
+import type { NodeInfo, PVInfo } from "../transport/types";
+import { checkOpsPod, initialOpsPod, nodeCandidates, nodeDetail, opsImageSuggestions, opsNamespaceCandidates, opsPodHint, pvCandidates, pvNamespace } from "./opsPodForm";
 
 const nodes: NodeInfo[] = [
   { name: "n-a", ready: "True", pool: "worker-a", zone: "eu-1a" },
@@ -47,5 +47,26 @@ describe("ops pod dialog", () => {
   it("the hint says what the pod gets", () => {
     expect(opsPodHint(opts)).toBe("privileged, host PID · deleted when the shell ends");
     expect(opsPodHint({ ...opts, hostRoot: true, chroot: true, hostNetwork: true })).toBe("privileged, host PID · node's / at /host, shell chrooted into it · host network · deleted when the shell ends");
+  });
+
+  it("PVs: only bound ones can be picked; the claim decides the namespace", () => {
+    const pvs: PVInfo[] = [
+      { name: "pv-a", phase: "Bound", claim: "garden/etcd-0", capacity: "25Gi", storageClass: "gp3", accessModes: ["ReadWriteOnce"] },
+      { name: "pv-b", phase: "Available", capacity: "1Gi", accessModes: ["ReadWriteMany", "ReadOnlyMany"] },
+    ];
+    expect(pvCandidates(pvs)).toEqual([
+      { value: "pv-a", label: "pv-a", detail: "garden/etcd-0 · 25Gi · gp3 · RWO", disabled: undefined },
+      { value: "pv-b", label: "pv-b", detail: "available · 1Gi · RWX,ROX", disabled: "available, no claim to mount through" },
+    ]);
+    expect(pvNamespace(pvs, " pv-a ")).toBe("garden");
+    expect(pvNamespace(pvs, "pv-b")).toBeUndefined();
+  });
+
+  it("a PV gets the default mount path; bad paths and YAML are passed on as given", () => {
+    expect(checkOpsPod("n-a", { ...opts, pv: "pv-a" }, nodes)).toMatchObject({ opts: { pv: "pv-a", mountPath: "/pv", readOnly: false } });
+    expect(checkOpsPod("n-a", { ...opts, pv: "pv-a", mountPath: "/host/x" }, nodes)).toEqual({ error: 'mount path "/host/x": absolute, not / and not under /host' });
+    expect(checkOpsPod("n-a", { ...opts, pv: " ", mountPath: "x" }, nodes)).toMatchObject({ opts: { image: "ops-toolbelt" } }); // no PV: the path doesn't matter
+    expect(checkOpsPod("n-a", { ...opts, yaml: "kind: Pod" }, nodes)).toMatchObject({ opts: { yaml: "kind: Pod" } });
+    expect(opsPodHint({ ...opts, pv: "pv-a", mountPath: "", readOnly: true })).toContain("pv-a at /pv (read-only)");
   });
 });

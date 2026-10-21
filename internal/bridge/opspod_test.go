@@ -23,7 +23,11 @@ func opsPodSetup(t *testing.T, rules []config.ContextRule) (*Service, *tape.Open
 	if err != nil {
 		t.Fatal(err)
 	}
-	op := &tape.Opener{Tapes: map[string]*tape.Tape{"e2e-static": pods, "nodes": nodes}}
+	pvs, err := tape.Load("../../testdata/tapes/persistentvolumes.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{"e2e-static": pods, "nodes": nodes, "persistentvolumes": pvs}}
 	cfg := config.Defaults("")
 	cfg.Config.Contexts = rules
 	log := &eventLog{events: map[string][]any{}}
@@ -224,5 +228,126 @@ func TestOpsPodRefusedOnReadOnly(t *testing.T) {
 	waitNodes(t, svc, "")
 	if _, err := svc.PrepareOpsPod("", "ip-10-0-1-11.ec2.internal"); err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("ops pod on read-only: %v", err)
+	}
+}
+
+func waitPVs(t *testing.T, svc *Service) PVList {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if l := svc.PersistentVolumes(""); !l.Loading {
+			return l
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("persistent volumes still loading")
+	return PVList{}
+}
+
+func TestOpsPodPersistentVolume(t *testing.T) {
+	svc, op, log, _ := opsPodSetup(t, nil)
+	waitNodes(t, svc, "")
+	l := waitPVs(t, svc)
+	want := []PVInfo{
+		{Name: "pv-etcd-main", Phase: "Bound", Claim: "garden/main-etcd-0", Capacity: "25Gi", StorageClass: "gp3", AccessModes: []string{"ReadWriteOnce"}},
+		{Name: "pv-old", Phase: "Released", Capacity: "5Gi", StorageClass: "efs", AccessModes: []string{"ReadWriteMany"}},
+		{Name: "pv-spare", Phase: "Available", Capacity: "1Gi", StorageClass: "gp3", AccessModes: []string{"ReadWriteOnce"}},
+	}
+	if fmt.Sprint(l.PVs) != fmt.Sprint(want) {
+		t.Errorf("pvs:\n%+v\nwant\n%+v", l.PVs, want)
+	}
+	node := "ip-10-0-1-11.ec2.internal"
+	for _, c := range []struct {
+		o    OpsPodOptions
+		want string
+	}{
+		{OpsPodOptions{Image: "x", PV: "pv-spare"}, "pv-spare is available, not bound to a claim"},
+		{OpsPodOptions{Image: "x", PV: "pv-old"}, "pv-old is released, not bound"},
+		{OpsPodOptions{Image: "x", PV: "nope"}, `no persistent volume "nope"`},
+		{OpsPodOptions{Image: "x", PV: "pv-etcd-main", Namespace: "shop"}, "claimed in namespace garden: the pod must run there, not in shop"},
+		{OpsPodOptions{Image: "x", PV: "pv-etcd-main", MountPath: "data"}, `mount path "data"`},
+		{OpsPodOptions{Image: "x", PV: "pv-etcd-main", MountPath: "/host/x"}, "not under /host"},
+	} {
+		if _, err := svc.OpsPodManifest("", node, c.o); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%+v: %v, want %q", c.o, err, c.want)
+		}
+	}
+	// the claim's namespace; the default mount path
+	y, err := svc.OpsPodManifest("", node, OpsPodOptions{Image: "x", PV: "pv-etcd-main", ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []string{"namespace: garden", "claimName: main-etcd-0", "mountPath: /pv", "readOnly: true", "nodeName: " + node} {
+		if !strings.Contains(y, w) {
+			t.Errorf("manifest lacks %q:\n%s", w, y)
+		}
+	}
+	if strings.Contains(y, "status:") {
+		t.Errorf("manifest has a status:\n%s", y)
+	}
+	p, _ := svc.PrepareOpsPod("", node)
+	r, err := svc.OpsPodStart(p.Token, OpsPodOptions{Image: "x", PV: "pv-etcd-main", MountPath: "/data"}, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, log, r.Session, func(out, _ string) bool { return strings.HasSuffix(out, "$ ") })
+	pod := op.OpsPods()["garden/"+r.Pod]
+	if pod == nil || pod.Spec.Volumes[0].PersistentVolumeClaim.ClaimName != "main-etcd-0" || r.Settings != "pv-etcd-main at /data" {
+		t.Fatalf("pod %+v, settings %q", pod, r.Settings)
+	}
+	_ = svc.SessionClose(r.Session)
+}
+
+func TestOpsPodEditedYAML(t *testing.T) {
+	svc, op, log, _ := opsPodSetup(t, nil)
+	waitNodes(t, svc, "")
+	node := "ip-10-0-1-11.ec2.internal"
+	o := OpsPodOptions{Image: "busybox", Namespace: "kube-system", HostRoot: true}
+	y, err := svc.OpsPodManifest("", node, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the rendered name is kept; anything else may change
+	edited := strings.Replace(y, "  nodeName: ", "  priorityClassName: system-cluster-critical\n  nodeName: ", 1)
+	edited = strings.Replace(edited, "image: busybox", "image: busybox:edited", 1)
+	start := func(yaml string) (OpsPodResult, error) {
+		p, err := svc.PrepareOpsPod("", node)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return svc.OpsPodStart(p.Token, OpsPodOptions{Image: o.Image, Namespace: o.Namespace, HostRoot: true, YAML: yaml}, 0, 0)
+	}
+	r, err := start(edited)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitOutput(t, log, r.Session, func(out, _ string) bool { return strings.HasSuffix(out, "$ ") })
+	pod := op.OpsPods()["kube-system/"+r.Pod]
+	if pod == nil || pod.Spec.PriorityClassName != "system-cluster-critical" || r.Image != "busybox:edited" || !strings.Contains(y, "name: "+r.Pod) {
+		t.Fatalf("edited pod: %+v, result %+v", pod, r)
+	}
+	if !strings.HasSuffix(r.Settings, "edited YAML") {
+		t.Errorf("settings: %q", r.Settings)
+	}
+	_ = svc.SessionClose(r.Session)
+
+	for _, c := range []struct{ yaml, want string }{
+		{strings.Replace(y, "nodeName: "+node, "nodeName: other", 1), "spec.nodeName must stay " + node},
+		{strings.Replace(y, "kind: Pod", "kind: Deployment", 1), "must stay a v1 Pod"},
+		{strings.Replace(y, "name: ops-pod\n", "name: renamed\n", 1), `container "ops-pod"`},
+		{strings.Replace(y, "namespace: kube-system", "namespace: default", 1), "name and namespace must stay"},
+		{strings.Replace(y, "  nodeName: ", "  nodeNmae: x\n  nodeName: ", 1), "unknown field"},
+		{"{not: [yaml", "edited YAML"},
+	} {
+		if _, err := start(c.yaml); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%v, want %q", err, c.want)
+		}
+		// the dialog's check finds the same, before anything is prepared
+		if err := svc.CheckOpsPod("", node, OpsPodOptions{Image: o.Image, Namespace: o.Namespace, HostRoot: true, YAML: c.yaml}); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("check: %v, want %q", err, c.want)
+		}
+	}
+	if err := svc.CheckOpsPod("", node, OpsPodOptions{Image: o.Image, Namespace: o.Namespace, HostRoot: true, YAML: edited}); err != nil {
+		t.Errorf("check of a good edit: %v", err)
 	}
 }

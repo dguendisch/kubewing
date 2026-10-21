@@ -41,7 +41,7 @@ func (c *Cluster) OpsPod(ctx context.Context, p OpsPodSpec, s ExecStreams) error
 		return err
 	}
 	pods := cs.CoreV1().Pods(p.Namespace)
-	if _, err := pods.Create(ctx, OpsPodManifest(p), metav1.CreateOptions{}); err != nil {
+	if _, err := pods.Create(ctx, p.Manifest(), metav1.CreateOptions{}); err != nil {
 		return err
 	}
 	defer func() {
@@ -107,10 +107,18 @@ func OpsPodManifest(p OpsPodSpec) *corev1.Pod {
 			}},
 		},
 	}
+	if p.Volume != nil {
+		c := &pod.Spec.Containers[0]
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "pv", MountPath: p.Volume.MountPath, ReadOnly: p.Volume.ReadOnly})
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "pv", VolumeSource: corev1.VolumeSource{
+			PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: p.Volume.Claim, ReadOnly: p.Volume.ReadOnly},
+		}})
+	}
 	if p.HostRoot || p.Chroot {
 		prop := corev1.MountPropagationHostToContainer
-		pod.Spec.Containers[0].VolumeMounts = []corev1.VolumeMount{{Name: "host-root", MountPath: "/host", MountPropagation: &prop}}
-		pod.Spec.Volumes = []corev1.Volume{{Name: "host-root", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}}}
+		c := &pod.Spec.Containers[0]
+		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{Name: "host-root", MountPath: "/host", MountPropagation: &prop})
+		pod.Spec.Volumes = append(pod.Spec.Volumes, corev1.Volume{Name: "host-root", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/"}}})
 	}
 	return pod
 }
@@ -124,10 +132,31 @@ type OpsPodSpec struct {
 	Chroot bool
 	// HostNetwork puts the pod into the node's network namespace.
 	HostNetwork bool
+	// Volume mounts a persistent volume (through its claim, in Namespace); nil = none.
+	Volume *OpsPodVolume
+	// Pod, if set, is created instead of OpsPodManifest (edited in the dialog's YAML).
+	Pod *corev1.Pod
 	// Started is called once the pod runs, before the shell starts.
 	Started func()
 	// Progress reports what happens until then (scheduling, image pull …), one line each.
 	Progress func(line string)
+}
+
+// OpsPodVolume is a persistent volume mounted into the ops pod. Pods mount
+// PVs only through their bound claim, from the claim's namespace.
+type OpsPodVolume struct {
+	// PV is the volume's name (for display); Claim the bound PVC's.
+	PV, Claim string
+	MountPath string
+	ReadOnly  bool
+}
+
+// Manifest is the pod to create: Pod if set (edited), else OpsPodManifest.
+func (p OpsPodSpec) Manifest() *corev1.Pod {
+	if p.Pod != nil {
+		return p.Pod
+	}
+	return OpsPodManifest(p)
 }
 
 // String is the pod's settings in a few words (session header, logs).
@@ -141,6 +170,15 @@ func (p OpsPodSpec) String() string {
 	}
 	if p.HostNetwork {
 		s += ", host network"
+	}
+	if v := p.Volume; v != nil {
+		s += fmt.Sprintf(", %s at %s", v.PV, v.MountPath)
+		if v.ReadOnly {
+			s += " (ro)"
+		}
+	}
+	if p.Pod != nil {
+		s += ", edited YAML"
 	}
 	return s
 }

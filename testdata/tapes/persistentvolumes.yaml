@@ -1,0 +1,14 @@
+# E2E tape for persistent volumes (ops pod dialog: mount a PV). Pods mount
+# PVs through their bound claim only: one bound in garden, one available, one released.
+pipeline:
+  source: {resource: persistentvolumes}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-etcd-main, uid: pv-1, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {capacity: {storage: 25Gi}, accessModes: [ReadWriteOnce], storageClassName: gp3, claimRef: {namespace: garden, name: main-etcd-0}}, status: {phase: Bound}}
+    cells: [pv-etcd-main, Bound]
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-spare, uid: pv-2, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {capacity: {storage: 1Gi}, accessModes: [ReadWriteOnce], storageClassName: gp3}, status: {phase: Available}}
+    cells: [pv-spare, Available]
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-old, uid: pv-3, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {capacity: {storage: 5Gi}, accessModes: [ReadWriteMany], storageClassName: efs, claimRef: {namespace: shop, name: gone}}, status: {phase: Released}}
+    cells: [pv-old, Released]

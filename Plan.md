@@ -48,6 +48,10 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
 
 Still open in P0:
+- Events for a resource (shortcut "v", move exec shortcut to "x", reserve "e" for future edit support)
+- edit support
+- grep highlight search results
+- better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
 Still open in P0.1:
@@ -110,6 +114,8 @@ Still open in P0.1:
 
 ### P3 — "Operator power" (v1.0)
 
+1. Resource dependencies (in both directions, owning and owned)
+1. RBAC views
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**
 1. **Session recording + saving** - allow to save a session (not every watch diff, but everything else displayed, for later forensics when one doesn't recall what was actually did on a cluster)

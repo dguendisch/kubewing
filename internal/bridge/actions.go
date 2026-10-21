@@ -710,8 +710,8 @@ func (s *Service) Shutdown() {
 	}
 	forwards := s.forwards
 	s.forwards = map[string]*forward{}
-	nodes := s.nodes
-	s.nodes = map[string]*nodeWatch{}
+	leased := s.leased
+	s.leased = map[watchKey]*leasedWatch{}
 	s.mu.Unlock()
 	for _, ss := range sessions {
 		ss.cancel()
@@ -720,7 +720,7 @@ func (s *Service) Shutdown() {
 	for _, f := range forwards {
 		f.f.Stop()
 	}
-	for _, w := range nodes {
+	for _, w := range leased {
 		w.sub.Close()
 	}
 	done := make(chan struct{})

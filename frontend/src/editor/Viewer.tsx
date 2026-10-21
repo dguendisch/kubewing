@@ -9,7 +9,7 @@ import { loadMonaco, type MonacoApi } from "./load";
 const token = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
 
 /** Monaco theme from the CSS theme tokens (Monaco can't read CSS variables). */
-function defineTheme(m: MonacoApi) {
+export function defineTheme(m: MonacoApi) {
   const c = (n: string) => token(n);
   m.editor.defineTheme("kubewing", {
     base: "vs-dark",
@@ -37,7 +37,7 @@ function defineTheme(m: MonacoApi) {
   m.editor.setTheme("kubewing");
 }
 
-const common: Monaco.editor.IEditorOptions = {
+export const common: Monaco.editor.IEditorOptions = {
   readOnly: true,
   domReadOnly: true,
   minimap: { enabled: false },

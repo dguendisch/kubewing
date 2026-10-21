@@ -185,7 +185,7 @@ func (o *Opener) OpsPod(ctx context.Context, cluster string, p source.OpsPodSpec
 	if o.opsPods == nil {
 		o.opsPods = map[string]*corev1.Pod{}
 	}
-	o.opsPods[p.Namespace+"/"+p.Name] = source.OpsPodManifest(p)
+	o.opsPods[p.Namespace+"/"+p.Name] = p.Manifest()
 	o.mu.Unlock()
 	defer func() {
 		o.mu.Lock()

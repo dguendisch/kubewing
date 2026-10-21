@@ -1317,9 +1317,20 @@ test.describe("object actions", () => {
     await expect(list.getByRole("option", { selected: true })).toHaveCount(0);
     await expect(list).toContainText("worker-a · eu-1b · cordoned");
     await expect(list).toContainText("not ready (unknown) · etcd · eu-1c");
+    // highlighting the prefilled node and pressing ⏎ only takes it (closes the list), doesn't launch
+    await page.keyboard.press("ArrowDown");
+    await expect(list.getByRole("option", { selected: true })).toHaveText(/ip-10-0-1-11/);
+    await node.fill("ip-10-0-2-22.ec2.internal"); // back to the prefilled one; it's the highlighted option
+    await page.keyboard.press("ArrowDown");
+    await expect(list.getByRole("option", { selected: true })).toContainText("ip-10-0-2-22.ec2.internal");
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("listbox", { name: "node suggestions" })).toHaveCount(0); // list closed
+    await expect(dialog).toBeVisible(); // not launched
+    expect((await inspect(page)).focus).toBe("dialog");
+    await expect(node).toHaveValue("ip-10-0-2-22.ec2.internal");
     // config.yaml's image; nothing ran yet: host root and host network prechecked, in this order
     await expect(dialog.getByRole("combobox", { name: "image" })).toHaveValue("europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest");
-    await expect(dialog.locator("label:has(input[type=checkbox])")).toHaveText(["chroot into /host", "host root at /host", "host network"]);
+    await expect(dialog.getByRole("group", { name: "host access" }).locator("label")).toHaveText(["chroot into /host", "host root at /host", "host network"]);
     await expect(dialog.getByRole("checkbox", { name: "chroot into /host" })).not.toBeChecked();
     await expect(dialog.getByRole("checkbox", { name: "host root at /host" })).toBeChecked();
     await expect(dialog.getByRole("checkbox", { name: "host network" })).toBeChecked();
@@ -1426,6 +1437,120 @@ test.describe("object actions", () => {
     await expect.poll(() => termText(page)).toContain("deleting kube-system/ops-pod-kubewing-e2e-");
     await page.keyboard.press("Control+D");
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("ops pod with a persistent volume: bound ones complete, the claim's namespace is taken", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const pv = dialog.getByRole("combobox", { name: "persistent volume" });
+    await pv.focus();
+    await page.keyboard.press("ArrowDown");
+    const list = dialog.getByRole("listbox", { name: "persistent volume suggestions" });
+    await expect(list.getByRole("option")).toHaveCount(3);
+    await expect(list.getByRole("option", { name: /pv-etcd-main/ })).toContainText("garden/main-etcd-0 · 25Gi · gp3 · RWO");
+    // not bound: listed with the reason, not pickable
+    await expect(list.getByRole("option", { name: /pv-spare/ })).toHaveAttribute("aria-disabled", "true");
+    await expect(list.getByRole("option", { name: /pv-spare/ })).toContainText("available, no claim to mount through");
+    await pv.fill("spare");
+    await page.keyboard.press("Tab");
+    await expect(pv).toHaveValue("spare"); // ⇥ doesn't complete to it
+    await pv.fill("etcd");
+    await page.keyboard.press("Tab");
+    await expect(pv).toHaveValue("pv-etcd-main");
+    const ns = dialog.getByRole("combobox", { name: "namespace" });
+    // a namespace set before (or remembered) must NOT be clobbered when a PV is selected,
+    // and a conflict with the claim's namespace is flagged, not silently overwritten
+    await ns.fill("kube-system");
+    await expect(ns).toHaveValue("kube-system");
+    await expect(dialog).toContainText("the volume mounts only in its claim's namespace garden");
+    // empty → the pod lands in the claim's namespace (shown as the placeholder/hint, not forced in)
+    await ns.fill("");
+    await expect(dialog).toContainText("empty → the volume's claim namespace garden");
+    await page.keyboard.press("Escape"); // close the namespace suggestion list before clicking below it
+    await dialog.getByRole("checkbox", { name: "read-only" }).check();
+    // an empty mount path uses the shown /pv
+    await expect(dialog).toContainText("pv-etcd-main at /pv (read-only)");
+    await dialog.getByRole("combobox", { name: "image" }).fill("busybox:pv");
+    // ⏎ in the mount path field starts (empty = /pv)
+    const mountPath = dialog.getByRole("textbox", { name: "mount path" });
+    await mountPath.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
+    await expect(header).toContainText("garden/ops-pod-kubewing-e2e-");
+    await expect(header).toContainText("pv-etcd-main at /pv (ro)");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("show YAML renders the pod; edited, it's what starts; edits that break the ops pod are refused", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    await dialog.getByRole("combobox", { name: "image" }).fill("busybox:yaml");
+    await dialog.getByRole("combobox", { name: "namespace" }).fill("ops");
+    await dialog.getByRole("button", { name: "show YAML…" }).click();
+    const editor = dialog.locator("[data-editor=yaml] .view-lines");
+    await expect(editor).toContainText("nodeName: ip-10-0-2-22.ec2.internal");
+    await expect(editor).toContainText("image: busybox:yaml");
+    await expect(editor).toContainText("namespace: ops");
+    // the form is locked while the YAML is what starts
+    await expect(dialog.getByRole("combobox", { name: "image" })).toBeDisabled();
+    await expect(dialog).toContainText("this is what starts");
+    // Esc in the find widget closes it, not the YAML
+    const textarea = dialog.getByRole("textbox", { name: "pod YAML" });
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+F");
+    await expect(dialog.locator(".find-widget.visible")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(editor).toBeVisible();
+    await expect(dialog).not.toContainText("esc again drops");
+    // edit: a spec-level field at the end of the YAML. Select-all then ArrowRight
+    // collapses the cursor to the document end deterministically (⌘End can land
+    // elsewhere after the find widget closed); insertText skips Monaco's auto-indent.
+    const append = async (line: string) => {
+      await textarea.focus();
+      await page.keyboard.press("ControlOrMeta+A");
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.insertText("\n" + line);
+    };
+    await append("  priorityClassName: system-cluster-critical");
+    await expect(dialog).toContainText("edited: this is what starts");
+    // Esc on edits asks first; typing again takes the question back
+    await page.keyboard.press("Escape");
+    await expect(dialog).toContainText("esc again drops the YAML edits");
+    await page.keyboard.type(" ");
+    await page.keyboard.press("Backspace");
+    await expect(dialog).not.toContainText("esc again drops");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
+    await expect(header).toContainText("busybox:yaml · ");
+    await expect(header).toContainText("edited YAML");
+    await expect(header).toContainText("ops/ops-pod-kubewing-e2e-");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+
+    // a broken edit: refused with the reason, the dialog and the YAML stay
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await dialog.getByRole("button", { name: "show YAML…" }).click();
+    await expect(editor).toContainText("nodeName: ip-10-0-2-22.ec2.internal");
+    await append("  bogusField: 1");
+    await expect(editor).toContainText("bogusField"); // the edit landed before we submit
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(dialog.getByRole("alert")).toContainText("unknown field");
+    // Esc twice drops the edits, back to the (unlocked) form; a third closes the dialog
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(editor).toHaveCount(0);
+    await expect(dialog.getByRole("combobox", { name: "image" })).toBeEnabled();
+    await dialog.getByRole("combobox", { name: "image" }).focus();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
   });
 
   test("ops pods are refused on read-only contexts, in the dialog", async ({ page }) => {

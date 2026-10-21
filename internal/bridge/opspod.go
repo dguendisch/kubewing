@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"cmp"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -12,7 +13,9 @@ import (
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/config"
 	"github.com/dguendisch/kubewing/internal/safety"
@@ -41,13 +44,15 @@ type NodeList struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// nodesLease is how long a node watch the dialog started outlives the last
-// Nodes call: the dialog polls while open, so it stays live while needed.
-const nodesLease = 30 * time.Second
+// watchLease is how long a watch the dialog started outlives the last
+// call (Nodes, PersistentVolumes): the dialog polls while open, so it
+// stays live while needed.
+const watchLease = 30 * time.Second
 
-// nodeWatch is a subscription to a context's shared nodes watch, kept up
-// to date from its events.
-type nodeWatch struct {
+// leasedWatch is a subscription to a context's shared watch on a
+// cluster-scoped resource (nodes, persistentvolumes), kept up to date from
+// its events.
+type leasedWatch struct {
 	sub *source.Subscription
 
 	mu     sync.Mutex
@@ -61,7 +66,7 @@ type nodeWatch struct {
 // subscribes to the shared nodes watch, which an open nodes pane may
 // already run; it's released again after nodesLease without calls.
 func (s *Service) Nodes(cluster string) NodeList {
-	w, err := s.nodeWatch(cluster)
+	w, err := s.leasedWatch(cluster, "nodes")
 	name, _ := s.contextName(cluster)
 	if err != nil {
 		return NodeList{Context: name, Nodes: []NodeInfo{}, Error: err.Error()}
@@ -77,24 +82,28 @@ func (s *Service) Nodes(cluster string) NodeList {
 	return out
 }
 
-func (s *Service) nodeWatch(cluster string) (*nodeWatch, error) {
+// watchKey identifies a leased watch: context and resource.
+type watchKey struct{ cluster, resource string }
+
+func (s *Service) leasedWatch(cluster, resource string) (*leasedWatch, error) {
+	k := watchKey{cluster, resource}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if w, ok := s.nodes[cluster]; ok {
+	if w, ok := s.leased[k]; ok {
 		return w, nil
 	}
-	sub, err := s.reg.Subscribe(source.Key{Cluster: cluster, Resource: "nodes"})
+	sub, err := s.reg.Subscribe(source.Key{Cluster: cluster, Resource: resource})
 	if err != nil {
 		return nil, err
 	}
-	w := &nodeWatch{sub: sub, items: map[string]*unstructured.Unstructured{}, used: s.opts.Clock.Now()}
-	s.nodes[cluster] = w
-	go s.runNodeWatch(cluster, w)
+	w := &leasedWatch{sub: sub, items: map[string]*unstructured.Unstructured{}, used: s.opts.Clock.Now()}
+	s.leased[k] = w
+	go s.runLeasedWatch(k, w)
 	return w, nil
 }
 
-func (s *Service) runNodeWatch(cluster string, w *nodeWatch) {
-	idle := time.NewTicker(nodesLease / 3)
+func (s *Service) runLeasedWatch(k watchKey, w *leasedWatch) {
+	idle := time.NewTicker(watchLease / 3)
 	defer idle.Stop()
 	for {
 		select {
@@ -120,27 +129,27 @@ func (s *Service) runNodeWatch(cluster string, w *nodeWatch) {
 			w.mu.Unlock()
 		case <-idle.C:
 			w.mu.Lock()
-			stale := s.opts.Clock.Now().Sub(w.used) > nodesLease
+			stale := s.opts.Clock.Now().Sub(w.used) > watchLease
 			w.mu.Unlock()
 			if stale {
-				s.dropNodeWatch(cluster, w)
+				s.dropLeasedWatch(k, w)
 				return
 			}
 		}
 	}
 }
 
-func (s *Service) dropNodeWatch(cluster string, w *nodeWatch) {
+func (s *Service) dropLeasedWatch(k watchKey, w *leasedWatch) {
 	s.mu.Lock()
-	if s.nodes[cluster] == w {
-		delete(s.nodes, cluster)
+	if s.leased[k] == w {
+		delete(s.leased, k)
 	}
 	s.mu.Unlock()
 	w.sub.Close()
 }
 
-// node returns a watched node by name.
-func (w *nodeWatch) node(name string) (*unstructured.Unstructured, bool) {
+// get returns a watched object by name.
+func (w *leasedWatch) get(name string) (*unstructured.Unstructured, bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	n, ok := w.items[name]
@@ -190,12 +199,98 @@ func (r row) isNode() bool { return r.kind() == "Node" && r.item.Object.GetAPIVe
 // OpsPodOptions configure an ops pod (see source.OpsPodSpec).
 type OpsPodOptions struct {
 	Image string `json:"image"`
-	// Namespace the pod is created in; "" = default.
+	// Namespace the pod is created in; "" = default (with a PV: its claim's).
 	Namespace string `json:"namespace"`
 	// HostRoot mounts the node's / at /host; Chroot also runs the shell in it.
 	HostRoot    bool `json:"hostRoot"`
 	Chroot      bool `json:"chroot"`
 	HostNetwork bool `json:"hostNetwork"`
+	// PV is a persistent volume to mount at MountPath ("" = none, default path /pv).
+	PV        string `json:"pv,omitempty"`
+	MountPath string `json:"mountPath,omitempty"`
+	ReadOnly  bool   `json:"readOnly,omitempty"`
+	// YAML, if set, is the pod as edited in the dialog: created instead of the options' pod.
+	YAML string `json:"yaml,omitempty"`
+}
+
+// PVInfo is one persistent volume, for the ops pod dialog's completion.
+type PVInfo struct {
+	Name string `json:"name"`
+	// Phase: Available, Bound, Released, Failed.
+	Phase string `json:"phase,omitempty"`
+	// Claim is the bound claim as namespace/name ("" = none).
+	Claim        string   `json:"claim,omitempty"`
+	Capacity     string   `json:"capacity,omitempty"`
+	StorageClass string   `json:"storageClass,omitempty"`
+	AccessModes  []string `json:"accessModes,omitempty"`
+}
+
+// PVList answers the ops pod dialog: a context's persistent volumes, from
+// the shared persistentvolumes watch (as Nodes).
+type PVList struct {
+	Context string   `json:"context"`
+	PVs     []PVInfo `json:"pvs"`
+	Loading bool     `json:"loading,omitempty"`
+	Error   string   `json:"error,omitempty"`
+}
+
+// PersistentVolumes lists the persistent volumes of a context ("" = current).
+func (s *Service) PersistentVolumes(cluster string) PVList {
+	w, err := s.leasedWatch(cluster, "persistentvolumes")
+	name, _ := s.contextName(cluster)
+	if err != nil {
+		return PVList{Context: name, PVs: []PVInfo{}, Error: err.Error()}
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.used = s.opts.Clock.Now()
+	out := PVList{Context: name, PVs: []PVInfo{}, Loading: !w.synced && w.err == "", Error: w.err}
+	for _, pv := range w.items {
+		out.PVs = append(out.PVs, pvInfo(pv))
+	}
+	sort.Slice(out.PVs, func(i, j int) bool { return out.PVs[i].Name < out.PVs[j].Name })
+	return out
+}
+
+func pvInfo(pv *unstructured.Unstructured) PVInfo {
+	o := pv.Object
+	info := PVInfo{Name: pv.GetName()}
+	info.Phase, _, _ = unstructured.NestedString(o, "status", "phase")
+	info.Capacity, _, _ = unstructured.NestedString(o, "spec", "capacity", "storage")
+	info.StorageClass, _, _ = unstructured.NestedString(o, "spec", "storageClassName")
+	info.AccessModes, _, _ = unstructured.NestedStringSlice(o, "spec", "accessModes")
+	ns, _, _ := unstructured.NestedString(o, "spec", "claimRef", "namespace")
+	claim, _, _ := unstructured.NestedString(o, "spec", "claimRef", "name")
+	if claim != "" && info.Phase == "Bound" {
+		info.Claim = ns + "/" + claim
+	}
+	return info
+}
+
+// volume resolves the options' PV to its bound claim, from the leased watch.
+func (s *Service) volume(cluster string, o OpsPodOptions) (*source.OpsPodVolume, string, error) {
+	pv := strings.TrimSpace(o.PV)
+	if pv == "" {
+		return nil, "", nil
+	}
+	w, err := s.leasedWatch(cluster, "persistentvolumes")
+	if err != nil {
+		return nil, "", err
+	}
+	obj, ok := w.get(pv)
+	if !ok {
+		return nil, "", fmt.Errorf("no persistent volume %q (still listing? try again)", pv)
+	}
+	info := pvInfo(obj)
+	if info.Claim == "" {
+		return nil, "", fmt.Errorf("persistent volume %s is %s, not bound to a claim: pods mount volumes only through their claim", pv, strings.ToLower(cmp.Or(info.Phase, "unknown")))
+	}
+	ns, claim, _ := strings.Cut(info.Claim, "/")
+	path := cmp.Or(strings.TrimSpace(o.MountPath), "/pv")
+	if !strings.HasPrefix(path, "/") || path == "/" || path == "/host" || strings.HasPrefix(path, "/host/") {
+		return nil, "", fmt.Errorf("mount path %q: absolute, not / and not under /host", path)
+	}
+	return &source.OpsPodVolume{PV: pv, Claim: claim, MountPath: path, ReadOnly: o.ReadOnly}, ns, nil
 }
 
 // opsPodTarget is the prepared ops pod's node (the safety token's target).
@@ -220,11 +315,11 @@ func (s *Service) PrepareOpsPod(cluster, node string) (safety.Pending, error) {
 		return safety.Pending{}, err
 	}
 	a := safety.Action{Kind: safety.OpsPod, Context: ctxName, Resource: "nodes", Name: node}
-	if w, err := s.nodeWatch(cluster); err == nil {
+	if w, err := s.leasedWatch(cluster, "nodes"); err == nil {
 		w.mu.Lock()
 		synced := w.synced
 		w.mu.Unlock()
-		n, ok := w.node(node)
+		n, ok := w.get(node)
 		if synced && !ok {
 			return safety.Pending{}, fmt.Errorf("no node %q on %s", node, ctxName)
 		}
@@ -252,28 +347,119 @@ const DefaultOpsPodNamespace = "default"
 
 var dns1123 = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`)
 
+// opsPodSpec builds the pod for the options on a prepared node. The
+// namespace is the PV claim's if a PV is mounted (pods mount claims of
+// their own namespace only); a different namespace typed with it is an error.
+func (s *Service) opsPodSpec(t opsPodTarget, o OpsPodOptions) (source.OpsPodSpec, error) {
+	o.Image = strings.TrimSpace(o.Image)
+	if o.Image == "" || strings.ContainsAny(o.Image, " \t") {
+		return source.OpsPodSpec{}, fmt.Errorf("an ops pod needs an image, not %q", o.Image)
+	}
+	o.Namespace = strings.TrimSpace(o.Namespace)
+	vol, claimNS, err := s.volume(t.cluster, o)
+	if err != nil {
+		return source.OpsPodSpec{}, err
+	}
+	if vol != nil {
+		if o.Namespace != "" && o.Namespace != claimNS {
+			return source.OpsPodSpec{}, fmt.Errorf("persistent volume %s is claimed in namespace %s: the pod must run there, not in %s", vol.PV, claimNS, o.Namespace)
+		}
+		o.Namespace = claimNS
+	}
+	if o.Namespace == "" {
+		o.Namespace = DefaultOpsPodNamespace
+	}
+	if !dns1123.MatchString(o.Namespace) {
+		return source.OpsPodSpec{}, fmt.Errorf("%q is not a namespace name", o.Namespace)
+	}
+	return source.OpsPodSpec{
+		Name: opsPodName(s.opts.User), Namespace: o.Namespace, Node: t.node, Image: o.Image,
+		HostRoot: o.HostRoot || o.Chroot, Chroot: o.Chroot, HostNetwork: o.HostNetwork, Volume: vol,
+	}, nil
+}
+
+// OpsPodManifest renders, as YAML, the pod an ops pod with these options on
+// node would be, for the dialog's "show YAML" (to read or edit before
+// starting). It creates nothing, so it needs no token: editing may take
+// longer than a token lives. Starting prepares and checks as always.
+func (s *Service) OpsPodManifest(cluster, node string, o OpsPodOptions) (string, error) {
+	spec, err := s.opsPodSpec(opsPodTarget{cluster: cluster, node: strings.TrimSpace(node)}, o)
+	if err != nil {
+		return "", err
+	}
+	b, err := sigsyaml.Marshal(source.OpsPodManifest(spec))
+	if err != nil {
+		return "", err
+	}
+	return strings.Replace(string(b), "status: {}\n", "", 1), nil
+}
+
+// editedPod decodes the dialog's edited YAML. What the safety token was
+// issued for and what the session needs stay as kubewing decided: a v1 Pod
+// on the prepared node, with the ops-pod container (the shell runs there),
+// name and namespace as rendered (the name is how the pod is deleted again).
+// Anything else (resources, env, volumes, priorityClassName …) is the
+// user's. Unknown fields are refused, so a typo doesn't silently vanish.
+func editedPod(yaml string, spec source.OpsPodSpec) (*corev1.Pod, error) {
+	var pod corev1.Pod
+	if err := sigsyaml.UnmarshalStrict([]byte(yaml), &pod); err != nil {
+		return nil, fmt.Errorf("edited YAML: %w", err)
+	}
+	switch {
+	case pod.APIVersion != "v1" || pod.Kind != "Pod":
+		return nil, fmt.Errorf("edited YAML: must stay a v1 Pod, not %s %s", pod.APIVersion, pod.Kind)
+	case pod.Spec.NodeName != spec.Node:
+		return nil, fmt.Errorf("edited YAML: spec.nodeName must stay %s (the node the ops pod was prepared for)", spec.Node)
+	case !slices.ContainsFunc(pod.Spec.Containers, func(c corev1.Container) bool { return c.Name == source.OpsPodContainer }):
+		return nil, fmt.Errorf("edited YAML: the shell runs in container %q; keep it", source.OpsPodContainer)
+	case pod.Name != spec.Name || pod.Namespace != spec.Namespace:
+		return nil, fmt.Errorf("edited YAML: name and namespace must stay %s/%s (change the namespace in the dialog)", spec.Namespace, spec.Name)
+	}
+	return &pod, nil
+}
+
+// fullSpec is the pod OpsPodStart creates: the options' pod, or the edited
+// YAML (checked by editedPod) with the name it was rendered with.
+func (s *Service) fullSpec(t opsPodTarget, o OpsPodOptions) (source.OpsPodSpec, error) {
+	spec, err := s.opsPodSpec(t, o)
+	if err != nil || strings.TrimSpace(o.YAML) == "" {
+		return spec, err
+	}
+	// the rendered name: what the user saw and kept
+	var meta struct {
+		Metadata struct{ Name string } `json:"metadata"`
+	}
+	if sigsyaml.Unmarshal([]byte(o.YAML), &meta) == nil && strings.HasPrefix(meta.Metadata.Name, "ops-pod-kubewing-") {
+		spec.Name = meta.Metadata.Name
+	}
+	if spec.Pod, err = editedPod(o.YAML, spec); err != nil {
+		return source.OpsPodSpec{}, err
+	}
+	spec.Image = cmp.Or(opsContainer(spec.Pod).Image, spec.Image)
+	return spec, nil
+}
+
+// CheckOpsPod runs OpsPodStart's checks (image, namespace, PV, edited
+// YAML) without creating anything, so the dialog can stay open with what's
+// wrong instead of failing after it closed. OpsPodStart checks again.
+func (s *Service) CheckOpsPod(cluster, node string, o OpsPodOptions) error {
+	_, err := s.fullSpec(opsPodTarget{cluster: cluster, node: strings.TrimSpace(node)}, o)
+	return err
+}
+
 // OpsPodStart redeems a prepared ops pod and starts a session: the pod is
-// created, its progress shows until it runs, then the shell. The pod is
-// deleted when the session ends (shell exits, pane closed, app quit).
+// created (as edited in the dialog's YAML, if it was), its progress shows
+// until it runs, then the shell. The pod is deleted when the session ends
+// (shell exits, pane closed, app quit).
 func (s *Service) OpsPodStart(token string, o OpsPodOptions, cols, rows int) (OpsPodResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.OpsPod)
 	if err != nil {
 		return OpsPodResult{}, err
 	}
 	t := target.(opsPodTarget)
-	o.Image = strings.TrimSpace(o.Image)
-	if o.Image == "" || strings.ContainsAny(o.Image, " \t") {
-		return OpsPodResult{}, fmt.Errorf("an ops pod needs an image, not %q", o.Image)
-	}
-	if o.Namespace = strings.TrimSpace(o.Namespace); o.Namespace == "" {
-		o.Namespace = DefaultOpsPodNamespace
-	}
-	if !dns1123.MatchString(o.Namespace) {
-		return OpsPodResult{}, fmt.Errorf("%q is not a namespace name", o.Namespace)
-	}
-	spec := source.OpsPodSpec{
-		Name: opsPodName(s.opts.User), Namespace: o.Namespace, Node: t.node, Image: o.Image,
-		HostRoot: o.HostRoot || o.Chroot, Chroot: o.Chroot, HostNetwork: o.HostNetwork,
+	spec, err := s.fullSpec(t, o)
+	if err != nil {
+		return OpsPodResult{}, err
 	}
 	settings := strings.TrimPrefix(strings.TrimPrefix(spec.String(), spec.Image+" on "+spec.Node), ", ")
 	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
@@ -283,8 +469,8 @@ func (s *Service) OpsPodStart(token string, o OpsPodOptions, cols, rows int) (Op
 		spec.Progress = func(line string) { dim("%s", line) }
 		// remembered once it runs (the image shared with debug containers): a typo isn't offered again
 		spec.Started = func() {
-			last := config.OpsPodSettings{Namespace: o.Namespace, Chroot: spec.Chroot, HostRoot: spec.HostRoot, HostNetwork: spec.HostNetwork}
-			if err := s.opts.History.AddOpsPod(o.Image, last); err != nil {
+			last := config.OpsPodSettings{Namespace: spec.Namespace, Chroot: spec.Chroot, HostRoot: spec.HostRoot, HostNetwork: spec.HostNetwork}
+			if err := s.opts.History.AddOpsPod(spec.Image, last); err != nil {
 				log.Printf("history: %v", err)
 			}
 		}
@@ -292,7 +478,16 @@ func (s *Service) OpsPodStart(token string, o OpsPodOptions, cols, rows int) (Op
 		dim("deleting %s/%s", spec.Namespace, spec.Name)
 		return err
 	})
-	return OpsPodResult{Session: id, Pod: spec.Name, Namespace: spec.Namespace, Node: a.Name, Image: o.Image, Context: a.Context, Settings: settings}, nil
+	return OpsPodResult{Session: id, Pod: spec.Name, Namespace: spec.Namespace, Node: a.Name, Image: spec.Image, Context: a.Context, Settings: settings}, nil
+}
+
+func opsContainer(p *corev1.Pod) *corev1.Container {
+	for i := range p.Spec.Containers {
+		if p.Spec.Containers[i].Name == source.OpsPodContainer {
+			return &p.Spec.Containers[i]
+		}
+	}
+	return &corev1.Container{}
 }
 
 // opsPodName: "ops-pod-kubewing-<user>-<hex>", the user as the ops-pod
@@ -346,9 +541,11 @@ func (s *Service) OpsPodDefaults() OpsPodDefaults {
 func (s *Service) opsPodNodes() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]string, 0, len(s.nodes))
-	for c := range s.nodes {
-		out = append(out, c)
+	out := []string{}
+	for k := range s.leased {
+		if k.resource == "nodes" {
+			out = append(out, k.cluster)
+		}
 	}
 	slices.Sort(out)
 	return out

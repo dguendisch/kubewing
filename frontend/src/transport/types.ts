@@ -291,12 +291,37 @@ export interface NodeList {
 /** Mirrors bridge.OpsPodOptions. */
 export interface OpsPodOptions {
   image: string;
-  /** "" = default. */
+  /** "" = default (with a PV: its claim's). */
   namespace: string;
   hostRoot: boolean;
   /** The shell runs in /host (implies hostRoot). */
   chroot: boolean;
   hostNetwork: boolean;
+  /** A persistent volume mounted at mountPath ("" = none; path default /pv). */
+  pv?: string;
+  mountPath?: string;
+  readOnly?: boolean;
+  /** The pod as edited in the dialog: created instead of the options' pod. */
+  yaml?: string;
+}
+
+/** Mirrors bridge.PVInfo. */
+export interface PVInfo {
+  name: string;
+  phase?: string;
+  /** The bound claim, namespace/name. */
+  claim?: string;
+  capacity?: string;
+  storageClass?: string;
+  accessModes?: string[];
+}
+
+/** Mirrors bridge.PVList: from the shared persistentvolumes watch. */
+export interface PVList {
+  context: string;
+  pvs: PVInfo[];
+  loading?: boolean;
+  error?: string;
 }
 
 /** Mirrors bridge.OpsPodResult. */
@@ -369,6 +394,12 @@ export interface Transport {
   nodes(cluster: string): Promise<NodeList>;
   /** The node a row stands for (a node, a pod's node), to prefill the ops pod dialog. */
   opsPodTarget(pane: string, key: string): Promise<{ node?: string }>;
+  /** A context's persistent volumes, from the shared persistentvolumes watch; poll while loading. */
+  persistentVolumes(cluster: string): Promise<PVList>;
+  /** The pod an ops pod with these options would be, as YAML (creates nothing). */
+  opsPodManifest(cluster: string, node: string, opts: OpsPodOptions): Promise<string>;
+  /** Runs the start's checks (image, namespace, PV, edited YAML) without creating anything; throws what's wrong. */
+  checkOpsPod(cluster: string, node: string, opts: OpsPodOptions): Promise<void>;
   /** Checks an ops pod on a node against the safety policy; throws if refused (unknown node, read-only). */
   prepareOpsPod(cluster: string, node: string): Promise<Pending>;
   /** Starts a prepared ops pod: created, shell once it runs, deleted when the session ends. */

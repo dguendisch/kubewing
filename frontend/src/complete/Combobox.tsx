@@ -30,8 +30,8 @@ interface Props {
  * (or ↓ to browse: every candidate while the value is still untouched, since
  * typing would replace it anyway; ranked by the text once typed). Keys: ↓/↑
  * (also ctrl+n/p) move, ⌥↑/⌥↓ first/last, Tab accepts and stays, Enter
- * accepts and submits (with enterAccepts: a suggestion that changes the value
- * is only accepted, the next Enter submits), Esc closes the list (a second
+ * accepts and submits (with enterAccepts: a highlighted suggestion is only
+ * accepted and the list closed, the next Enter submits), Esc closes the list (a second
  * Esc reaches the dialog). Removable entries (history) have a ✕, mouse only:
  * keys like ⌫ are typing here.
  */
@@ -45,9 +45,10 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
   const matches = open ? rank(typed ? value : "", candidates, 50) : [];
   const preselect = (q: string) => {
     const m = rank(q, candidates, 1)[0];
-    return q.trim() && m && !m.fuzzy ? 0 : -1;
+    return q.trim() && m && !m.fuzzy && !m.candidate.disabled ? 0 : -1;
   };
   const accept = (c: Candidate) => {
+    if (c.disabled) return; // shown with its reason, can't be picked
     onChange(c.value);
     setOpen(false);
     setActive(-1);
@@ -99,16 +100,18 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
           } else if (e.key === "ArrowUp" || (ctrl && e.key === "p")) {
             e.preventDefault();
             move(-1);
-          } else if (e.key === "Tab" && !e.shiftKey && open && (cur ?? matches[0])) {
-            // Tab completes to the active (or best) match and stays in the field
+          } else if (e.key === "Tab" && !e.shiftKey && open && (cur ?? matches.find((m) => !m.candidate.disabled))) {
+            // Tab completes to the active (or best pickable) match and stays in the field
             e.preventDefault();
-            accept((cur ?? matches[0])!.candidate);
-          } else if (e.key === "Enter" && enterAccepts && cur && cur.candidate.value !== value) {
+            accept((cur ?? matches.find((m) => !m.candidate.disabled))!.candidate);
+          } else if (e.key === "Enter" && enterAccepts && cur && !cur.candidate.disabled) {
+            // a highlighted suggestion is only taken (and the list closed); the next Enter, with
+            // nothing showing, submits — even when the suggestion already equals the field's text
             e.preventDefault();
             accept(cur.candidate);
           } else if (e.key === "Enter" && onSubmit) {
             e.preventDefault();
-            const v = cur ? cur.candidate.value : value;
+            const v = cur && !cur.candidate.disabled ? cur.candidate.value : value;
             if (cur) accept(cur.candidate);
             onSubmit(v);
           } else if (e.key === "Escape" && open && matches.length) {
@@ -133,6 +136,8 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
               id={`${id}-${i}`}
               role="option"
               aria-selected={i === active}
+              aria-disabled={m.candidate.disabled ? true : undefined}
+              title={m.candidate.disabled}
               ref={i === active ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
               // mousedown, not click: keep focus in the input
               onMouseDown={(e) => {
@@ -140,11 +145,12 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
                 accept(m.candidate);
               }}
               onMouseMove={() => setActive(i)}
-              className={`flex cursor-default justify-between gap-3 px-2 py-0.5 ${i === active ? "bg-bg-hover text-fg" : "text-fg-muted"}`}
+              className={`flex cursor-default justify-between gap-3 px-2 py-0.5 ${i === active ? "bg-bg-hover text-fg" : "text-fg-muted"} ${m.candidate.disabled ? "opacity-50" : ""}`}
             >
               {/* the name is what's picked: the detail gives way first (much higher shrink weight) */}
               <span className="min-w-0 shrink truncate text-fg">{highlight(m.candidate.label, m.hits)}</span>
               {m.candidate.detail && <span className="min-w-0 shrink-[1000] truncate">{highlight(m.candidate.detail, m.detailHits)}</span>}
+              {m.candidate.disabled ? <span className="shrink-0 italic">{m.candidate.disabled}</span> : null}
               {m.candidate.removable && onRemove ? (
                 // mousedown, like the option itself: the input keeps focus and the list stays open
                 <button

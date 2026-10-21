@@ -69,6 +69,15 @@ func (a *App) OpsPodTarget(pane, key string) (bridge.OpsPodTarget, error) {
 func (a *App) PrepareOpsPod(cluster, node string) (safety.Pending, error) {
 	return a.svc.PrepareOpsPod(cluster, node)
 }
+func (a *App) PersistentVolumes(cluster string) bridge.PVList {
+	return a.svc.PersistentVolumes(cluster)
+}
+func (a *App) OpsPodManifest(cluster, node string, o bridge.OpsPodOptions) (string, error) {
+	return a.svc.OpsPodManifest(cluster, node, o)
+}
+func (a *App) CheckOpsPod(cluster, node string, o bridge.OpsPodOptions) error {
+	return a.svc.CheckOpsPod(cluster, node, o)
+}
 func (a *App) OpsPodStart(token string, o bridge.OpsPodOptions, cols, rows int) (bridge.OpsPodResult, error) {
 	return a.svc.OpsPodStart(token, o, cols, rows)
 }

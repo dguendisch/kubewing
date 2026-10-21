@@ -82,8 +82,8 @@ type Service struct {
 	// cleanup (an ops pod's delete)
 	running  sync.WaitGroup
 	forwards map[string]*forward
-	// nodes: per context, the ops pod dialog's lease on the shared nodes watch
-	nodes map[string]*nodeWatch
+	// leased: the ops pod dialog's leases on shared watches (nodes, persistentvolumes)
+	leased map[watchKey]*leasedWatch
 	// described: last describe run per object, for the describe diff
 	described map[string]*describeSnap
 	useq      uint64
@@ -97,7 +97,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, nodes: map[string]*nodeWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")

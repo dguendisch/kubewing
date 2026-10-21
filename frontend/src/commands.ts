@@ -287,6 +287,8 @@ export async function submitOpsPod(cluster: string, node: string, opts: OpsPodOp
   if (o?.kind !== "opspod") return;
   let pending: Pending;
   try {
+    // what would fail after the dialog closed (a PV, edited YAML) fails here, with the dialog still open
+    await bridge().checkOpsPod(cluster, node, opts);
     pending = await bridge().prepareOpsPod(cluster, node);
   } catch (e) {
     return errorText(e);

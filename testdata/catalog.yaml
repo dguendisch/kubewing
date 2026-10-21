@@ -8,6 +8,7 @@ resources:
   - {name: secrets, version: v1, kind: Secret, singular: secret, namespaced: true}
   - {name: namespaces, version: v1, kind: Namespace, singular: namespace, shortNames: [ns], namespaced: false}
   - {name: nodes, version: v1, kind: Node, singular: node, shortNames: ["no"], namespaced: false}
+  - {name: persistentvolumes, version: v1, kind: PersistentVolume, singular: persistentvolume, shortNames: [pv], namespaced: false}
   - {name: events, version: v1, kind: Event, singular: event, shortNames: [ev], namespaced: true}
   - {name: deployments, group: apps, version: v1, kind: Deployment, singular: deployment, shortNames: [deploy], namespaced: true}
   - {name: statefulsets, group: apps, version: v1, kind: StatefulSet, singular: statefulset, shortNames: [sts], namespaced: true}

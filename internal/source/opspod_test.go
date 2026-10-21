@@ -53,3 +53,26 @@ func TestOpsPodShell(t *testing.T) {
 		t.Errorf("summary: %q", got)
 	}
 }
+
+// A persistent volume is mounted through its bound claim; an edited pod replaces the manifest.
+func TestOpsPodVolumeAndEditedPod(t *testing.T) {
+	p := OpsPodSpec{Name: "ops", Namespace: "data", Node: "n", Image: "i", HostRoot: true,
+		Volume: &OpsPodVolume{PV: "pv-1", Claim: "data-etcd-0", MountPath: "/pv", ReadOnly: true}}
+	m := OpsPodManifest(p)
+	v, vm := m.Spec.Volumes, m.Spec.Containers[0].VolumeMounts
+	if len(v) != 2 || v[0].PersistentVolumeClaim == nil || v[0].PersistentVolumeClaim.ClaimName != "data-etcd-0" || !v[0].PersistentVolumeClaim.ReadOnly {
+		t.Errorf("volumes: %+v", v)
+	}
+	if len(vm) != 2 || vm[0].Name != "pv" || vm[0].MountPath != "/pv" || !vm[0].ReadOnly || vm[1].MountPath != "/host" {
+		t.Errorf("mounts: %+v", vm)
+	}
+	if got := p.String(); got != "i on n, host root at /host, pv-1 at /pv (ro)" {
+		t.Errorf("summary: %q", got)
+	}
+	edited := m.DeepCopy()
+	edited.Spec.PriorityClassName = "system-cluster-critical"
+	p.Pod = edited
+	if p.Manifest() != edited || !strings.HasSuffix(p.String(), ", edited YAML") {
+		t.Error("an edited pod is created as is")
+	}
+}
