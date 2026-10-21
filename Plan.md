@@ -51,7 +51,6 @@ Still open in P0:
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
 Still open in P0.1:
-- Object-name completion.
 - Completion for a context picked in `⌘O` before any pane is open on it (shows a hint instead).
 
 ### P0 — "The Core" (v0.1)
@@ -79,7 +78,7 @@ Still open in P0.1:
    - **Labels and CEL are drafts until `⏎`.** A half-typed value (`app=et`, `o.status.phase == "Run"`) is valid but matches nothing, so applying live would blank the table on every keystroke. While typing, Go dry-runs the draft against the pane's objects and the field shows the outcome: `→ 298 / 340`, a type problem (`string, not bool`), or a parse error with a caret. `⏎` or leaving the field applies (an invalid draft is refused and stays, marked red), an empty field + `⏎` clears. Switching apps doesn't count as leaving the field. Label previews are exact when the draft is at least as strict as the applied selector, else a lower bound (`≥ 298`): the wider set isn't loaded yet.
    - **In-place stage updates.** A filter/grep change re-evaluates the match flag of the existing view instead of rebuilding it: the watch, normalized objects and diff state (prev, markers) survive. Only a source change (labels) re-subscribes.
    - **Errors are visible.** Missing fields stay "no match" (heterogeneous lists); other evaluation errors count as no match and are reported in the status line (`3 errors`). CEL cost limit per evaluation.
-   - **Completion** for the CEL field: field paths taken from the source's live objects (`o.status.` → keys seen at that path, with how many objects have them; works for every CRD without OpenAPI) plus CEL macros/functions, through the ⌘O ranker.
+   - **Completion** for the CEL field: field paths taken from the source's live objects (`o.status.` → keys seen at that path, with how many objects have them; works for every CRD without OpenAPI) plus CEL macros/functions, through the ⌘O ranker. Keys that aren't identifiers complete as `["app.kubernetes.io/name"]` (the objects are schemaless, so not Kubernetes' `__dot__` escaping). After an operand, the operators that fit the field's type (as the key listing reports it).
    - **From the detail view:** cursor on a YAML line, `=` sets the CEL filter to `<path> == <value>`, `!` to `!=`, and applies it at once (the expression is complete).
    - `↑` in an empty CEL field recalls recent expressions for the resource type.
 1. Keybindings and theme: sensible defaults + config files in `~/.kubewing/`; no settings UI yet.
@@ -87,12 +86,12 @@ Still open in P0.1:
 ### P0.1 — "Completion"
 1. **Cluster catalog** — per-context discovery snapshot (resource types incl. short names, group, scope; namespaces), fetched async on connect and refreshed on resolve-miss / CRD change. Only for connected contexts (never trigger exec-plugin logins in the background). Partial discovery failures degrade gracefully.
 1. **⌘O completion** — fuzzy completion for resource and namespace in the open dialog, built as a reusable completion provider (pure ranker + candidates) for the P1 command palette. cmdk not used here: it forces Enter onto the highlighted item, which breaks free-text submit; revisit for the palette itself.
-1. *(later)* object-name completion via metadata-only lists — first real consumer of a generic background-fetch layer.
 
 ### P1 — "Shell parity" (v0.5)
 
 1. **Filtering & aggregating** — `groupBy`/`aggregate` pipeline stages and full stage support in UI: group-by, count, histogram; `cpu-gauge` column type (gradient badge).
 1. **Command palette** — tab-complete operations, targets, aliases, pipeline stages.
+   - Targets: object-name completion (`describe po etcd-ma⇥` without a pane on pods) via metadata-only lists — first real consumer of a generic background-fetch layer.
 1. **Saved views / aliases / favorites** — transfer shell muscle memory (`kg` → `kubectl get`, `k get nodes -owide`, `tgd` → `gardenctl target garden landscape-dev`). Favorites = bookmarked clusters with a name.
 1. **Shell interop** — export the current pipeline as a `kubectl` + shell one-liner, and import one.
 1. **Edit resources** — apply/recreate, client-/server-side, dry-run, with diff preview.

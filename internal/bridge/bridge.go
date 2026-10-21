@@ -294,15 +294,16 @@ func (s *Service) Preview(paneID string, d Draft) (view.Preview, error) {
 	return view.Preview{}, fmt.Errorf("unknown draft field %q", d.Field)
 }
 
-// FieldKeys lists the keys at a dot path across a pane's live objects (CEL
-// field completion). Path is relative to the object, "" for the top level.
+// FieldKeys lists the keys at a path across a pane's live objects (CEL
+// field completion). Path is the keys from the object down, empty for the
+// top level; one key may contain dots (`labels`, `app.kubernetes.io/name`).
 type FieldKeys struct {
 	Keys    []view.FieldKey `json:"keys"`
 	Objects int             `json:"objects"`
 }
 
 // FieldKeys returns completion candidates for the CEL filter field.
-func (s *Service) FieldKeys(paneID, path string) (FieldKeys, error) {
+func (s *Service) FieldKeys(paneID string, path []string) (FieldKeys, error) {
 	pn, err := s.pane(paneID)
 	if err != nil {
 		return FieldKeys{}, err

@@ -1,8 +1,8 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { celContext, celFunctions, celGlobals, fieldCandidates } from "../complete/cel";
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { celContext, celGlobals, keyCandidates, operatorCandidates } from "../complete/cel";
 import { rank, type Candidate, type Match } from "../complete/complete";
 import { bridge, paneData } from "../store/store";
-import type { Preview } from "../transport/types";
+import type { FieldKeys, Preview } from "../transport/types";
 
 interface Props {
   field: "filter" | "labels";
@@ -34,7 +34,8 @@ const remember = (v: string) => {
  * otherwise blank the table on every keystroke. While typing, Go dry-runs
  * the draft against the pane's objects and the field shows the outcome.
  * ⏎ or leaving the field applies it.
- * The CEL field completes field paths from the live objects.
+ * The CEL field completes field paths from the live objects, and the
+ * operators that fit a field's type after it.
  */
 export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftField(
   { field, label, placeholder, applied, serverId, focused, onApply, onFocus, onBlur, className },
@@ -76,47 +77,55 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
     };
   }, [draft, serverId, pending, objects]);
 
-  // completion: field keys from Go (per path), plus CEL functions
-  const keys = useRef(new Map<string, Promise<Candidate[]>>());
+  // completion: field keys from Go (per path), plus CEL functions; operators after an operand
+  const keys = useRef(new Map<string, Promise<FieldKeys | undefined>>());
+  const fieldKeys = (id: string, path: string[]) => {
+    const k = JSON.stringify(path);
+    return keys.current.get(k) ?? keys.current.set(k, bridge().fieldKeys(id, path).catch(() => undefined)).get(k)!;
+  };
   useEffect(() => keys.current.clear(), [serverId, objects]);
   useEffect(() => {
     if (!cel || !focused || !serverId) return setList(undefined);
     const ctx = celContext(draft, caret);
-    if (!ctx || (!ctx.word && ctx.path === undefined)) return setList(undefined);
+    if (!ctx || (!ctx.word && ctx.path === undefined && !ctx.operator)) return setList(undefined);
     let live = true;
-    const fields =
-      ctx.path === undefined
+    const op = ctx.operator;
+    // the left operand's type: its key's entry at the parent path
+    const key = op?.path?.at(-1);
+    const cands = op
+      ? key === undefined
+        ? Promise.resolve(operatorCandidates(op))
+        : fieldKeys(serverId, op.path!.slice(0, -1)).then((f) => operatorCandidates(op, f?.keys.find((k) => k.key === key)?.type))
+      : ctx.path === undefined
         ? Promise.resolve(celGlobals)
-        : (keys.current.get(ctx.path) ??
-          keys.current
-            .set(
-              ctx.path,
-              bridge()
-                .fieldKeys(serverId, ctx.path)
-                .then(fieldCandidates, () => []),
-            )
-            .get(ctx.path)!
-        ).then((f) => [...f, ...(ctx.path ? celFunctions : [])]);
-    void fields.then((cands) => {
+        : fieldKeys(serverId, ctx.path).then((f) => keyCandidates(f, ctx));
+    void cands.then((cands) => {
       if (!live) return;
       const matches = rank(ctx.word, cands, 30);
-      // nothing more to add when the word is complete
-      if (!matches.length || (matches.length === 1 && matches[0]!.candidate.value === ctx.word)) return setList(undefined);
+      // nothing more to add when the text is complete (an operator's value adds a space)
+      const typed = draft.slice(ctx.from, caret);
+      if (!matches.length || (matches.length === 1 && matches[0]!.candidate.value.trimEnd() === typed)) return setList(undefined);
       setList({ matches, from: ctx.from, active: ctx.word && !matches[0]!.fuzzy ? 0 : -1 });
     });
     return () => void (live = false);
   }, [draft, caret, focused, serverId, cel]);
 
+  // the caret after an accept, placed as soon as the new value is in the DOM: a later
+  // frame could land after the next keys (typing on after `!= `) and move it back
+  const place = useRef<number>(undefined);
+  useLayoutEffect(() => {
+    if (place.current === undefined) return;
+    input.current?.setSelectionRange(place.current, place.current);
+    place.current = undefined;
+  });
   const accept = (c: Candidate) => {
     if (!list) return;
     const next = draft.slice(0, list.from) + c.value + draft.slice(caret);
     const at = list.from + c.value.length;
+    place.current = at;
     setDraft(next);
+    setCaret(at);
     setList(undefined);
-    requestAnimationFrame(() => {
-      input.current?.setSelectionRange(at, at);
-      setCaret(at);
-    });
   };
 
   const apply = async () => {

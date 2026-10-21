@@ -150,15 +150,15 @@ func TestPreviewLabels(t *testing.T) {
 
 func TestFieldKeys(t *testing.T) {
 	v := stageView(t)
-	keys, n := v.FieldKeys("status.containerStatuses", 0)
+	keys, n := v.FieldKeys([]string{"status", "containerStatuses"}, 0)
 	if n != 3 || len(keys) != 2 || keys[0] != (FieldKey{Key: "name", Type: "string", Count: 3}) || keys[1].Key != "restartCount" || keys[1].Type != "int" {
 		t.Fatalf("keys = %+v (%d)", keys, n)
 	}
-	top, _ := v.FieldKeys("", 0)
+	top, _ := v.FieldKeys(nil, 0)
 	if len(top) != 5 || top[0].Key != "apiVersion" || top[4].Key != "status" || top[4].Type != "map" {
 		t.Fatalf("top keys = %+v", top)
 	}
-	if keys, _ := v.FieldKeys("status.nope", 0); len(keys) != 0 {
+	if keys, _ := v.FieldKeys([]string{"status", "nope"}, 0); len(keys) != 0 {
 		t.Fatalf("keys = %+v", keys)
 	}
 }

@@ -24,7 +24,7 @@ async function ready(page: Page) {
     .toBe(true);
 }
 
-async function openTape(page: Page, resource = "e2e-pods") {
+async function openTape(page: Page, resource = "e2e-pods", objects = 3) {
   await ready(page);
   await page.keyboard.press("ControlOrMeta+O");
   await page.getByRole("combobox", { name: "resource" }).fill(resource);
@@ -34,7 +34,7 @@ async function openTape(page: Page, resource = "e2e-pods") {
       const p = await focused(page);
       return p.spec.resource === resource && !!p.serverId && p.status?.synced ? p.total : -1;
     })
-    .toBe(3);
+    .toBe(objects);
 }
 
 const focused = async (page: Page) => {
@@ -230,6 +230,41 @@ test("cel filter completes field paths from the live objects", async ({ page }) 
   await expect(list.getByRole("option").first()).toContainText("map · 3/3");
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("cel", { exact: true })).toHaveValue("o.metadata.labels");
+});
+
+test("cel filter brackets keys that aren't identifiers, and completes after them", async ({ page }) => {
+  // runs before the safety tests delete web-0 from this tape (serial, in file order)
+  await openTape(page, "e2e-static", 6);
+  await page.keyboard.press("c");
+  const cel = page.getByLabel("cel", { exact: true });
+  const list = page.getByRole("listbox", { name: "cel suggestions" });
+  await page.keyboard.type("o.metadata.annotations.kub");
+  await expect(list.getByRole("option").first()).toContainText("kubectl.kubernetes.io/default-container");
+  await page.keyboard.press("Tab");
+  await expect(cel).toHaveValue('o.metadata.annotations["kubectl.kubernetes.io/default-container"]');
+  // the operator after it fits the key's type (a string)
+  await page.keyboard.type(" ");
+  await expect(list.getByRole("option").first()).toContainText("==");
+  await page.keyboard.type('== "sidecar"');
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["web-0"]);
+});
+
+test("cel filter completes operators that fit the field's type", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("c");
+  await page.keyboard.type("o.status.phase ");
+  const list = page.getByRole("listbox", { name: "cel suggestions" });
+  await expect(list.getByRole("option").first()).toContainText("==");
+  await expect(list).toContainText("in […]");
+  await expect(list).not.toContainText("&&"); // a string, not a bool
+  await page.keyboard.type("!");
+  await page.keyboard.press("Tab");
+  const cel = page.getByLabel("cel", { exact: true });
+  await expect(cel).toHaveValue("o.status.phase != ");
+  await page.keyboard.type('"Pending"');
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).spec.filter).toBe('o.status.phase != "Pending"');
 });
 
 test("= in the YAML view filters by the field under the cursor", async ({ page }) => {

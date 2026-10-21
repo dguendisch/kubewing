@@ -87,7 +87,7 @@ func TestPreviewAndFieldKeys(t *testing.T) {
 	if _, err := svc.Preview(res.Pane, Draft{Field: "nope"}); err == nil {
 		t.Fatal("want error for unknown field")
 	}
-	fk, err := svc.FieldKeys(res.Pane, "spec")
+	fk, err := svc.FieldKeys(res.Pane, []string{"spec"})
 	if err != nil || fk.Objects != 3 || len(fk.Keys) != 1 || fk.Keys[0].Key != "gen" {
 		t.Fatalf("field keys = %+v, %v", fk, err)
 	}

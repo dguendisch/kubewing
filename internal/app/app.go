@@ -33,7 +33,7 @@ func (a *App) SetViewport(pane string, offset, limit int) error {
 func (a *App) Preview(pane string, d bridge.Draft) (view.Preview, error) {
 	return a.svc.Preview(pane, d)
 }
-func (a *App) FieldKeys(pane, path string) (bridge.FieldKeys, error) {
+func (a *App) FieldKeys(pane string, path []string) (bridge.FieldKeys, error) {
 	return a.svc.FieldKeys(pane, path)
 }
 func (a *App) Resync(pane string) error                     { return a.svc.Resync(pane) }

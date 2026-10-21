@@ -275,7 +275,8 @@ export interface Transport {
   /** Evaluates a draft filter/label selector against the pane's objects; changes nothing. */
   preview(pane: string, draft: Draft): Promise<Preview>;
   /** Keys at a dot path ("" = top level) across the pane's objects, for CEL completion. */
-  fieldKeys(pane: string, path: string): Promise<FieldKeys>;
+  /** Keys at a path: one step per key, as in the object ([] = top level). */
+  fieldKeys(pane: string, path: string[]): Promise<FieldKeys>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;
   resync(pane: string): Promise<void>;
   object(pane: string, key: string): Promise<Detail>;

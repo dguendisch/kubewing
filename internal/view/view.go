@@ -876,15 +876,13 @@ type FieldKey struct {
 	Count int `json:"count"`
 }
 
-// FieldKeys lists the keys found at a dot path (relative to the object,
-// e.g. "status.containerStatuses") across the view's live objects, most
-// common first. A list on the way is looked into element-wise, so the keys
-// of `status.containerStatuses` are those of its items. At most limit keys.
-func (v *View) FieldKeys(path string, limit int) (keys []FieldKey, objects int) {
-	var segs []string
-	if path != "" {
-		segs = strings.Split(path, ".")
-	}
+// FieldKeys lists the keys found at a path (keys from the object down, e.g.
+// [status containerStatuses]; nil for the top level) across the view's live
+// objects, most common first. Keys are taken as they are, so a key with dots
+// (`app.kubernetes.io/name`) is one step. A list on the way is looked into
+// element-wise, so the keys of `status.containerStatuses` are those of its
+// items. At most limit keys.
+func (v *View) FieldKeys(segs []string, limit int) (keys []FieldKey, objects int) {
 	type stat struct {
 		n     int
 		types map[string]int
