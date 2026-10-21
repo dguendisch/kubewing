@@ -74,7 +74,7 @@ func (c *Cluster) Debug(ctx context.Context, namespace, pod string, d DebugSpec,
 		}
 		return err
 	}
-	if err := c.waitRunning(ctx, cs, namespace, pod, d.Name, d.Progress); err != nil {
+	if err := c.waitRunning(ctx, cs, namespace, pod, d.Name, "spec.ephemeralContainers{"+d.Name+"}", d.Progress); err != nil {
 		return err
 	}
 	if d.Started != nil {
@@ -91,11 +91,12 @@ func (c *Cluster) Debug(ctx context.Context, namespace, pod string, d DebugSpec,
 	})
 }
 
-// waitRunning watches the pod until the ephemeral container runs, and
-// meanwhile the events about that container (image pull …), each reported
-// through progress once. A container that terminated right away, or can't
-// start (bad image), is an error naming the reason.
-func (c *Cluster) waitRunning(ctx context.Context, cs *kubernetes.Clientset, namespace, pod, name string, progress func(string)) error {
+// waitRunning watches the pod until its container name runs (a regular or
+// an ephemeral one), and meanwhile the events about it (image pull …), each
+// reported through progress once. fieldPath narrows the events to that
+// container ("" = all of the pod's). A container that terminated right away,
+// or can't start (bad image), or a pod that failed, is an error naming the reason.
+func (c *Cluster) waitRunning(ctx context.Context, cs *kubernetes.Clientset, namespace, pod, name, fieldPath string, progress func(string)) error {
 	ctx, cancel := context.WithTimeout(ctx, debugStartTimeout)
 	defer cancel()
 	if progress == nil {
@@ -108,10 +109,11 @@ func (c *Cluster) waitRunning(ctx context.Context, cs *kubernetes.Clientset, nam
 	defer w.Stop()
 	// events are best effort: without the permission to watch them only the state shows
 	var events <-chan watch.Event
-	ew, err := cs.CoreV1().Events(namespace).Watch(ctx, metav1.ListOptions{FieldSelector: fields.Set{
-		"involvedObject.name":      pod,
-		"involvedObject.fieldPath": "spec.ephemeralContainers{" + name + "}",
-	}.AsSelector().String()})
+	sel := fields.Set{"involvedObject.name": pod}
+	if fieldPath != "" {
+		sel["involvedObject.fieldPath"] = fieldPath
+	}
+	ew, err := cs.CoreV1().Events(namespace).Watch(ctx, metav1.ListOptions{FieldSelector: sel.AsSelector().String()})
 	if err == nil {
 		defer ew.Stop()
 		events = ew.ResultChan()
@@ -126,7 +128,7 @@ func (c *Cluster) waitRunning(ctx context.Context, cs *kubernetes.Clientset, nam
 	for {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("debug container %s didn't start within %s", name, debugStartTimeout)
+			return fmt.Errorf("container %s didn't start within %s", name, debugStartTimeout)
 		case ev, ok := <-events:
 			if !ok {
 				events = nil // a nil channel blocks: go on with the pod watch alone
@@ -137,7 +139,7 @@ func (c *Cluster) waitRunning(ctx context.Context, cs *kubernetes.Clientset, nam
 			}
 		case ev, ok := <-w.ResultChan():
 			if !ok {
-				return fmt.Errorf("watch on pod %s ended before debug container %s started", pod, name)
+				return fmt.Errorf("watch on pod %s ended before container %s started", pod, name)
 			}
 			p, ok := ev.Object.(*corev1.Pod)
 			if !ok {
@@ -164,34 +166,45 @@ func eventLine(e *corev1.Event) string {
 	return line
 }
 
+// containerStatus finds a container's status, regular or ephemeral (names are unique in a pod).
+func containerStatus(p *corev1.Pod, name string) *corev1.ContainerStatus {
+	for _, list := range [][]corev1.ContainerStatus{p.Status.ContainerStatuses, p.Status.EphemeralContainerStatuses} {
+		for i := range list {
+			if list[i].Name == name {
+				return &list[i]
+			}
+		}
+	}
+	return nil
+}
+
 // waitingLine is the container's waiting state, e.g. "waiting: ContainerCreating".
 func waitingLine(p *corev1.Pod, name string) string {
-	for _, st := range p.Status.EphemeralContainerStatuses {
-		if st.Name == name && st.State.Waiting != nil {
-			line := "waiting: " + st.State.Waiting.Reason
-			if m := st.State.Waiting.Message; m != "" {
-				line += ": " + m
-			}
-			return line
+	if st := containerStatus(p, name); st != nil && st.State.Waiting != nil {
+		line := "waiting: " + st.State.Waiting.Reason
+		if m := st.State.Waiting.Message; m != "" {
+			line += ": " + m
 		}
+		return line
 	}
 	return ""
 }
 
-// debugState: true once the container runs; an error if it can't.
+// debugState: true once the container runs; an error if it can't (or the pod failed).
 func debugState(p *corev1.Pod, name string) (bool, error) {
-	for _, st := range p.Status.EphemeralContainerStatuses {
-		if st.Name != name {
-			continue
-		}
+	if st := containerStatus(p, name); st != nil {
 		switch s := st.State; {
 		case s.Running != nil:
 			return true, nil
 		case s.Terminated != nil:
-			return false, fmt.Errorf("debug container %s terminated: %s %s", name, s.Terminated.Reason, s.Terminated.Message)
+			return false, fmt.Errorf("container %s terminated: %s %s", name, s.Terminated.Reason, s.Terminated.Message)
 		case s.Waiting != nil && unstartable[s.Waiting.Reason]:
-			return false, fmt.Errorf("debug container %s: %s: %s", name, s.Waiting.Reason, s.Waiting.Message)
+			return false, fmt.Errorf("container %s: %s: %s", name, s.Waiting.Reason, s.Waiting.Message)
 		}
+	}
+	// e.g. the kubelet rejected the pod (OutOfpods, NodeAffinity)
+	if p.Status.Phase == corev1.PodFailed {
+		return false, fmt.Errorf("pod %s failed: %s %s", p.Name, p.Status.Reason, p.Status.Message)
 	}
 	return false, nil
 }

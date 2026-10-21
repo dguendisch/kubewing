@@ -56,6 +56,8 @@ type Options struct {
 	// the config itself unless Config is set.
 	ConfigDir string
 	Config    *config.Effective
+	// User names ops pods (ops-pod-kubewing-<user>-…); "" = none.
+	User string
 	// History remembers recent debug images; nil = in memory only.
 	History *config.HistoryStore
 	// Actor performs object actions (delete …); nil disables them.
@@ -76,7 +78,12 @@ type Service struct {
 	norm     *normalize.Normalizer
 	guard    *safety.Guard
 	sessions map[string]*session
+	// running counts session goroutines, so Shutdown can wait for their
+	// cleanup (an ops pod's delete)
+	running  sync.WaitGroup
 	forwards map[string]*forward
+	// nodes: per context, the ops pod dialog's lease on the shared nodes watch
+	nodes map[string]*nodeWatch
 	// described: last describe run per object, for the describe diff
 	described map[string]*describeSnap
 	useq      uint64
@@ -90,7 +97,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, nodes: map[string]*nodeWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")

@@ -49,6 +49,28 @@ func TestHistory(t *testing.T) {
 	}
 }
 
+func TestHistoryOpsPod(t *testing.T) {
+	dir := t.TempDir()
+	h := OpenHistory(dir)
+	_ = h.AddDebugImage("busybox")
+	if h.Get().OpsPod != nil {
+		t.Fatal("no ops pod yet")
+	}
+	want := OpsPodSettings{Namespace: "kube-system", HostRoot: true}
+	if err := h.AddOpsPod("ops-toolbelt", want); err != nil {
+		t.Fatal(err)
+	}
+	got := OpenHistory(dir).Get()
+	if got.OpsPod == nil || *got.OpsPod != want || !slices.Equal(got.DebugImages, []string{"ops-toolbelt", "busybox"}) {
+		t.Errorf("reloaded: %+v %+v", got, got.OpsPod)
+	}
+	// Get returns a copy
+	got.OpsPod.Namespace = "x"
+	if h.Get().OpsPod.Namespace != "kube-system" {
+		t.Error("history changed through Get")
+	}
+}
+
 func TestHistoryBrokenOrNone(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, HistoryFile), []byte("debugImages: {not: a list}\n"), 0o644)

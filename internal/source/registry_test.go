@@ -92,3 +92,34 @@ func TestRegistrySharesAndRefCounts(t *testing.T) {
 		t.Fatal("watch goroutine still running after last unsubscribe")
 	}
 }
+
+// resolvingOpener resolves short names to one GVR, as discovery does.
+type resolvingOpener struct{ fakeOpener }
+
+func (f *resolvingOpener) Resolve(_, resource string) (Resolved, error) {
+	if resource == "no" || resource == "node" || resource == "nodes" {
+		return Resolved{GVR: nsGVR.GroupVersion().WithResource("nodes"), Kind: "Node"}, nil
+	}
+	return Resolved{GVR: nsGVR.GroupVersion().WithResource(resource), Namespaced: true}, nil
+}
+
+func TestRegistrySharesByResolvedResource(t *testing.T) {
+	f := &resolvingOpener{fakeOpener{feed: make(chan Event)}}
+	r := NewRegistry(f)
+	// a nodes pane opened as "no" in namespace shop, the ops pod dialog's "nodes" watch
+	a, _ := r.Subscribe(Key{Cluster: "c", Resource: "no", Namespace: "shop"})
+	b, _ := r.Subscribe(Key{Cluster: "c", Resource: "nodes"})
+	defer a.Close()
+	defer b.Close()
+	if r.Active() != 1 {
+		t.Fatalf("active = %d: no and nodes must share a watch", r.Active())
+	}
+	// namespaced types still watch per namespace
+	c, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods", Namespace: "a"})
+	d, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods", Namespace: "b"})
+	defer c.Close()
+	defer d.Close()
+	if r.Active() != 3 {
+		t.Fatalf("active = %d, want 3", r.Active())
+	}
+}

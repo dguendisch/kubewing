@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/source"
@@ -173,6 +175,41 @@ func (o *Opener) Debug(ctx context.Context, cluster, namespace, pod string, d so
 	}
 	fmt.Fprintf(s.Stdout, "debug %s (%s, profile %s, target %q)\r\n", d.Name, d.Image, d.Profile, d.Target)
 	return o.Exec(ctx, cluster, namespace, pod, d.Name, nil, s)
+}
+
+// OpsPod implements source.Actor: the pod's manifest is kept (OpsPods,
+// until the session ends, as a real cluster deletes it), one progress line,
+// then the echo shell (prompt node:ops-pod-…). Images "fail/…" don't pull.
+func (o *Opener) OpsPod(ctx context.Context, cluster string, p source.OpsPodSpec, s source.ExecStreams) error {
+	o.mu.Lock()
+	if o.opsPods == nil {
+		o.opsPods = map[string]*corev1.Pod{}
+	}
+	o.opsPods[p.Namespace+"/"+p.Name] = source.OpsPodManifest(p)
+	o.mu.Unlock()
+	defer func() {
+		o.mu.Lock()
+		delete(o.opsPods, p.Namespace+"/"+p.Name)
+		o.mu.Unlock()
+	}()
+	if p.Progress != nil {
+		p.Progress(fmt.Sprintf("Pulling: Pulling image %q", p.Image))
+	}
+	if strings.HasPrefix(p.Image, "fail/") {
+		return fmt.Errorf("container %s: ImagePullBackOff: Back-off pulling image %q", source.OpsPodContainer, p.Image)
+	}
+	if p.Started != nil {
+		p.Started()
+	}
+	fmt.Fprintf(s.Stdout, "ops pod %s (%s) runs %q\r\n", p.Name, p, strings.Join(source.OpsPodShell(p.Chroot), " "))
+	return o.Exec(ctx, cluster, p.Namespace, p.Node, p.Name, nil, s)
+}
+
+// OpsPods are the ops pods that currently exist, by namespace/name (tests).
+func (o *Opener) OpsPods() map[string]*corev1.Pod {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return maps.Clone(o.opsPods)
 }
 
 // ExitError is a non-zero exit of the tape shell (mirrors exec's CodeExitError).

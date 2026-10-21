@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "n-1",
+    "n-2",
+    "n-3"
+  ],
+  "rows": [
+    {
+      "key": "n-1",
+      "cells": [
+        "",
+        "ip-10-0-1-11.ec2.internal",
+        "Ready"
+      ]
+    },
+    {
+      "key": "n-2",
+      "cells": [
+        "",
+        "ip-10-0-2-22.ec2.internal",
+        "Ready,SchedulingDisabled"
+      ]
+    },
+    {
+      "key": "n-3",
+      "cells": [
+        "",
+        "ip-10-0-3-33.ec2.internal",
+        "NotReady"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { ContextList, DebugOptions, Pending } from "../transport/types";
+import type { ContextList, DebugOptions, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
@@ -38,6 +38,8 @@ export interface Term {
   context: string;
   /** A debug container (kubectl debug), not an exec. */
   debug?: { image: string; target?: string };
+  /** An ops pod on a node (pod = the ops pod, container its one container). */
+  ops?: { node: string; namespace: string; image: string; settings?: string };
   /** Exit code or error once the session ended; the pane stays until closed. */
   exited?: string;
   /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
@@ -87,8 +89,9 @@ export interface Overlay {
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes;
    *  container: which container a prepared exec enters;
-   *  debug: image, target and profile of a prepared debug container. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug";
+   *  debug: image, target and profile of a prepared debug container;
+   *  opspod: node, image and host access of an ops pod (prepared on submit). */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
@@ -112,6 +115,11 @@ export interface Overlay {
   container?: string;
   /** confirm: the options of a prepared debug. */
   debug?: DebugOptions;
+  /** opspod: the node prefilled from the selected row; confirm: the options of a prepared ops pod. */
+  node?: string;
+  ops?: OpsPodOptions;
+  /** opspod: the dialog's initial values, loaded before it opens. */
+  opsDefaults?: OpsPodDefaults;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -412,6 +420,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   closeTab: "confirm",
   portforward: "dialog",
   debug: "dialog",
+  opspod: "dialog",
   forwards: "forwards",
   menu: "menu",
   // a menu too: the same keys (j/k, ⏎, Esc)

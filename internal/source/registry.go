@@ -59,25 +59,28 @@ type Subscription struct {
 func (s *Subscription) Close() { s.close() }
 
 // Subscribe attaches to (or starts) the shared watch for k. A late
-// subscriber first receives a Relist with the current state.
+// subscriber first receives a Relist with the current state. Watches are
+// shared by what they resolve to: "no", "node" and "nodes" are one watch,
+// and a cluster-scoped type ignores the namespace.
 func (r *Registry) Subscribe(k Key) (*Subscription, error) {
+	res, err := r.opener.Resolve(k.Cluster, k.Resource)
+	if err != nil {
+		return nil, fmt.Errorf("resolve %q: %w", k.Resource, err)
+	}
+	id := shareKey(k, res)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	sh, ok := r.shared[k]
+	sh, ok := r.shared[id]
 	if !ok {
-		res, err := r.opener.Resolve(k.Cluster, k.Resource)
-		if err != nil {
-			return nil, fmt.Errorf("resolve %q: %w", k.Resource, err)
-		}
 		ctx, cancel := context.WithCancel(context.Background())
-		sh = &shared{key: k, res: res, cancel: cancel, subs: map[int]chan Event{}, items: map[string]Item{}}
-		r.shared[k] = sh
+		sh = &shared{key: id, res: res, cancel: cancel, subs: map[int]chan Event{}, items: map[string]Item{}}
+		r.shared[id] = sh
 		in := make(chan Event, 256)
 		go r.opener.Watch(ctx, k.Cluster, res, k, in)
 		go r.fanout(ctx, sh, in)
 	}
 	sh.refs++
-	id := sh.nextSub
+	sub := sh.nextSub
 	sh.nextSub++
 	// generous buffer; subscribers coalesce on their side
 	ch := make(chan Event, 1024)
@@ -87,11 +90,24 @@ func (r *Registry) Subscribe(k Key) (*Subscription, error) {
 	if sh.lastErr != "" {
 		ch <- Event{Type: Error, Err: sh.lastErr}
 	}
-	sh.subs[id] = ch
+	sh.subs[sub] = ch
 	var once sync.Once
 	return &Subscription{Events: ch, Resolved: sh.res, close: func() {
-		once.Do(func() { r.unsubscribe(sh, id) })
+		once.Do(func() { r.unsubscribe(sh, sub) })
 	}}, nil
+}
+
+// shareKey identifies the watch k resolves to. Openers without GVRs (tapes)
+// share by the name as given.
+func shareKey(k Key, res Resolved) Key {
+	if res.GVR.Resource == "" {
+		return k
+	}
+	k.Resource = res.GVR.String()
+	if !res.Namespaced {
+		k.Namespace = ""
+	}
+	return k
 }
 
 func (r *Registry) unsubscribe(sh *shared, id int) {

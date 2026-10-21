@@ -1300,6 +1300,145 @@ test.describe("object actions", () => {
     await expect(page.getByLabel("message")).toContainText("debug needs a pod, not configmap");
   });
 
+  // ⌥⌘O: ops pod on a node. Nodes complete from the nodes tape (Go's shared nodes watch); the tape
+  // fake runs the echo shell (prompt node:ops-pod-…), names the shell command and fails images "fail/…".
+  test("⌥⌘O on a pod: its node is prefilled, nodes listed, checkboxes set the pod; the shell opens below", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3"); // runs on ip-10-0-2-22 (nodes.yaml)
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const node = dialog.getByRole("combobox", { name: "node" });
+    await expect(node).toHaveValue("ip-10-0-2-22.ec2.internal");
+    await expect(node).toBeFocused();
+    expect((await inspect(page)).focus).toBe("dialog");
+    // the nodes are listed right away, with pool, zone and state; nothing highlighted (⏎ takes the prefilled one)
+    const list = dialog.getByRole("listbox", { name: "node suggestions" });
+    await expect(list.getByRole("option")).toHaveCount(3);
+    await expect(list.getByRole("option", { selected: true })).toHaveCount(0);
+    await expect(list).toContainText("worker-a · eu-1b · cordoned");
+    await expect(list).toContainText("not ready (unknown) · etcd · eu-1c");
+    // config.yaml's image; nothing ran yet: host root and host network prechecked, in this order
+    await expect(dialog.getByRole("combobox", { name: "image" })).toHaveValue("europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest");
+    await expect(dialog.locator("label:has(input[type=checkbox])")).toHaveText(["chroot into /host", "host root at /host", "host network"]);
+    await expect(dialog.getByRole("checkbox", { name: "chroot into /host" })).not.toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "host root at /host" })).toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "host network" })).toBeChecked();
+    await node.fill("33");
+    await page.keyboard.press("Tab"); // completes to the match
+    await expect(node).toHaveValue("ip-10-0-3-33.ec2.internal");
+    // chroot needs the mount: unchecking host root unchecks chroot, checking chroot checks it
+    await dialog.getByRole("checkbox", { name: "chroot into /host" }).check();
+    await expect(dialog).toContainText("shell chrooted into it");
+    await dialog.getByRole("checkbox", { name: "host root at /host" }).uncheck();
+    await expect(dialog.getByRole("checkbox", { name: "chroot into /host" })).not.toBeChecked();
+    await dialog.getByRole("checkbox", { name: "chroot into /host" }).check();
+    await expect(dialog.getByRole("checkbox", { name: "host root at /host" })).toBeChecked();
+    await dialog.getByRole("checkbox", { name: "host network" }).uncheck();
+    // the namespace completes from the context's namespaces
+    const ns = dialog.getByRole("combobox", { name: "namespace" });
+    await ns.fill("kube-s");
+    await page.keyboard.press("Tab");
+    await expect(ns).toHaveValue("kube-system");
+    await dialog.getByRole("combobox", { name: "image" }).fill("busybox:ops");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter"); // the first ⏎ takes nothing (no suggestion), so it starts
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
+    await expect(header).toContainText("node ip-10-0-3-33.ec2.internal");
+    await expect(header).toContainText("busybox:ops · chroot /host");
+    await expect(header).not.toContainText("host network");
+    await expect(header).toContainText("kube-system/ops-pod-kubewing-e2e-"); // the user (headless tapes: e2e)
+    await expect.poll(() => termText(page)).toContain("ip-10-0-3-33.ec2.internal:ops-pod-kubewing-e2e-");
+    expect(await termText(page)).toContain('Pulling: Pulling image "busybox:ops"');
+    expect(await termText(page)).toContain('runs "chroot /host sh -c');
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    // the next dialog starts with what ran: namespace and checkboxes (history.yaml, so also after a restart)
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await expect(ns).toHaveValue("kube-system");
+    await expect(dialog.getByRole("checkbox", { name: "chroot into /host" })).toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "host root at /host" })).toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "host network" })).not.toBeChecked();
+    await ns.focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(dialog.getByRole("listbox", { name: "namespace suggestions" }).getByRole("option").first()).toContainText("kube-systemlast used");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("⌥⌘O from a terminal pane: no row, an empty node; unknown nodes and empty images are refused in the dialog", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("e"); // one container: straight to its shell
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const node = dialog.getByRole("combobox", { name: "node" });
+    await expect(node).toHaveValue("");
+    await expect(dialog.getByRole("listbox", { name: "node suggestions" }).getByRole("option")).toHaveCount(3); // listed right away
+    // checked in the dialog once the nodes are listed (before that Go refuses it: "no node … on tape")
+    await expect(dialog.getByRole("status", { name: "node completion status" })).toHaveCount(0);
+    await node.fill("nope");
+    await node.press("Enter");
+    await expect(dialog.getByRole("alert")).toHaveText('no node "nope" (↓ lists them)');
+    await node.fill("ip-10-0-1-11.ec2.internal");
+    await dialog.getByRole("combobox", { name: "image" }).fill(" ");
+    await node.press("Enter");
+    await expect(dialog.getByRole("alert")).toHaveText("an image is needed, e.g. the ops-toolbelt");
+    // one image history with debug containers: an earlier debug's image and the last ops pod's are offered
+    await dialog.getByRole("combobox", { name: "image" }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toContainText("alpine:3.20");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toContainText("busybox:ops");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("terminal"); // back to the shell
+    await page.keyboard.press("Control+D");
+  });
+
+  test("ops pod on a node row of a dev context: confirmed with its settings; a failed image keeps the pane", async ({ page }) => {
+    const menu = (p: Page) => p.getByRole("menu");
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "context" }).selectOption("tape-dev");
+    await page.getByRole("combobox", { name: "resource" }).fill("nodes");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).rows.length).toBe(3);
+    await select(page, "n-1");
+    // the context menu offers it on node rows
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(menu(page).getByRole("menuitem", { name: "ops pod on node… ⌥⌘O" })).toBeEnabled();
+    await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toBeDisabled();
+    await menu(page).getByRole("menuitem", { name: "ops pod on node… ⌥⌘O" }).click();
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    await expect(dialog).toContainText("of tape-dev");
+    await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-1-11.ec2.internal");
+    await dialog.getByRole("combobox", { name: "image" }).fill("fail/nope");
+    await dialog.getByRole("combobox", { name: "image" }).press("Enter");
+    const confirm = page.getByRole("alertdialog", { name: "confirm opspod" });
+    // the remembered settings of the first ops pod test
+    await expect(confirm).toContainText("ops pod on node ip-10-0-1-11.ec2.internal on tape-dev (image fail/nope, namespace kube-system, chroot /host)");
+    await page.keyboard.press("Enter");
+    await expect(page.getByLabel("session ended")).toContainText("ImagePullBackOff");
+    await expect.poll(() => termText(page)).toContain("deleting kube-system/ops-pod-kubewing-e2e-");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  });
+
+  test("ops pods are refused on read-only contexts, in the dialog", async ({ page }) => {
+    await openStatic(page, "tape-prod");
+    await select(page, "s-web-3");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
+    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-2-22.ec2.internal");
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText("read-only context");
+    await expect(dialog).toBeVisible();
+  });
+
   test("f forwards the pod's ports; ⌥⌘P lists them, ⌫ stops", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
@@ -1597,6 +1736,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - separator
         - menuitem "exec shell e"
         - menuitem "debug container… b"
+        - menuitem "ops pod on node… ⌥⌘O"
         - menuitem "port-forward… f"
         - separator
         - menuitem "delete… ⌘⌫"

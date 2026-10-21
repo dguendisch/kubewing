@@ -25,10 +25,13 @@ const (
 	// Debug adds an ephemeral container to a pod (it stays in the pod spec
 	// for the pod's lifetime) and attaches to it.
 	Debug = "debug"
+	// OpsPod creates a privileged pod on a node (host PID, optionally the
+	// host's root file system and network) and opens a shell in it.
+	OpsPod = "opspod"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec, Debug}
+var mutating = []string{Delete, Exec, Debug, OpsPod}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {
@@ -192,15 +195,21 @@ func ctxName(r Rule) string {
 }
 
 func summary(a Action) string {
+	if a.Kind == OpsPod {
+		return fmt.Sprintf("ops pod on node %s on %s", a.Name, orCurrent(a.Context))
+	}
 	obj := a.Resource + "/" + a.Name
 	if a.Namespace != "" {
 		obj += " -n " + a.Namespace
 	}
-	ctx := a.Context
+	return fmt.Sprintf("%s %s on %s", a.Kind, obj, orCurrent(a.Context))
+}
+
+func orCurrent(ctx string) string {
 	if ctx == "" {
-		ctx = "(current context)"
+		return "(current context)"
 	}
-	return fmt.Sprintf("%s %s on %s", a.Kind, obj, ctx)
+	return ctx
 }
 
 func newToken() string {

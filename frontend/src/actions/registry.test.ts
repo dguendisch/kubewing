@@ -26,6 +26,12 @@ describe("row actions menu", () => {
     const m = byCmd(menuFor(cm, undefined));
     expect(m["object.exec"]!.disabled).toBe("needs a pod, not configmap");
     expect(m["object.portForward"]!.disabled).toBe("needs a pod, not configmap");
+    expect(m["object.opsPod"]!.disabled).toBe("needs a node or pod, not configmap");
+    // a node row: everything pod-only is off, the ops pod is on
+    const node = byCmd(menuFor({ key: "n1", kind: "Node", name: "n1" }, undefined));
+    expect(node["object.opsPod"]!.disabled).toBeUndefined();
+    expect(node["object.opsPod"]!.shortcut).toBe("⌥⌘O");
+    expect(node["object.exec"]!.disabled).toBe("needs a pod, not node");
     expect(m["object.diff"]!.disabled).toBe("no change seen yet");
     expect(m["object.describe"]!.disabled).toBeUndefined();
 
@@ -37,6 +43,7 @@ describe("row actions menu", () => {
     const prod = byCmd(menuFor(pod, ro));
     expect(prod["object.delete"]!.disabled).toBe("read-only context");
     expect(prod["object.exec"]!.disabled).toBe("read-only context");
+    expect(prod["object.opsPod"]!.disabled).toBe("read-only context");
     expect(prod["object.portForward"]!.disabled).toBeUndefined(); // doesn't change the cluster
     expect(prod["object.describe"]!.disabled).toBeUndefined();
   });

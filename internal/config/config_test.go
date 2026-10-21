@@ -39,6 +39,19 @@ func TestMissingDirIsDefaults(t *testing.T) {
 	}
 }
 
+var yes, no = true, false
+
+func TestOpsPodSettings(t *testing.T) {
+	if got := (OpsPod{}).Settings(); got != DefaultOpsPodSettings || !got.HostRoot || !got.HostNetwork || got.Chroot {
+		t.Errorf("defaults: %+v", got)
+	}
+	// false turns a default off; chroot brings the mount along
+	got := OpsPod{Namespace: "ops", Chroot: &yes, HostRoot: &no, HostNetwork: &no}.Settings()
+	if got != (OpsPodSettings{Namespace: "ops", Chroot: true, HostRoot: true}) {
+		t.Errorf("configured: %+v", got)
+	}
+}
+
 func TestValid(t *testing.T) {
 	dir := write(t, map[string]string{
 		"config.yaml": `
@@ -50,6 +63,7 @@ contexts:
   - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec], strict: true}
   - {match: "kind-*", label: kind, color: "#3b8eea"}
 debug: {image: nicolaka/netshoot, profile: netadmin}
+opsPod: {image: ops-toolbelt:latest, namespace: kube-system, chroot: true, hostNetwork: false}
 terminal: {scrollback: 50000}
 `,
 		"keybindings.yaml": `
@@ -72,6 +86,7 @@ accent: "rgb(203, 75, 22)"
 				{Match: "kind-*", Label: "kind", Color: "#3b8eea"},
 			},
 			Debug:    Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},
+			OpsPod:   OpsPod{Image: "ops-toolbelt:latest", Namespace: "kube-system", Chroot: &yes, HostNetwork: &no},
 			Terminal: Terminal{Scrollback: 50000},
 		},
 		Keybindings: []Binding{

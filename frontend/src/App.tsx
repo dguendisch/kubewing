@@ -3,6 +3,7 @@ import { Confirm, ConfirmCloseTab } from "./components/Confirm";
 import { ContainerPicker } from "./components/ContainerPicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { DebugDialog } from "./components/Debug";
+import { OpsPodDialog } from "./components/OpsPod";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
 import { Dock } from "./components/Dock";
@@ -86,6 +87,7 @@ export function App() {
       <ContextMenu />
       <ContainerPicker />
       <DebugDialog />
+      <OpsPodDialog />
       <TabSwitcher />
       <Help />
     </div>

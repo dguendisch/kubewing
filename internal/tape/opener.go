@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/dguendisch/kubewing/internal/source"
@@ -30,6 +31,7 @@ type Opener struct {
 	nextID  int
 	deleted map[string]bool // uids deleted via Delete
 	looks   map[string]int  // describe calls per namespace/name (fake events)
+	opsPods map[string]*corev1.Pod
 }
 
 // Resolve implements source.Opener.

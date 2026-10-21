@@ -42,7 +42,50 @@ type Config struct {
 	// Contexts are per-context safety rules; the first matching rule wins.
 	Contexts []ContextRule `json:"contexts"`
 	Debug    Debug         `json:"debug"`
+	OpsPod   OpsPod        `json:"opsPod"`
 	Terminal Terminal      `json:"terminal"`
+}
+
+// OpsPod configures ops pods on nodes (ops-toolbelt's ops-pod).
+type OpsPod struct {
+	// Image prefills the ops pod dialog, e.g. the ops-toolbelt image.
+	Image string `json:"image,omitempty"`
+	// Namespace the pods are created in; "" = default.
+	Namespace string `json:"namespace,omitempty"`
+	// Chroot, HostRoot and HostNetwork are the dialog's checkboxes' defaults
+	// until a pod ran (then the last used ones, see History); unset = off,
+	// on, on (see DefaultOpsPodSettings).
+	Chroot      *bool `json:"chroot,omitempty"`
+	HostRoot    *bool `json:"hostRoot,omitempty"`
+	HostNetwork *bool `json:"hostNetwork,omitempty"`
+}
+
+// OpsPodSettings are the ops pod dialog's namespace and checkboxes.
+type OpsPodSettings struct {
+	// Namespace "" = default.
+	Namespace   string `json:"namespace"`
+	Chroot      bool   `json:"chroot"`
+	HostRoot    bool   `json:"hostRoot"`
+	HostNetwork bool   `json:"hostNetwork"`
+}
+
+// DefaultOpsPodSettings: the node's / at /host and its network, no chroot.
+var DefaultOpsPodSettings = OpsPodSettings{HostRoot: true, HostNetwork: true}
+
+// Settings applies the configured defaults over DefaultOpsPodSettings.
+func (o OpsPod) Settings() OpsPodSettings {
+	s := DefaultOpsPodSettings
+	s.Namespace = o.Namespace
+	for _, f := range []struct {
+		from *bool
+		to   *bool
+	}{{o.Chroot, &s.Chroot}, {o.HostRoot, &s.HostRoot}, {o.HostNetwork, &s.HostNetwork}} {
+		if f.from != nil {
+			*f.to = *f.from
+		}
+	}
+	s.HostRoot = s.HostRoot || s.Chroot // chroot needs the mount
+	return s
 }
 
 // Terminal configures terminal panes (exec, debug).
@@ -76,7 +119,7 @@ type Diff struct {
 }
 
 // Actions that a context rule can require confirmation for.
-var Actions = []string{"delete", "exec", "debug"}
+var Actions = []string{"delete", "exec", "debug", "opspod"}
 
 // ContextRule applies to kubeconfig contexts whose name matches Match.
 type ContextRule struct {
@@ -155,6 +198,7 @@ func Load(dir string) Effective {
 		default:
 			e.Config.Terminal.Scrollback = n
 		}
+		e.Config.OpsPod = c.OpsPod
 		e.Config.Debug.Image = c.Debug.Image
 		if p := c.Debug.Profile; p != "" && !slices.Contains(DebugProfiles, p) {
 			errf("config.yaml", "debug.profile: unknown profile %q (known: %v)", p, DebugProfiles)

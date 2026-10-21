@@ -60,7 +60,18 @@ func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecRes
 func (a *App) DebugStart(token string, o bridge.DebugOptions, cols, rows int) (bridge.DebugResult, error) {
 	return a.svc.DebugStart(token, o, cols, rows)
 }
-func (a *App) DebugImages() []string { return a.svc.DebugImages() }
+func (a *App) DebugImages() []string                 { return a.svc.DebugImages() }
+func (a *App) Nodes(cluster string) bridge.NodeList  { return a.svc.Nodes(cluster) }
+func (a *App) OpsPodDefaults() bridge.OpsPodDefaults { return a.svc.OpsPodDefaults() }
+func (a *App) OpsPodTarget(pane, key string) (bridge.OpsPodTarget, error) {
+	return a.svc.OpsPodTargetFor(pane, key)
+}
+func (a *App) PrepareOpsPod(cluster, node string) (safety.Pending, error) {
+	return a.svc.PrepareOpsPod(cluster, node)
+}
+func (a *App) OpsPodStart(token string, o bridge.OpsPodOptions, cols, rows int) (bridge.OpsPodResult, error) {
+	return a.svc.OpsPodStart(token, o, cols, rows)
+}
 func (a *App) RemoveDebugImage(image string) ([]string, error) {
 	return a.svc.RemoveDebugImage(image)
 }

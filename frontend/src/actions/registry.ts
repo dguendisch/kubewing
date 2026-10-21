@@ -22,6 +22,7 @@ export interface RowAction {
 }
 
 const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
+const onNode = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.kind === "Node" ? true : `needs a node or pod, not ${r.kind.toLowerCase()}`);
 const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod, not ${r.kind.toLowerCase()}`);
 
 export const rowActions: RowAction[] = [
@@ -31,6 +32,7 @@ export const rowActions: RowAction[] = [
   { command: "object.copyName", label: "copy name", group: "view", available: () => true },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
   { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true },
+  { command: "object.opsPod", label: "ops pod on node…", group: "act", available: onNode, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },
 ];

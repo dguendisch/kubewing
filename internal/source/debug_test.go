@@ -77,3 +77,18 @@ func TestDebugProgressLines(t *testing.T) {
 		t.Errorf("unknown container: %q", got)
 	}
 }
+
+// A regular container (the ops pod's) is found as well as an ephemeral one;
+// a pod the kubelet rejected fails instead of waiting for the timeout.
+func TestDebugStateRegularContainerAndFailedPod(t *testing.T) {
+	p := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ops"}, Status: corev1.PodStatus{ContainerStatuses: []corev1.ContainerStatus{
+		{Name: OpsPodContainer, State: corev1.ContainerState{Running: &corev1.ContainerStateRunning{}}},
+	}}}
+	if done, err := debugState(p, OpsPodContainer); !done || err != nil {
+		t.Errorf("running: %v %v", done, err)
+	}
+	p = &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "ops"}, Status: corev1.PodStatus{Phase: corev1.PodFailed, Reason: "OutOfpods", Message: "Node didn't have enough resource: pods"}}
+	if _, err := debugState(p, OpsPodContainer); err == nil || !strings.Contains(err.Error(), "pod ops failed: OutOfpods") {
+		t.Errorf("rejected: %v", err)
+	}
+}

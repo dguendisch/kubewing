@@ -283,7 +283,9 @@ func (s *Service) startSession(cols, rows int, run func(context.Context, source.
 	out := newBatcher(func(b []byte) {
 		s.emit.Emit(SessionEvent, SessionPayload{ID: id, Data: base64.StdEncoding.EncodeToString(b)})
 	})
+	s.running.Add(1)
 	go func() {
+		defer s.running.Done()
 		err := run(ctx, source.ExecStreams{Stdin: inR, Stdout: out, Resize: ss.resize})
 		out.Close()
 		_ = inR.Close()
@@ -694,7 +696,12 @@ func (s *Service) PortForwardStop(id string) error {
 
 func (s *Service) emitForwards() { s.emit.Emit(PortForwardsEvent, s.PortForwards()) }
 
-// Shutdown ends all sessions and port-forwards (app quit).
+// shutdownWait bounds how long Shutdown waits for sessions to clean up
+// (ops pods being deleted) before the app quits anyway.
+const shutdownWait = 10 * time.Second
+
+// Shutdown ends all sessions and port-forwards (app quit) and waits, up to
+// shutdownWait, for the sessions to clean up: ops pods are deleted.
 func (s *Service) Shutdown() {
 	s.mu.Lock()
 	sessions := make([]*session, 0, len(s.sessions))
@@ -703,6 +710,8 @@ func (s *Service) Shutdown() {
 	}
 	forwards := s.forwards
 	s.forwards = map[string]*forward{}
+	nodes := s.nodes
+	s.nodes = map[string]*nodeWatch{}
 	s.mu.Unlock()
 	for _, ss := range sessions {
 		ss.cancel()
@@ -710,5 +719,18 @@ func (s *Service) Shutdown() {
 	}
 	for _, f := range forwards {
 		f.f.Stop()
+	}
+	for _, w := range nodes {
+		w.sub.Close()
+	}
+	done := make(chan struct{})
+	go func() {
+		s.running.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(shutdownWait):
+		log.Printf("shutdown: sessions still cleaning up after %s", shutdownWait)
 	}
 }

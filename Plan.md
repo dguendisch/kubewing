@@ -111,7 +111,6 @@ Still open in P0.1:
 ### P3 — "Operator power" (v1.0)
 
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
-1. **Ops pod on a node** - in two different flavors, without host mounting and with, configurable image
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**
 1. **Session recording + saving** - allow to save a session (not every watch diff, but everything else displayed, for later forensics when one doesn't recall what was actually did on a cluster)
 1. **Persistent history** — on-disk history buffer (hours, survives restarts); requires secret encryption/exclusion first.

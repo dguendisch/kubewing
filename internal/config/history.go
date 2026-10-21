@@ -21,8 +21,10 @@ const MaxDebugImages = 10
 
 // History mirrors history.yaml.
 type History struct {
-	// DebugImages are the images of debug containers that started, newest first.
+	// DebugImages are the images of debug containers and ops pods that started, newest first.
 	DebugImages []string `json:"debugImages"`
+	// OpsPod: the namespace and checkboxes of the last ops pod that started; nil = none yet.
+	OpsPod *OpsPodSettings `json:"opsPod,omitempty"`
 }
 
 // HistoryStore reads and writes dir/history.yaml. dir "" keeps history in
@@ -47,6 +49,7 @@ func OpenHistory(dir string) *HistoryStore {
 	var h History
 	if yaml.Unmarshal(b, &h) == nil {
 		s.h.DebugImages = dedupe(h.DebugImages, MaxDebugImages)
+		s.h.OpsPod = h.OpsPod
 	}
 	return s
 }
@@ -55,7 +58,21 @@ func OpenHistory(dir string) *HistoryStore {
 func (s *HistoryStore) Get() History {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return History{DebugImages: slices.Clone(s.h.DebugImages)}
+	h := History{DebugImages: slices.Clone(s.h.DebugImages)}
+	if s.h.OpsPod != nil {
+		o := *s.h.OpsPod
+		h.OpsPod = &o
+	}
+	return h
+}
+
+// AddOpsPod remembers a started ops pod: its image (with the debug images) and its settings.
+func (s *HistoryStore) AddOpsPod(image string, o OpsPodSettings) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.h.DebugImages = dedupe(append([]string{image}, s.h.DebugImages...), MaxDebugImages)
+	s.h.OpsPod = &o
+	return s.save()
 }
 
 // AddDebugImage moves image to the front (at most MaxDebugImages) and saves.
@@ -94,7 +111,7 @@ func (s *HistoryStore) save() error {
 	if err != nil {
 		return err
 	}
-	header := "# Written by kubewing (recent debug images); safe to delete.\n"
+	header := "# Written by kubewing (recent debug/ops pod images, last ops pod settings); safe to delete.\n"
 	if _, err := tmp.Write(append([]byte(header), b...)); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())

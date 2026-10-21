@@ -134,7 +134,7 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; terminal?: { scrollback: number } };
+  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number } };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;
@@ -145,6 +145,26 @@ export interface Config {
 export interface DebugConfig {
   image?: string;
   profile?: DebugProfile;
+}
+
+/** Mirrors config.OpsPod: defaults of the ops pod dialog. */
+export interface OpsPodConfig {
+  image?: string;
+  namespace?: string;
+  chroot?: boolean;
+  hostRoot?: boolean;
+  hostNetwork?: boolean;
+}
+
+/** Mirrors bridge.OpsPodDefaults: the dialog's initial values (last used, else config.yaml, else defaults). */
+export interface OpsPodDefaults {
+  image: string;
+  namespace: string;
+  chroot: boolean;
+  hostRoot: boolean;
+  hostNetwork: boolean;
+  /** The settings are the last pod's (history.yaml). */
+  remembered?: boolean;
 }
 
 /** kubectl debug --profile values (config.DebugProfiles). */
@@ -161,7 +181,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec" | "debug";
+export type ActionKind = "delete" | "exec" | "debug" | "opspod";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -249,6 +269,47 @@ export interface DebugResult {
   context: string;
 }
 
+/** Mirrors bridge.NodeInfo: one node for the ops pod dialog's completion. */
+export interface NodeInfo {
+  name: string;
+  /** The Ready condition (True, False, Unknown). */
+  ready?: string;
+  unschedulable?: boolean;
+  pool?: string;
+  zone?: string;
+}
+
+/** Mirrors bridge.NodeList: from the shared nodes watch (an open nodes pane's data). */
+export interface NodeList {
+  context: string;
+  nodes: NodeInfo[];
+  /** The watch hasn't listed yet: ask again. */
+  loading?: boolean;
+  error?: string;
+}
+
+/** Mirrors bridge.OpsPodOptions. */
+export interface OpsPodOptions {
+  image: string;
+  /** "" = default. */
+  namespace: string;
+  hostRoot: boolean;
+  /** The shell runs in /host (implies hostRoot). */
+  chroot: boolean;
+  hostNetwork: boolean;
+}
+
+/** Mirrors bridge.OpsPodResult. */
+export interface OpsPodResult {
+  session: string;
+  pod: string;
+  namespace: string;
+  node: string;
+  image: string;
+  context: string;
+  settings?: string;
+}
+
 /** Mirrors bridge.SessionPayload: output (base64) or, last, the exit. */
 export interface SessionPayload {
   id: string;
@@ -302,6 +363,16 @@ export interface Transport {
   debugImages(): Promise<string[]>;
   /** Forgets one; returns what's left. */
   removeDebugImage(image: string): Promise<string[]>;
+  /** The ops pod dialog's initial values. */
+  opsPodDefaults(): Promise<OpsPodDefaults>;
+  /** A context's nodes ("" = current), from the shared nodes watch; poll while loading. */
+  nodes(cluster: string): Promise<NodeList>;
+  /** The node a row stands for (a node, a pod's node), to prefill the ops pod dialog. */
+  opsPodTarget(pane: string, key: string): Promise<{ node?: string }>;
+  /** Checks an ops pod on a node against the safety policy; throws if refused (unknown node, read-only). */
+  prepareOpsPod(cluster: string, node: string): Promise<Pending>;
+  /** Starts a prepared ops pod: created, shell once it runs, deleted when the session ends. */
+  opsPodStart(token: string, opts: OpsPodOptions, cols: number, rows: number): Promise<OpsPodResult>;
   sessionInput(id: string, data: string): Promise<void>;
   sessionResize(id: string, cols: number, rows: number): Promise<void>;
   sessionClose(id: string): Promise<void>;

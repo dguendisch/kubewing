@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, DebugOptions, Pending } from "./transport/types";
+import type { ActionKind, DebugOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -125,6 +125,8 @@ export function dispatch(cmd: CommandId) {
       return void prepareAction("exec");
     case "object.debug":
       return void prepareAction("debug");
+    case "object.opsPod":
+      return void openOpsPod();
     case "object.portForward": {
       const key = selectedKey(pane);
       if (!key) return;
@@ -252,10 +254,50 @@ async function prepareAction(kind: ActionKind) {
   }
 }
 
-/** A prepared action, its container (exec) or options (debug) picked: confirm if the rule asks for it, else run. */
-async function proceed(paneId: string, key: string, pending: Pending, container = "", debug?: DebugOptions) {
-  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug }));
-  else await execute(paneId, pending, container, debug);
+/** A prepared action, its container (exec) or options (debug, ops pod) picked: confirm if the rule asks for it, else run. */
+async function proceed(paneId: string, key: string | undefined, pending: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions) {
+  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug, ops }));
+  else await execute(paneId, pending, container, debug, ops);
+}
+
+/**
+ * ⌘⌥O, from anywhere: the ops pod dialog on the focused pane's context.
+ * A selected row that stands for a node (a node, a pod's node) prefills it;
+ * nothing selected (a terminal pane, an empty table) starts empty.
+ */
+async function openOpsPod() {
+  const s = useUI.getState();
+  if (s.overlay?.kind === "opspod") return;
+  const pane = S.focusedPane(s);
+  const key = selectedKey(pane);
+  const [target, opsDefaults] = await Promise.all([
+    key && pane.serverId ? bridge().opsPodTarget(pane.serverId, key).catch(() => ({ node: undefined })) : { node: undefined },
+    bridge().opsPodDefaults().catch(() => undefined),
+  ]);
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "opspod", pane: pane.id, node: target.node, opsDefaults }));
+}
+
+/**
+ * The ops pod dialog's ⏎: Go prepares it (safety policy, the node exists),
+ * then it's confirmed if the rule asks for it, else started. A refusal is
+ * returned so the dialog stays open with it.
+ */
+export async function submitOpsPod(cluster: string, node: string, opts: OpsPodOptions): Promise<string | undefined> {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "opspod") return;
+  let pending: Pending;
+  try {
+    pending = await bridge().prepareOpsPod(cluster, node);
+  } catch (e) {
+    return errorText(e);
+  }
+  if (useUI.getState().overlay !== o) return; // cancelled meanwhile
+  setUI(S.closeOverlay);
+  try {
+    await proceed(o.pane, undefined, pending, "", undefined, opts);
+  } catch (e) {
+    flash(o.pane, errorText(e), true);
+  }
 }
 
 /**
@@ -292,13 +334,13 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o.container, o.debug);
+    await execute(o.pane, o.pending, o.container, o.debug, o.ops);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions) {
+async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions) {
   switch (p.action.kind) {
     case "delete":
       await bridge().delete(p.token);
@@ -312,6 +354,15 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
       if (!debug) return;
       const r = await bridge().debugStart(p.token, debug, 80, 24);
       const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context, debug: { image: r.image, target: r.target } };
+      return setUI((x) => S.openTerminal(x, term, paneId));
+    }
+    case "opspod": {
+      if (!ops) return;
+      const r = await bridge().opsPodStart(p.token, ops, 80, 24);
+      const term: S.Term = {
+        session: r.session, pod: r.pod, container: "ops-pod", context: r.context,
+        ops: { node: r.node, namespace: r.namespace, image: r.image, settings: r.settings },
+      };
       return setUI((x) => S.openTerminal(x, term, paneId));
     }
   }

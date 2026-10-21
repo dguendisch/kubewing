@@ -1,0 +1,14 @@
+# E2E tape for nodes (ops pod dialog completion, ⌘⌥O on a node row): a
+# Gardener-like pool across zones, one cordoned and one not-ready node.
+pipeline:
+  source: {resource: nodes}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Node, metadata: {name: ip-10-0-1-11.ec2.internal, uid: n-1, creationTimestamp: "2026-01-01T10:00:00Z", labels: {worker.gardener.cloud/pool: worker-a, topology.kubernetes.io/zone: eu-1a}}, status: {conditions: [{type: Ready, status: "True"}]}}
+    cells: [ip-10-0-1-11.ec2.internal, Ready]
+  - object: {apiVersion: v1, kind: Node, metadata: {name: ip-10-0-2-22.ec2.internal, uid: n-2, creationTimestamp: "2026-01-01T10:00:00Z", labels: {worker.gardener.cloud/pool: worker-a, topology.kubernetes.io/zone: eu-1b}}, spec: {unschedulable: true}, status: {conditions: [{type: Ready, status: "True"}]}}
+    cells: [ip-10-0-2-22.ec2.internal, "Ready,SchedulingDisabled"]
+  - object: {apiVersion: v1, kind: Node, metadata: {name: ip-10-0-3-33.ec2.internal, uid: n-3, creationTimestamp: "2026-01-01T10:00:00Z", labels: {worker.gardener.cloud/pool: etcd, topology.kubernetes.io/zone: eu-1c}}, status: {conditions: [{type: Ready, status: "Unknown"}]}}
+    cells: [ip-10-0-3-33.ec2.internal, NotReady]

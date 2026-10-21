@@ -13,13 +13,13 @@ diff:
 
 # Per-context safety rules (glob on the kubeconfig context name), first match wins.
 #   label/color: shown on the pane frame, header and tab; color is a theme token or a color
-#   readOnly:    every mutation (delete, exec, debug) is refused
+#   readOnly:    every mutation (delete, exec, debug, opspod) is refused
 #   confirm:     actions that need confirmation; delete always does
 #   strict:      confirmation requires typing the object name
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
-  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug]}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod]}
 
 # b (debug container, as kubectl debug): defaults of the dialog
 #   image:   prefilled (else the last image that started)
@@ -27,7 +27,17 @@ contexts:
 debug:
   image: nicolaka/netshoot
 
-# terminal panes (exec, debug)
+# ⌘⌥O (ops pod on a node, as ops-toolbelt's hacks/ops-pod): defaults of the dialog.
+# Namespace and checkboxes are these until a pod ran; then the last used ones (history.yaml).
+#   image:       prefilled (else the last image that started, debug containers' included)
+#   namespace:   where the pod is created (default: default)
+#   chroot:      the shell runs in /host, i.e. on the node (implies hostRoot; default false)
+#   hostRoot:    mount the node's / at /host (default true)
+#   hostNetwork: the node's network namespace (default true)
+opsPod:
+  image: europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest
+
+# terminal panes (exec, debug, ops pods)
 #   scrollback: lines kept beyond the screen (default 10000, 100 … 1000000)
 terminal:
   scrollback: 20000

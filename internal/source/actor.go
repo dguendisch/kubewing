@@ -28,6 +28,10 @@ type Actor interface {
 	// waits until it runs and attaches to it with a TTY until it exits or ctx
 	// ends. The container stays in the pod spec (terminated) afterwards.
 	Debug(ctx context.Context, cluster, namespace, pod string, d DebugSpec, s ExecStreams) error
+	// OpsPod creates a privileged pod on a node (ops-toolbelt's ops-pod),
+	// waits until it runs, opens a shell in it with a TTY until it exits or
+	// ctx ends, then deletes the pod.
+	OpsPod(ctx context.Context, cluster string, p OpsPodSpec, s ExecStreams) error
 	// PortForward forwards local ports on 127.0.0.1 to a pod ("8080:80",
 	// ":80" for a random local port) until Stop.
 	PortForward(ctx context.Context, cluster, namespace, pod string, ports []string) (*Forward, error)

@@ -16,6 +16,8 @@ interface Props {
   hint?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  /** The list is open from the start (browsing every candidate), as after ↓. */
+  openOnMount?: boolean;
   className?: string;
 }
 
@@ -33,9 +35,9 @@ interface Props {
  * Esc reaches the dialog). Removable entries (history) have a ✕, mouse only:
  * keys like ⌫ are typing here.
  */
-export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRemove, candidates, hint, placeholder, autoFocus, className }: Props) {
+export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRemove, candidates, hint, placeholder, autoFocus, openOnMount, className }: Props) {
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!openOnMount);
   // -1 = nothing active: Enter submits the typed text
   const [active, setActive] = useState(-1);
   // the value as it was when focused (prefilled or accepted): ↓ then browses everything

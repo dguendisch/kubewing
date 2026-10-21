@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -65,6 +66,12 @@ func main() {
 		*stateDir = opts.ConfigDir
 	}
 	opts.History = config.OpenHistory(*stateDir)
+	// ops pods are named after the user, as ops-toolbelt's $(whoami); tapes: a fixed one (e2e)
+	if *tapes != "" {
+		opts.User = "e2e"
+	} else if u, err := user.Current(); err == nil {
+		opts.User = u.Username
+	}
 	if *headless != "" {
 		runHeadless(*headless, opener, opts, *tapes != "")
 		return

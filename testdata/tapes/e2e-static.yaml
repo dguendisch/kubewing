@@ -13,8 +13,8 @@ initial:
     cells: [web-1, Running]
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-2, namespace: shop, uid: s-web-2, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
     cells: [web-2, Running]
-  # one declared port, below 1000 (port-forward prefills 8443:443); never deleted
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-3, namespace: shop, uid: s-web-3, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {containers: [{name: app, ports: [{containerPort: 443, name: https}]}]}, status: {phase: Running}}
+  # one declared port, below 1000 (port-forward prefills 8443:443); runs on a node of nodes.yaml (ops pod); never deleted
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-3, namespace: shop, uid: s-web-3, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: ip-10-0-2-22.ec2.internal, containers: [{name: app, ports: [{containerPort: 443, name: https}]}]}, status: {phase: Running}}
     cells: [web-3, Running]
   # exec container picker: a finished init container, a native sidecar, a crash-looping and a running container
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-4, namespace: shop, uid: s-web-4, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {initContainers: [{name: setup}, {name: proxy, restartPolicy: Always}], containers: [{name: app}, {name: worker}]}, status: {phase: Running, initContainerStatuses: [{name: setup, state: {terminated: {exitCode: 0, reason: Completed}}}, {name: proxy, state: {running: {}}}], containerStatuses: [{name: app, state: {running: {}}}, {name: worker, state: {waiting: {reason: CrashLoopBackOff}}}]}}
