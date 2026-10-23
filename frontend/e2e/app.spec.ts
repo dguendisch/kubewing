@@ -788,6 +788,48 @@ test.describe("dockview layout", () => {
     expect(Math.abs(c! - w2!)).toBeLessThan(0.01);
   });
 
+  test("⌘⇧⏎ maximizes the focused pane; the others stay open behind it and come back", async ({ page }) => {
+    await openTape(page);
+    await page.keyboard.press("ControlOrMeta+Shift+D"); // v1 | v2, focus v2
+    const layout = (await inspect(page)).tabs[0]!.layout;
+    const main = (await page.locator("main").boundingBox())!;
+    // dockview collapses a hidden pane to nothing rather than display:none: measure, as the user sees it
+    const share = async (id: string) => {
+      const b = await page.locator(`section[data-pane="${id}"]`).boundingBox();
+      return Math.round(((b?.width ?? 0) * (b?.height ?? 0) * 10) / (main.width * main.height));
+    };
+    await page.keyboard.press("ControlOrMeta+Shift+Enter");
+    const badge = page.getByRole("button", { name: "maximized pane" });
+    await expect(badge).toHaveText("⤡1");
+    await expect(badge).toHaveAttribute("title", /1 other pane hidden/);
+    await expect.poll(() => share("v2")).toBe(10);
+    await expect.poll(() => share("v1")).toBe(0);
+    // still open: its pane (and watch) are there, the layout is unchanged
+    const s = await inspect(page);
+    expect(s.panes.v1?.serverId).toBeTruthy();
+    expect(s.tabs[0]!.layout).toEqual(layout);
+    // keys still go to the maximized pane's table
+    expect(s.focus).toBe("table");
+    // ⌘⇧⏎ again: both back, side by side
+    await page.keyboard.press("ControlOrMeta+Shift+Enter");
+    await expect(badge).toBeHidden();
+    await expect.poll(() => share("v1")).toBe(5);
+    await expect.poll(() => share("v2")).toBe(5);
+    // the badge un-maximizes too
+    await page.keyboard.press("ControlOrMeta+Shift+Enter");
+    await expect.poll(() => share("v1")).toBe(0);
+    await badge.click();
+    await expect.poll(() => share("v1")).toBe(5);
+    expect((await inspect(page)).focusedPane).toBe("v2");
+    // and so does moving focus to another pane
+    await page.keyboard.press("ControlOrMeta+Shift+Enter");
+    await expect.poll(() => share("v1")).toBe(0);
+    await page.keyboard.press("ControlOrMeta+BracketLeft");
+    await expect.poll(() => share("v1")).toBe(5);
+    expect((await inspect(page)).focusedPane).toBe("v1");
+    expect((await inspect(page)).tabs[0]!.layout).toEqual(layout);
+  });
+
   test("clicking a pane focuses it", async ({ page }) => {
     await openTape(page);
     await page.keyboard.press("ControlOrMeta+Shift+D");

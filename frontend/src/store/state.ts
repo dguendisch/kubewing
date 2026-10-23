@@ -110,6 +110,8 @@ export interface Tab {
   id: string;
   layout: Layout;
   focused: string;
+  /** ⌘⇧⏎: this pane fills the tab, the others are hidden (not closed); always the focused one. */
+  maximized?: string;
 }
 
 export interface Overlay {
@@ -325,8 +327,28 @@ export const focusedPane = (s: UIState): PaneState => s.panes[activeTab(s).focus
 
 function withTab(s: UIState, f: (t: Tab) => Tab): UIState {
   const tabs = [...s.tabs];
-  tabs[s.activeTab] = f(activeTab(s));
+  tabs[s.activeTab] = unmaximized(f(activeTab(s)));
   return { ...s, tabs };
+}
+
+/** A maximized pane stays so only while it is focused and the tab's panes are unchanged (no split, no close). */
+function unmaximized(t: Tab): Tab {
+  if (!t.maximized || (t.focused === t.maximized && paneIds(t.layout).length > 1)) return t;
+  const { maximized: _, ...rest } = t;
+  return rest;
+}
+
+/**
+ * ⌘⇧⏎ (iTerm): the focused pane fills the tab, or back to the splits. The
+ * other panes stay open behind it (their watches and shells keep running);
+ * moving focus, splitting or closing a pane shows them again. A tab with
+ * one pane has nothing to maximize.
+ */
+export function toggleMaximize(s: UIState): UIState {
+  const t = activeTab(s);
+  if (t.maximized) return withTab(s, ({ maximized: _, ...rest }) => rest);
+  if (paneIds(t.layout).length < 2) return s;
+  return withTab(s, (x) => ({ ...x, maximized: x.focused }));
 }
 
 /** New pane cloned from the focused one (iTerm: new split shows the same thing). */
@@ -362,7 +384,8 @@ export function closePane(s: UIState, id = activeTab(s).focused): UIState {
   const rest = paneIds(layout);
   const focused = t.focused === id ? rest[Math.max(0, idx - 1)] ?? rest[0]! : t.focused;
   const tabs = [...s.tabs];
-  tabs[index] = { ...t, layout, focused };
+  const { maximized: _, ...kept } = t;
+  tabs[index] = { ...kept, layout, focused };
   // a pane closing on its own (an ended session) must not pull focus out of the pane in use
   const moved = index === s.activeTab && t.focused === id;
   return moved ? { ...s, tabs, panes, focus: "table", overlay: undefined } : { ...s, tabs, panes };

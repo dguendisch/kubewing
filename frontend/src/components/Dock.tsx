@@ -18,12 +18,17 @@ const components = { pane: ({ api }: IDockviewPanelProps) => <Pane id={api.id} /
  * Inactive tabs stay mounted but hidden: a hidden dockview has no size, so
  * it neither takes layouts (pixels would be meaningless) nor reports them
  * (they'd come back as equal shares). It syncs from the store when shown.
+ *
+ * A maximized pane (⌘⇧⏎) is dockview's maximized group: the others are only
+ * hidden, so their grids and shells stay as they are. Nothing is read back
+ * meanwhile (the hidden panes have no size); the tree is the one from before.
  */
 export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
   const api = useRef<DockviewApi>(undefined);
   const host = useRef<HTMLDivElement>(null);
   const live = useRef(false); // visible and in sync with the store
   const layout = useUI((s) => s.tabs.find((t) => t.id === tabId)?.layout);
+  const maximized = useUI((s) => s.tabs.find((t) => t.id === tabId)?.maximized);
 
   // measured from the DOM: right after a hidden tab is shown, dockview's own
   // width/height are stale until its resize observer fires
@@ -41,11 +46,15 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
     if (!a || !t || !b) return;
     live.current = false; // our own layout calls must not be read back as user changes
     if (a.width !== b.width || a.height !== b.height) a.layout(b.width, b.height);
+    // toJSON serializes the layout as it is without the maximized pane
     const shown = fromDockview(a.toJSON() as unknown as DockLayout);
     if (!shown || !sameLayout(shown, t.layout)) {
       a.fromJSON(toDockview(t.layout, t.focused, b) as unknown as SerializedDockview, { reuseExistingPanels: true });
       for (const g of a.groups) g.header.hidden = true; // each pane draws its own header
     }
+    const max = t.maximized ? a.getPanel(t.maximized) : undefined;
+    if (max && !max.api.isMaximized()) max.api.maximize();
+    else if (!max && a.hasMaximizedGroup()) a.exitMaximizedGroup();
     live.current = true;
   };
 
@@ -53,7 +62,7 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
   const pull = () => {
     const a = api.current;
     const t = storeTab();
-    if (!a || !t || !live.current || !sized()) return;
+    if (!a || !t || !live.current || !sized() || t.maximized || a.hasMaximizedGroup()) return;
     const got = fromDockview(a.toJSON() as unknown as DockLayout);
     if (got && !sameLayout(got, t.layout)) setUI((s) => (S.activeTab(s).id === tabId ? S.setLayout(s, got) : s));
   };
@@ -81,7 +90,7 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
       return;
     }
     push();
-  }, [layout, active]);
+  }, [layout, maximized, active]);
 
   return (
     <div ref={host} className="h-full w-full">

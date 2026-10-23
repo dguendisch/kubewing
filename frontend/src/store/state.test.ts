@@ -10,6 +10,11 @@ function invariants(s: S.UIState) {
     expect(valid(t.layout)).toBe(true);
     expect(paneIds(t.layout)).toContain(t.focused); // focus always lands on an existing pane
     for (const id of paneIds(t.layout)) expect(s.panes[id]).toBeDefined();
+    // a maximized pane is the focused one, in a tab with others to hide
+    if (t.maximized) {
+      expect(t.maximized).toBe(t.focused);
+      expect(paneIds(t.layout).length).toBeGreaterThan(1);
+    }
   }
   // the pane area's focus context matches the focused pane's kind
   if (s.focus === "table" || s.focus === "terminal") expect(s.focus).toBe(S.focusedPane(s).term ? "terminal" : "table");
@@ -72,6 +77,8 @@ describe("layout commands", () => {
       (s) => S.moveHistory(s, S.focusedPane(s).id, "back", `b${s.nextId}`).state,
       (s) => S.moveHistory(s, S.focusedPane(s).id, "forward", `f${s.nextId}`).state,
       (s) => S.splitWith(s, S.jumpSpec(S.focusedPane(s).spec, { resource: "replicasets.apps", namespace: "shop" })),
+      (s) => S.toggleMaximize(s),
+      (s) => S.toggleMaximize(s),
     );
     let s = S.initialState();
     for (let i = 0; i < 3000; i++) {
@@ -83,6 +90,52 @@ describe("layout commands", () => {
         expect(p.back?.length !== 0 && p.forward?.length !== 0).toBe(true); // empty is undefined
       }
     }
+  });
+});
+
+describe("maximize pane (⌘⇧⏎)", () => {
+  const max = (s: S.UIState) => S.activeTab(s).maximized;
+  const two = () => S.splitPane(S.initialState(), "row"); // v1 | v2, focus v2
+
+  it("toggles the focused pane; the layout and the other panes stay", () => {
+    const s = S.toggleMaximize(two());
+    expect(max(s)).toBe("v2");
+    expect(S.activeTab(s).layout).toEqual(S.activeTab(two()).layout);
+    expect(ids(s)).toEqual(["v1", "v2"]);
+    expect(max(S.toggleMaximize(s))).toBeUndefined();
+  });
+
+  it("a single pane has nothing to maximize", () => {
+    const s = S.initialState();
+    expect(S.toggleMaximize(s)).toBe(s);
+  });
+
+  it("splitting, closing or moving focus shows all panes again", () => {
+    const s = S.toggleMaximize(two());
+    expect(max(S.splitPane(s, "column"))).toBeUndefined();
+    expect(max(S.closePane(s, "v1"))).toBeUndefined(); // closing another one
+    expect(max(S.closePane(s))).toBeUndefined();
+    expect(max(S.cyclePane(s, 1))).toBeUndefined();
+    expect(max(S.focusDirection(s, "left"))).toBeUndefined();
+    expect(max(S.focusPane(s, "v1"))).toBeUndefined();
+    // focusing the maximized pane itself (a click into it) keeps it
+    expect(max(S.focusPane(s, "v2"))).toBe("v2");
+    // a terminal opening below it is a split too
+    expect(max(S.openTerminal(s, { session: "s1", pod: "p", container: "c", context: "k" }))).toBeUndefined();
+  });
+
+  it("is per tab", () => {
+    let s = S.toggleMaximize(two());
+    s = S.newTab(s);
+    expect(max(s)).toBeUndefined();
+    s = S.gotoTab(s, 1);
+    expect(max(s)).toBe("v2");
+  });
+
+  it("survives a rearranged layout of the same panes", () => {
+    const s = S.toggleMaximize(two());
+    const swapped: Layout = { type: "split", dir: "row", children: [leaf("v2"), leaf("v1")] };
+    expect(max(S.setLayout(s, swapped))).toBe("v2");
   });
 });
 

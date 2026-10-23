@@ -75,6 +75,7 @@ const layout: { title: string; entries: Entry[] }[] = [
     entries: [
       ["Split Down", "pane.splitDown"],
       ["Split Right", "pane.splitRight"],
+      ["Maximize Pane", "pane.toggleMaximize"],
       null,
       ["Next Pane", "pane.focusNext"],
       ["Previous Pane", "pane.focusPrev"],

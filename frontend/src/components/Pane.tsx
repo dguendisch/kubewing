@@ -5,6 +5,8 @@ import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useUI } from "../store/store";
+import { useConfig } from "../store/config";
+import { prettyKey } from "../keys/keymap";
 import { bottomCorners, paneIds } from "../store/layout";
 import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
@@ -26,6 +28,11 @@ export function Pane({ id }: { id: string }) {
   });
   const filterField = useUI((s) => (isFocused && s.focus === "filter" ? s.filterField ?? "grep" : undefined));
   const tableFocused = useUI((s) => isFocused && s.focus === "table" && !s.overlay);
+  // ⌘⇧⏎: the other panes of the tab are hidden behind this one
+  const hidden = useUI((s) => {
+    const t = s.tabs.find((x) => x.maximized === id);
+    return t ? paneIds(t.layout).length - 1 : 0;
+  });
 
   // open on mount / spec change of a table pane without server pane
   useEffect(() => {
@@ -63,10 +70,11 @@ export function Pane({ id }: { id: string }) {
       data-pane={id}
       data-context={pane.context}
       aria-label={`pane ${pane.spec.resource}`}
-      className={`flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${corners} ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
+      className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${corners} ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
       style={color ? { borderColor: color } : undefined}
       onMouseDown={() => setUI((s) => S.focusPane(s, id))}
     >
+      {hidden ? <Maximized hidden={hidden} /> : null}
       {pane.term ? (
         <>
           <TermHeader pane={pane} term={pane.term} rule={rule} />
@@ -90,6 +98,30 @@ export function Pane({ id }: { id: string }) {
         <TablePane pane={pane} id={id} rule={rule} filterField={filterField} tableFocused={tableFocused} />
       )}
     </section>
+  );
+}
+
+/** Top right of a maximized pane: ⤡ and how many are hidden behind it (narrow, so it covers little of the header); a click shows them again. */
+function Maximized({ hidden }: { hidden: number }) {
+  // the live key (keybindings.yaml may rebind or unbind it)
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "pane.toggleMaximize")?.key);
+  const others = `${hidden} other pane${hidden === 1 ? "" : "s"}`;
+  return (
+    <button
+      type="button"
+      aria-label="maximized pane"
+      title={`maximized: ${others} hidden — click${key ? ` or ${prettyKey(key)}` : ""} to show all`}
+      // no focus change: the pane keeps it, and keys go on to the table or shell
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        e.preventDefault();
+      }}
+      onClick={() => setUI(S.toggleMaximize)}
+      className="absolute top-0 right-0 z-20 flex items-center gap-0.5 rounded-bl bg-accent px-1 text-[11px] leading-4 text-bg hover:opacity-90"
+    >
+      <span aria-hidden>⤡</span>
+      {hidden}
+    </button>
   );
 }
 

@@ -24,6 +24,7 @@ describe("native menu", () => {
     expect(i["tab.close"]!.accelerator).toBe("CmdOrCtrl+w");
     expect(i["tab.goto9"]!.accelerator).toBe("CmdOrCtrl+9");
     expect(i["portforward.list"]!.accelerator).toBe("OptionOrAlt+CmdOrCtrl+p");
+    expect(i["pane.toggleMaximize"]!.accelerator).toBe("CmdOrCtrl+Shift+return");
   });
 
   it("names scoped and plain keys in the label instead (natively they'd fire in text fields)", () => {

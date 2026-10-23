@@ -38,6 +38,8 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.focusDirection(x, "up"));
     case "pane.focusDown":
       return setUI((x) => S.focusDirection(x, "down"));
+    case "pane.toggleMaximize":
+      return setUI(S.toggleMaximize);
     case "tab.new":
       return setUI(S.newTab);
     case "tab.close": {

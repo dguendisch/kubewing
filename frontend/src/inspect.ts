@@ -16,7 +16,7 @@ export function inspect() {
   return {
     config: { dir: c.config?.dir, errors: c.dismissed ? [] : c.errors, themeGen: c.themeGen },
     activeTab: s.activeTab,
-    tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused })),
+    tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused, maximized: t.maximized })),
     focus: s.focus,
     focusedPane: tab.focused,
     overlays: [...(s.overlay ? [s.overlay.kind] : []), ...(s.switcher ? ["switcher"] : [])],

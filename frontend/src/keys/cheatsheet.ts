@@ -45,6 +45,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("split down", "pane.splitDown"),
       row("split right", "pane.splitRight"),
       row("close pane", "pane.close"),
+      row("maximize pane / show all again", "pane.toggleMaximize"),
       row("next / previous pane", "pane.focusNext", "pane.focusPrev"),
       row("pane left / right", "pane.focusLeft", "pane.focusRight"),
       row("pane above / below", "pane.focusUp", "pane.focusDown"),
