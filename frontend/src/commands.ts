@@ -1,7 +1,8 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, DebugOptions, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, DebugOptions, JumpTarget, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
+import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursor, useDiffNav } from "./editor/Viewer";
@@ -71,11 +72,13 @@ export function dispatch(cmd: CommandId) {
     case "filter.blur":
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
+      if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, 1));
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
+      if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, -1));
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, -1));
@@ -105,13 +108,23 @@ export function dispatch(cmd: CommandId) {
       if (!key) return;
       return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "menu", pane: pane.id, key, index: 0, rowIndex: pane.selected }));
     }
+    case "object.jump":
+      return openJump();
+    case "menu.runSplit":
+      if (s.overlay?.kind === "jump") return void runJump(s.overlay.index ?? 0, true);
+      return;
+    case "history.back":
+    case "history.forward":
+      return void moveHistory(cmd === "history.back" ? "back" : "forward");
     case "menu.run": {
       const o = s.overlay;
+      if (o?.kind === "jump") return void runJump(o.index ?? 0, false);
       if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
       if (!item || item.disabled) return;
-      setUI(S.closeOverlay);
+      // the jump menu replaces this one at its anchor (it closes it itself)
+      if (item.command !== "object.jump") setUI(S.closeOverlay);
       return dispatch(item.command); // runs on the selected row, exactly like its shortcut
     }
     case "detail.showYaml":
@@ -476,6 +489,79 @@ function selectedKey(pane: S.PaneState): string | undefined {
   return d.order[pane.selected - d.offset];
 }
 
+/**
+ * ⌘J, on a row (or from its detail view): the jump menu. Opened from the
+ * ⌘⏎ menu it takes that menu's place, at the same anchor.
+ */
+function openJump() {
+  const s = useUI.getState();
+  const o = s.overlay;
+  const fromDetail = o?.kind === "detail";
+  const pane = fromDetail ? s.panes[o.pane] : S.focusedPane(s);
+  const key = fromDetail ? o.key : pane && selectedKey(pane);
+  if (!pane || !key) return;
+  const at = o?.kind === "menu" ? o.at : undefined;
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.selected, at }));
+}
+
+/**
+ * ⏎ / ⇧⏎ (or a click) on a jump menu entry: the pane shows the target, its
+ * previous view pushed on the history (⌘← returns, ⌘→ redoes), or
+ * the target opens in a split below. Entries without a target (a gone
+ * owner) and the scan entry are handled by the menu itself.
+ */
+export async function runJump(index: number, inSplit: boolean) {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "jump") return;
+  const item = useJump.getState().items[index];
+  if (!item || !jumpable(item)) return;
+  if (item.scan) return void useJump.getState().scan?.();
+  const pane = useUI.getState().panes[o.pane];
+  if (!pane || !item.target) return;
+  setUI(S.closeOverlay);
+  await jumpTo(pane.id, item.target, inSplit, o.key);
+}
+
+/** Shows a jump target in a pane (pushing its current view) or in a new split below it. */
+export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolean, fromKey?: string) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane) return;
+  const spec = S.jumpSpec(pane.spec, target);
+  if (inSplit) {
+    // the new pane opens itself on mount (Pane's effect), like any split
+    return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec));
+  }
+  setUI((x) => S.pushHistory(x, paneId, fromKey));
+  await applySpec(paneId, spec);
+}
+
+/**
+ * ⌘← / ⌘→ in the table: the view before the last jump, or forward again to
+ * the one just left; the row selected there is selected again.
+ */
+async function moveHistory(dir: "back" | "forward") {
+  const pane = S.focusedPane(useUI.getState());
+  if (pane.term) return;
+  const { state, entry } = S.moveHistory(useUI.getState(), pane.id, dir, selectedKey(pane));
+  if (!entry) return flash(pane.id, dir === "back" ? "nothing to go back to (⌘J jumps)" : "nothing to go forward to");
+  setUI(() => state);
+  await applySpec(pane.id, entry.spec, true);
+}
+
+/** Moves the jump menu highlight, skipping entries that go nowhere. */
+function moveJump(s: S.UIState, delta: number): S.UIState {
+  const items = useJump.getState().items;
+  if (!s.overlay || items.length === 0) return s;
+  let i = s.overlay.index ?? 0;
+  for (let n = 0; n < items.length; n++) {
+    const j = i + delta;
+    if (j < 0 || j >= items.length) break;
+    i = j;
+    if (jumpable(items[i]!)) return { ...s, overlay: { ...s.overlay, index: i } };
+  }
+  return s;
+}
+
 /** Moves the menu highlight, skipping disabled entries. */
 function moveMenu(s: S.UIState, delta: number): S.UIState {
   const items = useMenu.getState().items;
@@ -506,8 +592,11 @@ function moveForward(s: S.UIState, delta: number): S.UIState {
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 
-/** Applies a new spec to a pane: reuses the server pane if only stages changed. */
-export async function applySpec(paneId: string, spec: S.PaneSpec) {
+/**
+ * Applies a new spec to a pane: reuses the server pane if only stages changed.
+ * keepReselect: moving through the history, the row to select again stays pending (see S.moveHistory).
+ */
+export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect = false) {
   const p = useUI.getState().panes[paneId];
   if (!p) return;
   const keep = !!p.serverId && S.sameSource(p.spec, spec);
@@ -519,6 +608,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec) {
       spec,
       error: undefined,
       selected: 0,
+      reselect: keepReselect ? q.reselect : undefined,
       serverId: keep ? q.serverId : undefined,
       context: keep ? q.context : undefined,
       kind: keep ? q.kind : undefined,

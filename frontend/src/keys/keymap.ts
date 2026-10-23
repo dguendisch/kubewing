@@ -53,7 +53,11 @@ export type CommandId =
   | "object.diff"
   | "object.copyName"
   | "object.menu"
+  | "object.jump"
   | "menu.run"
+  | "menu.runSplit"
+  | "history.back"
+  | "history.forward"
   | "object.describe"
   | "object.exec"
   | "object.edit"
@@ -83,7 +87,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "object.menu", "object.jump", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
 ];
@@ -113,9 +117,9 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+T", command: "tab.new" },
   // more than one pane in the tab: the dispatcher asks first
   { key: "Meta+W", command: "tab.close" },
-  // not global: ⌘←/⌘→ jump to the start/end of the line in text fields
-  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help", "editpreview"] },
-  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help", "editpreview"] },
+  // the macOS tab keys (Safari, Terminal, iTerm); ⌘←/⌘→ are the jump history
+  { key: "Meta+Shift+]", command: "tab.next" },
+  { key: "Meta+Shift+[", command: "tab.prev" },
   // ⌘1–⌘8 go to that tab, ⌘9 to the last one (browser/iTerm convention)
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Binding => ({ key: `Meta+${n}`, command: `tab.goto${n}` })),
   // MRU switching; releasing Ctrl commits (handled on keyup in useKeys)
@@ -171,6 +175,13 @@ export const defaultBindings: Binding[] = [
   { key: "K", command: "row.up", when: ["menu"] },
   { key: "ArrowUp", command: "row.up", when: ["menu"] },
   { key: "Enter", command: "menu.run", when: ["menu"] },
+  // jump menu: ⇧⏎ opens the target in a split below instead of in place
+  { key: "Shift+Enter", command: "menu.runSplit", when: ["menu"] },
+  // ⌘J: where this row leads (namespace, owners, owned); jumps in place are a browser-like history:
+  // ⌘← back, ⌘→ forward again (table only: in text fields they're start/end of line)
+  { key: "Meta+J", command: "object.jump", when: ["table", "detail"] },
+  { key: "Meta+ArrowLeft", command: "history.back", when: ["table"] },
+  { key: "Meta+ArrowRight", command: "history.forward", when: ["table"] },
   { key: "D", command: "object.describe", when: ["table"] },
   // in the detail view d is the diff toggle, so describe keeps ⇧D there
   { key: "Shift+D", command: "object.describe", when: ["detail"] },

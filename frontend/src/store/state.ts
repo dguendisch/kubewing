@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { ContextList, DebugOptions, EditPreview, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
@@ -9,6 +9,8 @@ export interface PaneSpec {
   resource: string;
   namespace: string; // "" = all
   labelSelector: string;
+  /** Server-side field selector (a jump to a node's pods: spec.nodeName=…); "" = none. */
+  fieldSelector?: string;
   grep: string;
   /** CEL filter over the object `o` ("" = none). */
   filter: string;
@@ -40,7 +42,22 @@ export interface PaneState {
   opening?: boolean;
   error?: string;
   selected: number;
+  /** Jump history, as in a browser: the views before (⌘←) and, after going back, after (⌘→) this one; newest last. */
+  back?: HistoryEntry[];
+  forward?: HistoryEntry[];
+  /** After moving through the history: the row to select again once the pane shows it (by key). */
+  reselect?: string;
 }
+
+/** A view in a pane's jump history: its spec and the row selected there. */
+export interface HistoryEntry {
+  spec: PaneSpec;
+  /** Row key (the row index moves with the data). */
+  key?: string;
+}
+
+/** History depth per pane and direction. */
+export const historyLimit = 50;
 
 export interface Term {
   session: string;
@@ -102,17 +119,18 @@ export interface Overlay {
    *  container: which container a prepared exec enters;
    *  debug: image, target and profile of a prepared debug container;
    *  opspod: node, image and host access of an ops pod (prepared on submit);
-   *  edit: a row's object in the YAML editor, then the server's dry-run diff. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit";
+   *  edit: a row's object in the YAML editor, then the server's dry-run diff;
+   *  jump: where the pane can go from a row (namespace, owners, owned). */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
   describeGen?: number;
-  /** forwards, menu, container: highlighted entry. */
+  /** forwards, menu, container, jump: highlighted entry. */
   index?: number;
-  /** menu: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */
+  /** menu, jump: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */
   at?: { x: number; y: number };
-  /** menu: the row it belongs to, for anchoring. */
+  /** menu, jump: the row it belongs to, for anchoring. */
   rowIndex?: number;
   pane: string;
   key?: string;
@@ -324,6 +342,13 @@ export function splitPane(s: UIState, dir: "row" | "column"): UIState {
   };
 }
 
+/** ⇧⏎ in the jump menu: a new pane below the focused one (⌘D direction), showing spec. */
+export function splitWith(s: UIState, spec: PaneSpec): UIState {
+  const id = `v${s.nextId}`;
+  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, t.focused, "column", id), focused: id }));
+  return { ...next, nextId: s.nextId + 1, panes: { ...s.panes, [id]: { id, spec, selected: 0 } }, focus: "table" };
+}
+
 export function closePane(s: UIState, id = activeTab(s).focused): UIState {
   const index = s.tabs.findIndex((t) => paneIds(t.layout).includes(id));
   if (index < 0) return s;
@@ -458,6 +483,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   container: "menu",
   help: "help",
   edit: "edit",
+  // the menu's keys, plus ⇧⏎ (split)
+  jump: "menu",
 };
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
@@ -483,6 +510,7 @@ export function pipelineYAML(spec: PaneSpec): string {
   if (spec.context) source.cluster = spec.context;
   if (spec.namespace) source.namespace = spec.namespace;
   if (spec.labelSelector) source.labelSelector = spec.labelSelector;
+  if (spec.fieldSelector) source.fieldSelector = spec.fieldSelector;
   const p: Record<string, unknown> = { source };
   const stages = [
     ...(spec.hideHealthy ? [{ hideHealthy: true }] : []),
@@ -501,4 +529,59 @@ export function orphanedServerPanes(prev: UIState, next: UIState): string[] {
 }
 
 export const sameSource = (a: PaneSpec, b: PaneSpec) =>
-  a.context === b.context && a.resource === b.resource && a.namespace === b.namespace && a.labelSelector === b.labelSelector;
+  a.context === b.context && a.resource === b.resource && a.namespace === b.namespace && a.labelSelector === b.labelSelector && (a.fieldSelector ?? "") === (b.fieldSelector ?? "");
+
+/**
+ * The spec a jump opens: the target in the pane's context. Everything the
+ * target doesn't set is cleared (a jump replaces the filters), so the pane
+ * shows exactly why it holds what it holds.
+ */
+export function jumpSpec(from: PaneSpec, t: JumpTarget): PaneSpec {
+  const spec: PaneSpec = {
+    context: from.context,
+    resource: t.resource,
+    namespace: t.namespace ?? "",
+    labelSelector: t.labelSelector ?? "",
+    grep: t.grep ?? "",
+    filter: t.filter ?? "",
+  };
+  if (t.fieldSelector) spec.fieldSelector = t.fieldSelector;
+  if (t.hideHealthy) spec.hideHealthy = true;
+  return spec;
+}
+
+const orNone = <T>(l: T[]) => (l.length ? l : undefined);
+
+/**
+ * ⌘J ⏎: the pane shows the target instead; its current view (and the row
+ * the jump started from) goes on the back history, and the forward history
+ * is dropped, as a browser does on a new navigation. Bounded. The caller
+ * applies the new spec (applySpec).
+ */
+export function pushHistory(s: UIState, paneId: string, key: string | undefined): UIState {
+  return updatePane(s, paneId, (p) => ({ ...p, back: [...(p.back ?? []), { spec: p.spec, key }].slice(-historyLimit), forward: undefined, reselect: undefined }));
+}
+
+/**
+ * ⌘← (back) / ⌘→ (forward): the view at the top of that history, while
+ * the current view (with its selected row, key) moves onto the other one.
+ * Returns the entry to restore (the caller applies its spec and the row is
+ * reselected once shown), or no entry when there's nowhere to go.
+ */
+export function moveHistory(s: UIState, paneId: string, dir: "back" | "forward", key: string | undefined): { state: UIState; entry?: HistoryEntry } {
+  const p = s.panes[paneId];
+  const from = dir === "back" ? p?.back : p?.forward;
+  const entry = from?.at(-1);
+  if (!p || !entry) return { state: s };
+  const rest = from!.slice(0, -1);
+  const other = [...((dir === "back" ? p.forward : p.back) ?? []), { spec: p.spec, key }].slice(-historyLimit);
+  const back = dir === "back" ? rest : other;
+  const forward = dir === "back" ? other : rest;
+  return { state: updatePane(s, paneId, (x) => ({ ...x, back: orNone(back), forward: orNone(forward), reselect: entry.key })), entry };
+}
+
+/** The row to reselect after moving through the history is shown at index (or gone, -1): select it and stop looking. */
+export function reselected(s: UIState, paneId: string, key: string, index: number): UIState {
+  if (s.panes[paneId]?.reselect !== key) return s; // a stale answer (moved on meanwhile)
+  return updatePane(s, paneId, (p) => ({ ...p, reselect: undefined, selected: index >= 0 ? index : p.selected }));
+}

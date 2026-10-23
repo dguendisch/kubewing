@@ -24,6 +24,13 @@ type Tape struct {
 	// Initial objects (delivered as the first relist at t=0).
 	Initial []Object `json:"initial,omitempty"`
 	Steps   []Step   `json:"steps,omitempty"`
+	// Filter makes replays and metadata lists honor the source's namespace
+	// and label/field selectors, as an API server would (relation tapes:
+	// one tape is many sources). Other tapes replay everything.
+	Filter bool `json:"filter,omitempty"`
+	// CRD is the CustomResourceDefinition of a custom kind this tape serves
+	// (its scale subresource drives the jump menu's owned pods).
+	CRD map[string]any `json:"crd,omitempty"`
 }
 
 // Object is an object plus optional table cells.

@@ -1,0 +1,27 @@
+# Relation tapes (jump menu, u): a deployment → replica sets → pods chain
+# in "shop", a custom resource (widgets.e2e.kubewing) that owns config maps
+# and scales pods, and owners that are gone. filter: true makes replays and
+# metadata lists honor namespace and selectors like an API server.
+filter: true
+pipeline:
+  source: {resource: rel-pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-a, namespace: shop, uid: rp-web-a, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}
+    cells: [web-7d9f-a, Running]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-b, namespace: shop, uid: rp-web-b, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2}, status: {phase: Running}}
+    cells: [web-7d9f-b, Running]
+  # matches the deployment's selector, but no replica set owns it (adopted by nothing): counts for the deployment, not the replica set
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-stray, namespace: shop, uid: rp-web-stray, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}
+    cells: [web-stray, Running]
+  # run by the widget's scale selector
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: gizmo-0, namespace: shop, uid: rp-gizmo-0, labels: {widget: gizmo}, ownerReferences: [{apiVersion: e2e.kubewing/v1, kind: Widget, name: gizmo, uid: rw-gizmo, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2}, status: {phase: Running}}
+    cells: [gizmo-0, Running]
+  # its replica set was deleted (orphan)
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: orphan-0, namespace: shop, uid: rp-orphan-0, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: old-5c4b, uid: rr-old-5c4b, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [orphan-0, Running]
+  # same app label in another namespace: never counted for shop's deployment
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-other, namespace: lab, uid: rp-web-other, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}
+    cells: [web-other, Running]

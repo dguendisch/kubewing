@@ -355,11 +355,11 @@ test("? in the filter bar is typed, not a shortcut", async ({ page }) => {
   expect((await inspect(page)).overlays).toEqual([]);
 });
 
-test("tabs: cmd+t opens, cmd+right cycles; ARIA structure", async ({ page }) => {
+test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
   expect((await inspect(page)).activeTab).toBe(1);
-  await page.keyboard.press("ControlOrMeta+ArrowRight");
+  await page.keyboard.press("ControlOrMeta+Shift+BracketRight");
   expect((await inspect(page)).activeTab).toBe(0);
   await expect(page.getByRole("tablist")).toMatchAriaSnapshot(`
     - tablist:
@@ -373,7 +373,7 @@ test("switching tabs keeps each tab's live table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
   await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
-  await page.keyboard.press("ControlOrMeta+ArrowLeft");
+  await page.keyboard.press("ControlOrMeta+Shift+BracketLeft");
   await expect(page.getByRole("tab", { selected: true })).toHaveAccessibleName("e2e-pods");
   await expect.poll(async () => (await focused(page)).rows.length).toBe(3);
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
@@ -444,8 +444,8 @@ test.describe("ctrl+tab MRU tab switching", () => {
     await page.keyboard.press("Control+Tab");
     expect(await active(page)).toBe(2);
     // MRU, not positional: going back from 3 skips over nothing, 1 is now least recent
-    await page.keyboard.press("ControlOrMeta+ArrowLeft"); // tab 2 (positional cycle counts as use)
-    await page.keyboard.press("ControlOrMeta+ArrowLeft"); // tab 1
+    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 2 (positional cycle counts as use)
+    await page.keyboard.press("ControlOrMeta+Shift+BracketLeft"); // tab 1
     await page.keyboard.press("Control+Tab");
     expect(await active(page)).toBe(1); // tab 2, the previously used one
   });
@@ -2023,6 +2023,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "describe d"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name ⌘C"
+        - menuitem "jump to… ⌘J"
         - separator
         - menuitem "exec shell x"
         - menuitem "debug container… b"
@@ -2177,5 +2178,154 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     expect(Math.abs(mb.x - (box.x + 60))).toBeLessThan(4);
     await menu(page).getByRole("menuitem", { name: /view YAML/ }).click();
     await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-1");
+  });
+});
+
+test.describe("jump to (⌘J)", () => {
+  const jump = (page: Page) => page.getByRole("menu", { name: /^jump from/ });
+  async function openRel(page: Page, resource: string, objects: number) {
+    await openTape(page, resource, objects);
+  }
+  async function select(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+    await expect.poll(async () => (await focused(page)).rows[(await focused(page)).selected]?.key).toBe(key);
+  }
+
+  test("pod → ⌘J → owner chain; ⏎ jumps in place, ⌘← goes back to the same pod row, ⌘→ redoes the jump", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-b");
+    const startRow = (await focused(page)).selected;
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page)).toMatchAriaSnapshot(`
+      - menu "jump from web-7d9f-b":
+        - text: jump from pod web-7d9f-b · shop ⏎ here · ⇧⏎ split
+        - separator "namespace"
+        - menuitem "rel-pods in shop"
+        - menuitem "namespace object shop"
+        - separator "owners"
+        - menuitem "replicaset web-7d9f controller"
+        - menuitem "↑ deployment web controller"
+        - separator "owned"
+        - menuitem "scan for owned… in shop"
+    `);
+    expect((await inspect(page)).focus).toBe("menu");
+    // the highlight starts on the direct owner; j steps up the chain
+    await expect(jump(page).locator("[data-active]")).toContainText("replicaset web-7d9f");
+    await page.keyboard.press("j");
+    await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
+    await page.keyboard.press("Enter");
+    await expect(jump(page)).toHaveCount(0);
+    // the pane shows the deployment, filtered by name: the filter bar says why
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
+    }).toBe('rel-deployments shop o.metadata.name == "web" rd-web');
+    await expect(page.getByLabel("cel")).toHaveValue('o.metadata.name == "web"');
+    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
+    await expect(page.getByLabel("forward")).toHaveCount(0);
+    // esc no longer goes back (it's for overlays and fields only)
+    await page.keyboard.press("Escape");
+    expect((await focused(page)).spec.resource).toBe("rel-deployments");
+    // ⌘←: back on the pods, the same row selected again; the deployment is forward now
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    const pods = async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-pods" && p.status?.synced ? p.rows[p.selected]?.key : "";
+    };
+    await expect.poll(pods).toBe("rp-web-b");
+    expect((await focused(page)).selected).toBe(startRow);
+    await expect(page.getByLabel("back")).toHaveCount(0);
+    await expect(page.getByLabel("forward")).toContainText("⌘→ rel-deployments");
+    // nothing left to go back to: says so, stays
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(page.getByLabel("message")).toContainText("nothing to go back to");
+    expect((await focused(page)).spec.resource).toBe("rel-pods");
+    // ⌘→ redoes the jump, filter and all
+    await page.keyboard.press("ControlOrMeta+ArrowRight");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
+    }).toBe('rel-deployments o.metadata.name == "web" rd-web');
+    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
+    await expect(page.getByLabel("forward")).toHaveCount(0);
+    // and back again
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(pods).toBe("rp-web-b");
+  });
+
+  test("a new jump after going back drops the forward history", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-a");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: /replicaset web-7d9f/ }).click();
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-replicasets");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(page.getByLabel("forward")).toContainText("⌘→ rel-replicasets");
+    await expect.poll(async () => (await focused(page)).rows.length).toBe(6);
+    await select(page, "rp-web-a");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: /deployment web/ }).click();
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
+    await expect(page.getByLabel("forward")).toHaveCount(0);
+    await page.keyboard.press("ControlOrMeta+ArrowRight");
+    await expect(page.getByLabel("message")).toContainText("nothing to go forward to");
+  });
+
+  test("deployment → owned replica sets and pods (counted); ⇧⏎ opens a split below", async ({ page }) => {
+    await openRel(page, "rel-deployments", 2);
+    await select(page, "rd-web");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("menuitem", { name: "rel-replicasets 1" })).toBeVisible();
+    // the stray pod matches the selector (counted), lab's doesn't
+    await expect(jump(page).getByRole("menuitem", { name: "rel-pods 3" })).toBeVisible();
+    await expect(jump(page).getByRole("menuitem", { name: /no owner/ })).toBeDisabled();
+    await expect(jump(page).locator("[data-active]")).toContainText("rel-replicasets");
+    await page.keyboard.press("Shift+Enter");
+    await expect.poll(async () => (await inspect(page)).tabs[(await inspect(page)).activeTab]!.focused).not.toBe("v1");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
+    }).toBe('rel-replicasets o.metadata.ownerReferences.exists(r, r.uid == "rd-web") rr-web-7d9f');
+    // a split has no back stack of its own
+    await expect(page.locator("section[data-pane]").filter({ has: page.getByLabel("back") })).toHaveCount(0);
+  });
+
+  test("gone owners are listed disabled with why; a custom resource's owned scan finds config maps", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-orphan-0");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("menuitem", { name: /replicaset old-5c4b/ })).toBeDisabled();
+    await expect(jump(page).getByRole("menuitem", { name: /replicaset old-5c4b/ })).toContainText("deleted");
+    await page.keyboard.press("Escape");
+    expect((await inspect(page)).focus).toBe("table");
+
+    await openRel(page, "rel-widgets", 1);
+    await page.keyboard.press("ControlOrMeta+J");
+    // the CRD's scale subresource: the pods its selector matches
+    await expect(jump(page).getByRole("menuitem", { name: "rel-pods 1" })).toBeVisible();
+    await jump(page).getByRole("menuitem", { name: /scan for owned/ }).click();
+    // tape resource names; the pods are already listed above (same kind), so not repeated
+    await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
+    await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 6 types");
+    await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? p.rows.map((r) => r.key).join(" ") : "";
+    }).toBe("rc-gizmo-config rc-gizmo-scripts");
+  });
+
+  test("the ⌘⏎ menu's jump to… opens the jump menu in its place", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-a");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await page.getByRole("menu").getByRole("menuitem", { name: "jump to… ⌘J" }).click();
+    await expect(jump(page)).toBeVisible();
+    await expect(page.getByRole("menu")).toHaveCount(1);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
   });
 });

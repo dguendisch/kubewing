@@ -48,7 +48,7 @@ func (o *Opener) Resolve(_, resource string) (source.Resolved, error) {
 			kind = k
 		}
 	}
-	return source.Resolved{Kind: kind, Namespaced: true}, nil
+	return source.Resolved{Kind: kind, Namespaced: !t.Filter || o.namespaced(resource)}, nil
 }
 
 // Watch implements source.Opener.
@@ -59,7 +59,25 @@ func (o *Opener) Watch(ctx context.Context, _ string, res source.Resolved, k sou
 		speed = 1
 	}
 	start := time.Now()
+	m := matcher{}
+	if t.Filter {
+		var err error
+		if m, err = newMatcher(k.Namespace, k.LabelSelector, k.FieldSelector); err != nil {
+			select {
+			case out <- source.Event{Type: source.Error, Err: err.Error()}:
+			case <-ctx.Done():
+			}
+			<-ctx.Done()
+			return
+		}
+	}
 	emit := func(ev source.Event) bool {
+		if t.Filter {
+			var ok bool
+			if ev, ok = m.filter(ev); !ok {
+				return true
+			}
+		}
 		select {
 		case out <- ev:
 			return true

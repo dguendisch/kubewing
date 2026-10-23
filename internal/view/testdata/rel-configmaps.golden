@@ -1,0 +1,46 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "rc-gizmo-config",
+    "rc-gizmo-scripts",
+    "rc-plain"
+  ],
+  "rows": [
+    {
+      "key": "rc-gizmo-config",
+      "cells": [
+        "shop",
+        "gizmo-config"
+      ]
+    },
+    {
+      "key": "rc-gizmo-scripts",
+      "cells": [
+        "shop",
+        "gizmo-scripts"
+      ]
+    },
+    {
+      "key": "rc-plain",
+      "cells": [
+        "shop",
+        "plain"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

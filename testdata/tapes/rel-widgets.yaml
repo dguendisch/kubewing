@@ -1,0 +1,20 @@
+# Relation tapes: see rel-pods.yaml. A custom resource: owns config maps
+# (found by the owned scan) and scales pods (its CRD's labelSelectorPath).
+filter: true
+pipeline:
+  source: {resource: rel-widgets}
+columns:
+  - {name: Name, type: string, priority: 0}
+crd:
+  apiVersion: apiextensions.k8s.io/v1
+  kind: CustomResourceDefinition
+  metadata: {name: widgets.e2e.kubewing}
+  spec:
+    group: e2e.kubewing
+    names: {kind: Widget, plural: widgets}
+    scope: Namespaced
+    versions:
+      - {name: v1, served: true, storage: true, subresources: {scale: {specReplicasPath: .spec.replicas, statusReplicasPath: .status.replicas, labelSelectorPath: .status.selector}}}
+initial:
+  - object: {apiVersion: e2e.kubewing/v1, kind: Widget, metadata: {name: gizmo, namespace: shop, uid: rw-gizmo, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 1}, status: {replicas: 1, selector: widget=gizmo}}
+    cells: [gizmo]

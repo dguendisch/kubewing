@@ -2,6 +2,7 @@ import { ConfigErrors } from "./components/ConfigErrors";
 import { Confirm, ConfirmCloseTab } from "./components/Confirm";
 import { ContainerPicker } from "./components/ContainerPicker";
 import { ContextMenu } from "./components/ContextMenu";
+import { JumpMenu } from "./components/JumpMenu";
 import { DebugDialog } from "./components/Debug";
 import { OpsPodDialog } from "./components/OpsPod";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
@@ -87,6 +88,7 @@ export function App() {
       <PortForwardDialog />
       <PortForwardList />
       <ContextMenu />
+      <JumpMenu />
       <ContainerPicker />
       <DebugDialog />
       <OpsPodDialog />

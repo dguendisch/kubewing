@@ -1,0 +1,11 @@
+# Relation tapes: see rel-pods.yaml. Cluster-scoped (no namespace on the objects).
+filter: true
+pipeline:
+  source: {resource: rel-namespaces}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Namespace, metadata: {name: shop, uid: rn-shop, creationTimestamp: "2026-01-01T09:00:00Z"}}
+    cells: [shop]
+  - object: {apiVersion: v1, kind: Namespace, metadata: {name: lab, uid: rn-lab, creationTimestamp: "2026-01-01T09:00:00Z"}}
+    cells: [lab]

@@ -1,0 +1,13 @@
+# Relation tapes: see rel-pods.yaml.
+filter: true
+pipeline:
+  source: {resource: rel-replicasets}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: ReplicaSet, metadata: {name: web-7d9f, namespace: shop, uid: rr-web-7d9f, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: Deployment, name: web, uid: rd-web, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2, selector: {matchLabels: {app: web}, matchExpressions: [{key: tier, operator: NotIn, values: [batch]}]}}}
+    cells: [web-7d9f, 2/2]
+  # owned by a deployment that was deleted and recreated under the same name (another uid)
+  - object: {apiVersion: apps/v1, kind: ReplicaSet, metadata: {name: api-1a2b, namespace: shop, uid: rr-api-1a2b, ownerReferences: [{apiVersion: apps/v1, kind: Deployment, name: api, uid: rd-api-old, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 0, selector: {matchLabels: {app: api}}}}
+    cells: [api-1a2b, 0/0]

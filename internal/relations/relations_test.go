@@ -1,0 +1,197 @@
+package relations
+
+import (
+	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/dguendisch/kubewing/internal/expr"
+	"github.com/dguendisch/kubewing/internal/pipeline"
+)
+
+func obj(m map[string]any) *unstructured.Unstructured { return &unstructured.Unstructured{Object: m} }
+
+func md(kind, apiVersion, ns, name, uid string, extra map[string]any) *unstructured.Unstructured {
+	meta := map[string]any{"name": name, "uid": uid}
+	if ns != "" {
+		meta["namespace"] = ns
+	}
+	o := map[string]any{"apiVersion": apiVersion, "kind": kind, "metadata": meta}
+	for k, v := range extra {
+		o[k] = v
+	}
+	return obj(o)
+}
+
+func TestQuoteIsValidCEL(t *testing.T) {
+	for _, s := range []string{`plain`, `with "quotes"`, `back\slash`, "new\nline", `ünïcode`, `${x}`} {
+		prg, err := expr.Compile(NameFilter(s))
+		if err != nil {
+			t.Fatalf("%q: %v", s, err)
+		}
+		ok, err := prg.Bool(map[string]any{"metadata": map[string]any{"name": s}})
+		if err != nil || !ok {
+			t.Errorf("%q: filter %s doesn't match its own name (%v)", s, NameFilter(s), err)
+		}
+	}
+}
+
+func TestOwnedFilter(t *testing.T) {
+	prg, err := expr.Compile(OwnedFilter("u-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		o    map[string]any
+		want bool
+	}{
+		{map[string]any{"metadata": map[string]any{"ownerReferences": []any{map[string]any{"uid": "u-0"}, map[string]any{"uid": "u-1"}}}}, true},
+		{map[string]any{"metadata": map[string]any{"ownerReferences": []any{map[string]any{"uid": "u-0"}}}}, false},
+		{map[string]any{"metadata": map[string]any{}}, false}, // no owners: no match, no error
+	} {
+		if got, err := prg.Bool(c.o); got != c.want || err != nil {
+			t.Errorf("%v: got %v (%v), want %v", c.o, got, err, c.want)
+		}
+	}
+}
+
+func TestOwnersControllerFirst(t *testing.T) {
+	o := md("Pod", "v1", "shop", "p", "u", nil)
+	o.Object["metadata"].(map[string]any)["ownerReferences"] = []any{
+		map[string]any{"apiVersion": "v1", "kind": "ConfigMap", "name": "a", "uid": "a"},
+		map[string]any{"apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "rs", "uid": "rs", "controller": true},
+	}
+	got := Owners(o)
+	if len(got) != 2 || got[0].Name != "rs" || !got[0].Controller || got[1].Name != "a" {
+		t.Fatalf("owners = %+v, want the controller first", got)
+	}
+	if r := OwnerRelation(got[0], 1); r.ID != "owner:rs" || r.Label != "replicaset rs" || r.Section != SectionOwner {
+		t.Errorf("relation = %+v", r)
+	}
+}
+
+func TestSelector(t *testing.T) {
+	cases := []struct {
+		name string
+		sel  any
+		want string
+		ok   bool
+	}{
+		{"labels", map[string]any{"matchLabels": map[string]any{"app": "web"}}, "app=web", true},
+		{"expressions", map[string]any{"matchLabels": map[string]any{"app": "web"}, "matchExpressions": []any{
+			map[string]any{"key": "tier", "operator": "NotIn", "values": []any{"batch"}},
+			map[string]any{"key": "canary", "operator": "DoesNotExist"},
+		}}, "app=web,!canary,tier notin (batch)", true},
+		{"empty matches everything: none", map[string]any{}, "", false},
+		{"none", nil, "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			spec := map[string]any{}
+			if c.sel != nil {
+				spec["selector"] = c.sel
+			}
+			got, ok := Selector(md("Deployment", "apps/v1", "shop", "web", "d", map[string]any{"spec": spec}))
+			if got != c.want || ok != c.ok {
+				t.Errorf("got %q %v, want %q %v", got, ok, c.want, c.ok)
+			}
+		})
+	}
+}
+
+func TestChildren(t *testing.T) {
+	sel := map[string]any{"spec": map[string]any{"selector": map[string]any{"matchLabels": map[string]any{"app": "web"}}}}
+	cases := []struct {
+		name string
+		obj  *unstructured.Unstructured
+		want []Child
+	}{
+		{"deployment: replica sets it owns, pods by selector", md("Deployment", "apps/v1", "shop", "web", "d1", sel), []Child{
+			{APIVersion: "apps/v1", Kind: "ReplicaSet", Resource: "replicasets.apps", Namespace: "shop", LabelSelector: "app=web", OwnerUID: "d1"},
+			{APIVersion: "v1", Kind: "Pod", Resource: "pods", Namespace: "shop", LabelSelector: "app=web"},
+		}},
+		{"statefulset: pods it owns", md("StatefulSet", "apps/v1", "shop", "db", "s1", sel), []Child{
+			{APIVersion: "v1", Kind: "Pod", Resource: "pods", Namespace: "shop", LabelSelector: "app=web", OwnerUID: "s1"},
+		}},
+		{"cronjob: jobs it owns", md("CronJob", "batch/v1", "shop", "nightly", "c1", nil), []Child{
+			{APIVersion: "batch/v1", Kind: "Job", Resource: "jobs.batch", Namespace: "shop", OwnerUID: "c1"},
+		}},
+		{"node: pods running on it, in all namespaces", md("Node", "v1", "", "n1", "n1", nil), []Child{
+			{APIVersion: "v1", Kind: "Pod", Resource: "pods", FieldSelector: "spec.nodeName=n1"},
+		}},
+		{"a CRD kind: nothing known", md("Shoot", "core.gardener.cloud/v1beta1", "garden-x", "s", "s1", nil), nil},
+		{"same kind name in another group: nothing", md("Deployment", "example.com/v1", "shop", "d", "x", sel), nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := Children(c.obj)
+			if len(got) != len(c.want) {
+				t.Fatalf("got %+v, want %+v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("[%d] got %+v, want %+v", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestChildTargetAndOwns(t *testing.T) {
+	c := Child{APIVersion: "apps/v1", Kind: "ReplicaSet", Namespace: "shop", LabelSelector: "app=web", OwnerUID: "d1"}
+	r := OwnedRelation(c, "replicasets.apps")
+	want := Target{Resource: "replicasets.apps", Namespace: "shop", LabelSelector: "app=web", Filter: `o.metadata.ownerReferences.exists(r, r.uid == "d1")`}
+	if r.Label != "replicasets" || *r.Target != want {
+		t.Errorf("relation = %+v target %+v", r, *r.Target)
+	}
+	owned := md("ReplicaSet", "apps/v1", "shop", "a", "a", nil)
+	if c.Owns(owned) {
+		t.Error("an object without ownerReferences isn't a direct child")
+	}
+	owned.Object["metadata"].(map[string]any)["ownerReferences"] = []any{map[string]any{"apiVersion": "apps/v1", "kind": "Deployment", "name": "web", "uid": "d1"}}
+	if !c.Owns(owned) {
+		t.Error("owned by uid d1: a child")
+	}
+	if !(Child{}).Owns(owned) {
+		t.Error("without OwnerUID (grandchildren) the selector decides")
+	}
+}
+
+func TestNamespace(t *testing.T) {
+	pod := md("Pod", "v1", "shop", "p", "u", nil)
+	all := pipeline.Pipeline{Source: pipeline.Source{Resource: "pods", LabelSelector: "app=web"}, Stages: []pipeline.Stage{{Grep: "x"}, {Filter: "a"}, {Filter: "b"}, {HideHealthy: true}}}
+	got := Namespace(pod, all, "pods", "namespaces")
+	if len(got) != 2 {
+		t.Fatalf("got %+v", got)
+	}
+	here := Target{Resource: "pods", Namespace: "shop", LabelSelector: "app=web", Filter: "(a) && (b)", Grep: "x", HideHealthy: true}
+	if *got[0].Target != here {
+		t.Errorf("pods in shop keeps the pane's filters: %+v", *got[0].Target)
+	}
+	if got[0].Label != "pods in shop" || got[1].Label != "namespace object shop" {
+		t.Errorf("labels = %q, %q", got[0].Label, got[1].Label)
+	}
+	if want := (Target{Resource: "namespaces", Filter: `o.metadata.name == "shop"`}); *got[1].Target != want {
+		t.Errorf("namespace object: %+v", *got[1].Target)
+	}
+	// already in that namespace: only the namespace object
+	in := pipeline.Pipeline{Source: pipeline.Source{Resource: "pods", Namespace: "shop"}}
+	if got := Namespace(pod, in, "pods", "namespaces"); len(got) != 1 || got[0].ID != "ns:object" {
+		t.Errorf("namespaced pane: %+v", got)
+	}
+	if got := Namespace(md("Node", "v1", "", "n", "n", nil), all, "nodes", "namespaces"); got != nil {
+		t.Errorf("cluster-scoped: %+v", got)
+	}
+}
+
+func TestScaleSelector(t *testing.T) {
+	w := md("Widget", "e2e.kubewing/v1", "shop", "g", "g", map[string]any{"status": map[string]any{"selector": "widget=g"}})
+	if s, ok := ScaleSelector(w, ".status.selector"); !ok || s != "widget=g" {
+		t.Errorf("got %q %v", s, ok)
+	}
+	for _, p := range []string{"", ".status.missing", ".status.conditions[0].x"} {
+		if _, ok := ScaleSelector(w, p); ok {
+			t.Errorf("%q: want no selector", p)
+		}
+	}
+}

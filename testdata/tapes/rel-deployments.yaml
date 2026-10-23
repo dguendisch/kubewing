@@ -1,0 +1,12 @@
+# Relation tapes: see rel-pods.yaml.
+filter: true
+pipeline:
+  source: {resource: rel-deployments}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: shop, uid: rd-web, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2, selector: {matchLabels: {app: web}}}}
+    cells: [web, 2/2]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: api, namespace: shop, uid: rd-api, creationTimestamp: "2026-01-01T11:00:00Z"}, spec: {replicas: 0, selector: {matchLabels: {app: api}}}}
+    cells: [api, 0/0]

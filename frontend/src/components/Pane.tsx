@@ -31,6 +31,19 @@ export function Pane({ id }: { id: string }) {
   useEffect(() => {
     if (pane && !pane.term && !pane.serverId && !pane.opening && !pane.error) void applySpec(id, pane.spec);
   }, [id, pane?.serverId, pane?.opening, pane?.error]);
+
+  // back/forward through jumps: select the row that view had once the pane has it (frames only carry the window, so Go knows its index)
+  const reselect = pane?.reselect;
+  const serverId = pane?.serverId;
+  useEffect(() => {
+    if (!reselect || !serverId) return;
+    const look = () =>
+      void bridge()
+        .rowIndex(serverId, reselect)
+        .then((i) => (i >= 0 || paneData.get(serverId).status.synced) && setUI((s) => S.reselected(s, id, reselect, i)), () => {});
+    look();
+    return paneData.subscribe(serverId, look);
+  }, [reselect, serverId]);
   const termFocused = useUI((s) => isFocused && s.focus === "terminal" && !s.overlay);
   // the terminal's find results, shown in its find bar
   const [findResult, setFindResult] = useState<{ index: number; count: number }>();
@@ -208,6 +221,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
     const t = setTimeout(() => apply({ grep: grepNow }), 150);
     return () => clearTimeout(t);
   }, [grepNow]);
+  // a jump or going back replaces the spec: the field follows
+  useEffect(() => setGrep(pane.spec.grep), [pane.spec.grep]);
   // the latest spec, for applies that land after other edits
   const apply = (patch: Partial<S.PaneSpec>) => {
     const cur = useUI.getState().panes[pane.id];
@@ -215,13 +230,27 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   };
 
   const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
-  const { context, resource, namespace } = pane.spec;
+  const { context, resource, namespace, fieldSelector } = pane.spec;
+  const back = pane.back?.at(-1);
+  const forward = pane.forward?.at(-1);
   return (
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
       <span className="shrink-0 text-fg-muted">{context || pane.context || "(current)"}</span>
       <span className="shrink-0 font-semibold text-accent">{resource}</span>
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
+      {fieldSelector ? (
+        <span aria-label="field selector" title="field selector (from a jump)" className="truncate border border-border px-1 text-fg-muted">
+          {fieldSelector}
+        </span>
+      ) : null}
+      {back || forward ? (
+        <span aria-label="history" className="shrink-0 text-fg-muted">
+          {back ? <span aria-label="back" title={`⌘← back (${pane.back!.length})`}>⌘← {back.spec.resource}</span> : null}
+          {back && forward ? " · " : null}
+          {forward ? <span aria-label="forward" title={`⌘→ forward (${pane.forward!.length})`}>⌘→ {forward.spec.resource}</span> : null}
+        </span>
+      ) : null}
       <span className="flex-1" />
       <div className="relative">
         <input

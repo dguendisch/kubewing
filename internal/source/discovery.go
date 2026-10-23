@@ -2,7 +2,6 @@ package source
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -141,32 +140,13 @@ func PartialDiscovery(err error) bool {
 
 // Namespaces lists namespace names via a metadata-only list.
 func (c *Cluster) Namespaces(ctx context.Context) ([]string, error) {
-	res := Resolved{GVR: nsGVR, Metadata: true}
-	rc, err := c.restClient(res.GVR.GroupVersion())
+	items, err := c.ListMetadata(ctx, Resolved{GVR: nsGVR}, "", "", "")
 	if err != nil {
 		return nil, err
 	}
-	var names []string
-	cont := ""
-	for {
-		req := c.request(rc, res, "", "", "").Param("limit", "500")
-		if cont != "" {
-			req = req.Param("continue", cont)
-		}
-		body, err := req.DoRaw(ctx)
-		if err != nil {
-			return nil, err
-		}
-		t, err := decodeTableOrList(body)
-		if err != nil {
-			return nil, fmt.Errorf("list %s: %w", res.GVR.Resource, err)
-		}
-		for _, it := range t.items {
-			names = append(names, it.Object.GetName())
-		}
-		if cont = t.cont; cont == "" {
-			break
-		}
+	names := make([]string, 0, len(items))
+	for _, it := range items {
+		names = append(names, it.GetName())
 	}
 	sort.Strings(names)
 	return names, nil

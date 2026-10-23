@@ -64,6 +64,13 @@ func (a *App) Describe(pane, key string) (bridge.DescribeResult, error) {
 	return a.svc.Describe(pane, key)
 }
 func (a *App) RowInfo(pane, key string) (bridge.RowInfo, error) { return a.svc.RowInfo(pane, key) }
+func (a *App) RowIndex(pane, key string) (int, error)           { return a.svc.RowIndex(pane, key) }
+func (a *App) Relations(pane, key string) (bridge.Relations, error) {
+	return a.svc.Relations(pane, key)
+}
+func (a *App) OwnedScan(pane, key string) (bridge.OwnedScanResult, error) {
+	return a.svc.OwnedScan(pane, key)
+}
 func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecResult, error) {
 	return a.svc.ExecStart(token, container, cols, rows)
 }

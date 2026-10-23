@@ -1,0 +1,13 @@
+# Relation tapes: see rel-pods.yaml.
+filter: true
+pipeline:
+  source: {resource: rel-configmaps}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: gizmo-config, namespace: shop, uid: rc-gizmo-config, ownerReferences: [{apiVersion: e2e.kubewing/v1, kind: Widget, name: gizmo, uid: rw-gizmo, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [gizmo-config]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: gizmo-scripts, namespace: shop, uid: rc-gizmo-scripts, ownerReferences: [{apiVersion: e2e.kubewing/v1, kind: Widget, name: gizmo, uid: rw-gizmo}], creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [gizmo-scripts]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: plain, namespace: shop, uid: rc-plain, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [plain]

@@ -752,6 +752,21 @@ func (v *View) Deleted(key string) bool {
 	return ok && !e.deletedAt.IsZero()
 }
 
+// Synced reports whether the source delivered its first list, and how
+// many live objects the view holds (filters not applied).
+func (v *View) Synced() (bool, int) { return v.synced, v.objectCount() }
+
+// Index is a row's position in the display order (filters and sort
+// applied), or -1 if it isn't shown.
+func (v *View) Index(key string) int {
+	for i, e := range v.rows() {
+		if e.key == key {
+			return i
+		}
+	}
+	return -1
+}
+
 // Item returns the source item for a row key (for actions).
 func (v *View) Item(key string) (source.Item, bool) {
 	e, ok := v.entries[key]

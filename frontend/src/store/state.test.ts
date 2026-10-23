@@ -67,12 +67,128 @@ describe("layout commands", () => {
       (s) => S.focusDirection(s, (["left", "right", "up", "down"] as const)[Math.floor(rnd() * 4)]!),
       (s) => S.gotoTab(s, 1 + Math.floor(rnd() * 9)),
       (s) => S.openTerminal(s, { session: `sx${s.nextId}`, pod: "p", container: "c", context: "k" }),
+      // jumps: in place (history), into a split, back and forward
+      (s) => S.pushHistory(s, S.focusedPane(s).id, `k${s.nextId}`),
+      (s) => S.moveHistory(s, S.focusedPane(s).id, "back", `b${s.nextId}`).state,
+      (s) => S.moveHistory(s, S.focusedPane(s).id, "forward", `f${s.nextId}`).state,
+      (s) => S.splitWith(s, S.jumpSpec(S.focusedPane(s).spec, { resource: "replicasets.apps", namespace: "shop" })),
     );
     let s = S.initialState();
     for (let i = 0; i < 3000; i++) {
       s = apply(s, ops[Math.floor(rnd() * ops.length)]!);
       invariants(s);
+      for (const p of Object.values(s.panes)) {
+        expect((p.back ?? []).length).toBeLessThanOrEqual(S.historyLimit);
+        expect((p.forward ?? []).length).toBeLessThanOrEqual(S.historyLimit);
+        expect(p.back?.length !== 0 && p.forward?.length !== 0).toBe(true); // empty is undefined
+      }
     }
+  });
+});
+
+describe("jumps and their history", () => {
+  const owner = { resource: "deployments.apps", namespace: "shop", filter: 'o.metadata.name == "web"' };
+  const owned = { resource: "replicasets.apps", namespace: "shop" };
+
+  it("a jump replaces the pane's filters with the target's, keeping the context", () => {
+    const from: S.PaneSpec = { ...S.initialSpec("kind", ""), grep: "web", filter: "x", labelSelector: "a=b", hideHealthy: true };
+    expect(S.jumpSpec(from, owner)).toEqual({ context: "kind", resource: "deployments.apps", namespace: "shop", labelSelector: "", grep: "", filter: 'o.metadata.name == "web"' });
+    const node = S.jumpSpec(from, { resource: "pods", fieldSelector: "spec.nodeName=n1" });
+    expect(node.fieldSelector).toBe("spec.nodeName=n1");
+    expect(S.pipelineYAML(node)).toBe(JSON.stringify({ source: { resource: "pods", cluster: "kind", fieldSelector: "spec.nodeName=n1" } }));
+    // a field selector is part of the source: changing it re-subscribes
+    expect(S.sameSource(from, { ...from, fieldSelector: "spec.nodeName=n1" })).toBe(false);
+    expect(S.sameSource(from, { ...from, fieldSelector: "" })).toBe(true);
+  });
+
+  // what the dispatcher does: push, then show the target
+  const jump = (s: S.UIState, key: string, t: Parameters<typeof S.jumpSpec>[1]) =>
+    S.updatePane(S.pushHistory(s, "v1", key), "v1", (p) => ({ ...p, spec: S.jumpSpec(p.spec, t), selected: 0 }));
+  const go = (s: S.UIState, dir: "back" | "forward", key?: string) => {
+    const r = S.moveHistory(s, "v1", dir, key);
+    return r.entry ? S.updatePane(r.state, "v1", (p) => ({ ...p, spec: r.entry!.spec })) : r.state;
+  };
+  const where = (s: S.UIState) => s.panes.v1!.spec.resource;
+
+  it("back then forward redoes the jump; each way reselects the row that view had", () => {
+    let s = S.initialState("kind", "shop");
+    s = jump(s, "uid-pod", owner); // pods → deployment
+    expect([where(s), s.panes.v1!.back?.length, s.panes.v1!.forward]).toEqual(["deployments.apps", 1, undefined]);
+
+    s = go(s, "back", "uid-deploy");
+    expect([where(s), s.panes.v1!.reselect, s.panes.v1!.back, s.panes.v1!.forward]).toEqual([
+      "pods", "uid-pod", undefined, [{ spec: S.jumpSpec(S.initialSpec("kind", "shop"), owner), key: "uid-deploy" }],
+    ]);
+    s = go(s, "forward", "uid-pod");
+    expect([where(s), s.panes.v1!.reselect, s.panes.v1!.forward]).toEqual(["deployments.apps", "uid-deploy", undefined]);
+    expect(s.panes.v1!.back).toEqual([{ spec: S.initialSpec("kind", "shop"), key: "uid-pod" }]);
+  });
+
+  it("a new jump after going back drops the forward history, as a browser does", () => {
+    let s = jump(jump(S.initialState(), "a", owner), "b", owned); // pods → deploy → rs
+    s = go(s, "back", "rs-row"); // at deploy, rs forward
+    expect(s.panes.v1!.forward).toHaveLength(1);
+    s = jump(s, "c", { resource: "pods", namespace: "shop" });
+    expect(s.panes.v1!.forward).toBeUndefined();
+    expect(s.panes.v1!.back!.map((e) => e.spec.resource)).toEqual(["pods", "deployments.apps"]);
+  });
+
+  it("several steps back and forward walk the chain in order", () => {
+    let s = jump(jump(S.initialState(), "a", owner), "b", owned);
+    s = go(go(s, "back"), "back");
+    expect(where(s)).toBe("pods");
+    expect(S.moveHistory(s, "v1", "back", undefined).entry).toBeUndefined(); // the start
+    s = go(s, "forward");
+    expect(where(s)).toBe("deployments.apps");
+    s = go(s, "forward");
+    expect(where(s)).toBe("replicasets.apps");
+    expect(S.moveHistory(s, "v1", "forward", undefined).entry).toBeUndefined(); // the newest
+  });
+
+  it("the row to reselect: shown at an index, gone, or a stale answer", () => {
+    const { state } = S.moveHistory(jump(S.initialState(), "uid-pod", owner), "v1", "back", undefined);
+    const r = S.reselected(state, "v1", "uid-pod", 4);
+    expect(r.panes.v1!.selected).toBe(4);
+    expect(r.panes.v1!.reselect).toBeUndefined();
+    expect(S.reselected(state, "v1", "uid-pod", -1).panes.v1!.selected).toBe(0); // gone meanwhile: stays
+    expect(S.reselected(state, "v1", "other", 2)).toBe(state);
+  });
+
+  it("nowhere to go: unchanged", () => {
+    const s = S.initialState();
+    expect(S.moveHistory(s, "v1", "back", "k")).toEqual({ state: s });
+    expect(S.moveHistory(s, "v1", "forward", "k")).toEqual({ state: s });
+  });
+
+  it("bounded in both directions", () => {
+    let s = S.initialState();
+    for (let i = 0; i < S.historyLimit + 5; i++) s = S.pushHistory(s, "v1", `k${i}`);
+    expect(s.panes.v1!.back).toHaveLength(S.historyLimit);
+    expect(s.panes.v1!.back!.at(-1)!.key).toBe(`k${S.historyLimit + 4}`);
+    for (let i = 0; i < S.historyLimit + 5; i++) s = S.moveHistory(s, "v1", "back", `f${i}`).state;
+    expect(s.panes.v1!.back).toBeUndefined();
+    expect(s.panes.v1!.forward).toHaveLength(S.historyLimit);
+  });
+
+  it("splits and new tabs start without history; a jump into a split opens below, focused", () => {
+    let s = S.pushHistory(S.initialState(), "v1", "k");
+    expect(S.splitPane(s, "row").panes.v2!.back).toBeUndefined();
+    expect(S.newTab(s).panes.v2!.back).toBeUndefined();
+    s = S.splitWith(s, S.jumpSpec(s.panes.v1!.spec, owner));
+    const l = S.activeTab(s).layout;
+    expect(l.type === "split" && l.dir).toBe("column");
+    expect(S.activeTab(s).focused).toBe("v2");
+    expect(s.panes.v2!.spec.resource).toBe("deployments.apps");
+    expect(s.panes.v2!.back).toBeUndefined();
+    expect(s.panes.v1!.back).toHaveLength(1); // the source pane keeps its own
+    invariants(s);
+  });
+
+  it("the jump menu holds the menu's focus context, Esc restores", () => {
+    let s = S.openOverlay(S.initialState(), { kind: "jump", pane: "v1", key: "k", index: 0 });
+    expect(s.focus).toBe("menu");
+    s = S.closeOverlay(s);
+    expect(s.focus).toBe("table");
   });
 });
 

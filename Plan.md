@@ -48,6 +48,8 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
 
 Next up:
+- cmd+shift+return: maximize a pane (similar to iTerm), with some button/indicator on the top right that it's maximized and thus potentially overshadows other split panes, clicking on it (or cmd+shift+return again) un-maximizes it
+- overlay grab handles for panes to move them, attach them (similar to ghostty)
 - Events for a resource (shortcut "v")
 - grep highlight search results
 - better column sizing + resizing + rememeber last used app window size
@@ -115,7 +117,7 @@ Still open in P0.1:
 
 ### P3 — "Operator power" (v1.0)
 
-1. Resource dependencies (in both directions, owning and owned)
+1. Resource dependencies: done as the jump menu (`⌘J`: namespace, owners, owned; `⌘←`/`⌘→` back and forward; see the README). Open: non-owner references (pod → node, the configmaps/secrets/PVCs/service account it uses, svc → pods, pvc → pv, ingress → svc) as a "references" section from a per-kind table, with the same jump mechanics; a dependency tree view.
 1. RBAC views
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**

@@ -28,8 +28,10 @@ describe("native menu", () => {
 
   it("names scoped and plain keys in the label instead (natively they'd fire in text fields)", () => {
     const i = items();
-    // ⌘← is line start in the filter bar
-    expect(i["tab.prev"]).toEqual({ label: "Previous Tab  (⌘←)", command: "tab.prev" });
+    // ⌘← is line start in the filter bar: the history keys are named, not native
+    expect(i["history.back"]).toEqual({ label: "Back  (⌘←)", command: "history.back" });
+    // ⌘⇧[ is global, so it is a native key equivalent
+    expect(i["tab.prev"]!.accelerator).toBe("CmdOrCtrl+Shift+[");
     expect(i["object.describe"]).toEqual({ label: "Describe  (d)", command: "object.describe" });
     // ⌘C is the native copy in fields, Monaco and terminals
     expect(i["object.copyName"]).toEqual({ label: "Copy Name  (⌘C)", command: "object.copyName" });

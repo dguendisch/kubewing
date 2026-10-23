@@ -1,0 +1,43 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "rd-api",
+    "rd-web"
+  ],
+  "rows": [
+    {
+      "key": "rd-api",
+      "cells": [
+        "shop",
+        "api",
+        "0/0"
+      ]
+    },
+    {
+      "key": "rd-web",
+      "cells": [
+        "shop",
+        "web",
+        "2/2"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

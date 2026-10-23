@@ -209,6 +209,57 @@ export interface EditPreview {
   noChange?: boolean;
 }
 
+/** Mirrors relations.Target: where a jump lands, in the pane's context ("" namespace = all). */
+export interface JumpTarget {
+  resource: string;
+  namespace?: string;
+  labelSelector?: string;
+  fieldSelector?: string;
+  filter?: string;
+  grep?: string;
+  hideHealthy?: boolean;
+}
+
+/** Mirrors relations.Relation: one jump menu entry. */
+export interface Relation {
+  id: string;
+  section: "namespace" | "owner" | "owned";
+  label: string;
+  kind?: string;
+  name?: string;
+  /** Owners: 1 = direct, 2 = the owner's owner … */
+  depth?: number;
+  controller?: boolean;
+  /** undefined = nowhere to go (see gone). */
+  target?: JumpTarget;
+  /** Owned objects found; undefined = not counted. */
+  count?: number;
+  /** Why an owner can't be jumped to (deleted, recreated). */
+  gone?: string;
+  /** Qualifies an entry that still works (not checked, not counted). */
+  note?: string;
+}
+
+/** Mirrors bridge.Relations: the jump menu of one row. */
+export interface Relations {
+  kind: string;
+  name: string;
+  namespace?: string;
+  items: Relation[];
+  /** The owned scan can look for any kind owned by this object. */
+  scan?: boolean;
+  /** The scan spans all namespaces and cluster-scoped types (asks first). */
+  scanAll?: boolean;
+}
+
+/** Mirrors bridge.OwnedScanResult. */
+export interface OwnedScan {
+  items: Relation[];
+  scanned: number;
+  skipped?: number;
+  skipReason?: string;
+}
+
 /** Mirrors bridge.RowInfo: identity and capabilities of one row (no object content). */
 export interface RowInfo {
   key: string;
@@ -400,6 +451,12 @@ export interface Transport {
   editClose(session: string): Promise<void>;
   /** Identity and capabilities of a row (context menu, port-forward defaults). */
   rowInfo(pane: string, key: string): Promise<RowInfo>;
+  /** A row's position in the pane's current order (-1 = not shown). */
+  rowIndex(pane: string, key: string): Promise<number>;
+  /** The jump menu of a row: namespace, owner chain, known owned kinds (read-only, metadata only). */
+  relations(pane: string, key: string): Promise<Relations>;
+  /** Every resource type with objects owned by the row (lists all types: explicit only). */
+  ownedScan(pane: string, key: string): Promise<OwnedScan>;
   /** kubectl describe output for a row (read-only; no token); diffed against the previous look. */
   describe(pane: string, key: string): Promise<DescribeResult>;
   /** Starts a prepared exec; container "" = the pod's default. */

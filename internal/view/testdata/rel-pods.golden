@@ -1,0 +1,79 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 6,
+  "offset": 0,
+  "order": [
+    "rp-web-other",
+    "rp-gizmo-0",
+    "rp-orphan-0",
+    "rp-web-a",
+    "rp-web-b",
+    "rp-web-stray"
+  ],
+  "rows": [
+    {
+      "key": "rp-web-other",
+      "cells": [
+        "lab",
+        "web-other",
+        "Running"
+      ]
+    },
+    {
+      "key": "rp-gizmo-0",
+      "cells": [
+        "shop",
+        "gizmo-0",
+        "Running"
+      ]
+    },
+    {
+      "key": "rp-orphan-0",
+      "cells": [
+        "shop",
+        "orphan-0",
+        "Running"
+      ]
+    },
+    {
+      "key": "rp-web-a",
+      "cells": [
+        "shop",
+        "web-7d9f-a",
+        "Running"
+      ]
+    },
+    {
+      "key": "rp-web-b",
+      "cells": [
+        "shop",
+        "web-7d9f-b",
+        "Running"
+      ]
+    },
+    {
+      "key": "rp-web-stray",
+      "cells": [
+        "shop",
+        "web-stray",
+        "Running"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 6
+  }
+}

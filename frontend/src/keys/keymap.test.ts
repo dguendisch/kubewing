@@ -76,8 +76,8 @@ describe("resolve", () => {
     expect(resolve("Ctrl+D", "ended")).toBe("pane.close"); // …until the shell has ended
     expect(resolve("Meta+W", "ended")).toBe("tab.close");
     expect(resolve("J", "ended")).toBeUndefined(); // no table to move in
-    expect(resolve("Meta+ArrowRight", "table")).toBe("tab.next");
-    expect(resolve("Meta+ArrowLeft", "table")).toBe("tab.prev");
+    expect(resolve("Meta+Shift+]", "table")).toBe("tab.next");
+    expect(resolve("Meta+Shift+[", "table")).toBe("tab.prev");
     expect(resolve("Meta+ArrowRight", "filter")).toBeUndefined(); // start/end of line in inputs
     expect(resolve("D", "table")).toBe("object.describe");
     expect(resolve("D", "detail")).toBe("detail.toggleDiff"); // describe keeps ⇧D in the detail view
@@ -100,7 +100,7 @@ describe("terminal focus", () => {
   it("only ⌘ chords, ⌃⇥ and ⌃⇧D reach the app; everything else goes to the shell", () => {
     expect(resolve("Meta+D", "terminal")).toBe("pane.splitDown");
     expect(resolve("Meta+W", "terminal")).toBe("tab.close");
-    expect(resolve("Meta+ArrowRight", "terminal")).toBe("tab.next");
+    expect(resolve("Meta+Shift+]", "terminal")).toBe("tab.next");
     expect(resolve("Alt+Meta+ArrowLeft", "terminal")).toBe("pane.focusLeft");
     expect(resolve("Ctrl+Tab", "terminal")).toBe("tab.mruNext");
     expect(resolve("Ctrl+Shift+Tab", "terminal")).toBe("tab.mruPrev");
@@ -227,5 +227,35 @@ describe("user keybindings", () => {
   it("every default command is a known command id", () => {
     const known = new Set<string>(commandIds);
     expect(defaultBindings.filter((b) => !known.has(b.command))).toEqual([]);
+  });
+});
+
+describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", () => {
+  it("⌘J opens the jump menu from the table and the detail view", () => {
+    expect(resolve("Meta+J", "table")).toBe("object.jump");
+    expect(resolve("Meta+J", "detail")).toBe("object.jump");
+    expect(resolve("U", "table")).toBeUndefined();
+    expect(resolve("Escape", "table")).toBeUndefined();
+    expect(resolve("Escape", "menu")).toBe("detail.close"); // the jump menu closes like the ⌘⏎ menu
+    expect(resolve("Shift+Enter", "menu")).toBe("menu.runSplit");
+    expect(resolve("Enter", "menu")).toBe("menu.run");
+    expect(resolve("J", "table")).toBe("row.down");
+  });
+
+  it("⌘← / ⌘→ move through the jump history in the table; elsewhere they're the field's or nothing", () => {
+    expect(resolve("Meta+ArrowLeft", "table")).toBe("history.back");
+    expect(resolve("Meta+ArrowRight", "table")).toBe("history.forward");
+    expect(resolve("Meta+ArrowLeft", "filter")).toBeUndefined(); // start of line
+    for (const ctx of ["detail", "menu", "terminal"] as const) expect(resolve("Meta+ArrowLeft", ctx)).toBeUndefined();
+  });
+
+  it("⌘⇧[ / ⌘⇧] cycle tabs from anywhere, also from a shell", () => {
+    for (const ctx of ["table", "detail", "terminal", "filter", "menu"] as const) {
+      expect(resolve("Meta+Shift+]", ctx)).toBe("tab.next");
+      expect(resolve("Meta+Shift+[", ctx)).toBe("tab.prev");
+    }
+    // as macOS delivers them: ⇧] types "}"
+    expect(resolve(chord({ key: "}", code: "BracketRight", metaKey: true, shiftKey: true }), "table")).toBe("tab.next");
+    expect(resolve(chord({ key: "{", code: "BracketLeft", metaKey: true, shiftKey: true }), "table")).toBe("tab.prev");
   });
 });

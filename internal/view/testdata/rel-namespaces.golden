@@ -1,0 +1,38 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "rn-lab",
+    "rn-shop"
+  ],
+  "rows": [
+    {
+      "key": "rn-lab",
+      "cells": [
+        "",
+        "lab"
+      ]
+    },
+    {
+      "key": "rn-shop",
+      "cells": [
+        "",
+        "shop"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

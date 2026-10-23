@@ -1,0 +1,38 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "rnd-1",
+    "rnd-2"
+  ],
+  "rows": [
+    {
+      "key": "rnd-1",
+      "cells": [
+        "",
+        "node-1"
+      ]
+    },
+    {
+      "key": "rnd-2",
+      "cells": [
+        "",
+        "node-2"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

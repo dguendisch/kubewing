@@ -90,6 +90,9 @@ const sections: { title: string; rows: Row[] }[] = [
       row("delete…", "object.delete"),
       row("all actions for the row", "object.menu"),
       row("run the highlighted action", "menu.run"),
+      row("jump to namespace / owner / owned", "object.jump"),
+      row("jump into a split below", "menu.runSplit"),
+      row("back / forward through jumps", "history.back", "history.forward"),
     ],
   },
   {
@@ -99,6 +102,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
       rowIn("detail", "edit YAML…", "object.edit"),
+      rowIn("detail", "jump to namespace / owner / owned", "object.jump"),
       row("wrap long lines on / off", "detail.toggleWrap"),
       row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),

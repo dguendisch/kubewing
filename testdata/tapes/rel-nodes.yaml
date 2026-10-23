@@ -1,0 +1,12 @@
+# Relation tapes: see rel-pods.yaml. Cluster-scoped: a node runs the pods
+# whose spec.nodeName is it (a field selector, across namespaces).
+filter: true
+pipeline:
+  source: {resource: rel-nodes}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Node, metadata: {name: node-1, uid: rnd-1, creationTimestamp: "2026-01-01T09:00:00Z"}}
+    cells: [node-1]
+  - object: {apiVersion: v1, kind: Node, metadata: {name: node-2, uid: rnd-2, creationTimestamp: "2026-01-01T09:00:00Z"}}
+    cells: [node-2]

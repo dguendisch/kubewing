@@ -51,6 +51,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       null,
       ["Delete…", "object.delete"],
       null,
+      ["Jump To…", "object.jump"],
       ["All Actions…", "object.menu"],
     ],
   },
@@ -81,6 +82,9 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Pane Right", "pane.focusRight"],
       ["Pane Above", "pane.focusUp"],
       ["Pane Below", "pane.focusDown"],
+      null,
+      ["Back", "history.back"],
+      ["Forward", "history.forward"],
     ],
   },
   {
