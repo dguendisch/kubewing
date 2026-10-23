@@ -12,7 +12,7 @@ import (
 )
 
 // HistoryFile is the one file kubewing writes in its directory: what it
-// remembers between runs (recent debug images). Hand-edited files stay
+// remembers between runs (recent debug images, the window's size). Hand-edited files stay
 // read-only; this one is the app's and is rewritten as a whole.
 const HistoryFile = "history.yaml"
 
@@ -25,6 +25,24 @@ type History struct {
 	DebugImages []string `json:"debugImages"`
 	// OpsPod: the namespace and checkboxes of the last ops pod that started; nil = none yet.
 	OpsPod *OpsPodSettings `json:"opsPod,omitempty"`
+	// Window: the main window's size when kubewing last closed; nil = never closed yet.
+	Window *Window `json:"window,omitempty"`
+}
+
+// Window states (Window.State).
+const (
+	WindowNormal     = ""
+	WindowMaximised  = "maximised"
+	WindowFullscreen = "fullscreen"
+)
+
+// Window is the main window's state and size.
+type Window struct {
+	// State is WindowNormal, WindowMaximised or WindowFullscreen.
+	State string `json:"state,omitempty"`
+	// Width and Height are the normal (not maximised) size in points.
+	Width  int `json:"width"`
+	Height int `json:"height"`
 }
 
 // HistoryStore reads and writes dir/history.yaml. dir "" keeps history in
@@ -50,6 +68,7 @@ func OpenHistory(dir string) *HistoryStore {
 	if yaml.Unmarshal(b, &h) == nil {
 		s.h.DebugImages = dedupe(h.DebugImages, MaxDebugImages)
 		s.h.OpsPod = h.OpsPod
+		s.h.Window = h.Window
 	}
 	return s
 }
@@ -63,7 +82,19 @@ func (s *HistoryStore) Get() History {
 		o := *s.h.OpsPod
 		h.OpsPod = &o
 	}
+	if s.h.Window != nil {
+		w := *s.h.Window
+		h.Window = &w
+	}
 	return h
+}
+
+// SetWindow remembers the main window's size and state and saves.
+func (s *HistoryStore) SetWindow(w Window) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.h.Window = &w
+	return s.save()
 }
 
 // AddOpsPod remembers a started ops pod: its image (with the debug images) and its settings.
@@ -111,7 +142,7 @@ func (s *HistoryStore) save() error {
 	if err != nil {
 		return err
 	}
-	header := "# Written by kubewing (recent debug/ops pod images, last ops pod settings); safe to delete.\n"
+	header := "# Written by kubewing (recent debug/ops pod images, last ops pod settings, window size); safe to delete.\n"
 	if _, err := tmp.Write(append([]byte(header), b...)); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())

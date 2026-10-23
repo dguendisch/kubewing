@@ -71,6 +71,27 @@ func TestHistoryOpsPod(t *testing.T) {
 	}
 }
 
+func TestHistoryWindow(t *testing.T) {
+	dir := t.TempDir()
+	h := OpenHistory(dir)
+	_ = h.AddDebugImage("busybox")
+	if h.Get().Window != nil {
+		t.Fatal("no window yet")
+	}
+	want := Window{State: WindowMaximised, Width: 1400, Height: 860}
+	if err := h.SetWindow(want); err != nil {
+		t.Fatal(err)
+	}
+	got := OpenHistory(dir).Get()
+	if got.Window == nil || *got.Window != want || !slices.Equal(got.DebugImages, []string{"busybox"}) {
+		t.Errorf("reloaded: %+v %+v", got, got.Window)
+	}
+	got.Window.Width = 99
+	if h.Get().Window.Width != 1400 {
+		t.Error("history changed through Get")
+	}
+}
+
 func TestHistoryBrokenOrNone(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, HistoryFile), []byte("debugImages: {not: a list}\n"), 0o644)

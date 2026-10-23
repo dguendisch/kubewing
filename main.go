@@ -93,7 +93,8 @@ func main() {
 	// before the frontend sends its menus (and should it never): no ⌘W "Close Window", no ⌘R "Reload"
 	a.Menu.Set(app.BaseMenu(nil, emit.Emit))
 	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emit.Emit)) }
-	a.Window.NewWithOptions(application.WebviewWindowOptions{
+	// reopens in the size it was last closed in (history.yaml)
+	app.NewMainWindow(a, opts.History, application.WebviewWindowOptions{
 		Title:  "kubewing",
 		Width:  1400,
 		Height: 860,

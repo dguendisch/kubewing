@@ -48,11 +48,12 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
 
 Next up:
+- diff editor (show that j/k is for next/prev change)
 - cmd+shift+return: maximize a pane (similar to iTerm), with some button/indicator on the top right that it's maximized and thus potentially overshadows other split panes, clicking on it (or cmd+shift+return again) un-maximizes it
 - overlay grab handles for panes to move them, attach them (similar to ghostty)
 - Events for a resource (shortcut "v")
 - grep highlight search results
-- better column sizing + resizing + rememeber last used app window size
+- better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
 Still open in P0.1:
