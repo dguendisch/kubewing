@@ -153,7 +153,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
   return (
     <form
       role="dialog"
-      aria-label="ops pod"
+      aria-label="node shell"
       className={`absolute top-16 left-1/2 z-30 flex ${yaml ? "w-[min(76rem,96vw)]" : "w-[34rem]"} -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl`}
       onSubmit={(e) => {
         e.preventDefault();
@@ -171,7 +171,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
       }}
     >
       <div className="text-fg">
-        ops pod on a node <span className="text-fg-muted">of {nodes?.context || cluster || "the current context"}</span>
+        node shell <span className="text-fg-muted">on a node of {nodes?.context || cluster || "the current context"}</span>
       </div>
       <div className="flex min-h-0 gap-3">
         <div className="flex w-[32rem] shrink-0 flex-col gap-2">

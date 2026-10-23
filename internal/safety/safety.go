@@ -196,7 +196,7 @@ func ctxName(r Rule) string {
 
 func summary(a Action) string {
 	if a.Kind == OpsPod {
-		return fmt.Sprintf("ops pod on node %s on %s", a.Name, orCurrent(a.Context))
+		return fmt.Sprintf("node shell on node %s on %s", a.Name, orCurrent(a.Context))
 	}
 	obj := a.Resource + "/" + a.Name
 	if a.Namespace != "" {

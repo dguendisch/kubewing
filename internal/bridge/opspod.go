@@ -391,7 +391,16 @@ func (s *Service) OpsPodManifest(cluster, node string, o OpsPodOptions) (string,
 	if err != nil {
 		return "", err
 	}
-	return strings.Replace(string(b), "status: {}\n", "", 1), nil
+	y := strings.Replace(string(b), "status: {}\n", "", 1)
+	// offer priorityClassName as a comment right after nodeName (both spec-level):
+	// a full node may evict a best-effort pod otherwise. Uncomment to keep it.
+	if i := strings.Index(y, "  nodeName:"); i >= 0 {
+		if nl := strings.IndexByte(y[i:], '\n'); nl >= 0 {
+			at := i + nl + 1
+			y = y[:at] + "  # priorityClassName: system-cluster-critical  # uncomment to survive on a full node\n" + y[at:]
+		}
+	}
+	return y, nil
 }
 
 // editedPod decodes the dialog's edited YAML. What the safety token was

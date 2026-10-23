@@ -85,10 +85,10 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
       <span className="text-fg-muted">{pane.context}</span>
-      <span className="font-semibold text-accent">{term.ops ? "ops pod" : term.debug ? "debug" : "exec"}</span>
+      <span className="font-semibold text-accent">{term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
       {term.ops ? (
         <>
-          <span>node {term.ops.node}</span>
+          <span>{term.ops.node}</span>
           <span className="text-fg-muted">
             {term.ops.namespace}/{term.pod} · {term.ops.image}
             {term.ops.settings ? ` · ${term.ops.settings}` : ""}

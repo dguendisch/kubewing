@@ -144,7 +144,7 @@ func TestOpsPodSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !p.NeedsConfirm || p.Summary != "ops pod on node "+node+" on tape" || p.Action.UID != "n-1" {
+	if !p.NeedsConfirm || p.Summary != "node shell on node "+node+" on tape" || p.Action.UID != "n-1" {
 		t.Errorf("prepared: %+v", p)
 	}
 	r, err := svc.OpsPodStart(p.Token, OpsPodOptions{Image: " ops-toolbelt ", Chroot: true, HostNetwork: true}, 80, 24)
@@ -284,6 +284,13 @@ func TestOpsPodPersistentVolume(t *testing.T) {
 	}
 	if strings.Contains(y, "status:") {
 		t.Errorf("manifest has a status:\n%s", y)
+	}
+	// priorityClassName is offered as a commented line just after nodeName (uncomment to survive a full node)
+	if !strings.Contains(y, "# priorityClassName: system-cluster-critical") {
+		t.Errorf("manifest lacks the priorityClassName comment:\n%s", y)
+	}
+	if ni := strings.Index(y, "nodeName:"); ni >= 0 && !strings.Contains(y[ni:], "# priorityClassName") {
+		t.Errorf("priorityClassName comment not after nodeName:\n%s", y)
 	}
 	p, _ := svc.PrepareOpsPod("", node)
 	r, err := svc.OpsPodStart(p.Token, OpsPodOptions{Image: "x", PV: "pv-etcd-main", MountPath: "/data"}, 0, 0)

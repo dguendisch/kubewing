@@ -45,7 +45,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       null,
       ["Exec Shell", "object.exec"],
       ["Debug Container…", "object.debug"],
-      ["Ops Pod on Node…", "object.opsPod"],
+      ["Node Shell…", "object.opsPod"],
       ["Port-Forward…", "object.portForward"],
       ["Port-Forwards", "portforward.list"],
       null,

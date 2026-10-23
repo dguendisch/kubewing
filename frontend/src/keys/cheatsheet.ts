@@ -78,7 +78,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("describe", "object.describe"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
-      row("ops pod on a node… (the row's node, or any)", "object.opsPod"),
+      row("node shell… (the row's node, or any)", "object.opsPod"),
       row("port-forward…", "object.portForward"),
       row("delete…", "object.delete"),
       row("all actions for the row", "object.menu"),

@@ -1306,7 +1306,7 @@ test.describe("object actions", () => {
     await openStatic(page);
     await select(page, "s-web-3"); // runs on ip-10-0-2-22 (nodes.yaml)
     await page.keyboard.press("ControlOrMeta+Alt+O");
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     const node = dialog.getByRole("combobox", { name: "node" });
     await expect(node).toHaveValue("ip-10-0-2-22.ec2.internal");
     await expect(node).toBeFocused();
@@ -1355,8 +1355,8 @@ test.describe("object actions", () => {
     await page.keyboard.press("Enter"); // the first ⏎ takes nothing (no suggestion), so it starts
     await expect(dialog).toHaveCount(0);
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
-    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
-    await expect(header).toContainText("node ip-10-0-3-33.ec2.internal");
+    const header = page.locator("section[data-pane] header").filter({ hasText: "node shell" });
+    await expect(header).toContainText("ip-10-0-3-33.ec2.internal");
     await expect(header).toContainText("busybox:ops · chroot /host");
     await expect(header).not.toContainText("host network");
     await expect(header).toContainText("kube-system/ops-pod-kubewing-e2e-"); // the user (headless tapes: e2e)
@@ -1385,7 +1385,7 @@ test.describe("object actions", () => {
     await page.keyboard.press("e"); // one container: straight to its shell
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     await page.keyboard.press("ControlOrMeta+Alt+O");
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     const node = dialog.getByRole("combobox", { name: "node" });
     await expect(node).toHaveValue("");
     await expect(dialog.getByRole("listbox", { name: "node suggestions" }).getByRole("option")).toHaveCount(3); // listed right away
@@ -1421,17 +1421,17 @@ test.describe("object actions", () => {
     await select(page, "n-1");
     // the context menu offers it on node rows
     await page.keyboard.press("ControlOrMeta+Enter");
-    await expect(menu(page).getByRole("menuitem", { name: "ops pod on node… ⌥⌘O" })).toBeEnabled();
+    await expect(menu(page).getByRole("menuitem", { name: "node shell… ⌥⌘O" })).toBeEnabled();
     await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toBeDisabled();
-    await menu(page).getByRole("menuitem", { name: "ops pod on node… ⌥⌘O" }).click();
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    await menu(page).getByRole("menuitem", { name: "node shell… ⌥⌘O" }).click();
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     await expect(dialog).toContainText("of tape-dev");
     await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-1-11.ec2.internal");
     await dialog.getByRole("combobox", { name: "image" }).fill("fail/nope");
     await dialog.getByRole("combobox", { name: "image" }).press("Enter");
     const confirm = page.getByRole("alertdialog", { name: "confirm opspod" });
     // the remembered settings of the first ops pod test
-    await expect(confirm).toContainText("ops pod on node ip-10-0-1-11.ec2.internal on tape-dev (image fail/nope, namespace kube-system, chroot /host)");
+    await expect(confirm).toContainText("node shell on node ip-10-0-1-11.ec2.internal on tape-dev (image fail/nope, namespace kube-system, chroot /host)");
     await page.keyboard.press("Enter");
     await expect(page.getByLabel("session ended")).toContainText("ImagePullBackOff");
     await expect.poll(() => termText(page)).toContain("deleting kube-system/ops-pod-kubewing-e2e-");
@@ -1443,7 +1443,7 @@ test.describe("object actions", () => {
     await openStatic(page);
     await select(page, "s-web-3");
     await page.keyboard.press("ControlOrMeta+Alt+O");
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     const pv = dialog.getByRole("combobox", { name: "persistent volume" });
     await pv.focus();
     await page.keyboard.press("ArrowDown");
@@ -1478,7 +1478,7 @@ test.describe("object actions", () => {
     await mountPath.focus();
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
-    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
+    const header = page.locator("section[data-pane] header").filter({ hasText: "node shell" });
     await expect(header).toContainText("garden/ops-pod-kubewing-e2e-");
     await expect(header).toContainText("pv-etcd-main at /pv (ro)");
     await page.keyboard.press("Control+D");
@@ -1489,7 +1489,7 @@ test.describe("object actions", () => {
     await openStatic(page);
     await select(page, "s-web-3");
     await page.keyboard.press("ControlOrMeta+Alt+O");
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     await dialog.getByRole("combobox", { name: "image" }).fill("busybox:yaml");
     await dialog.getByRole("combobox", { name: "namespace" }).fill("ops");
     await dialog.getByRole("button", { name: "show YAML…" }).click();
@@ -1497,6 +1497,7 @@ test.describe("object actions", () => {
     await expect(editor).toContainText("nodeName: ip-10-0-2-22.ec2.internal");
     await expect(editor).toContainText("image: busybox:yaml");
     await expect(editor).toContainText("namespace: ops");
+    // (the commented priorityClassName line is asserted precisely in the Go bridge test)
     // the form is locked while the YAML is what starts
     await expect(dialog.getByRole("combobox", { name: "image" })).toBeDisabled();
     await expect(dialog).toContainText("this is what starts");
@@ -1527,7 +1528,7 @@ test.describe("object actions", () => {
     await expect(dialog).not.toContainText("esc again drops");
     await page.keyboard.press("ControlOrMeta+Enter");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
-    const header = page.locator("section[data-pane] header").filter({ hasText: "ops pod" });
+    const header = page.locator("section[data-pane] header").filter({ hasText: "node shell" });
     await expect(header).toContainText("busybox:yaml · ");
     await expect(header).toContainText("edited YAML");
     await expect(header).toContainText("ops/ops-pod-kubewing-e2e-");
@@ -1557,7 +1558,7 @@ test.describe("object actions", () => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-3");
     await page.keyboard.press("ControlOrMeta+Alt+O");
-    const dialog = page.getByRole("dialog", { name: "ops pod" });
+    const dialog = page.getByRole("dialog", { name: "node shell" });
     await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-2-22.ec2.internal");
     await page.keyboard.press("Enter");
     await expect(dialog.getByRole("alert")).toContainText("read-only context");
@@ -1861,7 +1862,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - separator
         - menuitem "exec shell e"
         - menuitem "debug container… b"
-        - menuitem "ops pod on node… ⌥⌘O"
+        - menuitem "node shell… ⌥⌘O"
         - menuitem "port-forward… f"
         - separator
         - menuitem "delete… ⌘⌫"
