@@ -1,21 +1,76 @@
 package view
 
-// healthyPod reports whether obj is a pod with nothing to look at: Running,
-// not being deleted, and every container (including restartable init
-// containers, i.e. sidecars) has a status that is ready. A container without
-// a status yet counts as not ready, as in kubectl's READY column.
-func healthyPod(obj map[string]any) bool {
-	if obj["kind"] != "Pod" {
-		return false
-	}
-	if meta, _ := obj["metadata"].(map[string]any); meta["deletionTimestamp"] != nil {
-		return false
-	}
-	status, _ := obj["status"].(map[string]any)
-	if status["phase"] != "Running" {
+// healthy reports whether obj has nothing to look at: not being deleted and,
+// by kind, a ready pod or a workload whose rollout is complete (see
+// healthyPod, healthyWorkload). Other kinds are never healthy, so never
+// hidden; the frontend's healthKinds lists the same kinds.
+func healthy(obj map[string]any) bool {
+	meta, _ := obj["metadata"].(map[string]any)
+	if meta["deletionTimestamp"] != nil {
 		return false
 	}
 	spec, _ := obj["spec"].(map[string]any)
+	status, _ := obj["status"].(map[string]any)
+	switch obj["kind"] {
+	case "Pod":
+		return healthyPod(spec, status)
+	case "Deployment", "StatefulSet":
+		return healthyWorkload(meta, spec, status, "replicas", "updatedReplicas", "readyReplicas", "availableReplicas")
+	case "ReplicaSet":
+		// a ReplicaSet doesn't roll out: its pods are all of its one template
+		return healthyWorkload(meta, spec, status, "replicas", "readyReplicas", "availableReplicas")
+	case "DaemonSet":
+		return number(status["numberMisscheduled"]) == 0 &&
+			healthyWorkload(meta, nil, status, "currentNumberScheduled", "updatedNumberScheduled", "numberReady", "numberAvailable")
+	}
+	return false
+}
+
+// healthyWorkload reports whether the controller has seen the latest spec
+// (observedGeneration) and every count in status equals the desired one:
+// spec.replicas (default 1), or for a DaemonSet (spec nil)
+// desiredNumberScheduled. Counts the API omits are 0, as it omits zeros.
+// This is what kubectl rollout status waits for.
+func healthyWorkload(meta, spec, status map[string]any, counts ...string) bool {
+	if number(status["observedGeneration"]) < number(meta["generation"]) {
+		return false
+	}
+	want := number(status["desiredNumberScheduled"])
+	if spec != nil {
+		want = 1
+		if r, ok := spec["replicas"]; ok {
+			want = number(r)
+		}
+	}
+	for _, c := range counts {
+		if number(status[c]) != want {
+			return false
+		}
+	}
+	return true
+}
+
+// number reads a JSON number as decoded into an unstructured object (int64,
+// or float64 from plain JSON); anything else is 0.
+func number(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		return int64(n)
+	}
+	return 0
+}
+
+// healthyPod: Running and every container (including restartable init
+// containers, i.e. sidecars) has a status that is ready. A container without
+// a status yet counts as not ready, as in kubectl's READY column.
+func healthyPod(spec, status map[string]any) bool {
+	if status["phase"] != "Running" {
+		return false
+	}
 	return allReady(containerNames(spec["containers"], false), status["containerStatuses"], true) &&
 		allReady(containerNames(spec["initContainers"], true), status["initContainerStatuses"], false)
 }

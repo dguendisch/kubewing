@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "d-api",
+    "d-web",
+    "d-worker"
+  ],
+  "rows": [
+    {
+      "key": "d-api",
+      "cells": [
+        "shop",
+        "api",
+        "3/3"
+      ]
+    },
+    {
+      "key": "d-web",
+      "cells": [
+        "shop",
+        "web",
+        "3/3"
+      ]
+    },
+    {
+      "key": "d-worker",
+      "cells": [
+        "shop",
+        "worker",
+        "1/2"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

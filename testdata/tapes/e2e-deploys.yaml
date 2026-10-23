@@ -1,0 +1,14 @@
+# E2E tape for "hide healthy" on workloads: a finished rollout, one in
+# progress (1 of 3 updated) and one with an unavailable replica.
+pipeline:
+  source: {resource: deployments}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: api, namespace: shop, uid: d-api, generation: 4, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 3}, status: {observedGeneration: 4, replicas: 3, updatedReplicas: 3, readyReplicas: 3, availableReplicas: 3}}
+    cells: [api, 3/3]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: shop, uid: d-web, generation: 7, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 3}, status: {observedGeneration: 7, replicas: 4, updatedReplicas: 1, readyReplicas: 3, availableReplicas: 3}}
+    cells: [web, 3/3]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: worker, namespace: shop, uid: d-worker, generation: 2, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2}, status: {observedGeneration: 2, replicas: 2, updatedReplicas: 2, readyReplicas: 1, availableReplicas: 1}}
+    cells: [worker, 1/2]

@@ -40,8 +40,9 @@ type Stage struct {
 	Grep string `json:"grep,omitempty"`
 	// Sort lists column names; a leading "-" sorts descending.
 	Sort []string `json:"sort,omitempty"`
-	// HideHealthy drops pods that are Running with every container ready
-	// (other kinds pass through).
+	// HideHealthy drops pods that are Running with every container ready,
+	// and deployments, statefulsets, replicasets and daemonsets whose
+	// rollout is complete (other kinds pass through).
 	HideHealthy bool `json:"hideHealthy,omitempty"`
 }
 

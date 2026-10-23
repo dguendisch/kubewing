@@ -905,6 +905,25 @@ test.describe("object actions", () => {
     await expect(box).toBeChecked();
   });
 
+  // e2e-deploys: api's rollout is complete, web is mid-rollout, worker has an unavailable replica
+  test("h hides deployments whose rollout is complete; kinds without a health check get no checkbox", async ({ page }) => {
+    await openTape(page, "e2e-deploys");
+    const box = page.getByRole("checkbox", { name: "hide healthy" });
+    await expect(page.locator("label", { has: box })).toHaveAttribute("title", /deployments whose replicas/);
+    await page.keyboard.press("h");
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toEqual(["d-web", "d-worker"]);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("nodes");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
+    await expect(box).toHaveCount(0);
+    // the toggle carried over with the spec turns off; turning it on again is refused here
+    await page.keyboard.press("h");
+    expect((await focused(page)).spec).not.toMatchObject({ hideHealthy: true });
+    await page.keyboard.press("h");
+    await expect(page.getByLabel("message")).toContainText("hiding healthy works on pods, deployments");
+  });
+
   test("d describes in Monaco; y back to yaml", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");

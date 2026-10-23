@@ -448,7 +448,7 @@ func (v *View) evalMatch(e *entry) {
 // matches applies the view's stages to an entry, with filters in place of
 // the view's own (a draft filter is previewed that way).
 func (v *View) matches(e *entry, filters []*expr.Program) (bool, error) {
-	if v.hideHealthy && healthyPod(e.item.Object.Object) {
+	if v.hideHealthy && healthy(e.item.Object.Object) {
 		return false, nil
 	}
 	return matches(e.item.Object.Object, e.cells, filters, v.greps)

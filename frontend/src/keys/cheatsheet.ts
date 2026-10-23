@@ -14,6 +14,8 @@ interface Row {
   commands: CommandId[];
   /** Show the keys as a range ("⌘1–⌘9") instead of listing all of them. */
   range?: boolean;
+  /** Only the keys bound in this context; lets a section repeat a command that works there too. */
+  in?: FocusContext;
 }
 
 export interface Entry {
@@ -30,6 +32,9 @@ export interface Section {
 }
 
 const row = (label: string, ...commands: CommandId[]): Row => ({ label, commands });
+
+/** A row for a command listed elsewhere, showing its keys in one context only. */
+const rowIn = (context: FocusContext, label: string, ...commands: CommandId[]): Row => ({ label, commands, in: context });
 
 const tabJumps = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): CommandId => `tab.goto${n}`);
 
@@ -63,7 +68,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("filter rows", "filter.focus"),
       row("filter by label selector", "filter.focusLabels"),
       row("filter by CEL expression", "filter.focusCel"),
-      row("hide / show healthy pods", "filter.toggleHealthy"),
+      row("hide / show healthy pods and workloads", "filter.toggleHealthy"),
       row("leave the filter bar", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),
       row("page down / up", "row.pageDown", "row.pageUp"),
@@ -77,7 +82,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("diff last change", "object.diff"),
       row("copy name", "object.copyName"),
       row("describe", "object.describe"),
-      row("edit YAML… (also from the YAML view)", "object.edit"),
+      row("edit YAML…", "object.edit"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
       row("node shell… (the row's node, or any)", "object.opsPod"),
@@ -93,6 +98,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("back to YAML", "detail.showYaml"),
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
+      rowIn("detail", "edit YAML…", "object.edit"),
       row("wrap long lines on / off", "detail.toggleWrap"),
       row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
@@ -136,6 +142,9 @@ const sections: { title: string; rows: Row[] }[] = [
 /** Every command the sheet shows; used by the completeness test. */
 export const listedCommands: readonly CommandId[] = sections.flatMap((s) => s.rows.flatMap((r) => r.commands));
 
+/** The commands of the unscoped rows, which must each appear once. */
+export const primaryCommands: readonly CommandId[] = sections.flatMap((s) => s.rows.filter((r) => !r.in).flatMap((r) => r.commands));
+
 /** The sheet for a keymap. Unbound commands and empty sections are left out. Pure. */
 export function cheatsheet(bindings: Binding[] = defaultBindings): Section[] {
   return sections
@@ -149,6 +158,7 @@ function entry(r: Row, bindings: Binding[]): Entry | undefined {
   let global = false;
   for (const b of bindings) {
     if (!r.commands.includes(b.command)) continue;
+    if (r.in && b.when?.length && !b.when.includes(r.in)) continue;
     const k = prettyKey(b.key);
     if (!keys.includes(k)) keys.push(k);
     if (b.when?.length) b.when.forEach((w) => when.add(w));
@@ -157,5 +167,5 @@ function entry(r: Row, bindings: Binding[]): Entry | undefined {
   if (!keys.length) return undefined;
   // ⌘1–⌘9: the nine tab jumps are one line, and only its ends are worth printing
   const shown = r.range && keys.length > 2 ? [`${keys[0]}–${keys[keys.length - 1]}`] : keys;
-  return { label: r.label, keys: shown, when: global ? [] : [...when] };
+  return { label: r.label, keys: shown, when: global ? [] : r.in ? [r.in] : [...when] };
 }

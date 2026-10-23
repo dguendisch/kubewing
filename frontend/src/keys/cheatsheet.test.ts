@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cheatsheet, listedCommands } from "./cheatsheet";
+import { cheatsheet, listedCommands, primaryCommands } from "./cheatsheet";
 import { commandIds, defaultBindings, mergeBindings } from "./keymap";
 // the dispatcher's source, to check the sheet's own command is handled
 import commandsSrc from "../commands.ts?raw";
@@ -10,7 +10,7 @@ describe("cheat sheet", () => {
   it("shows every command of the keymap (a new command needs a section entry)", () => {
     const listed = new Set(listedCommands);
     expect(commandIds.filter((c) => !listed.has(c))).toEqual([]);
-    expect(listedCommands.filter((c, i) => listedCommands.indexOf(c) !== i)).toEqual([]); // no command twice
+    expect(primaryCommands.filter((c, i) => primaryCommands.indexOf(c) !== i)).toEqual([]); // no command twice, bar scoped repeats
   });
 
   it("pretty-prints the chords and pairs next/previous on one line", () => {
@@ -28,6 +28,13 @@ describe("cheat sheet", () => {
     expect(e["describe"]!.when).toEqual(["table", "detail"]);
     expect(e["close pane"]!.keys).toEqual(["⌃D", "⌃⇧D"]);
     expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "ended", "terminal"]); // terminal: ⌃⇧D only
+  });
+
+  it("repeats a command in a section scoped to one context", () => {
+    const detail = cheatsheet().find((s) => s.title === "detail view")!;
+    const edit = detail.entries.find((e) => e.label === "edit YAML…")!;
+    expect(edit.keys).toEqual(["e"]);
+    expect(edit.when).toEqual(["detail"]);
   });
 
   it("collapses the nine tab jumps into a range", () => {

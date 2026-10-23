@@ -222,11 +222,12 @@ function filterFromDetail(op: "==" | "!=") {
   void applySpec(pane.id, { ...pane.spec, filter: expr });
 }
 
-/** h: hides (or shows again) the pods that are Running with all containers ready. */
+/** h: hides (or shows again) the healthy pods and workloads (see S.healthKinds). */
 function toggleHealthy() {
   const pane = S.focusedPane(useUI.getState());
   if (pane.term) return;
-  if (pane.kind && pane.kind !== "Pod" && !pane.spec.hideHealthy) return flash(pane.id, "hiding healthy works on pods only", true);
+  if (pane.kind && !S.hasHealth(pane.kind) && !pane.spec.hideHealthy)
+    return flash(pane.id, "hiding healthy works on pods, deployments, statefulsets, replicasets and daemonsets", true);
   void applySpec(pane.id, { ...pane.spec, hideHealthy: !pane.spec.hideHealthy });
 }
 

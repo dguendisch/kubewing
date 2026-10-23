@@ -282,8 +282,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         className={`w-36 truncate ${field}`}
       />
       {/* other kinds aren't affected, so there's nothing to show */}
-      {pane.kind === "Pod" ? (
-        <label title="hide pods that are Running with all containers ready (h)" className="flex shrink-0 cursor-pointer items-center gap-1 text-fg-muted">
+      {S.hasHealth(pane.kind) ? (
+        <label title={healthyTitle(pane.kind!)} className="flex shrink-0 cursor-pointer items-center gap-1 text-fg-muted">
           <input
             type="checkbox"
             aria-label="hide healthy"
@@ -298,6 +298,14 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       ) : null}
     </header>
   );
+}
+
+function healthyTitle(kind: string) {
+  const what =
+    kind === "Pod"
+      ? "pods that are Running with all containers ready"
+      : `${kind.toLowerCase()}s whose replicas are all current, up to date, ready and available`;
+  return `hide ${what} (h)`;
 }
 
 function StatusLine({ pane }: { pane: S.PaneState }) {

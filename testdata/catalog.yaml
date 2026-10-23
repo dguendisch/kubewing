@@ -18,4 +18,5 @@ resources:
   - {name: machines, group: machine.sapcloud.io, version: v1alpha1, kind: Machine, singular: machine, shortNames: [mach], namespaced: true}
   - {name: machines, group: cluster.x-k8s.io, version: v1beta1, kind: Machine, singular: machine, shortNames: [ma], namespaced: true}
   - {name: e2e-pods, version: v1, kind: Pod, namespaced: true}
+  - {name: e2e-deploys, group: apps, version: v1, kind: Deployment, namespaced: true}
 namespaces: [default, garden, kube-public, kube-system, prod, shoot--foo--bar]

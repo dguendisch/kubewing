@@ -12,9 +12,16 @@ export interface PaneSpec {
   grep: string;
   /** CEL filter over the object `o` ("" = none). */
   filter: string;
-  /** Hides pods that are Running with all containers ready (other kinds pass). */
+  /** Hides healthy objects of the healthKinds (other kinds pass). */
   hideHealthy?: boolean;
 }
+
+/**
+ * Kinds "hide healthy" knows (internal/view/healthy.go): pods Running with
+ * all containers ready, workloads whose rollout is complete.
+ */
+export const healthKinds = ["Pod", "Deployment", "StatefulSet", "ReplicaSet", "DaemonSet"];
+export const hasHealth = (kind?: string) => !!kind && healthKinds.includes(kind);
 
 export interface PaneState {
   id: string;
