@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalKey, chord, collisions, commandIds, defaultBindings, mergeBindings, prettyKey, resolve, suppressedDefaults } from "./keymap";
+import { canonicalKey, chord, collisions, commandIds, defaultBindings, fieldReserved, mergeBindings, prettyKey, resolve, suppressedDefaults } from "./keymap";
 
 describe("chord", () => {
   it("canonicalizes", () => {
@@ -113,6 +113,13 @@ describe("terminal focus", () => {
     const { bindings } = mergeBindings(defaultBindings, [{ key: "ctrl+c", command: "pane.close" }]);
     expect(resolve("Ctrl+C", "table", bindings)).toBe("pane.close");
     expect(resolve("Ctrl+C", "terminal", bindings)).toBeUndefined();
+  });
+});
+
+describe("Monaco find field", () => {
+  it("keeps typed keys (d, j, =, ⌃D, ⌘←) and lets ⌘ chords and ⌃⇥ through", () => {
+    for (const k of ["D", "Shift+D", "J", "K", "Y", "W", "R", "=", "!", "?", "Ctrl+D", "Ctrl+Shift+D", "Enter", "Meta+ArrowLeft", "Meta+ArrowRight"]) expect(fieldReserved(k)).toBe(true);
+    for (const k of ["Meta+W", "Meta+D", "Meta+]", "Meta+1", "Alt+Meta+ArrowLeft", "Ctrl+Tab", "Ctrl+Shift+Tab"]) expect(fieldReserved(k)).toBe(false);
   });
 });
 

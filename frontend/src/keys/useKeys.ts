@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { dispatch } from "../commands";
 import { useConfig } from "../store/config";
 import { bridge, useUI } from "../store/store";
-import { chord, commandIds, resolve, suppressedDefaults, type CommandId } from "./keymap";
+import { chord, commandIds, fieldReserved, resolve, suppressedDefaults, type CommandId } from "./keymap";
 
 /**
  * Owns all shortcuts: resolves keydown via the keymap and suppresses webview
@@ -15,6 +15,8 @@ export function useKeys() {
       const c = chord(e);
       // an open Monaco find widget closes on Esc before the detail view does
       if (c === "Escape" && e.target instanceof Element && e.target.closest(".find-widget.visible")) return;
+      // typing in Monaco's find field is text, not the detail view's d/j/k/y … keys
+      if (e.target instanceof Element && e.target.closest(".find-widget") && fieldReserved(c)) return;
       // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
       if (c === "Meta+F" && e.target instanceof Element && e.target.closest(".monaco-editor")) return;
       const cmd = resolve(c, useUI.getState().focus, useConfig.getState().bindings);

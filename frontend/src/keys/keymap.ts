@@ -251,6 +251,17 @@ export function terminalReserved(key: string): boolean {
   return !mods.includes("Meta") && !/^Ctrl(\+Shift)?\+Tab$/.test(key) && key !== "Ctrl+Shift+D";
 }
 
+/**
+ * In Monaco's find field the keys are text being typed (d, j, =, ⌃D …);
+ * only ⌘ chords and ⌃⇥ MRU switching reach the app, except ⌘←/⌘→, which
+ * jump to the start/end of the field.
+ */
+export function fieldReserved(key: string): boolean {
+  const mods = key.split("+").slice(0, -1);
+  if (/^Ctrl(\+Shift)?\+Tab$/.test(key)) return false;
+  return !mods.includes("Meta") || key === "Meta+ArrowLeft" || key === "Meta+ArrowRight";
+}
+
 /** Resolves a chord in a focus context; context-specific bindings win over global ones. */
 export function resolve(key: string, focus: FocusContext, bindings: Binding[] = defaultBindings): CommandId | undefined {
   if (focus === "terminal" && terminalReserved(key)) return undefined;

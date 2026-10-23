@@ -851,6 +851,11 @@ test.describe("detail view (Monaco)", () => {
     await page.keyboard.press("ControlOrMeta+F");
     await expect(page.locator(".find-widget.visible")).toBeVisible();
     expect((await inspect(page)).focus).toBe("detail");
+    // typed text stays in the field: d/y/w/j/k/r/= are not the detail view's keys there
+    await page.keyboard.type("dywjkr=");
+    await expect(page.locator(".find-widget.visible textarea").first()).toHaveValue("dywjkr=");
+    expect((await inspect(page)).overlays).toEqual(["detail"]); // still the yaml (d: diff), wrap untouched (w)
+    await expect(page.locator('[data-viewer="single"]')).toHaveAttribute("data-wrap", "true");
     await page.keyboard.press("Escape");
     await expect(page.locator(".find-widget.visible")).toHaveCount(0);
     expect((await inspect(page)).overlays).toEqual(["detail"]);
