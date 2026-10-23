@@ -92,6 +92,27 @@ func TestExecSession(t *testing.T) {
 	}
 }
 
+// Keystrokes sent one call each, faster than the shell reads, arrive in
+// order (they used to race, one goroutine per write: "seq" became "esq").
+func TestSessionInputKeepsOrder(t *testing.T) {
+	svc, log, res := deleteSetup(t, nil)
+	waitRow(t, log, res.Pane, "s-web-1", func(view.RowData) bool { return true })
+	p, err := svc.Prepare("exec", res.Pane, "s-web-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	er, err := svc.ExecStart(p.Token, "", 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := "the quick brown fox jumps over the lazy dog 0123456789"
+	for _, c := range line + "\r" { // before the prompt: nothing reads yet
+		input(t, svc, er.Session, string(c))
+	}
+	waitOutput(t, log, er.Session, func(out, _ string) bool { return strings.Contains(out, line+"\r\n"+line+"\r\n") })
+	_ = svc.SessionClose(er.Session)
+}
+
 func TestExecDefaultContainerAndClose(t *testing.T) {
 	svc, log, res := deleteSetup(t, nil)
 	waitRow(t, log, res.Pane, "s-web-0", func(view.RowData) bool { return true })

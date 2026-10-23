@@ -60,7 +60,7 @@ diff:
   ignore:
     - {path: status.observedGeneration, kinds: [Deployment]}
 contexts:
-  - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec], strict: true}
+  - {match: "*prod*", label: PROD, color: prod, readOnly: true, confirm: [delete, exec, edit], strict: true}
   - {match: "kind-*", label: kind, color: "#3b8eea"}
 debug: {image: nicolaka/netshoot, profile: netadmin}
 opsPod: {image: ops-toolbelt:latest, namespace: kube-system, chroot: true, hostNetwork: false}
@@ -82,7 +82,7 @@ accent: "rgb(203, 75, 22)"
 			Theme: "solar",
 			Diff:  Diff{Ignore: []normalize.Rule{{Path: "status.observedGeneration", Kinds: []string{"Deployment"}}}},
 			Contexts: []ContextRule{
-				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec"}, Strict: true},
+				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec", "edit"}, Strict: true},
 				{Match: "kind-*", Label: "kind", Color: "#3b8eea"},
 			},
 			Debug:    Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},

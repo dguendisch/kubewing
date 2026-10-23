@@ -16,7 +16,8 @@ describe("row actions menu", () => {
     const m = byCmd(menuFor(pod, undefined));
     expect(Object.values(m).filter((i) => i.disabled)).toEqual([]);
     expect(m["object.describe"]!.shortcut).toBe("d");
-    expect(m["object.exec"]!.shortcut).toBe("e");
+    expect(m["object.exec"]!.shortcut).toBe("x");
+    expect(m["object.edit"]!.shortcut).toBe("e");
     expect(m["object.delete"]!.shortcut).toBe("⌘⌫");
     expect(m["object.portForward"]!.shortcut).toBe("f");
     expect(m["detail.open"]!.shortcut).toBe("⏎");

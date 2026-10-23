@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { ContextList, DebugOptions, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ContextList, DebugOptions, EditPreview, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
 
@@ -90,8 +90,9 @@ export interface Overlay {
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes;
    *  container: which container a prepared exec enters;
    *  debug: image, target and profile of a prepared debug container;
-   *  opspod: node, image and host access of an ops pod (prepared on submit). */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod";
+   *  opspod: node, image and host access of an ops pod (prepared on submit);
+   *  edit: a row's object in the YAML editor, then the server's dry-run diff. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
@@ -120,8 +121,27 @@ export interface Overlay {
   ops?: OpsPodOptions;
   /** opspod: the dialog's initial values, loaded before it opens. */
   opsDefaults?: OpsPodDefaults;
+  /** edit: the editor's state; confirm: the edit being written (a failed write reopens the editor with it). */
+  edit?: EditState;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
+}
+
+/** An open edit (see bridge/edit.go): Go holds the original, the UI the text being edited. */
+export interface EditState {
+  session: string;
+  /** The row edited (the overlay may be a confirm meanwhile). */
+  key: string;
+  /** "kind name" for the header. */
+  title: string;
+  /** As opened, for "discard changes?". */
+  opened: string;
+  yaml: string;
+  /** Set once the dry run passed: the editor shows its diff instead (focus editpreview). */
+  preview?: EditPreview;
+  error?: string;
+  /** Esc with changes asks once; the second Esc discards. */
+  discarding?: boolean;
 }
 
 export type FilterField = "grep" | "labels" | "cel";
@@ -426,10 +446,19 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a menu too: the same keys (j/k, ⏎, Esc)
   container: "menu",
   help: "help",
+  edit: "edit",
 };
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
   return { ...s, overlay: { ...o, restore: s.focus }, focus: overlayFocus[o.kind] };
+}
+
+/** The edit overlay's focus follows what it shows: the editor, or the dry-run diff. */
+export function setEdit(s: UIState, f: (e: EditState) => EditState): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "edit" || !o.edit) return s;
+  const edit = f(o.edit);
+  return { ...s, overlay: { ...o, edit }, focus: edit.preview ? "editpreview" : "edit" };
 }
 
 export function closeOverlay(s: UIState): UIState {

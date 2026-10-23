@@ -23,3 +23,9 @@ initial:
   # its data is one long line without spaces (YAML can't fold it): wider than the detail view (word wrap)
   - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: cfg, namespace: shop, uid: s-cfg, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {settings: '{"replicas":3,"image":"registry.example.com/team/app@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08","args":["--listen=0.0.0.0:8080","--log-level=debug","--feature-gates=AllAlpha=false,AllBeta=true","--extra-config=kubelet.max-pods=110,kubelet.eviction-hard=memory.available<100Mi,nodefs.available<10%"]}'}}
     cells: [cfg, ""]
+  # edit (e): a config map to change; its edits persist for the backend's lifetime, so each e2e test edits its own key (mode, stage)
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: settings, namespace: shop, uid: s-settings, resourceVersion: "7", creationTimestamp: "2026-01-01T10:00:00Z"}, data: {mode: blue, replicas: "3", stage: dev-before}}
+    cells: [settings, ""]
+  # edit refused by the fake admission webhook (tape.RejectEditAnnotation)
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: locked, namespace: shop, uid: s-locked, creationTimestamp: "2026-01-01T10:00:00Z", annotations: {e2e.kubewing/reject-edit: "locked by policy"}}, data: {mode: blue}}
+    cells: [locked, ""]

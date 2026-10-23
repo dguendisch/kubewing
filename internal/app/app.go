@@ -50,6 +50,16 @@ func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }
 func (a *App) Delete(token string) error { return a.svc.Delete(token) }
+func (a *App) EditOpen(pane, key string) (bridge.EditSession, error) {
+	return a.svc.EditOpen(pane, key)
+}
+func (a *App) EditCheck(session, yaml string) (bridge.EditPreview, error) {
+	return a.svc.EditCheck(session, yaml)
+}
+func (a *App) EditApply(token, session, yaml string) error {
+	return a.svc.EditApply(token, session, yaml)
+}
+func (a *App) EditClose(session string) { a.svc.EditClose(session) }
 func (a *App) Describe(pane, key string) (bridge.DescribeResult, error) {
 	return a.svc.Describe(pane, key)
 }

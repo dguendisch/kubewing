@@ -224,8 +224,12 @@ type ExecResult struct {
 }
 
 type session struct {
-	id     string
-	stdin  *io.PipeWriter
+	id    string
+	stdin *io.PipeWriter
+	// input feeds stdin through one writer goroutine: keystrokes stay in
+	// order (a goroutine per write would race on the pipe) and SessionInput
+	// never blocks on a remote that isn't reading yet
+	input  chan []byte
 	resize chan source.TerminalSize
 	cancel context.CancelFunc
 
@@ -272,7 +276,14 @@ func (s *Service) startSession(cols, rows int, run func(context.Context, source.
 	s.mu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	inR, inW := io.Pipe()
-	ss := &session{id: id, stdin: inW, resize: make(chan source.TerminalSize, 4), cancel: cancel}
+	ss := &session{id: id, stdin: inW, input: make(chan []byte, 1024), resize: make(chan source.TerminalSize, 4), cancel: cancel}
+	go func() {
+		for b := range ss.input {
+			if _, err := inW.Write(b); err != nil {
+				return // the remote ended; endSession closes input
+			}
+		}
+	}()
 	if cols > 0 && rows > 0 {
 		ss.resize <- source.TerminalSize{Cols: uint16(cols), Rows: uint16(rows)}
 	}
@@ -496,8 +507,15 @@ func (s *Service) SessionInput(id, data string) error {
 	if err != nil {
 		return err
 	}
-	// io.Pipe blocks until the remote reads; keep the bridge call responsive
-	go func() { _, _ = ss.stdin.Write(b) }()
+	ss.mu.Lock()
+	defer ss.mu.Unlock()
+	if ss.closed {
+		return nil
+	}
+	select {
+	case ss.input <- b:
+	default: // a remote that stopped reading: drop, as a full TTY buffer would
+	}
 	return nil
 }
 
@@ -535,6 +553,7 @@ func (s *Service) endSession(ss *session) {
 	if !ss.closed {
 		ss.closed = true
 		close(ss.resize)
+		close(ss.input)
 		_ = ss.stdin.Close()
 	}
 	ss.mu.Unlock()

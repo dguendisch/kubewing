@@ -47,11 +47,11 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
 
-Still open in P0:
-- Events for a resource (shortcut "v", move exec shortcut to "x", reserve "e" for future edit support)
-- edit support
+Next up:
+- Events for a resource (shortcut "v")
 - grep highlight search results
-- better column sizing + resizing
+- exclude "healthy" pods (Running and all containers ready)
+- better column sizing + resizing + rememeber last used app window size
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
 Still open in P0.1:
@@ -99,6 +99,8 @@ Still open in P0.1:
 1. **Saved views / aliases / favorites** — transfer shell muscle memory (`kg` → `kubectl get`, `k get nodes -owide`, `tgd` → `gardenctl target garden landscape-dev`). Favorites = bookmarked clusters with a name.
 1. **Shell interop** — export the current pipeline as a `kubectl` + shell one-liner, and import one.
 1. **Edit resources** — apply/recreate, client-/server-side, dry-run, with diff preview.
+   - Done: update as `kubectl edit` (`e`; exec moved to `x`): merge patch with a resourceVersion precondition, server dry run shown as a diff before writing, `edit` safety action.
+   - Open: server-side apply (field manager `kubewing`, conflicts listed with their owners, force), recreate for immutable fields (delete + create, confirmed as delete), and applying from files (P3 "Scratch apply").
 1. **Field-path diff engine** — computed from the P0 history buffer.
    - Changes as field paths, e.g. `status.conditions[Ready].status: True→False`.
    - Lists matched by key (containers by `name`, conditions by `type`) via OpenAPI `x-kubernetes-list-map-keys`, not by index.

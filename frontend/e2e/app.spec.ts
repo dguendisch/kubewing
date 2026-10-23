@@ -234,7 +234,7 @@ test("cel filter completes field paths from the live objects", async ({ page }) 
 
 test("cel filter brackets keys that aren't identifiers, and completes after them", async ({ page }) => {
   // runs before the safety tests delete web-0 from this tape (serial, in file order)
-  await openTape(page, "e2e-static", 6);
+  await openTape(page, "e2e-static", 8);
   await page.keyboard.press("c");
   const cel = page.getByLabel("cel", { exact: true });
   const list = page.getByRole("listbox", { name: "cel suggestions" });
@@ -935,10 +935,10 @@ test.describe("object actions", () => {
   });
 
   // web-3 has a single container: e goes straight to its shell
-  test("e opens a terminal pane below; keys go to the shell; ⌘W is still the tab's", async ({ page }) => {
+  test("x opens a terminal pane below; keys go to the shell; ⌘W is still the tab's", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     const s = await inspect(page);
     const termPane = s.panes[s.focusedPane] as unknown as { term?: { session: string; pod: string; container: string } };
@@ -966,7 +966,7 @@ test.describe("object actions", () => {
   test("the terminal keeps terminal.scrollback lines (config.yaml: 20000), more than the old 5000", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("seq 12000");
     await page.keyboard.press("Enter");
@@ -986,7 +986,7 @@ test.describe("object actions", () => {
   test("⌘F finds in the terminal (as Monaco's find): live, ⏎ / ⇧⏎ / ⌘G step, options, esc back to the shell", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("seq 300");
     await page.keyboard.press("Enter");
@@ -1039,7 +1039,7 @@ test.describe("object actions", () => {
   test("⌃D in the shell ends the session and closes the pane", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(() => termText(page)).toContain("$");
     // the tape's shell ends on EOF, like a real one
     await page.keyboard.press("Control+D");
@@ -1052,7 +1052,7 @@ test.describe("object actions", () => {
   test("⌃⇧D closes the shell pane even when the shell ignores ⌃D", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("x"); // the tape shell ignores ⌃D on a non-empty line, like a busy one
     await page.keyboard.press("Control+D");
@@ -1067,17 +1067,17 @@ test.describe("object actions", () => {
   test("exit in the shell closes the pane too", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect.poll(() => termText(page)).toContain("$");
     await page.keyboard.type("exit 2");
     await page.keyboard.press("Enter");
     await expect.poll(async () => Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     expect((await inspect(page)).focus).toBe("table");
   });
-  test("e on a pod with several containers asks which one; the default is highlighted", async ({ page }) => {
+  test("x on a pod with several containers asks which one; the default is highlighted", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-4");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     const picker = page.getByRole("menu", { name: "exec into web-4" });
     await expect(picker).toMatchAriaSnapshot(`
       - menu "exec into web-4":
@@ -1105,11 +1105,11 @@ test.describe("object actions", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
   });
 
-  test("container picker: e ⏎ enters the default; esc cancels without a session", async ({ page }) => {
+  test("container picker: x ⏎ enters the default; esc cancels without a session", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-4");
     const sel = (await focused(page)).selected;
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     const picker = page.getByRole("menu", { name: "exec into web-4" });
     await expect(picker).toBeVisible();
     await page.keyboard.press("Escape");
@@ -1118,7 +1118,7 @@ test.describe("object actions", () => {
     expect((await focused(page)).selected).toBe(sel);
     expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     // the same key twice: the highlighted default
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect(picker).toBeVisible();
     await page.keyboard.press("Enter");
     await expect.poll(() => termText(page)).toContain("web-4:app$");
@@ -1129,7 +1129,7 @@ test.describe("object actions", () => {
   test("container picker, then the confirmation naming the container (dev context)", async ({ page }) => {
     await openStatic(page, "tape-dev");
     await select(page, "s-web-1");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     const picker = page.getByRole("menu", { name: "exec into web-1" });
     await picker.getByRole("menuitem", { name: /sidecar/ }).click();
     const confirm = page.getByRole("alertdialog", { name: "confirm exec" });
@@ -1387,7 +1387,7 @@ test.describe("object actions", () => {
   test("⌥⌘O from a terminal pane: no row, an empty node; unknown nodes and empty images are refused in the dialog", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("e"); // one container: straight to its shell
+    await page.keyboard.press("x"); // one container: straight to its shell
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     await page.keyboard.press("ControlOrMeta+Alt+O");
     const dialog = page.getByRole("dialog", { name: "node shell" });
@@ -1794,7 +1794,7 @@ test.describe("object actions", () => {
   test("not a pod: exec and port-forward are refused", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-cfg");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect(page.getByLabel("message")).toContainText("exec needs a pod, not configmap");
     expect((await inspect(page)).focus).toBe("table");
   });
@@ -1802,12 +1802,132 @@ test.describe("object actions", () => {
   test("read-only context: exec refused; describe still works", async ({ page }) => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-1");
-    await page.keyboard.press("e");
+    await page.keyboard.press("x");
     await expect(page.getByLabel("message")).toContainText("read-only context");
     expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     await page.keyboard.press("d");
     await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
   });
+  test.describe("edit", () => {
+    const dialog = (page: Page) => page.getByRole("dialog", { name: "edit object" });
+    /**
+     * Changes one value in the editor by typing: find it (⌘F), close the find
+     * widget (the match stays selected) and type over it. Typed, not pasted:
+     * the editor's keys are text, and Monaco's auto-indent stays out of it.
+     */
+    async function retype(page: Page, from: string, to: string) {
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText(from);
+      await dialog(page).getByRole("textbox", { name: "edit YAML" }).focus();
+      await page.keyboard.press("ControlOrMeta+F");
+      await page.keyboard.insertText(from);
+      await page.keyboard.press("Escape");
+      await expect(dialog(page).locator(".find-widget.visible")).toHaveCount(0);
+      await page.keyboard.type(to);
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText(to);
+    }
+
+    test("e opens the object; ⌘S previews the server's dry run; ⏎ writes it and the table shows it", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      await page.keyboard.press("e");
+      await expect(dialog(page)).toContainText("ConfigMap settings");
+      expect((await inspect(page)).focus).toBe("edit");
+      // keys are text in the editor: typing "green" (r: refresh, e: edit, n …) only edits
+      await retype(page, "blue", "green");
+      expect((await inspect(page)).overlays).toEqual(["edit"]);
+      await expect(dialog(page)).toContainText("edit (changed)");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page)).toContainText("preview (server dry run");
+      expect((await inspect(page)).focus).toBe("editpreview");
+      await expect(dialog(page).getByRole("status", { name: "change position" })).toHaveText("1 / 1");
+      const diff = dialog(page).locator('[data-viewer="diff"]');
+      await expect(diff).toContainText("mode: blue");
+      await expect(diff).toContainText("mode: green");
+      // esc goes back to editing, with the text kept; ⌘S again previews it
+      await page.keyboard.press("Escape");
+      expect((await inspect(page)).focus).toBe("edit");
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText("mode: green");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page)).toContainText("preview (server dry run");
+      await page.keyboard.press("Enter");
+      await expect(dialog(page)).toHaveCount(0);
+      await expect(page.getByLabel("message")).toHaveText("edited e2e-static/settings");
+      expect((await inspect(page)).focus).toBe("table");
+      // the watch delivers the new version: the YAML view shows it
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("mode: green");
+      // e from the YAML view edits the version just written
+      await page.keyboard.press("e");
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText("mode: green");
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText('resourceVersion: "8"');
+      // nothing changed: esc closes at once
+      await page.keyboard.press("Escape");
+      await expect(dialog(page)).toHaveCount(0);
+      expect((await inspect(page)).overlays).toEqual([]);
+    });
+
+    test("changes ask before esc discards them; nothing changed is refused in the editor", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      await page.keyboard.press("e");
+      await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText("apiVersion"); // read from the server first
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page).getByRole("alert")).toHaveText("no changes");
+      await retype(page, "settings", "settingsx"); // the name: changed, but never sent
+      await page.keyboard.press("Escape");
+      await expect(dialog(page).getByRole("status")).toHaveText("unsaved changes: esc again discards them");
+      await page.keyboard.press("Escape");
+      await expect(dialog(page)).toHaveCount(0);
+      expect((await inspect(page)).focus).toBe("table");
+    });
+
+    test("a refused edit (admission webhook, renamed object) stays in the editor with the reason", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-locked");
+      await page.keyboard.press("e");
+      await retype(page, "blue", "red");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page).getByRole("alert")).toContainText("denied the request: locked by policy");
+      expect((await inspect(page)).focus).toBe("edit");
+      await retype(page, "name: locked", "name: unlocked");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page).getByRole("alert")).toContainText("name and namespace must stay shop/locked");
+      await page.keyboard.press("Escape");
+      await page.keyboard.press("Escape");
+      await expect(dialog(page)).toHaveCount(0);
+    });
+
+    test("a context that confirms edits asks after the preview; esc there goes back to it", async ({ page }) => {
+      await openStatic(page, "tape-dev");
+      await select(page, "s-settings");
+      await page.keyboard.press("e");
+      await retype(page, "dev-before", "dev-after");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page)).toContainText("preview (server dry run");
+      await expect(dialog(page)).toContainText("DEV");
+      await page.keyboard.press("Enter");
+      const confirm = page.getByRole("alertdialog", { name: "confirm edit" });
+      await expect(confirm).toContainText("edit e2e-static/settings -n shop on tape-dev");
+      await page.keyboard.press("Escape");
+      await expect(confirm).toHaveCount(0);
+      expect((await inspect(page)).focus).toBe("editpreview");
+      await page.keyboard.press("Enter");
+      await confirm.getByRole("button").first().click();
+      await expect(page.getByLabel("message")).toHaveText("edited e2e-static/settings");
+    });
+
+    test("read-only context: the menu entry is disabled and e is refused", async ({ page }) => {
+      await openStatic(page, "tape-prod");
+      await select(page, "s-settings");
+      await page.keyboard.press("e");
+      await expect(page.getByLabel("message")).toContainText("read-only context");
+      await expect(dialog(page)).toHaveCount(0);
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(page.getByRole("menu").getByRole("menuitem", { name: /edit YAML…/ })).toContainText("read-only context");
+      await page.keyboard.press("Escape");
+    });
+  });
+
   test("long lines wrap by default; w toggles it for the session, also in describe", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-cfg");
@@ -1861,11 +1981,12 @@ test.describe("context menu (⌘⏎, right-click)", () => {
       - menu "actions for web-1":
         - text: web-1 · pod · shop
         - menuitem "view YAML ⏎"
+        - menuitem "edit YAML… e"
         - menuitem "describe d"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name ⌘C"
         - separator
-        - menuitem "exec shell e"
+        - menuitem "exec shell x"
         - menuitem "debug container… b"
         - menuitem "node shell… ⌥⌘O"
         - menuitem "port-forward… f"
@@ -1873,7 +1994,9 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j/k skip the disabled diff entry: describe → copy name → describe
+    // j/k skip the disabled diff entry: edit YAML → describe → copy name → describe
+    await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("edit YAML…");
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("j");
@@ -1917,7 +2040,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   test("a menu opening under a resting pointer keeps the first entry; moving the mouse still highlights", async ({ page }) => {
     await openSettled(page);
     const active = () => menu(page).locator("[data-active]").innerText();
-    // find where "describe" (2nd entry) appears, then park the pointer there
+    // find where "edit YAML…" (2nd entry) appears, then park the pointer there
     await page.keyboard.press("ControlOrMeta+Enter");
     const item = (await menu(page).getByRole("menuitem").nth(1).boundingBox())!;
     await page.keyboard.press("Escape");
@@ -1932,7 +2055,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     // real movement inside the open menu highlights what's under the pointer
     await page.keyboard.press("ControlOrMeta+Enter");
     await page.mouse.move(item.x + 60, item.y + item.height / 2, { steps: 4 });
-    await expect.poll(active).toContain("describe");
+    await expect.poll(active).toContain("edit YAML…");
   });
 
   test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {

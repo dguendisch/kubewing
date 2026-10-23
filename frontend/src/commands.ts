@@ -123,6 +123,19 @@ export function dispatch(cmd: CommandId) {
     }
     case "object.exec":
       return void prepareAction("exec");
+    case "object.edit":
+      return void openEdit();
+    case "edit.submit":
+      return void submitEdit();
+    case "edit.back": {
+      const e = s.overlay?.kind === "edit" ? s.overlay.edit : undefined;
+      if (!e) return;
+      if (e.preview) return setUI((x) => S.setEdit(x, (d) => ({ ...d, preview: undefined })));
+      // changes are work: the first esc only asks
+      if (e.yaml !== e.opened && !e.discarding) return setUI((x) => S.setEdit(x, (d) => ({ ...d, discarding: true })));
+      void bridge().editClose(e.session).catch(() => {});
+      return setUI(S.closeOverlay);
+    }
     case "object.debug":
       return void prepareAction("debug");
     case "object.opsPod":
@@ -170,6 +183,8 @@ export function dispatch(cmd: CommandId) {
       }
       return void runConfirmed();
     case "confirm.cancel":
+      // a confirmed edit goes back to its preview, not away
+      if (s.overlay?.kind === "confirm" && s.overlay.edit) return reopenEdit(s.overlay.pane, s.overlay.edit);
       return setUI(S.closeOverlay);
     case "term.find":
       return setUI(S.openFind);
@@ -230,7 +245,7 @@ export function flash(paneId: string, text: string, error = false) {
  * (Prepare), the UI confirms if the rule asks for it, then the token is
  * redeemed. Refusals (read-only context …) show in the pane's status line.
  * An exec into a pod with more than one container it could enter asks which
- * one in between (the default highlighted, so e ⏎ is the old e).
+ * one in between (the default highlighted, so x ⏎ is a plain x).
  */
 async function prepareAction(kind: ActionKind) {
   const s = useUI.getState();
@@ -254,10 +269,74 @@ async function prepareAction(kind: ActionKind) {
   }
 }
 
-/** A prepared action, its container (exec) or options (debug, ops pod) picked: confirm if the rule asks for it, else run. */
-async function proceed(paneId: string, key: string | undefined, pending: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions) {
-  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug, ops }));
-  else await execute(paneId, pending, container, debug, ops);
+/** A prepared action, its container (exec) or options (debug, ops pod, edit) picked: confirm if the rule asks for it, else run. */
+async function proceed(paneId: string, key: string | undefined, pending: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState) {
+  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug, ops, edit }));
+  else await execute(paneId, pending, container, debug, ops, edit);
+}
+
+/**
+ * e, from the table or the detail view: Go reads the object fresh and opens
+ * an edit session (refused on read-only contexts, before anyone types).
+ */
+async function openEdit() {
+  const s = useUI.getState();
+  const o = s.overlay;
+  const fromDetail = o?.kind === "detail";
+  const paneId = fromDetail ? o.pane : S.focusedPane(s).id;
+  const pane = s.panes[paneId];
+  const key = fromDetail ? o.key : pane && selectedKey(pane);
+  if (!pane?.serverId || !key) return;
+  try {
+    const [es, info] = await Promise.all([bridge().editOpen(pane.serverId, key), bridge().rowInfo(pane.serverId, key)]);
+    if (useUI.getState().overlay !== o) return void bridge().editClose(es.session).catch(() => {}); // something else meanwhile
+    const edit: S.EditState = { session: es.session, key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml };
+    setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "edit", pane: paneId, key, edit }));
+  } catch (e) {
+    // the detail view would cover the pane's status line
+    if (fromDetail && useUI.getState().overlay === o) setUI(S.closeOverlay);
+    flash(paneId, errorText(e), true);
+  }
+}
+
+/** The edit overlay again (back from a confirm, or after a failed write), in the editor or its preview. */
+function reopenEdit(paneId: string, edit: S.EditState) {
+  setUI((x) => S.setEdit(S.openOverlay(S.closeOverlay(x), { kind: "edit", pane: paneId, key: edit.key, edit }), (e) => e));
+}
+
+/**
+ * ⌘S / ⌘⏎ in the editor: Go checks the edit and the server dry-runs it; a
+ * refusal (bad YAML, webhook, conflict) stays in the editor, else its diff
+ * shows. There ⏎ (or ⌘S again) prepares and writes it, confirmed if the
+ * context's rule asks for it.
+ */
+async function submitEdit() {
+  const o = useUI.getState().overlay;
+  const e = o?.kind === "edit" ? o.edit : undefined;
+  const pane = o && useUI.getState().panes[o.pane];
+  if (!o || !e || !pane?.serverId) return;
+  // a result for text that was changed meanwhile is dropped
+  const same = (x: S.UIState) => x.overlay?.kind === "edit" && x.overlay.edit?.session === e.session && x.overlay.edit.yaml === e.yaml && !x.overlay.edit.preview === !e.preview;
+  const fail = (err: unknown) => setUI((x) => (same(x) ? S.setEdit(x, (d) => ({ ...d, preview: undefined, error: errorText(err), discarding: false })) : x));
+  if (!e.preview) {
+    try {
+      const preview = await bridge().editCheck(e.session, e.yaml);
+      if (preview.noChange) return fail("the server would store nothing new (status, for one, isn't changed by an edit)");
+      setUI((x) => (same(x) ? S.setEdit(x, (d) => ({ ...d, preview, error: undefined, discarding: false })) : x));
+    } catch (err) {
+      fail(err);
+    }
+    return;
+  }
+  let pending: Pending;
+  try {
+    pending = await bridge().prepare("edit", pane.serverId, e.key);
+  } catch (err) {
+    return fail(err);
+  }
+  if (!same(useUI.getState())) return;
+  setUI(S.closeOverlay);
+  await proceed(o.pane, e.key, pending, "", undefined, undefined, e);
 }
 
 /**
@@ -336,14 +415,24 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o.container, o.debug, o.ops);
+    await execute(o.pane, o.pending, o.container, o.debug, o.ops, o.edit);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions) {
+async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState) {
   switch (p.action.kind) {
+    case "edit": {
+      if (!edit) return;
+      try {
+        await bridge().editApply(p.token, edit.session, edit.yaml);
+      } catch (e) {
+        // nothing typed is lost: back in the editor, with why
+        return reopenEdit(paneId, { ...edit, preview: undefined, error: errorText(e) });
+      }
+      return flash(paneId, `edited ${p.action.resource}/${p.action.name}`);
+    }
     case "delete":
       await bridge().delete(p.token);
       return flash(paneId, `deleted ${p.action.resource}/${p.action.name}`);

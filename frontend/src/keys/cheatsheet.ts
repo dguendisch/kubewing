@@ -76,6 +76,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("diff last change", "object.diff"),
       row("copy name", "object.copyName"),
       row("describe", "object.describe"),
+      row("edit YAML… (also from the YAML view)", "object.edit"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
       row("node shell… (the row's node, or any)", "object.opsPod"),
@@ -95,6 +96,13 @@ const sections: { title: string; rows: Row[] }[] = [
       row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
       row("close", "detail.close"),
+    ],
+  },
+  {
+    title: "edit",
+    rows: [
+      row("preview the change (server dry run), then apply", "edit.submit"),
+      row("back to editing / close", "edit.back"),
     ],
   },
   {

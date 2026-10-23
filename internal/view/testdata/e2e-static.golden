@@ -12,10 +12,12 @@
       "name": "STATUS"
     }
   ],
-  "total": 6,
+  "total": 8,
   "offset": 0,
   "order": [
     "s-cfg",
+    "s-locked",
+    "s-settings",
     "s-web-0",
     "s-web-1",
     "s-web-2",
@@ -28,6 +30,22 @@
       "cells": [
         "shop",
         "cfg",
+        ""
+      ]
+    },
+    {
+      "key": "s-locked",
+      "cells": [
+        "shop",
+        "locked",
+        ""
+      ]
+    },
+    {
+      "key": "s-settings",
+      "cells": [
+        "shop",
+        "settings",
         ""
       ]
     },
@@ -74,6 +92,6 @@
   ],
   "status": {
     "synced": true,
-    "objects": 6
+    "objects": 8
   }
 }

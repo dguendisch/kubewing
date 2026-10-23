@@ -47,7 +47,7 @@ func del(ctx, name string) Action {
 
 func TestReadOnlyRefusesMutations(t *testing.T) {
 	g := NewGuard(NewPolicy(rules), time.Now)
-	for _, kind := range []string{Delete, Exec} {
+	for _, kind := range []string{Delete, Exec, Edit} {
 		_, err := g.Prepare(Action{Kind: kind, Context: "garden-prod-eu", Resource: "pods", Name: "a"}, nil)
 		if !errors.Is(err, ErrReadOnly) || !strings.Contains(err.Error(), "PROD") {
 			t.Errorf("%s: %v", kind, err)

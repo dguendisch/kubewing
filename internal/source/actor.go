@@ -8,6 +8,7 @@ import (
 	"io"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 )
 
@@ -22,6 +23,11 @@ type Actor interface {
 	// Delete deletes one object. uid is a precondition: an object recreated
 	// under the same name in the meantime is never deleted.
 	Delete(ctx context.Context, cluster string, res Resolved, namespace, name string, uid k8stypes.UID) error
+	// Get reads one object fresh from the API server, without managedFields.
+	Get(ctx context.Context, cluster string, res Resolved, namespace, name string) (*unstructured.Unstructured, error)
+	// Patch sends a JSON merge patch and returns the object as stored; with
+	// dryRun the server only reports what it would store.
+	Patch(ctx context.Context, cluster string, res Resolved, namespace, name string, patch []byte, dryRun bool) (*unstructured.Unstructured, error)
 	// Exec runs cmd in a pod container with a TTY until it exits or ctx ends.
 	Exec(ctx context.Context, cluster, namespace, pod, container string, cmd []string, s ExecStreams) error
 	// Debug adds an ephemeral container to a pod, like `kubectl debug -it`,

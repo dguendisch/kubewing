@@ -9,6 +9,7 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/dguendisch/kubewing/internal/source"
@@ -29,8 +30,9 @@ type Opener struct {
 	// real cluster's watch would deliver.
 	live    map[*Tape]map[int]chan source.Event
 	nextID  int
-	deleted map[string]bool // uids deleted via Delete
-	looks   map[string]int  // describe calls per namespace/name (fake events)
+	deleted map[string]bool                       // uids deleted via Delete
+	edited  map[string]*unstructured.Unstructured // uid → latest version written via Patch
+	looks   map[string]int                        // describe calls per namespace/name (fake events)
 	opsPods map[string]*corev1.Pod
 }
 
@@ -113,16 +115,22 @@ func (o *Opener) attach(t *Tape) (<-chan source.Event, func()) {
 	}
 }
 
-// withoutDeleted drops objects deleted via Delete from a replayed relist,
-// so a new pane on the same tape doesn't resurrect them.
+// withoutDeleted drops objects deleted via Delete from a replayed relist
+// and swaps in versions written via Patch, so a new pane on the same tape
+// neither resurrects nor reverts them.
 func (o *Opener) withoutDeleted(ev source.Event) source.Event {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	items := ev.Items[:0:0]
 	for _, it := range ev.Items {
-		if !o.deleted[string(it.Object.GetUID())] {
-			items = append(items, it)
+		uid := string(it.Object.GetUID())
+		if o.deleted[uid] {
+			continue
 		}
+		if e, ok := o.edited[uid]; ok {
+			it = source.Item{Object: e.DeepCopy(), Cells: it.Cells}
+		}
+		items = append(items, it)
 	}
 	ev.Items = items
 	return ev

@@ -181,7 +181,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec" | "debug" | "opspod";
+export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -192,6 +192,21 @@ export interface Pending {
   needsConfirm: boolean;
   /** Strict mode: the text the user must type to confirm. */
   typeToConfirm?: string;
+}
+
+/** Mirrors bridge.EditSession: an opened editor (Go keeps the original it patches against). */
+export interface EditSession {
+  session: string;
+  yaml: string;
+}
+
+/** Mirrors bridge.EditPreview: what an edit changes, as the server's dry run reports it. */
+export interface EditPreview {
+  patch: string;
+  prevNorm: string;
+  curNorm: string;
+  /** The server would store nothing new (e.g. only status was edited). */
+  noChange?: boolean;
 }
 
 /** Mirrors bridge.RowInfo: identity and capabilities of one row (no object content). */
@@ -376,6 +391,13 @@ export interface Transport {
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */
   delete(token: string): Promise<void>;
+  /** Reads a row's object fresh from the server into a new edit session; refused on read-only contexts. */
+  editOpen(pane: string, key: string): Promise<EditSession>;
+  /** Checks an edit and dry-runs it on the server; writes nothing. */
+  editCheck(session: string, yaml: string): Promise<EditPreview>;
+  /** Writes a prepared edit (the same patch editCheck dry-ran). */
+  editApply(token: string, session: string, yaml: string): Promise<void>;
+  editClose(session: string): Promise<void>;
   /** Identity and capabilities of a row (context menu, port-forward defaults). */
   rowInfo(pane: string, key: string): Promise<RowInfo>;
   /** kubectl describe output for a row (read-only; no token); diffed against the previous look. */

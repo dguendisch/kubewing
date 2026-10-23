@@ -28,10 +28,13 @@ const (
 	// OpsPod creates a privileged pod on a node (host PID, optionally the
 	// host's root file system and network) and opens a shell in it.
 	OpsPod = "opspod"
+	// Edit patches an object with what was changed in the editor (like
+	// kubectl edit). Not confirmed by default: its diff preview is the review.
+	Edit = "edit"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec, Debug, OpsPod}
+var mutating = []string{Delete, Exec, Debug, OpsPod, Edit}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {

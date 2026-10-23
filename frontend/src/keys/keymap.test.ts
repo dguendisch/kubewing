@@ -116,6 +116,27 @@ describe("terminal focus", () => {
   });
 });
 
+describe("edit", () => {
+  it("e edits (table and YAML view), x execs; the editor keeps its keys", () => {
+    expect(resolve("E", "table")).toBe("object.edit");
+    expect(resolve("E", "detail")).toBe("object.edit");
+    expect(resolve("X", "table")).toBe("object.exec");
+    expect(resolve("X", "forwards")).toBe("portforward.stop");
+    for (const k of ["D", "J", "X", "E", "Y", "=", "?", "Enter", "Ctrl+D", "Shift+D", "Meta+ArrowLeft"]) expect(resolve(k, "edit")).toBeUndefined();
+    expect(resolve("Escape", "edit")).toBe("edit.back");
+    expect(resolve("Meta+S", "edit")).toBe("edit.submit");
+    expect(resolve("Meta+Enter", "edit")).toBe("edit.submit");
+    expect(resolve("Meta+W", "edit")).toBe("tab.close");
+  });
+  it("the preview steps through changes and applies with ⏎", () => {
+    expect(resolve("J", "editpreview")).toBe("diff.next");
+    expect(resolve("K", "editpreview")).toBe("diff.prev");
+    expect(resolve("Enter", "editpreview")).toBe("edit.submit");
+    expect(resolve("Escape", "editpreview")).toBe("edit.back");
+    expect(resolve("D", "editpreview")).toBeUndefined();
+  });
+});
+
 describe("Monaco find field", () => {
   it("keeps typed keys (d, j, =, ⌃D, ⌘←) and lets ⌘ chords and ⌃⇥ through", () => {
     for (const k of ["D", "Shift+D", "J", "K", "Y", "W", "R", "=", "!", "?", "Ctrl+D", "Ctrl+Shift+D", "Enter", "Meta+ArrowLeft", "Meta+ArrowRight"]) expect(fieldReserved(k)).toBe(true);
@@ -131,10 +152,10 @@ describe("default keymap", () => {
     expect(collisions([...defaultBindings, { key: "J", command: "row.up", when: ["table"] }])).toHaveLength(1);
   });
   it("suppressed webview defaults are either bound or explicitly unbound", () => {
-    // Meta+F is ours (Monaco's find in the detail view); the rest must not be bound to a command by accident
-    // (that would make suppression depend on focus).
+    // Meta+F is ours (Monaco's find in the detail view), Meta+S the editor's preview/apply; the rest must
+    // not be bound to a command by accident (that would make suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
-    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F"]);
+    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+S"]);
   });
   it("pretty-prints chords", () => {
     expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");
@@ -189,9 +210,9 @@ describe("user keybindings", () => {
 
   it("reports and skips invalid entries", () => {
     const { bindings, errors } = mergeBindings(defaultBindings, [
-      { key: "hyper+x", command: "row.up" },
-      { key: "x", command: "rm.rf" },
-      { key: "x", command: "row.up", when: ["sidebar"] },
+      { key: "hyper+q", command: "row.up" },
+      { key: "q", command: "rm.rf" },
+      { key: "q", command: "row.up", when: ["sidebar"] },
       { key: "Meta+K", command: "row.up", when: ["table"] },
       { key: "Meta+K", command: "row.down", when: ["table"] },
     ]);
@@ -200,7 +221,7 @@ describe("user keybindings", () => {
     expect(errors[1]).toContain('unknown command "rm.rf"');
     expect(errors[2]).toContain('unknown context "sidebar"');
     expect(errors[3]).toContain("Meta+K@table");
-    expect(resolve("X", "table", bindings)).toBeUndefined();
+    expect(resolve("Q", "table", bindings)).toBeUndefined();
   });
 
   it("every default command is a known command id", () => {

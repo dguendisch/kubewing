@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help", "edit", "editpreview"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -55,6 +55,7 @@ export type CommandId =
   | "menu.run"
   | "object.describe"
   | "object.exec"
+  | "object.edit"
   | "object.debug"
   | "object.opsPod"
   | "object.portForward"
@@ -63,6 +64,8 @@ export type CommandId =
   | "confirm.accept"
   | "confirm.cancel"
   | "help.toggle"
+  | "edit.submit"
+  | "edit.back"
   | "term.find"
   | "term.findNext"
   | "term.findPrev"
@@ -79,8 +82,8 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.debug", "object.opsPod", "object.portForward",
-  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle",
+  "object.delete", "object.diff", "object.copyName", "object.menu", "menu.run", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
 ];
 
@@ -110,8 +113,8 @@ export const defaultBindings: Binding[] = [
   // more than one pane in the tab: the dispatcher asks first
   { key: "Meta+W", command: "tab.close" },
   // not global: ⌘←/⌘→ jump to the start/end of the line in text fields
-  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help"] },
-  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help"] },
+  { key: "Meta+ArrowRight", command: "tab.next", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help", "editpreview"] },
+  { key: "Meta+ArrowLeft", command: "tab.prev", when: ["table", "detail", "terminal", "ended", "forwards", "menu", "help", "editpreview"] },
   // ⌘1–⌘8 go to that tab, ⌘9 to the last one (browser/iTerm convention)
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Binding => ({ key: `Meta+${n}`, command: `tab.goto${n}` })),
   // MRU switching; releasing Ctrl commits (handled on keyup in useKeys)
@@ -148,8 +151,8 @@ export const defaultBindings: Binding[] = [
   { key: "R", command: "detail.refresh", when: ["detail"] },
   { key: "W", command: "detail.toggleWrap", when: ["detail"] },
   // next/previous change in a diff (vim-like, as in the table); no-ops elsewhere
-  { key: "J", command: "diff.next", when: ["detail"] },
-  { key: "K", command: "diff.prev", when: ["detail"] },
+  { key: "J", command: "diff.next", when: ["detail", "editpreview"] },
+  { key: "K", command: "diff.prev", when: ["detail", "editpreview"] },
   // the YAML line under the cursor becomes the pane's CEL filter
   { key: "=", command: "filter.fromDetail", when: ["detail"] },
   { key: "!", command: "filter.fromDetailNot", when: ["detail"] },
@@ -169,7 +172,15 @@ export const defaultBindings: Binding[] = [
   { key: "D", command: "object.describe", when: ["table"] },
   // in the detail view d is the diff toggle, so describe keeps ⇧D there
   { key: "Shift+D", command: "object.describe", when: ["detail"] },
-  { key: "E", command: "object.exec", when: ["table"] },
+  // e edits (as kubectl edit, also from the YAML view); exec is x (k9s' "s" is the shell there, x for eXec)
+  { key: "E", command: "object.edit", when: ["table", "detail"] },
+  { key: "X", command: "object.exec", when: ["table"] },
+  // the editor: ⌘S / ⌘⏎ dry-run into the diff preview; there ⏎ (or ⌘S / ⌘⏎ again) writes, esc goes back to the editor
+  { key: "Meta+S", command: "edit.submit", when: ["edit", "editpreview"] },
+  { key: "Meta+Enter", command: "edit.submit", when: ["edit", "editpreview"] },
+  { key: "Enter", command: "edit.submit", when: ["editpreview"] },
+  { key: "Escape", command: "edit.back", when: ["edit", "editpreview"] },
+  { key: "W", command: "detail.toggleWrap", when: ["editpreview"] },
   { key: "B", command: "object.debug", when: ["table"] },
   // from anywhere (also a terminal pane): the node is prefilled from the selected row, if any
   { key: "Alt+Meta+O", command: "object.opsPod" },
@@ -252,7 +263,7 @@ export function terminalReserved(key: string): boolean {
 }
 
 /**
- * In Monaco's find field the keys are text being typed (d, j, =, ⌃D …);
+ * In Monaco's find field and the YAML editor the keys are text being typed (d, j, =, ⌃D …);
  * only ⌘ chords and ⌃⇥ MRU switching reach the app, except ⌘←/⌘→, which
  * jump to the start/end of the field.
  */
@@ -265,6 +276,8 @@ export function fieldReserved(key: string): boolean {
 /** Resolves a chord in a focus context; context-specific bindings win over global ones. */
 export function resolve(key: string, focus: FocusContext, bindings: Binding[] = defaultBindings): CommandId | undefined {
   if (focus === "terminal" && terminalReserved(key)) return undefined;
+  // the editor is a text field: keys are text (Esc leaves it)
+  if (focus === "edit" && key !== "Escape" && fieldReserved(key)) return undefined;
   let global: CommandId | undefined;
   for (const b of bindings) {
     if (b.key !== key) continue;

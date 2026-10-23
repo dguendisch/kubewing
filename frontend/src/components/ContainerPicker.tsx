@@ -3,7 +3,7 @@ import { setUI, useUI } from "../store/store";
 
 /**
  * e on a pod with more than one container exec can enter: which one. The
- * default is highlighted, so e ⏎ enters it as before; containers that aren't
+ * default is highlighted, so x ⏎ enters it; containers that aren't
  * running are listed with their state but skipped. j/k or arrows move, ⏎ (or
  * a click) execs, Esc cancels. The exec is already prepared (the safety
  * policy said yes); a confirmation, if the rule asks for one, comes after.

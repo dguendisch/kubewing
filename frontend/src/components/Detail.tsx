@@ -79,7 +79,7 @@ export function Detail() {
               : "yaml"}
         </span>
         {diff ? <DiffNav /> : null}
-        <span className="ml-auto">{describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · w: wrap · ⌘F find · esc: close</span>
+        <span className="ml-auto">{describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · e: edit · w: wrap · ⌘F find · esc: close</span>
       </div>
       <div className="min-h-0 flex-1">
         {describe ? (
@@ -111,7 +111,7 @@ export function Detail() {
 }
 
 /** Previous/next change (k/j) and where the cursor is, like VS Code's diff toolbar. */
-function DiffNav() {
+export function DiffNav() {
   const { index, total } = useDiffNav();
   const btn = "rounded border border-border px-1.5 leading-tight text-fg enabled:hover:border-accent disabled:opacity-40";
   // mousedown + preventDefault: the editor keeps the focus, so j/k go on working

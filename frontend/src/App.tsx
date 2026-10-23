@@ -6,6 +6,7 @@ import { DebugDialog } from "./components/Debug";
 import { OpsPodDialog } from "./components/OpsPod";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
+import { Edit } from "./components/Edit";
 import { Dock } from "./components/Dock";
 import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
@@ -79,6 +80,7 @@ export function App() {
         ))}
       </main>
       <Detail />
+      <Edit />
       <OpenSource />
       <Confirm />
       <ConfirmCloseTab />
