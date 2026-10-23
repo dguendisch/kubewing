@@ -17,6 +17,7 @@ source:
 stages:
   - filter: 'o.status.phase != "Running"'
   - grep: oom
+  - hideHealthy: true
   - sort: [-restarts, name]
 render:
   columns:
@@ -47,6 +48,8 @@ func TestParseErrors(t *testing.T) {
 		"unknown field":    `source: {resource: pods, bogus: 1}`,
 		"empty stage":      "source: {resource: pods}\nstages: [{}]",
 		"two kinds":        "source: {resource: pods}\nstages: [{grep: a, filter: 'true'}]",
+		"hide and grep":    "source: {resource: pods}\nstages: [{grep: a, hideHealthy: true}]",
+		"hide false":       "source: {resource: pods}\nstages: [{hideHealthy: false}]",
 		"path and expr":    "source: {resource: pods}\nrender: {columns: [{name: A, path: a, expr: b}]}",
 		"bad type":         "source: {resource: pods}\nrender: {columns: [{name: A, path: a, type: wat}]}",
 		"duplicate column": "source: {resource: pods}\nrender: {columns: [{name: A, path: a}, {name: a, path: b}]}",

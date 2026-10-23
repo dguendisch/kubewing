@@ -50,7 +50,6 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 Next up:
 - Events for a resource (shortcut "v")
 - grep highlight search results
-- exclude "healthy" pods (Running and all containers ready)
 - better column sizing + resizing + rememeber last used app window size
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 

@@ -29,6 +29,7 @@ export type CommandId =
   | "filter.focus"
   | "filter.focusLabels"
   | "filter.focusCel"
+  | "filter.toggleHealthy"
   | "filter.blur"
   | "filter.fromDetail"
   | "filter.fromDetailNot"
@@ -78,7 +79,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.new", "tab.close", "tab.next", "tab.prev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
-  "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
+  "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
@@ -130,6 +131,7 @@ export const defaultBindings: Binding[] = [
   { key: "/", command: "filter.focus", when: ["table"] },
   { key: "L", command: "filter.focusLabels", when: ["table"] },
   { key: "C", command: "filter.focusCel", when: ["table"] },
+  { key: "H", command: "filter.toggleHealthy", when: ["table"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },

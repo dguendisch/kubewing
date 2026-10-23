@@ -66,6 +66,8 @@ export function dispatch(cmd: CommandId) {
     case "filter.fromDetail":
     case "filter.fromDetailNot":
       return filterFromDetail(cmd === "filter.fromDetail" ? "==" : "!=");
+    case "filter.toggleHealthy":
+      return toggleHealthy();
     case "filter.blur":
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
@@ -218,6 +220,14 @@ function filterFromDetail(op: "==" | "!=") {
   if (!expr) return flash(pane.id, "no value on this line to filter by", true);
   setUI(S.closeOverlay);
   void applySpec(pane.id, { ...pane.spec, filter: expr });
+}
+
+/** h: hides (or shows again) the pods that are Running with all containers ready. */
+function toggleHealthy() {
+  const pane = S.focusedPane(useUI.getState());
+  if (pane.term) return;
+  if (pane.kind && pane.kind !== "Pod" && !pane.spec.hideHealthy) return flash(pane.id, "hiding healthy works on pods only", true);
+  void applySpec(pane.id, { ...pane.spec, hideHealthy: !pane.spec.hideHealthy });
 }
 
 /** ⌘C in the table: the selected object's name (as kubectl takes it). */
@@ -510,6 +520,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec) {
       selected: 0,
       serverId: keep ? q.serverId : undefined,
       context: keep ? q.context : undefined,
+      kind: keep ? q.kind : undefined,
       opening: !keep,
     })),
   );
@@ -523,7 +534,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec) {
       bridge().close(res.pane).catch(() => {}); // superseded or pane closed meanwhile
       return;
     }
-    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, opening: false })));
+    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
   }

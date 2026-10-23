@@ -886,6 +886,25 @@ test.describe("object actions", () => {
   }
   const termText = (page: Page) => page.locator("[data-terminal] .xterm-rows").innerText();
 
+  // web-3 is the tape's only healthy pod; the config maps aren't pods and stay
+  test("h hides healthy pods, the header checkbox shows and toggles it", async ({ page }) => {
+    await openStatic(page);
+    const box = page.getByRole("checkbox", { name: "hide healthy" });
+    const keys = async () => (await focused(page)).rows.map((r) => r.key);
+    await expect(box).not.toBeChecked();
+    expect(await keys()).toContain("s-web-3");
+    await page.keyboard.press("h");
+    await expect(box).toBeChecked();
+    await expect.poll(keys).not.toContain("s-web-3");
+    expect(await keys()).toEqual(expect.arrayContaining(["s-web-1", "s-web-4", "s-cfg"]));
+    await box.click();
+    await expect.poll(keys).toContain("s-web-3");
+    // the click leaves the keys with the table
+    expect((await inspect(page)).focus).toBe("table");
+    await page.keyboard.press("h");
+    await expect(box).toBeChecked();
+  });
+
   test("d describes in Monaco; y back to yaml", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");

@@ -12,6 +12,8 @@ export interface PaneSpec {
   grep: string;
   /** CEL filter over the object `o` ("" = none). */
   filter: string;
+  /** Hides pods that are Running with all containers ready (other kinds pass). */
+  hideHealthy?: boolean;
 }
 
 export interface PaneState {
@@ -19,6 +21,8 @@ export interface PaneState {
   spec: PaneSpec;
   /** Context name the server pane resolved spec.context to (safety rules match on it). */
   context?: string;
+  /** Kind the server pane resolved spec.resource to ("Pod"). */
+  kind?: string;
   /** Short-lived status message (e.g. an action refused by the safety model). */
   flash?: { text: string; error?: boolean };
   /** Set for terminal panes (exec session) instead of a table. */
@@ -473,7 +477,11 @@ export function pipelineYAML(spec: PaneSpec): string {
   if (spec.namespace) source.namespace = spec.namespace;
   if (spec.labelSelector) source.labelSelector = spec.labelSelector;
   const p: Record<string, unknown> = { source };
-  const stages = [...(spec.filter ? [{ filter: spec.filter }] : []), ...(spec.grep ? [{ grep: spec.grep }] : [])];
+  const stages = [
+    ...(spec.hideHealthy ? [{ hideHealthy: true }] : []),
+    ...(spec.filter ? [{ filter: spec.filter }] : []),
+    ...(spec.grep ? [{ grep: spec.grep }] : []),
+  ];
   if (stages.length) p.stages = stages;
   return JSON.stringify(p);
 }

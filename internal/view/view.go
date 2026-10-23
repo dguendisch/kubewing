@@ -91,9 +91,10 @@ type View struct {
 	opts Options
 	p    pipeline.Pipeline
 
-	filters []*expr.Program
-	greps   []pipeline.GrepTerm
-	sortBy  [][]string // raw sort specs, resolved against cols
+	filters     []*expr.Program
+	greps       []pipeline.GrepTerm
+	hideHealthy bool
+	sortBy      [][]string // raw sort specs, resolved against cols
 
 	userCols bool
 	cols     []colSpec
@@ -140,7 +141,7 @@ func New(p pipeline.Pipeline, opts Options) (*View, error) {
 	if err != nil {
 		return nil, err
 	}
-	v.filters, v.greps, v.sortBy = st.filters, st.greps, st.sortBy
+	v.filters, v.greps, v.hideHealthy, v.sortBy = st.filters, st.greps, st.hideHealthy, st.sortBy
 	if len(p.Render.Columns) > 0 {
 		v.userCols = true
 		cols, err := compileColumns(p.Render.Columns)
@@ -155,9 +156,10 @@ func New(p pipeline.Pipeline, opts Options) (*View, error) {
 }
 
 type stages struct {
-	filters []*expr.Program
-	greps   []pipeline.GrepTerm
-	sortBy  [][]string
+	filters     []*expr.Program
+	greps       []pipeline.GrepTerm
+	hideHealthy bool
+	sortBy      [][]string
 }
 
 func compileStages(in []pipeline.Stage) (stages, error) {
@@ -174,6 +176,8 @@ func compileStages(in []pipeline.Stage) (stages, error) {
 			st.greps = append(st.greps, pipeline.ParseGrep(s.Grep)...)
 		case len(s.Sort) > 0:
 			st.sortBy = append(st.sortBy, s.Sort)
+		case s.HideHealthy:
+			st.hideHealthy = true
 		}
 	}
 	return st, nil
@@ -193,7 +197,7 @@ func (v *View) SetStages(in []pipeline.Stage) error {
 		return err
 	}
 	v.p.Stages = in
-	v.filters, v.greps = st.filters, st.greps
+	v.filters, v.greps, v.hideHealthy = st.filters, st.greps, st.hideHealthy
 	if !slices.EqualFunc(v.sortBy, st.sortBy, slices.Equal) {
 		v.sortBy = st.sortBy
 		v.resolveSort()
@@ -426,11 +430,11 @@ func (v *View) render(e *entry) {
 	v.evalMatch(e)
 }
 
-// evalMatch sets e.match from the filter and grep stages, keeping the
-// pane's error count in step.
+// evalMatch sets e.match from the filter, grep and hideHealthy stages,
+// keeping the pane's error count in step.
 func (v *View) evalMatch(e *entry) {
 	v.clearMatchErr(e)
-	ok, err := matches(e.item.Object.Object, e.cells, v.filters, v.greps)
+	ok, err := v.matches(e, v.filters)
 	e.match = ok
 	if err != nil && e.deletedAt.IsZero() {
 		e.matchErr = true
@@ -439,6 +443,15 @@ func (v *View) evalMatch(e *entry) {
 			v.firstErr = err.Error()
 		}
 	}
+}
+
+// matches applies the view's stages to an entry, with filters in place of
+// the view's own (a draft filter is previewed that way).
+func (v *View) matches(e *entry, filters []*expr.Program) (bool, error) {
+	if v.hideHealthy && healthyPod(e.item.Object.Object) {
+		return false, nil
+	}
+	return matches(e.item.Object.Object, e.cells, filters, v.greps)
 }
 
 // matches applies filters (all must be true) and grep terms (each must
@@ -793,7 +806,7 @@ func (v *View) PreviewFilter(src string) Preview {
 			continue
 		}
 		pv.Objects++
-		ok, err := matches(e.item.Object.Object, e.cells, filters, v.greps)
+		ok, err := v.matches(e, filters)
 		var nb *expr.NotBoolError
 		switch {
 		case err == nil:
@@ -839,7 +852,7 @@ func (v *View) PreviewLabels(draft, applied string) Preview {
 		if !sel.Matches(labels.Set(e.item.Object.GetLabels())) {
 			continue
 		}
-		if ok, _ := matches(e.item.Object.Object, e.cells, v.filters, v.greps); ok {
+		if ok, _ := v.matches(e, v.filters); ok {
 			pv.Matched++
 		}
 	}

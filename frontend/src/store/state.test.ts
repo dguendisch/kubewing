@@ -121,6 +121,8 @@ describe("pipelineYAML", () => {
     expect(JSON.parse(y)).toEqual({ source: { cluster: "c", resource: "po", labelSelector: "app=x" }, stages: [{ grep: "oom" }] });
     const f = S.pipelineYAML({ context: "", resource: "po", namespace: "", labelSelector: "", grep: "oom", filter: 'o.status.phase == "Running"' });
     expect(JSON.parse(f).stages).toEqual([{ filter: 'o.status.phase == "Running"' }, { grep: "oom" }]);
+    const h = S.pipelineYAML({ context: "", resource: "po", namespace: "", labelSelector: "", grep: "", filter: "", hideHealthy: true });
+    expect(JSON.parse(h).stages).toEqual([{ hideHealthy: true }]);
   });
 });
 

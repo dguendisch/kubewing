@@ -281,6 +281,21 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         onBlur={onBlur}
         className={`w-36 truncate ${field}`}
       />
+      {/* other kinds aren't affected, so there's nothing to show */}
+      {pane.kind === "Pod" ? (
+        <label title="hide pods that are Running with all containers ready (h)" className="flex shrink-0 cursor-pointer items-center gap-1 text-fg-muted">
+          <input
+            type="checkbox"
+            aria-label="hide healthy"
+            checked={!!pane.spec.hideHealthy}
+            onChange={(e) => apply({ hideHealthy: e.target.checked })}
+            // a click mustn't leave focus in the header: keys go back to the table
+            onMouseUp={(e) => e.currentTarget.blur()}
+            className="accent-(--color-accent)"
+          />
+          hide healthy
+        </label>
+      ) : null}
     </header>
   );
 }

@@ -40,6 +40,9 @@ type Stage struct {
 	Grep string `json:"grep,omitempty"`
 	// Sort lists column names; a leading "-" sorts descending.
 	Sort []string `json:"sort,omitempty"`
+	// HideHealthy drops pods that are Running with every container ready
+	// (other kinds pass through).
+	HideHealthy bool `json:"hideHealthy,omitempty"`
 }
 
 // Kind returns the stage kind, or an error if not exactly one field is set.
@@ -54,8 +57,11 @@ func (s Stage) Kind() (string, error) {
 	if len(s.Sort) > 0 {
 		kinds = append(kinds, "sort")
 	}
+	if s.HideHealthy {
+		kinds = append(kinds, "hideHealthy")
+	}
 	if len(kinds) != 1 {
-		return "", fmt.Errorf("stage must set exactly one of filter, grep, sort (got %v)", kinds)
+		return "", fmt.Errorf("stage must set exactly one of filter, grep, sort, hideHealthy (got %v)", kinds)
 	}
 	return kinds[0], nil
 }
