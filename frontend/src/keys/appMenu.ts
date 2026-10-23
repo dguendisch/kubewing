@@ -52,6 +52,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Delete…", "object.delete"],
       null,
       ["Jump To…", "object.jump"],
+      ["Events", "object.events"],
       ["All Actions…", "object.menu"],
     ],
   },

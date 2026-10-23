@@ -179,7 +179,8 @@ func metadataOnly(u *unstructured.Unstructured) *unstructured.Unstructured {
 
 // matcher is an API server's namespace + selector filtering, for tapes
 // that ask for it (Tape.Filter). Field selectors support metadata.name,
-// metadata.namespace and spec.nodeName, like the pods fields kubewing uses.
+// metadata.namespace and spec.nodeName, like the pods fields kubewing uses,
+// and involvedObject.* (events).
 type matcher struct {
 	namespace string
 	labels    labels.Selector
@@ -213,7 +214,13 @@ func (m matcher) match(u *unstructured.Unstructured) bool {
 		return false
 	}
 	node, _, _ := unstructured.NestedString(u.Object, "spec", "nodeName")
-	return m.fields.Matches(fields.Set{"metadata.name": u.GetName(), "metadata.namespace": u.GetNamespace(), "spec.nodeName": node})
+	set := fields.Set{"metadata.name": u.GetName(), "metadata.namespace": u.GetNamespace(), "spec.nodeName": node}
+	for _, f := range []string{"kind", "name", "namespace", "uid"} {
+		if v, ok, _ := unstructured.NestedString(u.Object, "involvedObject", f); ok {
+			set["involvedObject."+f] = v
+		}
+	}
+	return m.fields.Matches(set)
 }
 
 // filter applies the matcher to an event of a filtering tape. A Deleted

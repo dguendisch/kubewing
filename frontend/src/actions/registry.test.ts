@@ -62,7 +62,8 @@ describe("row actions menu", () => {
 
   it("every object.* command is in the menu (new row actions must be added to the registry)", () => {
     const inMenu = new Set(rowActions.map((a) => a.command));
-    const objectCmds = commandIds.filter((c) => c.startsWith("object.") && c !== "object.menu");
+    // object.events is an entry of the jump menu (jump to…), like the other places a pane can switch to
+    const objectCmds = commandIds.filter((c) => c.startsWith("object.") && c !== "object.menu" && c !== "object.events");
     expect(objectCmds.filter((c) => !inMenu.has(c))).toEqual([]);
   });
 

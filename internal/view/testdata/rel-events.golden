@@ -1,0 +1,97 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "TYPE"
+    },
+    {
+      "name": "REASON"
+    },
+    {
+      "name": "OBJECT"
+    },
+    {
+      "name": "MESSAGE"
+    }
+  ],
+  "total": 6,
+  "offset": 0,
+  "order": [
+    "re-6",
+    "re-4",
+    "re-3",
+    "re-1",
+    "re-2",
+    "re-5"
+  ],
+  "rows": [
+    {
+      "key": "re-6",
+      "cells": [
+        "default",
+        "Normal",
+        "NodeReady",
+        "node/node-1",
+        "Node node-1 status is now: NodeReady"
+      ]
+    },
+    {
+      "key": "re-4",
+      "cells": [
+        "lab",
+        "Normal",
+        "Scheduled",
+        "pod/web-7d9f-b",
+        "Successfully assigned lab/web-7d9f-b"
+      ]
+    },
+    {
+      "key": "re-3",
+      "cells": [
+        "shop",
+        "Normal",
+        "Started",
+        "pod/web-7d9f-a",
+        "Started container web"
+      ]
+    },
+    {
+      "key": "re-1",
+      "cells": [
+        "shop",
+        "Normal",
+        "Pulled",
+        "pod/web-7d9f-b",
+        "Container image \"web:1\" already present on machine"
+      ]
+    },
+    {
+      "key": "re-2",
+      "cells": [
+        "shop",
+        "Warning",
+        "BackOff",
+        "pod/web-7d9f-b",
+        "Back-off restarting failed container"
+      ]
+    },
+    {
+      "key": "re-5",
+      "cells": [
+        "shop",
+        "Normal",
+        "ScalingReplicaSet",
+        "deployment/web",
+        "Scaled up replica set web-7d9f to 2"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 6
+  }
+}

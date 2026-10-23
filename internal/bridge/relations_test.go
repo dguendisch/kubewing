@@ -108,7 +108,7 @@ func TestRelationsOwnerChain(t *testing.T) {
 	for _, r := range got.Items {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, " ") != "ns:here ns:object owner:rr-web-7d9f owner:rd-web" {
+	if strings.Join(ids, " ") != "ns:here ns:object owner:rr-web-7d9f owner:rd-web events" {
 		t.Errorf("items = %v", ids)
 	}
 }
@@ -265,5 +265,65 @@ func TestRelationsNodePods(t *testing.T) {
 	p := m["owned:v1/Pod"]
 	if count(p) != 3 || *p.Target != (relations.Target{Resource: "rel-pods", FieldSelector: "spec.nodeName=node-1"}) {
 		t.Errorf("pods = %+v %+v", p, p.Target)
+	}
+}
+
+func TestEventsTarget(t *testing.T) {
+	svc, _ := relSetup(t)
+	pods := openSynced(t, svc, "source: {resource: rel-pods}", 6)
+	got, err := svc.EventsTarget(pods.Pane, "rp-web-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// v1 Event resolves to its tape; by kind and name, in the pod's namespace
+	want := relations.Target{Resource: "rel-events", Namespace: "shop", FieldSelector: "involvedObject.kind=Pod,involvedObject.name=web-7d9f-b"}
+	if got != want {
+		t.Errorf("pod = %+v", got)
+	}
+	// the target opens on the pod's events only (not another pod's, not lab's namesake)
+	ev := openSynced(t, svc, "source: {resource: rel-events, namespace: shop, fieldSelector: \""+got.FieldSelector+"\"}", 2)
+	if idx, _ := svc.RowIndex(ev.Pane, "re-4"); idx != -1 {
+		t.Error("lab's event of the same name is shown")
+	}
+
+	// cluster-scoped: all namespaces (a node's events are in default)
+	nodes := openSynced(t, svc, "source: {resource: rel-nodes}", 2)
+	got, err = svc.EventsTarget(nodes.Pane, "rnd-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := (relations.Target{Resource: "rel-events", FieldSelector: "involvedObject.kind=Node,involvedObject.name=node-1"}); got != want {
+		t.Errorf("node = %+v", got)
+	}
+	openSynced(t, svc, "source: {resource: rel-events, namespace: \"*\", fieldSelector: \""+got.FieldSelector+"\"}", 1)
+
+	evs := openSynced(t, svc, "source: {resource: rel-events}", 6)
+	if _, err := svc.EventsTarget(evs.Pane, "re-1"); err == nil {
+		t.Error("an event's events: want an error")
+	}
+	if rel, err := svc.Relations(evs.Pane, "re-1"); err != nil || byID(rel.Items)["events"].ID != "" {
+		t.Errorf("an event's jump menu has an events entry: %v %+v", err, rel.Items)
+	}
+	if _, err := svc.EventsTarget(pods.Pane, "nope"); err == nil {
+		t.Error("unknown row: want an error")
+	}
+
+	// the jump menu's events entry: the same target, counted
+	for key, want := range map[string]int{"rp-web-b": 2, "rp-web-stray": 0} {
+		rel, err := svc.Relations(pods.Pane, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := byID(rel.Items)["events"]
+		if r.Section != relations.SectionEvents || r.Count == nil || *r.Count != want || r.Target == nil || r.Target.FieldSelector != "involvedObject.kind=Pod,involvedObject.name="+rel.Name {
+			t.Errorf("%s: events entry = %+v %+v", key, r, r.Target)
+		}
+	}
+	rel, err := svc.Relations(nodes.Pane, "rnd-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := byID(rel.Items)["events"]; r.Count == nil || *r.Count != 1 || r.Target.Namespace != "" {
+		t.Errorf("node: events entry = %+v %+v", r, r.Target)
 	}
 }

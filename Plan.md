@@ -50,7 +50,7 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 Next up:
 - diff editor (show that j/k is for next/prev change)
 - overlay grab handles for panes to move them, attach them (similar to ghostty)
-- Events for a resource (shortcut "v")
+- specifically for namespaces: offer to jump to pods in the selected ns
 - grep highlight search results
 - better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.

@@ -223,7 +223,7 @@ export interface JumpTarget {
 /** Mirrors relations.Relation: one jump menu entry. */
 export interface Relation {
   id: string;
-  section: "namespace" | "owner" | "owned";
+  section: "namespace" | "owner" | "owned" | "events";
   label: string;
   kind?: string;
   name?: string;
@@ -455,6 +455,8 @@ export interface Transport {
   rowIndex(pane: string, key: string): Promise<number>;
   /** The jump menu of a row: namespace, owner chain, known owned kinds (read-only, metadata only). */
   relations(pane: string, key: string): Promise<Relations>;
+  /** Where v goes: the events about the row's object (read-only; refused for an event). */
+  eventsTarget(pane: string, key: string): Promise<JumpTarget>;
   /** Every resource type with objects owned by the row (lists all types: explicit only). */
   ownedScan(pane: string, key: string): Promise<OwnedScan>;
   /** kubectl describe output for a row (read-only; no token); diffed against the previous look. */

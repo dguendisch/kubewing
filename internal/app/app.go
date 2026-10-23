@@ -6,6 +6,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/view"
@@ -67,6 +68,9 @@ func (a *App) RowInfo(pane, key string) (bridge.RowInfo, error) { return a.svc.R
 func (a *App) RowIndex(pane, key string) (int, error)           { return a.svc.RowIndex(pane, key) }
 func (a *App) Relations(pane, key string) (bridge.Relations, error) {
 	return a.svc.Relations(pane, key)
+}
+func (a *App) EventsTarget(pane, key string) (relations.Target, error) {
+	return a.svc.EventsTarget(pane, key)
 }
 func (a *App) OwnedScan(pane, key string) (bridge.OwnedScanResult, error) {
 	return a.svc.OwnedScan(pane, key)

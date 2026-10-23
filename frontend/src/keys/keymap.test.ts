@@ -242,6 +242,12 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     expect(resolve("J", "table")).toBe("row.down");
   });
 
+  it("v shows the row's events from the table and the detail view; in fields it's text", () => {
+    expect(resolve("V", "table")).toBe("object.events");
+    expect(resolve("V", "detail")).toBe("object.events");
+    for (const ctx of ["filter", "terminal", "edit", "menu"] as const) expect(resolve("V", ctx)).toBeUndefined();
+  });
+
   it("⌘← / ⌘→ move through the jump history in the table; elsewhere they're the field's or nothing", () => {
     expect(resolve("Meta+ArrowLeft", "table")).toBe("history.back");
     expect(resolve("Meta+ArrowRight", "table")).toBe("history.forward");

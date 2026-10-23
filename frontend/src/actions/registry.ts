@@ -6,7 +6,8 @@ import type { RowInfo, SafetyRule } from "../transport/types";
  * Every operation on a table row, in menu order. The context menu (⌘⏎,
  * right-click) is generated from this list, and its shortcuts come from the
  * live keymap, so a new row action only needs an entry here (a unit test
- * fails for object.* commands that have none).
+ * fails for object.* commands that have none). Places the pane switches
+ * to are in the jump menu instead (jump to…), events included.
  *
  * `available` only drives the display: Go re-checks everything (safety
  * policy, object identity) when the command runs.

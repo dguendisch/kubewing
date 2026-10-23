@@ -195,3 +195,14 @@ func TestScaleSelector(t *testing.T) {
 		}
 	}
 }
+
+func TestEvents(t *testing.T) {
+	pod := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": "web-0", "namespace": "shop", "uid": "u1"}}}
+	if got, want := Events(pod, "events"), (Target{Resource: "events", Namespace: "shop", FieldSelector: "involvedObject.kind=Pod,involvedObject.name=web-0"}); got != want {
+		t.Errorf("pod = %+v", got)
+	}
+	node := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Node", "metadata": map[string]any{"name": "n1", "uid": "u2"}}}
+	if got, want := Events(node, "events"), (Target{Resource: "events", FieldSelector: "involvedObject.kind=Node,involvedObject.name=n1"}); got != want {
+		t.Errorf("node = %+v", got)
+	}
+}

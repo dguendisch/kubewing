@@ -32,6 +32,16 @@ describe("jump menu items", () => {
     expect(firstJumpable(jumpItems(pod))).toBe(2);
   });
 
+  it("events come last, after the scan's entries; zero events can still be watched", () => {
+    const ev = (count: number) => ({ id: "events", section: "events" as const, label: "events", count, target: { resource: "events", namespace: "shop", fieldSelector: "involvedObject.kind=Pod,involvedObject.name=web-7d9f-a" } });
+    const rel = { ...pod, items: [ev(0), ...pod.items] };
+    const scanned = { scanned: { items: [{ id: "scan:cm", section: "owned" as const, label: "configmaps", count: 1, target: { resource: "configmaps" } }], scanned: 3 } };
+    const items = jumpItems(rel, scanned);
+    expect(items.map((i) => i.section).slice(-3)).toEqual(["owned", "owned", "events"]);
+    expect(view(items).at(-1)).toBe("events | 0 |  | 0");
+    expect(view(jumpItems({ ...pod, items: [...pod.items, ev(3)] })).at(-1)).toBe("events | 3 |  | 0");
+  });
+
   it("owned counts: zero is disabled, uncounted keeps its note", () => {
     const deploy: Relations = {
       kind: "Deployment", name: "web", namespace: "shop", scan: true,

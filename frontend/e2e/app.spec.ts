@@ -2251,6 +2251,8 @@ test.describe("jump to (⌘J)", () => {
         - menuitem "↑ deployment web controller"
         - separator "owned"
         - menuitem "scan for owned… in shop"
+        - separator "events"
+        - menuitem "events 2"
     `);
     expect((await inspect(page)).focus).toBe("menu");
     // the highlight starts on the direct owner; j steps up the chain
@@ -2295,6 +2297,63 @@ test.describe("jump to (⌘J)", () => {
     // and back again
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(pods).toBe("rp-web-b");
+  });
+
+  test("v shows the row's events in place (by kind + name, its namespace only); ⌘← back to the row; also from the jump menu and for a node", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-b");
+    const startRow = (await focused(page)).selected;
+    await page.keyboard.press("v");
+    // not the other pod's event, not lab's namesake
+    const shown = async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace} ${p.rows.map((r) => r.key).sort()}` : "";
+    };
+    await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
+    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
+    // an event has no events of its own
+    await page.keyboard.press("v");
+    await expect(page.getByLabel("message")).toContainText("an event has no events of its own");
+    expect((await focused(page)).spec.resource).toBe("rel-events");
+    const backOnPod = async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-pods" && p.status?.synced ? p.rows[p.selected]?.key : "";
+    };
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(backOnPod).toBe("rp-web-b");
+    expect((await focused(page)).selected).toBe(startRow);
+    await expect(page.getByLabel("field selector")).toHaveCount(0);
+
+    // from the detail view, and the jump menu's events entry: the same jump
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "object detail" })).toBeVisible();
+    await page.keyboard.press("v");
+    await expect(page.getByRole("dialog", { name: "object detail" })).toHaveCount(0);
+    await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(backOnPod).toBe("rp-web-b");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "events 2" }).click();
+    await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    // ⇧⏎: in a split below, the pods stay
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(backOnPod).toBe("rp-web-b");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "events 2" }).hover();
+    await expect(jump(page).locator("[data-active]")).toContainText("events");
+    await page.keyboard.press("Shift+Enter");
+    await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    expect(Object.keys((await inspect(page)).panes)).toHaveLength(2);
+
+    // cluster-scoped: a node's events are found in any namespace
+    await openRel(page, "rel-nodes", 2);
+    await select(page, "rnd-1");
+    await page.keyboard.press("v");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.rows.map((r) => r.key)}` : "";
+    }).toBe("rel-events  re-6");
   });
 
   test("a new jump after going back drops the forward history", async ({ page }) => {

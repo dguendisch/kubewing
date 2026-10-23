@@ -55,6 +55,7 @@ export type CommandId =
   | "object.copyName"
   | "object.menu"
   | "object.jump"
+  | "object.events"
   | "menu.run"
   | "menu.runSplit"
   | "history.back"
@@ -88,7 +89,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.menu", "object.jump", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
 ];
@@ -185,6 +186,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+J", command: "object.jump", when: ["table", "detail"] },
   { key: "Meta+ArrowLeft", command: "history.back", when: ["table"] },
   { key: "Meta+ArrowRight", command: "history.forward", when: ["table"] },
+  // the row's events: a jump to the events about it (⌘← back to the row)
+  { key: "V", command: "object.events", when: ["table", "detail"] },
   { key: "D", command: "object.describe", when: ["table"] },
   // in the detail view d is the diff toggle, so describe keeps ⇧D there
   { key: "Shift+D", command: "object.describe", when: ["detail"] },

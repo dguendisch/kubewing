@@ -68,8 +68,8 @@ func (s *Service) relator() (source.Relator, error) {
 }
 
 // Relations lists where the jump menu goes from a row: its namespace, its
-// owner chain (each owner checked to exist, by UID) and what it is known
-// to own (counted). Read-only: no token, works on read-only contexts and
+// owner chain (each owner checked to exist, by UID), what it is known
+// to own (counted) and its events (counted). Read-only: no token, works on read-only contexts and
 // on tombstones.
 func (s *Service) Relations(paneID, key string) (Relations, error) {
 	rel, err := s.relator()
@@ -104,6 +104,9 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 	out.Items = append(out.Items, relations.Namespace(obj, p, plural, nsRes)...)
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
+	if kind != "Event" {
+		out.Items = append(out.Items, eventsRelation(ctx, rel, cluster, withKind(obj, kind)))
+	}
 	if obj.GetUID() != "" {
 		out.Scan = true
 		out.ScanAll = obj.GetNamespace() == ""
@@ -338,6 +341,61 @@ func (s *Service) scanTypes(cluster string) []source.ResourceType {
 		out = append(out, t)
 	}
 	return out
+}
+
+// EventsTarget is where v goes from a row: the events about its object
+// (the jump menu's events entry, without opening the menu). Read-only,
+// works on tombstones (events outlive their object for a while).
+func (s *Service) EventsTarget(paneID, key string) (relations.Target, error) {
+	pn, obj, err := s.rowObject(paneID, key)
+	if err != nil {
+		return relations.Target{}, err
+	}
+	pn.mu.Lock()
+	cluster, kind := pn.p.Source.Cluster, pn.res.Kind
+	pn.mu.Unlock()
+	obj = withKind(obj, kind)
+	if obj.GetKind() == "Event" {
+		return relations.Target{}, errors.New("an event has no events of its own")
+	}
+	resource := "events"
+	if rel, err := s.relator(); err == nil {
+		resource = eventResource(rel, cluster)
+	}
+	return relations.Events(obj, resource), nil
+}
+
+// withKind fills in an object's kind from the pane's resource if the
+// object lacks it.
+func withKind(obj *unstructured.Unstructured, kind string) *unstructured.Unstructured {
+	if obj.GetKind() != "" {
+		return obj
+	}
+	obj = obj.DeepCopy()
+	obj.SetKind(kind)
+	return obj
+}
+
+func eventResource(rel source.Relator, cluster string) string {
+	if r, _, err := rel.ResolveKind(cluster, "v1", "Event"); err == nil {
+		return r
+	}
+	return "events"
+}
+
+// eventsRelation is the jump menu's events entry, counted with a
+// metadata-only list.
+func eventsRelation(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) relations.Relation {
+	t := relations.Events(obj, eventResource(rel, cluster))
+	r := relations.Relation{ID: "events", Section: relations.SectionEvents, Label: "events", Kind: "Event", Target: &t}
+	list, err := rel.ListMetadata(ctx, cluster, t.Resource, t.Namespace, "", t.FieldSelector)
+	if err != nil {
+		r.Note = "not counted: " + shortErr(err)
+		return r
+	}
+	n := len(list)
+	r.Count = &n
+	return r
 }
 
 // RowIndex is the position of a row in a pane's current order (-1 if not

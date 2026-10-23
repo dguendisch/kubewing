@@ -112,6 +112,8 @@ export function dispatch(cmd: CommandId) {
     }
     case "object.jump":
       return openJump();
+    case "object.events":
+      return void openEvents();
     case "menu.runSplit":
       if (s.overlay?.kind === "jump") return void runJump(s.overlay.index ?? 0, true);
       return;
@@ -504,6 +506,27 @@ function openJump() {
   if (!pane || !key) return;
   const at = o?.kind === "menu" ? o.at : undefined;
   setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.selected, at }));
+}
+
+/**
+ * v, on a row (or from its detail view): the pane jumps to the events about
+ * it, as a jump menu entry would (⌘← goes back to the row). Go builds the
+ * target (field selector on the involved object).
+ */
+async function openEvents() {
+  const s = useUI.getState();
+  const o = s.overlay;
+  const fromDetail = o?.kind === "detail";
+  const pane = fromDetail ? s.panes[o.pane] : S.focusedPane(s);
+  const key = fromDetail ? o.key : pane && selectedKey(pane);
+  if (!pane?.serverId || !key) return;
+  try {
+    const target = await bridge().eventsTarget(pane.serverId, key);
+    setUI(S.closeOverlay);
+    await jumpTo(pane.id, target, false, key);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
 }
 
 /**

@@ -1,0 +1,29 @@
+# Relation tapes: see rel-pods.yaml. Events about the rel-* objects, for v
+# (events of a row): involvedObject field selectors pick them. Same names
+# under another kind or namespace must not match; a node's event is in
+# "default" with the node's name as its UID (as the kubelet records it).
+filter: true
+pipeline:
+  source: {resource: rel-events}
+columns:
+  - {name: Type, type: string, priority: 0}
+  - {name: Reason, type: string, priority: 0}
+  - {name: Object, type: string, priority: 0}
+  - {name: Message, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Event, metadata: {name: web-7d9f-b.1, namespace: shop, uid: re-1, creationTimestamp: "2026-01-01T10:00:00Z"}, involvedObject: {apiVersion: v1, kind: Pod, name: web-7d9f-b, namespace: shop, uid: rp-web-b}, type: Normal, reason: Pulled, message: "Container image \"web:1\" already present on machine"}
+    cells: [Normal, Pulled, pod/web-7d9f-b, "Container image \"web:1\" already present on machine"]
+  - object: {apiVersion: v1, kind: Event, metadata: {name: web-7d9f-b.2, namespace: shop, uid: re-2, creationTimestamp: "2026-01-01T10:01:00Z"}, involvedObject: {apiVersion: v1, kind: Pod, name: web-7d9f-b, namespace: shop, uid: rp-web-b}, type: Warning, reason: BackOff, message: Back-off restarting failed container}
+    cells: [Warning, BackOff, pod/web-7d9f-b, Back-off restarting failed container]
+  # another pod
+  - object: {apiVersion: v1, kind: Event, metadata: {name: web-7d9f-a.1, namespace: shop, uid: re-3, creationTimestamp: "2026-01-01T10:00:00Z"}, involvedObject: {apiVersion: v1, kind: Pod, name: web-7d9f-a, namespace: shop, uid: rp-web-a}, type: Normal, reason: Started, message: Started container web}
+    cells: [Normal, Started, pod/web-7d9f-a, Started container web]
+  # the same name in another namespace
+  - object: {apiVersion: v1, kind: Event, metadata: {name: web-7d9f-b.3, namespace: lab, uid: re-4, creationTimestamp: "2026-01-01T10:00:00Z"}, involvedObject: {apiVersion: v1, kind: Pod, name: web-7d9f-b, namespace: lab, uid: other}, type: Normal, reason: Scheduled, message: Successfully assigned lab/web-7d9f-b}
+    cells: [Normal, Scheduled, pod/web-7d9f-b, Successfully assigned lab/web-7d9f-b]
+  # the deployment web: the same name as nothing above, but a kind of its own
+  - object: {apiVersion: v1, kind: Event, metadata: {name: web.1, namespace: shop, uid: re-5, creationTimestamp: "2026-01-01T10:00:00Z"}, involvedObject: {apiVersion: apps/v1, kind: Deployment, name: web, namespace: shop, uid: rd-web}, type: Normal, reason: ScalingReplicaSet, message: Scaled up replica set web-7d9f to 2}
+    cells: [Normal, ScalingReplicaSet, deployment/web, Scaled up replica set web-7d9f to 2]
+  # a node: cluster-scoped, recorded in default with the node's name as its UID
+  - object: {apiVersion: v1, kind: Event, metadata: {name: node-1.1, namespace: default, uid: re-6, creationTimestamp: "2026-01-01T09:00:00Z"}, involvedObject: {kind: Node, name: node-1, uid: node-1}, type: Normal, reason: NodeReady, message: "Node node-1 status is now: NodeReady"}
+    cells: [Normal, NodeReady, node/node-1, "Node node-1 status is now: NodeReady"]

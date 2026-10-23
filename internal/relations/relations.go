@@ -1,5 +1,5 @@
 // Package relations derives where the jump menu can go from one object:
-// its namespace, its owners (ownerReferences) and what it owns. Each place
+// its namespace, its owners (ownerReferences), what it owns and its events. Each place
 // is a pipeline (source + CEL filter), so the pane it opens looks like one
 // the user could have typed. Pure: the bridge resolves kinds to resources
 // and does the lookups.
@@ -24,6 +24,7 @@ const (
 	SectionNamespace Section = "namespace"
 	SectionOwner     Section = "owner"
 	SectionOwned     Section = "owned"
+	SectionEvents    Section = "events"
 )
 
 // Target is where a jump lands, in the pane's context. Unset fields are
@@ -275,5 +276,19 @@ func ScanRelation(resource, kind, namespace, uid string, count int) Relation {
 	return Relation{
 		ID: "scan:" + resource, Section: SectionOwned, Label: label, Kind: kind, Count: &count,
 		Target: &Target{Resource: resource, Namespace: namespace, Filter: OwnedFilter(uid)},
+	}
+}
+
+// Events is the pane listing an object's events (eventResource as
+// resolved, core v1), by the involved object's kind and name. Not by UID:
+// the kubelet records a node's events with the node's name as its UID, so
+// a UID match would miss them (kubectl describe makes the same exception).
+// A namespaced object's events are in its namespace; a cluster-scoped
+// object's land in "default" or elsewhere, so all namespaces.
+func Events(obj *unstructured.Unstructured, eventResource string) Target {
+	return Target{
+		Resource:      eventResource,
+		Namespace:     obj.GetNamespace(),
+		FieldSelector: "involvedObject.kind=" + obj.GetKind() + ",involvedObject.name=" + obj.GetName(),
 	}
 }
