@@ -2668,6 +2668,45 @@ test.describe("jump to (⌘J)", () => {
     await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
   });
 
+  test("⌘O after a jump to an owner: the jump's CEL filter stays behind, one typed since stays", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    const toOwner = async () => {
+      await select(page, "rp-web-b");
+      await page.keyboard.press("ControlOrMeta+J");
+      await expect(jump(page).locator("[data-active]")).toContainText("replicaset web-7d9f");
+      await page.keyboard.press("j");
+      await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
+      await page.keyboard.press("Enter");
+      await expect(page.getByLabel("cel")).toHaveValue('o.metadata.name == "web"');
+    };
+    const shown = async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-deployments" && p.status?.synced ? `${p.spec.filter}|${p.rows.map((r) => r.key).sort()}` : "";
+    };
+    const reopen = async () => {
+      await page.keyboard.press("ControlOrMeta+O");
+      await expect(page.getByRole("combobox", { name: "resource" })).toHaveValue("rel-deployments");
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("dialog", { name: "open source" })).toHaveCount(0);
+    };
+    // ⌘O ⏎ on the same resource: every deployment, the filter field empty
+    await toOwner();
+    await reopen();
+    await expect.poll(shown).toBe("|rd-api,rd-web");
+    await expect(page.getByLabel("cel")).toHaveValue("");
+    // a filter typed over the jump's is the user's: ⌘O keeps it
+    await page.keyboard.press("ControlOrMeta+ArrowLeft"); // the same source again wasn't a navigation: back on the pods
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-pods");
+    await toOwner();
+    await page.getByLabel("cel").fill('o.metadata.name == "api"');
+    await page.keyboard.press("Enter");
+    await expect.poll(shown).toBe('o.metadata.name == "api"|rd-api');
+    await page.keyboard.press("Escape");
+    expect((await inspect(page)).focus).toBe("table");
+    await reopen();
+    await expect.poll(shown).toBe('o.metadata.name == "api"|rd-api');
+  });
+
   test("a new jump after going back drops the forward history", async ({ page }) => {
     await openRel(page, "rel-pods", 6);
     await select(page, "rp-web-a");

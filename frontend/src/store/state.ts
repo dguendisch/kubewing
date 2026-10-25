@@ -14,6 +14,8 @@ export interface PaneSpec {
   grep: string;
   /** CEL filter over the object `o` ("" = none). */
   filter: string;
+  /** The filter a jump set (o.metadata.name == …): ⌘O drops the filter while it's still this one. */
+  jumpFilter?: string;
   /** Hides healthy objects of the healthKinds (other kinds pass). */
   hideHealthy?: boolean;
 }
@@ -624,6 +626,9 @@ export function jumpSpec(from: PaneSpec, t: JumpTarget): PaneSpec {
     filter: t.filter ?? "",
   };
   if (t.fieldSelector) spec.fieldSelector = t.fieldSelector;
+  // "pods in shop" carries the pane's own filter along: the jump's only if it was before
+  const jumpFilter = t.filter === from.filter ? from.jumpFilter : t.filter;
+  if (t.filter && jumpFilter) spec.jumpFilter = jumpFilter;
   if (t.hideHealthy) spec.hideHealthy = true;
   return spec;
 }
@@ -640,10 +645,16 @@ export function pushHistory(s: UIState, paneId: string, key: string | undefined)
   return updatePane(s, paneId, (p) => ({ ...p, back: [...(p.back ?? []), { spec: p.spec, key }].slice(-historyLimit), forward: undefined, reselect: undefined }));
 }
 
-/** What the ⌘O dialog starts from: the pane's spec without what it can't show (the field selector). */
+/**
+ * What the ⌘O dialog starts from: the pane's spec without what a jump put
+ * there to pick its target (the field selector, which the dialog can't
+ * show, and the CEL filter as long as it's the jump's: o.metadata.name ==
+ * "shop" would hide everything else on another resource). A filter typed
+ * since stays.
+ */
 export function openSpec(spec: PaneSpec): PaneSpec {
-  const { fieldSelector: _, ...rest } = spec;
-  return rest;
+  const { fieldSelector: _, jumpFilter, ...rest } = spec;
+  return jumpFilter !== undefined && rest.filter === jumpFilter ? { ...rest, filter: "" } : rest;
 }
 
 /**

@@ -154,7 +154,7 @@ describe("jumps and their history", () => {
 
   it("a jump replaces the pane's filters with the target's, keeping the context", () => {
     const from: S.PaneSpec = { ...S.initialSpec("kind", ""), grep: "web", filter: "x", labelSelector: "a=b", hideHealthy: true };
-    expect(S.jumpSpec(from, owner)).toEqual({ context: "kind", resource: "deployments.apps", namespace: "shop", labelSelector: "", grep: "", filter: 'o.metadata.name == "web"' });
+    expect(S.jumpSpec(from, owner)).toEqual({ context: "kind", resource: "deployments.apps", namespace: "shop", labelSelector: "", grep: "", filter: 'o.metadata.name == "web"', jumpFilter: 'o.metadata.name == "web"' });
     const node = S.jumpSpec(from, { resource: "pods", fieldSelector: "spec.nodeName=n1" });
     expect(node.fieldSelector).toBe("spec.nodeName=n1");
     expect(S.pipelineYAML(node)).toBe(JSON.stringify({ source: { resource: "pods", cluster: "kind", fieldSelector: "spec.nodeName=n1" } }));
@@ -263,6 +263,22 @@ describe("jumps and their history", () => {
     expect("fieldSelector" in start).toBe(false);
     // ⌘O ⏎ on the same resource then drops it too: a new source, so a step back to the events
     expect(S.sameSource(events, start)).toBe(false);
+  });
+
+  it("⌘O starts without a jump's CEL filter, but keeps one typed since", () => {
+    const ns = S.jumpSpec(S.initialSpec("kind", "shop"), { resource: "namespaces", filter: 'o.metadata.name == "shop"' });
+    expect(S.openSpec(ns)).toEqual({ ...S.initialSpec("kind", ""), resource: "namespaces" });
+    // typed over it (c ⏎, = in the YAML): the user's, kept
+    const typed = { ...ns, filter: "o.status.phase == \"Active\"" };
+    expect(S.openSpec(typed).filter).toBe('o.status.phase == "Active"');
+    // a filter without a jump: kept
+    expect(S.openSpec({ ...S.initialSpec(), filter: "true" }).filter).toBe("true");
+    // "pods in shop" carries the pane's own filter: still the user's, kept
+    const all: S.PaneSpec = { ...S.initialSpec("kind", ""), filter: "mine" };
+    expect(S.openSpec(S.jumpSpec(all, { resource: "pods", namespace: "shop", filter: "mine" })).filter).toBe("mine");
+    // … and a jump's filter carried that way is still the jump's
+    const owned = S.jumpSpec(all, { resource: "pods", filter: "o.metadata.ownerReferences.exists(r, r.uid == \"u\")" });
+    expect(S.openSpec(S.jumpSpec(owned, { resource: "pods", namespace: "shop", filter: owned.filter })).filter).toBe("");
   });
 
   it("nowhere to go: unchanged", () => {
