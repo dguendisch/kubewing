@@ -2235,6 +2235,16 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(async () => (await focused(page)).rows[(await focused(page)).selected]?.key).toBe(key);
   }
 
+  // the header's ← / → buttons (of the focused pane by default): where each leads (their title), or greyed out
+  const nav = async (page: Page, dir: "back" | "forward", pane?: string) =>
+    page.locator(`section[data-pane="${pane ?? (await inspect(page)).focusedPane}"]`).getByRole("button", { name: dir, exact: true });
+  async function leads(page: Page, dir: "back" | "forward", to: string | null, pane?: string) {
+    const b = await nav(page, dir, pane);
+    if (to === null) return expect(b).toBeDisabled();
+    await expect(b).toBeEnabled();
+    await expect(b).toHaveAttribute("title", new RegExp(`^${dir} to ${to.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} `));
+  }
+
   test("pod → ⌘J → owner chain; ⏎ jumps in place, ⌘← goes back to the same pod row, ⌘→ redoes the jump", async ({ page }) => {
     await openRel(page, "rel-pods", 6);
     await select(page, "rp-web-b");
@@ -2267,8 +2277,8 @@ test.describe("jump to (⌘J)", () => {
       return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
     }).toBe('rel-deployments shop o.metadata.name == "web" rd-web');
     await expect(page.getByLabel("cel")).toHaveValue('o.metadata.name == "web"');
-    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
-    await expect(page.getByLabel("forward")).toHaveCount(0);
+    await leads(page, "back", "rel-pods");
+    await leads(page, "forward", null);
     // esc no longer goes back (it's for overlays and fields only)
     await page.keyboard.press("Escape");
     expect((await focused(page)).spec.resource).toBe("rel-deployments");
@@ -2281,16 +2291,16 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(pods).toBe("rp-web-b");
     expect((await focused(page)).selected).toBe(startRow);
     // behind it only the launch view, which ⌘O (openTape) left
-    await expect(page.getByLabel("back")).toHaveText("⌘← pods");
-    await expect(page.getByLabel("forward")).toContainText("⌘→ rel-deployments");
+    await leads(page, "back", "pods");
+    await leads(page, "forward", "rel-deployments");
     // ⌘→ redoes the jump, filter and all
     await page.keyboard.press("ControlOrMeta+ArrowRight");
     await expect.poll(async () => {
       const p = await focused(page);
       return p.status?.synced ? `${p.spec.resource} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
     }).toBe('rel-deployments o.metadata.name == "web" rd-web');
-    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
-    await expect(page.getByLabel("forward")).toHaveCount(0);
+    await leads(page, "back", "rel-pods");
+    await leads(page, "forward", null);
     // and back again
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(pods).toBe("rp-web-b");
@@ -2308,7 +2318,7 @@ test.describe("jump to (⌘J)", () => {
     };
     await expect.poll(shown).toBe("rel-events shop re-1,re-2");
     await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
-    await expect(page.getByLabel("back")).toContainText("⌘← rel-pods");
+    await leads(page, "back", "rel-pods");
     // an event has no events of its own
     await page.keyboard.press("v");
     await expect(page.getByLabel("message")).toContainText("an event has no events of its own");
@@ -2355,7 +2365,7 @@ test.describe("jump to (⌘J)", () => {
 
   test("⌘O to a new source is a step in the history as a jump is; the same source or a filter edit isn't", async ({ page }) => {
     await openRel(page, "rel-pods", 6);
-    await expect(page.getByLabel("back")).toHaveText("⌘← pods"); // the launch view
+    await leads(page, "back", "pods"); // the launch view
     await select(page, "rp-web-b");
     const reopen = async (resource: string, namespace?: string) => {
       await page.keyboard.press("ControlOrMeta+O");
@@ -2365,33 +2375,107 @@ test.describe("jump to (⌘J)", () => {
     };
     await reopen("rel-deployments");
     await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
-    await expect(page.getByLabel("back")).toHaveText("⌘← rel-pods");
+    await leads(page, "back", "rel-pods");
     // ⌘←: the pods again, with the row that was selected
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(async () => {
       const p = await focused(page);
       return p.spec.resource === "rel-pods" && p.status?.synced ? p.rows[p.selected]?.key : "";
     }).toBe("rp-web-b");
-    await expect(page.getByLabel("forward")).toHaveText("⌘→ rel-deployments");
+    await leads(page, "forward", "rel-deployments");
     // the same source again, or a grep: no step (the forward history stays)
     await reopen("rel-pods");
     await page.keyboard.press("/");
     await page.keyboard.type("web");
     await expect.poll(async () => (await focused(page)).spec.grep).toBe("web");
     await page.keyboard.press("Escape");
-    await expect(page.getByLabel("back")).toHaveText("⌘← pods");
-    await expect(page.getByLabel("forward")).toHaveText("⌘→ rel-deployments");
+    await leads(page, "back", "pods");
+    await leads(page, "forward", "rel-deployments");
     // only the namespace changes: a step, and as a new navigation it drops the forward history
     await reopen("rel-pods", "shop");
     await expect.poll(async () => ((await focused(page)).spec as { namespace?: string }).namespace).toBe("shop");
-    await expect(page.getByLabel("back")).toHaveText("⌘← rel-pods");
-    await expect(page.getByLabel("forward")).toHaveCount(0);
+    await leads(page, "back", "rel-pods");
+    await leads(page, "forward", null);
     // back to all namespaces, the grep still there (filters belong to the view)
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(async () => {
       const p = await focused(page);
       return `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.spec.grep}`;
     }).toBe("rel-pods  web");
+  });
+
+  test("← / → buttons as in a browser: greyed out with nowhere to go, a click is one step, holding lists the history", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-b");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: /replicaset web-7d9f/ }).click();
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${p.rows.map((r) => r.key)}` : "";
+    }).toBe("rel-replicasets rr-web-7d9f");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: /deployment web/ }).click();
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
+    await leads(page, "forward", null);
+
+    // a click: one step back, the row selected again; focus stays on the table
+    await (await nav(page, "back")).click();
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-replicasets" && p.status?.synced ? p.rows[p.selected]?.key : "";
+    }).toBe("rr-web-7d9f");
+    expect((await inspect(page)).focus).toBe("table");
+    await leads(page, "forward", "rel-deployments");
+    await (await nav(page, "forward")).click();
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
+
+    // holding ←: the back history below it, nearest first; nothing moved yet
+    const list = page.getByRole("menu", { name: "back history" });
+    const back = await nav(page, "back");
+    await back.hover();
+    await page.mouse.down();
+    await expect(list).toBeVisible();
+    await page.mouse.up();
+    await expect(list).toBeVisible(); // the release ends the hold, not the list
+    expect((await focused(page)).spec.resource).toBe("rel-deployments");
+    await expect(list.getByRole("menuitem")).toHaveText([/^rel-replicasets -n shop/, /^rel-pods -A/, /^pods /]);
+    await expect(list.locator("[data-active]")).toContainText("rel-replicasets");
+    expect((await inspect(page)).focus).toBe("menu");
+    // keys as in any menu: j moves, esc closes, nothing happened
+    await page.keyboard.press("j");
+    await expect(list.locator("[data-active]")).toContainText("rel-pods");
+    await page.keyboard.press("Escape");
+    await expect(list).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+    expect((await focused(page)).spec.resource).toBe("rel-deployments");
+
+    // right-click opens it too; a click elsewhere closes it
+    await back.click({ button: "right" });
+    await expect(list).toBeVisible();
+    await page.locator("section[data-pane] header").getByLabel("filter").click();
+    await expect(list).toHaveCount(0);
+    expect((await focused(page)).spec.resource).toBe("rel-deployments");
+
+    // picking an entry two steps back goes there at once; what it passed over is forward now
+    await back.click({ button: "right" });
+    await list.getByRole("menuitem", { name: /^rel-pods/ }).click();
+    await expect(list).toHaveCount(0);
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-pods" && p.status?.synced ? p.rows[p.selected]?.key : "";
+    }).toBe("rp-web-b");
+    await leads(page, "back", "pods");
+    await leads(page, "forward", "rel-replicasets");
+    const fwd = page.getByRole("menu", { name: "forward history" });
+    await (await nav(page, "forward")).click({ button: "right" });
+    await expect(fwd.getByRole("menuitem")).toHaveText([/^rel-replicasets/, /^rel-deployments/]);
+    // ⏎ on the highlight (j stops at the last one)
+    await page.keyboard.press("j");
+    await page.keyboard.press("j");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
+    await leads(page, "forward", null);
+    await expect(await nav(page, "forward")).toBeDisabled();
   });
 
   test("a new jump after going back drops the forward history", async ({ page }) => {
@@ -2401,13 +2485,13 @@ test.describe("jump to (⌘J)", () => {
     await jump(page).getByRole("menuitem", { name: /replicaset web-7d9f/ }).click();
     await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-replicasets");
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
-    await expect(page.getByLabel("forward")).toContainText("⌘→ rel-replicasets");
+    await leads(page, "forward", "rel-replicasets");
     await expect.poll(async () => (await focused(page)).rows.length).toBe(6);
     await select(page, "rp-web-a");
     await page.keyboard.press("ControlOrMeta+J");
     await jump(page).getByRole("menuitem", { name: /deployment web/ }).click();
     await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
-    await expect(page.getByLabel("forward")).toHaveCount(0);
+    await leads(page, "forward", null);
     await page.keyboard.press("ControlOrMeta+ArrowRight");
     await expect(page.getByLabel("message")).toContainText("nothing to go forward to");
   });
@@ -2429,8 +2513,8 @@ test.describe("jump to (⌘J)", () => {
     }).toBe('rel-replicasets o.metadata.ownerReferences.exists(r, r.uid == "rd-web") rr-web-7d9f');
     // a split has no back stack of its own (the pane it came from has the launch view behind it)
     const split = (await inspect(page)).focusedPane;
-    await expect(page.locator(`section[data-pane="${split}"]`).getByLabel("back")).toHaveCount(0);
-    await expect(page.locator(`section[data-pane="v1"]`).getByLabel("back")).toHaveText("⌘← pods");
+    await leads(page, "back", null, split);
+    await leads(page, "back", "pods", "v1");
   });
 
   test("gone owners are listed disabled with why; a custom resource's owned scan finds config maps", async ({ page }) => {

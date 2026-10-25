@@ -229,6 +229,24 @@ describe("jumps and their history", () => {
     expect([where(x), x.panes.v1!.reselect]).toEqual(["pods", "uid-pod"]);
   });
 
+  it("several steps at once (a pick from the history list): the views passed over go to the other side, in order", () => {
+    let s = jump(jump(jump(S.initialState(), "a", owner), "b", owned), "c", { resource: "services" }); // pods → deploy → rs → services
+    const r = S.moveHistory(s, "v1", "back", "svc", 3);
+    expect(r.entry).toEqual({ spec: S.initialSpec(), key: "a" });
+    s = S.updatePane(r.state, "v1", (p) => ({ ...p, spec: r.entry!.spec }));
+    expect([where(s), s.panes.v1!.back, s.panes.v1!.reselect]).toEqual(["pods", undefined, "a"]);
+    // forward, nearest last: deploy, rs, then services (with the row it had)
+    expect(s.panes.v1!.forward!.map((e) => [e.spec.resource, e.key])).toEqual([["services", "svc"], ["replicasets.apps", "c"], ["deployments.apps", "b"]]);
+    // and two forward again: rs, deploy behind it, services still ahead
+    s = (({ state, entry }) => S.updatePane(state, "v1", (p) => ({ ...p, spec: entry!.spec })))(S.moveHistory(s, "v1", "forward", "a2", 2));
+    expect(where(s)).toBe("replicasets.apps");
+    expect(s.panes.v1!.back!.map((e) => [e.spec.resource, e.key])).toEqual([["pods", "a2"], ["deployments.apps", "b"]]);
+    expect(s.panes.v1!.forward!.map((e) => e.spec.resource)).toEqual(["services"]);
+    // more steps than there are, or none: nowhere
+    expect(S.moveHistory(s, "v1", "back", undefined, 3).entry).toBeUndefined();
+    expect(S.moveHistory(s, "v1", "back", undefined, 0).entry).toBeUndefined();
+  });
+
   it("nowhere to go: unchanged", () => {
     const s = S.initialState();
     expect(S.moveHistory(s, "v1", "back", "k")).toEqual({ state: s });

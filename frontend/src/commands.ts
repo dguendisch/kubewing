@@ -75,12 +75,14 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => ({ ...x, focus: "table" }));
     case "row.down":
       if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, 1));
+      if (s.overlay?.kind === "history") return setUI((x) => moveInHistory(x, 1));
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
       if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, -1));
+      if (s.overlay?.kind === "history") return setUI((x) => moveInHistory(x, -1));
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, -1));
@@ -123,6 +125,7 @@ export function dispatch(cmd: CommandId) {
     case "menu.run": {
       const o = s.overlay;
       if (o?.kind === "jump") return void runJump(o.index ?? 0, false);
+      if (o?.kind === "history") return void pickHistory(o.index ?? 0);
       if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
@@ -569,16 +572,39 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
 }
 
 /**
- * ⌘← / ⌘→ in the table: the view before the last jump or ⌘O, or forward
- * again to the one just left; the row selected there is selected again.
+ * ⌘← / ⌘→ in the table (or the header's ← / → buttons): the view before the
+ * last jump or ⌘O, or forward again to the one just left; the row selected
+ * there is selected again. steps: several at once, picked from the history list.
  */
-async function moveHistory(dir: "back" | "forward") {
-  const pane = S.focusedPane(useUI.getState());
-  if (pane.term) return;
-  const { state, entry } = S.moveHistory(useUI.getState(), pane.id, dir, selectedKey(pane));
+export async function moveHistory(dir: "back" | "forward", paneId = S.focusedPane(useUI.getState()).id, steps = 1) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane || pane.term) return;
+  const { state, entry } = S.moveHistory(useUI.getState(), pane.id, dir, selectedKey(pane), steps);
   if (!entry) return flash(pane.id, dir === "back" ? "nothing to go back to" : "nothing to go forward to");
   setUI(() => state);
   await applySpec(pane.id, entry.spec, true);
+}
+
+/** Holding the ← / → button: that direction's history as a list below it, the nearest view first and highlighted. */
+export function openHistoryList(paneId: string, dir: "back" | "forward", at: { x: number; y: number }) {
+  const p = useUI.getState().panes[paneId];
+  if (!(dir === "back" ? p?.back : p?.forward)?.length) return;
+  setUI((x) => S.openOverlay(S.closeOverlay(S.focusPane(x, paneId)), { kind: "history", pane: paneId, dir, index: 0, at }));
+}
+
+/** ⏎ / click on an entry of the history list: goes there (index 0 is one step). */
+export async function pickHistory(index: number) {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "history" || !o.dir) return;
+  setUI(S.closeOverlay);
+  await moveHistory(o.dir, o.pane, index + 1);
+}
+
+function moveInHistory(s: S.UIState, delta: number): S.UIState {
+  const o = s.overlay;
+  const n = (o?.dir === "back" ? s.panes[o.pane]?.back : o?.dir === "forward" ? s.panes[o.pane]?.forward : undefined)?.length ?? 0;
+  if (!o || n === 0) return s;
+  return { ...s, overlay: { ...o, index: Math.min(Math.max((o.index ?? 0) + delta, 0), n - 1) } };
 }
 
 /** Moves the jump menu highlight, skipping entries that go nowhere. */

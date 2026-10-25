@@ -13,6 +13,7 @@ import { Terminal } from "../term/Terminal";
 import { FindBar } from "../term/FindBar";
 import { b64encode } from "../term/sessions";
 import { DraftField } from "./DraftField";
+import { HistoryButtons } from "./HistoryNav";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 
@@ -263,10 +264,9 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
 
   const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
   const { context, resource, namespace, fieldSelector } = pane.spec;
-  const back = pane.back?.at(-1);
-  const forward = pane.forward?.at(-1);
   return (
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
+      <HistoryButtons pane={pane} />
       <Badges rule={rule} />
       <span className="shrink-0 text-fg-muted">{context || pane.context || "(current)"}</span>
       <span className="shrink-0 font-semibold text-accent">{resource}</span>
@@ -274,13 +274,6 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       {fieldSelector ? (
         <span aria-label="field selector" title="field selector (from a jump)" className="truncate border border-border px-1 text-fg-muted">
           {fieldSelector}
-        </span>
-      ) : null}
-      {back || forward ? (
-        <span aria-label="history" className="shrink-0 text-fg-muted">
-          {back ? <span aria-label="back" title={`⌘← back (${pane.back!.length})`}>⌘← {back.spec.resource}</span> : null}
-          {back && forward ? " · " : null}
-          {forward ? <span aria-label="forward" title={`⌘→ forward (${pane.forward!.length})`}>⌘→ {forward.spec.resource}</span> : null}
         </span>
       ) : null}
       <span className="flex-1" />

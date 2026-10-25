@@ -122,15 +122,18 @@ export interface Overlay {
    *  debug: image, target and profile of a prepared debug container;
    *  opspod: node, image and host access of an ops pod (prepared on submit);
    *  edit: a row's object in the YAML editor, then the server's dry-run diff;
-   *  jump: where the pane can go from a row (namespace, owners, owned). */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump";
+   *  jump: where the pane can go from a row (namespace, owners, owned);
+   *  history: a pane's back or forward history (holding its ← / → button). */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history";
+  /** history: which one. */
+  dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. */
   view?: "yaml" | "describe";
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
   describeGen?: number;
-  /** forwards, menu, container, jump: highlighted entry. */
+  /** forwards, menu, container, jump, history: highlighted entry. */
   index?: number;
-  /** menu, jump: pointer position when opened by right-click; else it's anchored to the row (rowIndex). */
+  /** menu, jump: pointer position when opened by right-click; else it's anchored to the row (rowIndex). history: below its button. */
   at?: { x: number; y: number };
   /** menu, jump: the row it belongs to, for anchoring. */
   rowIndex?: number;
@@ -508,6 +511,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   edit: "edit",
   // the menu's keys, plus ⇧⏎ (split)
   jump: "menu",
+  history: "menu",
 };
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
@@ -601,14 +605,17 @@ export function openHistory(s: UIState, paneId: string, spec: PaneSpec, key: str
  * the current view (with its selected row, key) moves onto the other one.
  * Returns the entry to restore (the caller applies its spec and the row is
  * reselected once shown), or no entry when there's nowhere to go.
+ * steps > 1 (a pick from the history list): the views passed over move to
+ * the other history too, in order, as a browser does.
  */
-export function moveHistory(s: UIState, paneId: string, dir: "back" | "forward", key: string | undefined): { state: UIState; entry?: HistoryEntry } {
+export function moveHistory(s: UIState, paneId: string, dir: "back" | "forward", key: string | undefined, steps = 1): { state: UIState; entry?: HistoryEntry } {
   const p = s.panes[paneId];
   const from = dir === "back" ? p?.back : p?.forward;
-  const entry = from?.at(-1);
+  const entry = steps >= 1 ? from?.at(-steps) : undefined;
   if (!p || !entry) return { state: s };
-  const rest = from!.slice(0, -1);
-  const other = [...((dir === "back" ? p.forward : p.back) ?? []), { spec: p.spec, key }].slice(-historyLimit);
+  const rest = from!.slice(0, -steps);
+  const passed = from!.slice(-steps + 1 || from!.length).reverse();
+  const other = [...((dir === "back" ? p.forward : p.back) ?? []), { spec: p.spec, key }, ...passed].slice(-historyLimit);
   const back = dir === "back" ? rest : other;
   const forward = dir === "back" ? other : rest;
   return { state: updatePane(s, paneId, (x) => ({ ...x, back: orNone(back), forward: orNone(forward), reselect: entry.key })), entry };
