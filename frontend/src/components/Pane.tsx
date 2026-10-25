@@ -363,6 +363,16 @@ function healthyTitle(kind: string) {
   return `hide ${what} (h)`;
 }
 
+/** The not-yet-synced marker: live's dot, pulsing while the initial list loads; a still ring once the
+ *  source reports an error, since the error beside it is then the news. */
+function Syncing({ stalled }: { stalled: boolean }) {
+  return (
+    <span>
+      {stalled ? "○" : <span className="text-accent motion-safe:animate-pulse">●</span>} syncing
+    </span>
+  );
+}
+
 function StatusLine({ pane }: { pane: S.PaneState }) {
   const [d, setD] = useState<PaneData | undefined>(pane.serverId ? paneData.get(pane.serverId) : undefined);
   useEffect(() => {
@@ -374,7 +384,7 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
   const st = d?.status;
   return (
     <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
-      <span>{st?.synced ? "● live" : "○ syncing"}</span>
+      {st?.synced ? <span>● live</span> : <Syncing stalled={!!st?.error} />}
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
