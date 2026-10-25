@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bottomCorners, leaf, neighbor, paneIds, rects, split, valid, type Layout } from "./layout";
+import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
 
 const ids = (s: S.UIState) => paneIds(S.activeTab(s).layout);
@@ -79,6 +79,15 @@ describe("layout commands", () => {
       (s) => S.splitWith(s, S.jumpSpec(S.focusedPane(s).spec, { resource: "replicasets.apps", namespace: "shop" })),
       (s) => S.toggleMaximize(s),
       (s) => S.toggleMaximize(s),
+      // drag and drop: any pane to any side of any pane or tab edge, or a new tab
+      (s) => {
+        const all = Object.keys(s.panes);
+        const pick = <T,>(l: T[]) => l[Math.floor(rnd() * l.length)]!;
+        const t = pick(s.tabs);
+        const side = pick(["left", "right", "top", "bottom"] as const);
+        const to: S.MoveTarget = rnd() < 0.15 ? { newTab: true } : rnd() < 0.3 ? { tab: t.id, side } : { tab: t.id, pane: pick(paneIds(t.layout)), side };
+        return S.movePane(s, pick(all), to);
+      },
     );
     let s = S.initialState();
     for (let i = 0; i < 3000; i++) {
@@ -593,5 +602,122 @@ describe("bottomCorners (macOS rounds the window's bottom corners)", () => {
     expect(bottomCorners(l, "v2")).toEqual({ left: false, right: false });
     expect(bottomCorners(l, "v3")).toEqual({ left: false, right: true });
     expect(bottomCorners(l, "gone")).toEqual({ left: false, right: false });
+  });
+});
+
+describe("insert / insertEdge (where a dragged pane lands)", () => {
+  const p = leaf;
+  it("puts the pane on any side of the target, halving the target's share", () => {
+    expect(insert(p("a"), "a", "left", "n")).toEqual({ type: "split", dir: "row", children: [p("n"), p("a")] });
+    expect(insert(p("a"), "a", "bottom", "n")).toEqual({ type: "split", dir: "column", children: [p("a"), p("n")] });
+    const l: Layout = { type: "split", dir: "row", children: [p("a"), p("b")], sizes: [0.6, 0.4] };
+    expect(insert(l, "b", "left", "n")).toEqual({ type: "split", dir: "row", children: [p("a"), p("n"), p("b")], sizes: [0.6, 0.2, 0.2] });
+    // across the split's direction: the target becomes a split of its own
+    expect(insert(l, "a", "top", "n")).toEqual({
+      type: "split",
+      dir: "row",
+      children: [{ type: "split", dir: "column", children: [p("n"), p("a")] }, p("b")],
+      sizes: [0.6, 0.4],
+    });
+    expect(valid(insert(l, "a", "top", "n"))).toBe(true);
+  });
+
+  it("an edge of the tab: an equal share along it, the rest keep their proportions", () => {
+    const l: Layout = { type: "split", dir: "row", children: [p("a"), p("b")], sizes: [0.6, 0.4] };
+    const r = insertEdge(l, "right", "n");
+    expect(r.type === "split" && r.children.map((c) => (c as { id: string }).id)).toEqual(["a", "b", "n"]);
+    expect(r.type === "split" && r.sizes!.map((x) => Math.round(x * 100))).toEqual([40, 27, 33]);
+    expect(edgeShare(l, "right")).toBeCloseTo(1 / 3);
+    // across: the whole layout and the pane, half each
+    expect(insertEdge(l, "bottom", "n")).toEqual({ type: "split", dir: "column", children: [l, p("n")] });
+    expect(edgeShare(l, "bottom")).toBe(0.5);
+    expect(insertEdge(p("a"), "left", "n")).toEqual({ type: "split", dir: "row", children: [p("n"), p("a")] });
+  });
+
+  it("nearestSide goes by the diagonals; sidePart is the preview", () => {
+    const r = { x: 0, y: 0, w: 200, h: 100 };
+    expect(nearestSide(r, 10, 50)).toBe("left");
+    expect(nearestSide(r, 190, 50)).toBe("right");
+    expect(nearestSide(r, 100, 5)).toBe("top");
+    expect(nearestSide(r, 100, 95)).toBe("bottom");
+    expect(sidePart(r, "right", 0.5)).toEqual({ x: 100, y: 0, w: 100, h: 100 });
+    expect(sidePart(r, "top", 0.25)).toEqual({ x: 0, y: 0, w: 200, h: 25 });
+  });
+});
+
+describe("movePane (drag and drop by the grip)", () => {
+  // t1: v1 | v2 (focus v2)
+  const two = () => S.splitPane(S.initialState(), "row");
+  const tabIds = (s: S.UIState, i: number) => paneIds(s.tabs[i]!.layout);
+
+  it("within a tab: next to another pane, the pane itself is kept (no new pane)", () => {
+    let s = apply(two(), (x) => S.splitPane(x, "column")); // v1 | (v2 / v3), focus v3
+    const v3 = s.panes.v3;
+    s = apply(s, (x) => S.movePane(x, "v3", { tab: "t1", pane: "v1", side: "left" }));
+    invariants(s);
+    expect(s.tabs[0]!.layout).toEqual({ type: "split", dir: "row", children: [leaf("v3"), leaf("v1"), leaf("v2")] }); // unsized: equal shares, as a split
+    expect(s.panes.v3).toBe(v3);
+    expect(S.activeTab(s).focused).toBe("v3");
+    expect(s.nextId).toBe(4);
+  });
+
+  it("onto itself, or the only pane to its own tab's edge, is no move", () => {
+    const s = two();
+    expect(S.movePane(s, "v2", { tab: "t1", pane: "v2", side: "left" })).toBe(s);
+    expect(S.movePane(s, "v9", { tab: "t1", pane: "v1", side: "left" })).toBe(s);
+    expect(S.movePane(s, "v1", { tab: "t9", side: "left" })).toBe(s);
+    const one = S.initialState();
+    expect(S.movePane(one, "v1", { tab: "t1", side: "left" })).toBe(one);
+    expect(S.movePane(one, "v1", { newTab: true })).toBe(one);
+    // to the edge of its own tab with others there: a move
+    expect(S.movePane(s, "v2", { tab: "t1", side: "left" }).tabs[0]!.layout).toEqual({ type: "split", dir: "row", children: [leaf("v2"), leaf("v1")] });
+  });
+
+  it("to another tab: shown there, focused; the old tab focuses a neighbor", () => {
+    let s = apply(two(), S.newTab); // t1: v1 | v2; t3: v3 (active)
+    s = apply(s, (x) => S.gotoTab(x, 1));
+    s = apply(s, (x) => S.movePane(x, "v2", { tab: "t3", pane: "v3", side: "bottom" }));
+    invariants(s);
+    expect(tabIds(s, 0)).toEqual(["v1"]);
+    expect(s.tabs[0]!.focused).toBe("v1");
+    expect(s.tabs[1]!.layout).toEqual({ type: "split", dir: "column", children: [leaf("v3"), leaf("v2")] });
+    expect(s.activeTab).toBe(1);
+    expect(S.activeTab(s).focused).toBe("v2");
+  });
+
+  it("the last pane of a tab: the tab closes", () => {
+    let s = apply(two(), S.newTab); // t3: v3
+    s = apply(s, (x) => S.movePane(x, "v3", { tab: "t1", side: "right" }));
+    invariants(s);
+    expect(s.tabs.map((t) => t.id)).toEqual(["t1"]);
+    expect(tabIds(s, 0)).toEqual(["v1", "v2", "v3"]);
+    expect(S.focusedPane(s).id).toBe("v3");
+  });
+
+  it("into a new tab, alone", () => {
+    let s = apply(two(), (x) => S.movePane(x, "v1", { newTab: true }));
+    invariants(s);
+    expect(s.tabs.map((t) => [t.id, paneIds(t.layout)])).toEqual([
+      ["t1", ["v2"]],
+      ["t3", ["v1"]],
+    ]);
+    expect(s.activeTab).toBe(1);
+    expect(s.nextId).toBe(4);
+  });
+
+  it("server panes and shells move along (nothing is released)", () => {
+    let s = S.updatePane(two(), "v1", (p) => ({ ...p, serverId: "p1" }));
+    s = S.openTerminal(s, { session: "s1", pod: "p", container: "c", context: "k" }, "v1"); // v3
+    const next = apply(s, (x) => S.movePane(x, "v3", { newTab: true }));
+    expect(S.orphanedServerPanes(s, next)).toEqual([]);
+    expect(S.orphanedSessions(s, next)).toEqual([]);
+    expect(next.focus).toBe("terminal");
+  });
+
+  it("un-maximizes the tabs involved", () => {
+    let s = apply(apply(two(), (x) => S.splitPane(x, "column")), S.toggleMaximize); // v3 maximized
+    s = apply(s, (x) => S.movePane(x, "v1", { tab: "t1", pane: "v3", side: "right" }));
+    invariants(s);
+    expect(S.activeTab(s).maximized).toBeUndefined();
   });
 });

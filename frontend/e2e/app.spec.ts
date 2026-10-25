@@ -867,6 +867,108 @@ test.describe("dockview layout", () => {
     expect((await inspect(page)).tabs[0]!.layout).toEqual(layout);
   });
 
+  test.describe("moving a pane by its grip", () => {
+    const grip = (page: Page, id: string) => page.locator(`section[data-pane="${id}"]`).getByRole("button", { name: "move pane" });
+    const center = async (page: Page, sel: string) => {
+      const b = (await page.locator(sel).boundingBox())!;
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2, b };
+    };
+    /** Presses on the pane's grip (shown by moving over the pane first) and moves to (x, y). */
+    const dragFrom = async (page: Page, id: string, x: number, y: number) => {
+      const p = await center(page, `section[data-pane="${id}"]`);
+      await page.mouse.move(p.x, p.y);
+      await page.mouse.move(p.x + 5, p.y + 5);
+      await expect(grip(page, id)).toHaveAttribute("data-shown", "true");
+      const g = (await grip(page, id).boundingBox())!;
+      await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(x, y, { steps: 8 });
+    };
+
+    test("the grip shows while the mouse moves, and not with nowhere to move", async ({ page }) => {
+      await openTape(page);
+      await expect(grip(page, "v1")).toHaveCount(0); // the only pane of the only tab
+      await page.keyboard.press("ControlOrMeta+Shift+D");
+      await expect(grip(page, "v1")).not.toHaveAttribute("data-shown");
+      const p = await center(page, 'section[data-pane="v1"]');
+      await page.mouse.move(p.x, p.y);
+      await page.mouse.move(p.x + 5, p.y);
+      await expect(grip(page, "v1")).toHaveAttribute("data-shown", "true");
+      await expect(grip(page, "v2")).not.toHaveAttribute("data-shown");
+      // it goes again once the mouse rests
+      await expect(grip(page, "v1")).not.toHaveAttribute("data-shown", { timeout: 3000 });
+    });
+
+    test("dropped on a side of another pane: it moves there with its data; esc cancels a drag", async ({ page }) => {
+      await openTape(page);
+      await page.keyboard.press("ControlOrMeta+Shift+D"); // v1 | v2
+      await expect.poll(async () => !!(await inspect(page)).panes.v2?.serverId).toBe(true);
+      const before = await inspect(page);
+      // v2 onto the bottom half of v1: v1 / v2, stacked
+      const v1 = await center(page, 'section[data-pane="v1"]');
+      await dragFrom(page, "v2", v1.x, v1.b.y + v1.b.height * 0.85);
+      await expect(page.getByLabel("drop target")).toBeVisible();
+      await page.mouse.up();
+      await expect(page.getByLabel("drop target")).toBeHidden();
+      const s = await inspect(page);
+      expect(s.tabs[0]!.layout).toEqual({ type: "split", dir: "column", children: [{ type: "pane", id: "v1" }, { type: "pane", id: "v2" }] });
+      expect(s.focusedPane).toBe("v2");
+      expect(s.panes.v2!.serverId).toBe(before.panes.v2!.serverId); // the same watch, not a new pane
+      // esc mid-drag: nothing moves
+      const top = await center(page, 'section[data-pane="v1"]');
+      await dragFrom(page, "v2", top.b.x + top.b.width * 0.1, top.y);
+      await page.keyboard.press("Escape");
+      await page.mouse.up();
+      expect((await inspect(page)).tabs[0]!.layout).toEqual(s.tabs[0]!.layout);
+    });
+
+    test("dropped on another tab's header it goes there; holding over it shows the tab to pick a pane; + makes a new tab", async ({ page }) => {
+      await openTape(page);
+      await page.keyboard.press("ControlOrMeta+Shift+D"); // t1: v1 | v2
+      await page.keyboard.press("ControlOrMeta+T"); // t3: v3
+      await page.keyboard.press("ControlOrMeta+1");
+      await expect.poll(async () => !!(await inspect(page)).panes.v2?.serverId).toBe(true);
+      const server = (await inspect(page)).panes.v2!.serverId;
+      // onto the header of tab 2: its right edge
+      const tab2 = await center(page, '[role="tab"] >> nth=1');
+      await dragFrom(page, "v2", tab2.x, tab2.y);
+      await page.mouse.up();
+      let s = await inspect(page);
+      expect(s.activeTab).toBe(1);
+      expect(s.tabs[1]!.layout).toEqual({ type: "split", dir: "row", children: [{ type: "pane", id: "v3" }, { type: "pane", id: "v2" }] });
+      expect(s.tabs[0]!.layout).toEqual({ type: "pane", id: "v1" });
+      expect(s.panes.v2!.serverId).toBe(server);
+      await expect(page.locator("section[data-pane]")).toHaveCount(3); // mounted once, in its new tab
+      await expect(page.locator('main > div:not([hidden]) section[data-pane="v2"]')).toBeVisible();
+      // back: v1 dragged over tab 2's header, held until it shows, then onto the top of v3
+      await page.keyboard.press("ControlOrMeta+1");
+      const t2 = await center(page, '[role="tab"] >> nth=1');
+      await dragFrom(page, "v1", t2.x, t2.y);
+      await expect.poll(async () => (await inspect(page)).activeTab).toBe(1);
+      const v3 = await center(page, 'main > div:not([hidden]) section[data-pane="v3"]');
+      await page.mouse.move(v3.x, v3.b.y + v3.b.height * 0.2, { steps: 8 });
+      await page.mouse.up();
+      s = await inspect(page);
+      // tab 1 had nothing left and closed
+      expect(s.tabs.map((t) => t.id)).toEqual(["t3"]);
+      expect(s.tabs[0]!.layout).toEqual({
+        type: "split",
+        dir: "row",
+        children: [{ type: "split", dir: "column", children: [{ type: "pane", id: "v1" }, { type: "pane", id: "v3" }] }, { type: "pane", id: "v2" }],
+      });
+      expect(s.focusedPane).toBe("v1");
+      // onto +: a tab of its own
+      const plus = await center(page, 'button[aria-label="new tab"]');
+      await dragFrom(page, "v2", plus.x, plus.y);
+      await page.mouse.up();
+      s = await inspect(page);
+      expect(s.tabs.length).toBe(2);
+      expect(s.tabs[1]!.layout).toEqual({ type: "pane", id: "v2" });
+      expect(s.activeTab).toBe(1);
+      expect(s.panes.v2!.serverId).toBe(server);
+    });
+  });
+
   test("clicking a pane focuses it", async ({ page }) => {
     await openTape(page);
     await page.keyboard.press("ControlOrMeta+Shift+D");
@@ -1078,6 +1180,38 @@ test.describe("object actions", () => {
     const after = await inspect(page);
     expect(after.tabs).toHaveLength(1);
     expect(Object.values(after.panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
+  });
+
+  test("a terminal pane dragged into a new tab keeps its shell and screen; keys still go to it", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("x");
+    await expect.poll(() => termText(page)).toContain("web-3:app$");
+    await page.keyboard.type("echo before");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("echo before\necho before");
+    const id = (await inspect(page)).focusedPane;
+    const session = (await focused(page) as unknown as { term: { session: string } }).term.session;
+    const pane = (await page.locator(`section[data-pane="${id}"]`).boundingBox())!;
+    await page.mouse.move(pane.x + pane.width / 2, pane.y + pane.height / 2);
+    await page.mouse.move(pane.x + pane.width / 2 + 5, pane.y + pane.height / 2);
+    const g = (await page.locator(`section[data-pane="${id}"]`).getByRole("button", { name: "move pane" }).boundingBox())!;
+    const plus = (await page.getByRole("button", { name: "new tab" }).boundingBox())!;
+    await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(plus.x + plus.width / 2, plus.y + plus.height / 2, { steps: 8 });
+    await page.mouse.up();
+    const s = await inspect(page);
+    expect(s.tabs).toHaveLength(2);
+    expect(s.tabs[1]!.layout).toEqual({ type: "pane", id });
+    expect(s.focus).toBe("terminal");
+    expect((await focused(page) as unknown as { term: { session: string } }).term.session).toBe(session);
+    await expect(page.locator("[data-terminal]")).toHaveCount(1);
+    // the screen is replayed in its new place, and the shell is the same one
+    await expect.poll(() => termText(page)).toContain("echo before\necho before");
+    await page.keyboard.type("echo after");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("echo after\necho after");
   });
 
   test("the terminal keeps terminal.scrollback lines (config.yaml: 20000), more than the old 5000", async ({ page }) => {

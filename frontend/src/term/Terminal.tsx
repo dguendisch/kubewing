@@ -86,12 +86,13 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     t.loadAddon(sa);
     search.current = sa;
     const opts = (f: TermFind): ISearchOptions => ({ caseSensitive: f.caseSensitive, wholeWord: f.wholeWord, regex: f.regex, decorations: decorations() });
-    finders.set(session, (dir) => {
+    const finder = (dir: "next" | "prev") => {
       const f = findRef.current;
       if (!f?.query) return;
       if (dir === "next") sa.findNext(f.query, opts(f));
       else sa.findPrevious(f.query, opts(f));
-    });
+    };
+    finders.set(session, finder);
     sa.onDidChangeResults((r) => cb.current.onFindResult?.({ index: r.resultIndex, count: r.resultCount }));
     t.open(host.current!);
     term.current = t;
@@ -121,7 +122,8 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
       ro.disconnect();
       subs.forEach((s) => s.dispose());
       if (openTerminals.get(session) === t) openTerminals.delete(session);
-      finders.delete(session);
+      // a pane moved to another tab mounts its new terminal before this one goes
+      if (finders.get(session) === finder) finders.delete(session);
       search.current = undefined;
       t.dispose();
       term.current = undefined;

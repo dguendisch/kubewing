@@ -11,6 +11,7 @@ import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
 import { Edit } from "./components/Edit";
 import { Dock } from "./components/Dock";
+import { DragPreview } from "./components/PaneDrag";
 import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
 import { TabSwitcher } from "./components/TabSwitcher";
@@ -44,6 +45,7 @@ export function App() {
             <button
               key={t.id}
               role="tab"
+              data-tab={t.id}
               aria-selected={i === active}
               aria-keyshortcuts={n ? `Meta+${n}` : undefined}
               onClick={() => setUI((s) => ({ ...s, activeTab: i }))}
@@ -58,7 +60,7 @@ export function App() {
             </button>
           );
         })}
-        <button aria-label="new tab" className="px-2 py-1 text-fg-muted" onClick={() => setUI(S.newTab)}>
+        <button aria-label="new tab" data-new-tab className="px-2 py-1 text-fg-muted" onClick={() => setUI(S.newTab)}>
           +
         </button>
         {forwards ? (
@@ -77,7 +79,7 @@ export function App() {
       <main className="relative min-h-0 flex-1 p-px">
         {/* every tab stays mounted (hidden when inactive): dockview and the grids keep their state */}
         {tabs.map((t) => (
-          <div key={t.id} className="absolute inset-px" hidden={t.id !== tab.id}>
+          <div key={t.id} data-tab-area={t.id} className="absolute inset-px" hidden={t.id !== tab.id}>
             <Dock tabId={t.id} active={t.id === tab.id} />
           </div>
         ))}
@@ -98,6 +100,7 @@ export function App() {
       <OpsPodDialog />
       <TabSwitcher />
       <Help />
+      <DragPreview />
     </div>
   );
 }

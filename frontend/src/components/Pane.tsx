@@ -14,6 +14,7 @@ import { FindBar } from "../term/FindBar";
 import { b64encode } from "../term/sessions";
 import { DraftField } from "./DraftField";
 import { HistoryButtons } from "./HistoryNav";
+import { Grip } from "./PaneDrag";
 import { StatusError } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
@@ -76,6 +77,7 @@ export function Pane({ id }: { id: string }) {
       style={color ? { borderColor: color } : undefined}
       onMouseDown={() => setUI((s) => S.focusPane(s, id))}
     >
+      <Grip id={id} />
       {hidden ? <Maximized hidden={hidden} /> : null}
       {pane.term ? (
         <>

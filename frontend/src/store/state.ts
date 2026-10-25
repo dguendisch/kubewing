@@ -1,7 +1,7 @@
 import type { FocusContext } from "../keys/keymap";
 import type { ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
-import { leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout } from "./layout";
+import { insert, insertEdge, leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -464,6 +464,52 @@ export function setLayout(s: UIState, layout: Layout): UIState {
   const got = paneIds(layout).sort();
   if (!valid(layout) || have.length !== got.length || have.some((id, i) => id !== got[i])) return s;
   return withTab(s, () => ({ ...t, layout }));
+}
+
+/** Where a dragged pane goes: a side of another pane, an edge of a tab (pane unset), or a new tab. */
+export type MoveTarget = { tab: string; pane?: string; side: Side } | { newTab: true };
+
+/**
+ * Drag and drop by a pane's grip (ghostty): the pane moves, as it is (its
+ * watch, its shell, its history), next to another pane or to the edge of a
+ * tab, also another one, or into a new tab of its own. The tab it ends up in
+ * is shown with the pane focused there. A tab left empty closes; its other
+ * panes regain the space. A drop onto itself is no move.
+ */
+export function movePane(s: UIState, id: string, to: MoveTarget): UIState {
+  const fromIndex = s.tabs.findIndex((t) => paneIds(t.layout).includes(id));
+  if (fromIndex < 0) return s;
+  const from = s.tabs[fromIndex]!;
+  if ("newTab" in to) {
+    if (paneIds(from.layout).length < 2) return s; // already alone in its tab
+  } else {
+    const t = s.tabs.find((x) => x.id === to.tab);
+    if (!t || to.pane === id || (to.pane && !paneIds(t.layout).includes(to.pane))) return s;
+    if (t.id === from.id && !to.pane && paneIds(t.layout).length < 2) return s;
+  }
+  const rest = remove(from.layout, id);
+  let tabs = [...s.tabs];
+  if (rest) {
+    const ids = paneIds(from.layout);
+    const left = paneIds(rest);
+    const focused = from.focused === id ? left[Math.max(0, ids.indexOf(id) - 1)] ?? left[0]! : from.focused;
+    const { maximized: _, ...kept } = from;
+    tabs[fromIndex] = { ...kept, layout: rest, focused };
+  } else tabs = tabs.filter((_, i) => i !== fromIndex);
+  let activeTab: number;
+  let nextId = s.nextId;
+  if ("newTab" in to) {
+    tabs.push({ id: `t${nextId++}`, layout: leaf(id), focused: id });
+    activeTab = tabs.length - 1;
+  } else {
+    activeTab = tabs.findIndex((t) => t.id === to.tab);
+    const t = tabs[activeTab]!;
+    const base = t.id === from.id ? rest! : t.layout;
+    const layout = to.pane ? insert(base, to.pane, to.side, id) : insertEdge(base, to.side, id);
+    const { maximized: _, ...kept } = t;
+    tabs[activeTab] = { ...kept, layout, focused: id };
+  }
+  return { ...s, tabs, activeTab, nextId, focus: "table", overlay: undefined, switcher: undefined };
 }
 
 export function cyclePane(s: UIState, delta: number): UIState {

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { DockviewReact, type DockviewApi, type DockviewReadyEvent, type IDockviewPanelProps, type SerializedDockview } from "dockview-react";
 import "dockview-react/dist/styles/dockview.css";
 import { fromDockview, sameLayout, toDockview, type DockLayout } from "../store/dock";
+import { paneIds } from "../store/layout";
 import { setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import { Pane } from "./Pane";
@@ -87,6 +88,10 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
   useEffect(() => {
     if (!active) {
       live.current = false;
+      // a pane dragged out to another tab must not stay mounted here meanwhile (twice, then)
+      const a = api.current;
+      const ids = layout ? paneIds(layout) : [];
+      for (const p of a?.panels ?? []) if (!ids.includes(p.id)) a!.removePanel(p);
       return;
     }
     push();
