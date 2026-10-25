@@ -1,0 +1,14 @@
+# E2E tape for the status line's error: the source fails right after the
+# initial list, with the message source.errText makes of a response that
+# isn't a Status (client-go's summary first, then what the server said).
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: err-0, namespace: shop, uid: err-0, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [err-0]
+steps:
+  - at: 0s
+    error: "the server rejected our request for an unknown reason (get pods)\nfield label not supported: involvedObject.kind\nHTTP 400 BadRequest"
+    frame: true

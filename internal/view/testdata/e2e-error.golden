@@ -1,0 +1,44 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "err-0"
+  ],
+  "rows": [
+    {
+      "key": "err-0",
+      "cells": [
+        "shop",
+        "err-0"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}
+--- frame 1
+{
+  "seq": 2,
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "err-0"
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1,
+    "error": "the server rejected our request for an unknown reason (get pods)\nfield label not supported: involvedObject.kind\nHTTP 400 BadRequest"
+  }
+}

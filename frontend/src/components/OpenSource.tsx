@@ -18,7 +18,9 @@ export function OpenSource() {
 function OpenDialog({ pane }: { pane: S.PaneState }) {
   const list = useContexts((c) => c.list);
   const contexts = [...(list?.contexts ?? [])].sort();
-  const [spec, setSpec] = useState<S.PaneSpec>(pane.spec);
+  // a field selector comes only from a jump (events: involvedObject.kind=…) and has no field
+  // here: it would ride along, unseen, onto a resource it doesn't apply to
+  const [spec, setSpec] = useState<S.PaneSpec>(() => S.openSpec(pane.spec));
   const cat = useCatalog(spec.context, true);
 
   // re-read on every open: contexts added to the kubeconfig meanwhile show up

@@ -3,11 +3,13 @@ package source
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -149,14 +151,14 @@ func (c *Cluster) restClient(gv schema.GroupVersion) (*rest.RESTClient, error) {
 func (c *Cluster) Watch(ctx context.Context, res Resolved, namespace, labelSel, fieldSel string, out chan<- Event) {
 	rc, err := c.restClient(res.GVR.GroupVersion())
 	if err != nil {
-		send(ctx, out, Event{Type: Error, Err: err.Error()})
+		send(ctx, out, Event{Type: Error, Err: errText(err)})
 		return
 	}
 	backoff := time.Second
 	for ctx.Err() == nil {
 		rv, err := c.list(ctx, rc, res, namespace, labelSel, fieldSel, out)
 		if err != nil {
-			send(ctx, out, Event{Type: Error, Err: err.Error()})
+			send(ctx, out, Event{Type: Error, Err: errText(err)})
 			sleep(ctx, backoff)
 			backoff = min(backoff*2, 30*time.Second)
 			continue
@@ -166,7 +168,7 @@ func (c *Cluster) Watch(ctx context.Context, res Resolved, namespace, labelSel, 
 			next, expired, err := c.watch(ctx, rc, res, namespace, labelSel, fieldSel, rv, out)
 			if err != nil || expired {
 				if err != nil && ctx.Err() == nil {
-					send(ctx, out, Event{Type: Error, Err: err.Error()})
+					send(ctx, out, Event{Type: Error, Err: errText(err)})
 					sleep(ctx, backoff)
 				}
 				break // relist
@@ -190,6 +192,35 @@ func send(ctx context.Context, out chan<- Event, ev Event) bool {
 	case <-ctx.Done():
 		return false
 	}
+}
+
+// errText is an error for the status line: its message, then (on more
+// lines) what the API server actually answered when client-go only says
+// "the server rejected the request for an unknown reason": a response that
+// isn't a Status (a proxy's or webhook's page, a bare "field label not
+// supported") ends up in the causes, which Error() leaves out.
+func errText(err error) string {
+	msg := err.Error()
+	var st apierrors.APIStatus
+	if !errors.As(err, &st) {
+		return msg
+	}
+	s := st.Status()
+	var more []string
+	if s.Details != nil {
+		for _, c := range s.Details.Causes {
+			if t := strings.TrimSpace(c.Message); t != "" && !strings.Contains(msg, t) {
+				more = append(more, t)
+			}
+		}
+	}
+	if s.Code != 0 && !strings.Contains(msg, fmt.Sprint(s.Code)) {
+		more = append(more, fmt.Sprintf("HTTP %d %s", s.Code, s.Reason))
+	}
+	if len(more) == 0 {
+		return msg
+	}
+	return msg + "\n" + strings.Join(more, "\n")
 }
 
 func (c *Cluster) request(rc *rest.RESTClient, res Resolved, namespace, labelSel, fieldSel string) *rest.Request {

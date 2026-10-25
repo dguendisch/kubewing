@@ -247,6 +247,15 @@ describe("jumps and their history", () => {
     expect(S.moveHistory(s, "v1", "back", undefined, 0).entry).toBeUndefined();
   });
 
+  it("⌘O starts without a jump's field selector (the dialog has no field for it), everything else kept", () => {
+    const events = { ...S.initialSpec("kind", "shop"), resource: "events", fieldSelector: "involvedObject.kind=Pod,involvedObject.name=web", grep: "x" };
+    const start = S.openSpec(events);
+    expect(start).toEqual({ ...S.initialSpec("kind", "shop"), resource: "events", grep: "x" });
+    expect("fieldSelector" in start).toBe(false);
+    // ⌘O ⏎ on the same resource then drops it too: a new source, so a step back to the events
+    expect(S.sameSource(events, start)).toBe(false);
+  });
+
   it("nowhere to go: unchanged", () => {
     const s = S.initialState();
     expect(S.moveHistory(s, "v1", "back", "k")).toEqual({ state: s });

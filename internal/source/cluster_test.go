@@ -118,3 +118,34 @@ func TestDecodeKeepsInts(t *testing.T) {
 		}
 	}
 }
+
+// A response that isn't a Status ("field label not supported" as plain text,
+// a proxy's page): client-go only says "unknown reason"; the event carries
+// what the server said too, on the lines after it.
+func TestWatchErrorKeepsTheServersAnswer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `field label not supported: involvedObject.kind`, http.StatusBadRequest)
+	}))
+	defer srv.Close()
+
+	c := &Cluster{Config: &rest.Config{Host: srv.URL}, http: srv.Client()}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out := make(chan Event, 1)
+	go c.Watch(ctx, Resolved{GVR: schema.GroupVersionResource{Version: "v1", Resource: "pods"}, Namespaced: true}, "ns", "", "involvedObject.kind=Pod", out)
+
+	ev := <-out
+	first, rest, _ := strings.Cut(ev.Err, "\n")
+	if ev.Type != Error || !strings.Contains(first, "unknown reason") {
+		t.Fatalf("event = %s %q", ev.Type, ev.Err)
+	}
+	if !strings.Contains(rest, "field label not supported: involvedObject.kind") || !strings.Contains(rest, "HTTP 400 BadRequest") {
+		t.Fatalf("details = %q", rest)
+	}
+}
+
+func TestErrTextPlainErrors(t *testing.T) {
+	if got := errText(fmt.Errorf("dial tcp: refused")); got != "dial tcp: refused" {
+		t.Fatalf("plain error = %q", got)
+	}
+}

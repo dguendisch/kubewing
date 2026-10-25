@@ -4,6 +4,7 @@ import { ContainerPicker } from "./components/ContainerPicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { JumpMenu } from "./components/JumpMenu";
 import { HistoryList } from "./components/HistoryNav";
+import { ErrorDetail } from "./components/ErrorDetail";
 import { DebugDialog } from "./components/Debug";
 import { OpsPodDialog } from "./components/OpsPod";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
@@ -91,6 +92,7 @@ export function App() {
       <ContextMenu />
       <JumpMenu />
       <HistoryList />
+      <ErrorDetail />
       <ContainerPicker />
       <DebugDialog />
       <OpsPodDialog />

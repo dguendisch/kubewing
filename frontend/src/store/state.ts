@@ -123,12 +123,15 @@ export interface Overlay {
    *  opspod: node, image and host access of an ops pod (prepared on submit);
    *  edit: a row's object in the YAML editor, then the server's dry-run diff;
    *  jump: where the pane can go from a row (namespace, owners, owned);
-   *  history: a pane's back or forward history (holding its ← / → button). */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history";
+   *  history: a pane's back or forward history (holding its ← / → button);
+   *  error: the full text of an error in the status line (a click on it). */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error";
   /** history: which one. */
   dir?: "back" | "forward";
-  /** detail: which view; describe is fetched separately. */
-  view?: "yaml" | "describe";
+  /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
+  view?: "yaml" | "describe" | "source" | "filter";
+  /** error: its full text. */
+  text?: string;
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
   describeGen?: number;
   /** forwards, menu, container, jump, history: highlighted entry. */
@@ -512,6 +515,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // the menu's keys, plus ⇧⏎ (split)
   jump: "menu",
   history: "menu",
+  // no bindings of its own: ⌘C is the native copy of the selection there
+  error: "dialog",
 };
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
@@ -587,6 +592,12 @@ const orNone = <T>(l: T[]) => (l.length ? l : undefined);
  */
 export function pushHistory(s: UIState, paneId: string, key: string | undefined): UIState {
   return updatePane(s, paneId, (p) => ({ ...p, back: [...(p.back ?? []), { spec: p.spec, key }].slice(-historyLimit), forward: undefined, reselect: undefined }));
+}
+
+/** What the ⌘O dialog starts from: the pane's spec without what it can't show (the field selector). */
+export function openSpec(spec: PaneSpec): PaneSpec {
+  const { fieldSelector: _, ...rest } = spec;
+  return rest;
 }
 
 /**

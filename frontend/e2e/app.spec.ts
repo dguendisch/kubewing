@@ -279,6 +279,43 @@ test("= in the YAML view filters by the field under the cursor", async ({ page }
   expect((await inspect(page)).overlays).toEqual([]);
 });
 
+test("an error in the status line: its first line, a click shows all of it above, selectable and copyable", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openTape(page, "e2e-error", 1);
+  const entry = page.getByRole("button", { name: "pane error" });
+  await expect(entry).toHaveText("the server rejected our request for an unknown reason (get pods)");
+  await entry.click();
+  const pop = page.getByRole("dialog", { name: "error detail" });
+  await expect(pop.getByLabel("error text")).toHaveText(
+    "the server rejected our request for an unknown reason (get pods)\nfield label not supported: involvedObject.kind\nHTTP 400 BadRequest",
+  );
+  // above the status line, not over it
+  const [p, e] = [await pop.boundingBox(), await entry.boundingBox()];
+  expect(p!.y + p!.height).toBeLessThanOrEqual(e!.y);
+  // keys go to it, not the table: ⌘C is the native copy of a selection
+  expect((await inspect(page)).focus).toBe("dialog");
+  await pop.getByLabel("error text").selectText();
+  await page.keyboard.press("ControlOrMeta+C");
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("field label not supported: involvedObject.kind");
+  // "copy all" takes the whole message
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await pop.getByRole("button", { name: "copy all" }).click();
+  await expect(pop.getByRole("button", { name: "copied" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("HTTP 400 BadRequest");
+  // esc closes, back on the table
+  await page.keyboard.press("Escape");
+  await expect(pop).toHaveCount(0);
+  expect((await inspect(page)).focus).toBe("table");
+  // a click on the entry again, or elsewhere, closes it too
+  await entry.click();
+  await expect(pop).toBeVisible();
+  await entry.click();
+  await expect(pop).toHaveCount(0);
+  await entry.click();
+  await page.locator("section[data-pane] header").getByLabel("filter").click();
+  await expect(pop).toHaveCount(0);
+});
+
 test("⌘C copies the selected row's name; in a text field it stays the native copy", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openTape(page);
@@ -2476,6 +2513,25 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
     await leads(page, "forward", null);
     await expect(await nav(page, "forward")).toBeDisabled();
+  });
+
+  test("⌘O after a jump to events: the field selector stays behind (no field for it in the dialog)", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-web-b");
+    await page.keyboard.press("v");
+    await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("rel-pods");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      const spec = p.spec as { namespace?: string; fieldSelector?: string };
+      return p.spec.resource === "rel-pods" && p.status?.synced ? `${spec.namespace}|${spec.fieldSelector ?? ""}|${p.rows.map((r) => r.key).sort()}` : "";
+    }).toBe("shop||rp-gizmo-0,rp-orphan-0,rp-web-a,rp-web-b,rp-web-stray"); // the events' namespace kept, every pod in it
+    await expect(page.getByLabel("field selector")).toHaveCount(0);
+    // the events view is a step back, with its selector
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
   });
 
   test("a new jump after going back drops the forward history", async ({ page }) => {

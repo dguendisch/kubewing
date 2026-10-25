@@ -14,6 +14,7 @@ import { FindBar } from "../term/FindBar";
 import { b64encode } from "../term/sessions";
 import { DraftField } from "./DraftField";
 import { HistoryButtons } from "./HistoryNav";
+import { StatusError } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 
@@ -377,12 +378,8 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
-      {st?.error ? <span className="text-deleted">{st.error}</span> : null}
-      {st?.filterErrors ? (
-        <span aria-label="filter errors" title={st.filterError} className="truncate text-deleted">
-          filter failed on {st.filterErrors}: {st.filterError}
-        </span>
-      ) : null}
+      {st?.error ? <StatusError paneId={pane.id} which="source" text={st.error} /> : null}
+      {st?.filterErrors ? <StatusError paneId={pane.id} which="filter" text={st.filterError ?? ""} prefix={`filter failed on ${st.filterErrors}: `} /> : null}
       {pane.flash ? (
         <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
           {pane.flash.text}
