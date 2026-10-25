@@ -15,10 +15,11 @@
       "name": "VOLUME"
     }
   ],
-  "total": 3,
+  "total": 4,
   "offset": 0,
   "order": [
     "rpvc-data-0",
+    "rpvc-scratch",
     "rpvc-lost",
     "rpvc-pending"
   ],
@@ -30,6 +31,15 @@
         "data-0",
         "Bound",
         "pv-data-0"
+      ]
+    },
+    {
+      "key": "rpvc-scratch",
+      "cells": [
+        "shop",
+        "gizmo-0-scratch",
+        "Bound",
+        "pv-scratch"
       ]
     },
     {
@@ -53,6 +63,6 @@
   ],
   "status": {
     "synced": true,
-    "objects": 3
+    "objects": 4
   }
 }

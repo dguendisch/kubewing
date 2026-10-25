@@ -2782,7 +2782,7 @@ test.describe("jump to (⌘J)", () => {
     await jump(page).getByRole("menuitem", { name: "rel-pods 5" }).click();
     await expect.poll(shown).toBe("rel-pods shop rp-gizmo-0,rp-orphan-0,rp-web-a,rp-web-b,rp-web-stray");
 
-    await openRel(page, "rel-pvcs", 3);
+    await openRel(page, "rel-pvcs", 4);
     await select(page, "rpvc-data-0");
     await page.keyboard.press("ControlOrMeta+J");
     await expect(jump(page)).toMatchAriaSnapshot(`
@@ -2818,11 +2818,49 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(shown).toBe("rel-volumeattachments  rva-a,rva-b");
 
     // a pending claim has no volume yet
-    await openRel(page, "rel-pvcs", 3);
+    await openRel(page, "rel-pvcs", 4);
     await select(page, "rpvc-pending");
     await page.keyboard.press("ControlOrMeta+J");
     await expect(jump(page).getByRole("menuitem", { name: /^persistentvolume/ })).toContainText("not bound");
     await expect(jump(page).getByRole("menuitem", { name: /^persistentvolume/ })).toBeDisabled();
+  });
+
+  test("a pod jumps to its claims, their volumes and the volumes' attachments", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-gizmo-0");
+    await page.keyboard.press("ControlOrMeta+J");
+    // in volume order (the ephemeral volume's claim too), each claim followed by its volume; the config map volume isn't listed
+    await expect(jump(page)).toMatchAriaSnapshot(`
+      - menu "jump from gizmo-0":
+        - text: jump from pod gizmo-0 · shop ⏎ here · ⇧⏎ split
+        - separator "namespace"
+        - menuitem "rel-pods in shop"
+        - menuitem "namespace object shop"
+        - separator "owners"
+        - menuitem "widget gizmo controller"
+        - separator "owned"
+        - menuitem "scan for owned… in shop"
+        - separator "references"
+        - menuitem "persistentvolumeclaim data-0"
+        - menuitem "persistentvolume pv-data-0"
+        - menuitem "persistentvolumeclaim gizmo-0-scratch"
+        - menuitem "persistentvolume pv-scratch"
+        - menuitem "persistentvolumeclaim cache · not found" [disabled]
+        - menuitem "rel-volumeattachments 3"
+        - separator "events"
+        - menuitem "events 0"
+    `);
+    const shown = async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.rows.map((r) => r.key).sort()}` : "";
+    };
+    await jump(page).getByRole("menuitem", { name: "rel-volumeattachments 3" }).click();
+    await expect.poll(shown).toBe("rel-volumeattachments  rva-a,rva-b,rva-scratch");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).rows[(await focused(page)).selected]?.key).toBe("rp-gizmo-0");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "persistentvolumeclaim gizmo-0-scratch" }).click();
+    await expect.poll(shown).toBe("rel-pvcs shop rpvc-scratch");
   });
 
   test("the ⌘⏎ menu's jump to… opens the jump menu in its place", async ({ page }) => {

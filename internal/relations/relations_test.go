@@ -1,6 +1,7 @@
 package relations
 
 import (
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -167,7 +168,16 @@ func TestReferences(t *testing.T) {
 			func() Ref { r := pv; r.Name = "pv-1"; return r }(),
 			{APIVersion: "v1", Kind: "Node", Resource: "nodes", Name: "n1"},
 		}},
-		{"a pod: none (yet)", md("Pod", "v1", "shop", "p", "p1", nil), nil},
+		{"a pod: its claims, named and ephemeral, once each", md("Pod", "v1", "shop", "p", "p1", spec(map[string]any{"volumes": []any{
+			map[string]any{"name": "a", "persistentVolumeClaim": map[string]any{"claimName": "data"}},
+			map[string]any{"name": "b", "persistentVolumeClaim": map[string]any{"claimName": "data"}},
+			map[string]any{"name": "tmp", "ephemeral": map[string]any{}},
+			map[string]any{"name": "cfg", "configMap": map[string]any{"name": "x"}},
+		}})), []Ref{
+			{APIVersion: "v1", Kind: "PersistentVolumeClaim", Resource: "persistentvolumeclaims", Namespace: "shop", Name: "data"},
+			{APIVersion: "v1", Kind: "PersistentVolumeClaim", Resource: "persistentvolumeclaims", Namespace: "shop", Name: "p-tmp"},
+		}},
+		{"a pod without volumes: none", md("Pod", "v1", "shop", "p", "p1", nil), nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -199,6 +209,17 @@ func TestReferences(t *testing.T) {
 		t.Errorf("inline volume: %v %v", ok, err)
 	}
 
+	// several volumes: one filter for all their attachments
+	prg, err = expr.Compile(AttachmentsFilter("pv-1", "pv-2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"pv-1": true, "pv-2": true, "pv-3": false} {
+		if ok, _ := prg.Bool(map[string]any{"spec": map[string]any{"source": map[string]any{"persistentVolumeName": name}}}); ok != want {
+			t.Errorf("%s: %v, want %v", name, ok, want)
+		}
+	}
+
 	one := RefRelation(Ref{APIVersion: "v1", Kind: "PersistentVolumeClaim", Namespace: "shop", Name: "data"}, "persistentvolumeclaims")
 	if one.ID != "ref:v1/PersistentVolumeClaim/shop/data" || one.Label != "persistentvolumeclaim data" || one.Section != SectionReference {
 		t.Errorf("one = %+v", one)
@@ -209,6 +230,37 @@ func TestReferences(t *testing.T) {
 	}
 	if got := *(Ref{Name: "pv-1"}).Target("persistentvolumes"); got != (Target{Resource: "persistentvolumes", Filter: `o.metadata.name == "pv-1"`}) {
 		t.Errorf("target = %+v", got)
+	}
+}
+
+func TestPodVolumes(t *testing.T) {
+	vol := func(name, claim string) any {
+		return map[string]any{"name": name, "persistentVolumeClaim": map[string]any{"claimName": claim}}
+	}
+	pod := md("Pod", "v1", "shop", "p", "p1", map[string]any{"spec": map[string]any{"volumes": []any{vol("a", "bound"), vol("b", "pending"), vol("c", "gone"), vol("d", "bound2")}}})
+	claim := func(name, uid, pv string) *unstructured.Unstructured {
+		return md("PersistentVolumeClaim", "v1", "shop", name, uid, map[string]any{"spec": map[string]any{"volumeName": pv}})
+	}
+	got := PodVolumes(pod, []*unstructured.Unstructured{claim("bound", "c1", "pv-1"), claim("pending", "c2", ""), claim("bound2", "c4", "pv-2")})
+	var s []string
+	for _, r := range got {
+		s = append(s, r.Kind+" "+r.Name+" "+r.UID+" "+r.Missing+" "+r.Filter)
+	}
+	want := []string{
+		"PersistentVolumeClaim bound c1  ",
+		"PersistentVolume pv-1   ",
+		"PersistentVolumeClaim pending c2  ",
+		"PersistentVolumeClaim gone  not found ",
+		"PersistentVolumeClaim bound2 c4  ",
+		"PersistentVolume pv-2   ",
+		`VolumeAttachment    o.spec.source.persistentVolumeName in ["pv-1", "pv-2"]`,
+	}
+	if strings.Join(s, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(want, "\n"))
+	}
+	// no bound volume: no attachments entry
+	if got := PodVolumes(pod, nil); len(got) != 4 || got[0].Missing != "not found" {
+		t.Errorf("no claims read = %+v", got)
 	}
 }
 

@@ -105,7 +105,7 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 	out.Items = append(out.Items, relations.Namespace(obj, p, plural, nsRes)...)
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
-	out.Items = append(out.Items, references(ctx, rel, cluster, withKind(obj, kind))...)
+	out.Items = append(out.Items, references(ctx, rel, cluster, refsOf(ctx, rel, cluster, withKind(obj, kind)))...)
 	if kind != "Event" {
 		out.Items = append(out.Items, eventsRelation(ctx, rel, cluster, withKind(obj, kind)))
 	}
@@ -199,11 +199,29 @@ func (s *Service) owned(ctx context.Context, rel source.Relator, cluster string,
 	return out
 }
 
-// references lists what obj refers to (relations.References): one object
-// looked up by name (gone if deleted or recreated), a set counted with a
-// full list and its filter (the filter's field has no field selector).
-func references(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) []relations.Relation {
+// refsOf is what obj refers to (relations.References). A pod's claims are
+// read in full (one list of its namespace's claims) to go on to their
+// volumes and attachments; if that fails, the claims alone.
+func refsOf(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) []relations.Ref {
 	refs := relations.References(obj)
+	if obj.GetAPIVersion() != "v1" || obj.GetKind() != "Pod" || len(refs) == 0 {
+		return refs
+	}
+	resource, _, err := rel.ResolveKind(cluster, "v1", "PersistentVolumeClaim")
+	if err != nil {
+		resource = "persistentvolumeclaims"
+	}
+	claims, err := rel.List(ctx, cluster, resource, obj.GetNamespace())
+	if err != nil {
+		return refs
+	}
+	return relations.PodVolumes(obj, claims)
+}
+
+// references lists the entries of refs: one object looked up by name (gone
+// if deleted or recreated), a set counted with a full list and its filter
+// (the filter's field has no field selector).
+func references(ctx context.Context, rel source.Relator, cluster string, refs []relations.Ref) []relations.Relation {
 	out := make([]relations.Relation, len(refs))
 	var wg sync.WaitGroup
 	for i, ref := range refs {

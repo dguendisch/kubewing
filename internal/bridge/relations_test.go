@@ -284,7 +284,7 @@ func TestRelationsNamespacePods(t *testing.T) {
 
 func TestRelationsStorageReferences(t *testing.T) {
 	svc, _ := relSetup(t)
-	pvcs := openSynced(t, svc, "source: {resource: rel-pvcs}", 3)
+	pvcs := openSynced(t, svc, "source: {resource: rel-pvcs}", 4)
 	got, err := svc.Relations(pvcs.Pane, "rpvc-data-0")
 	if err != nil {
 		t.Fatal(err)
@@ -301,8 +301,8 @@ func TestRelationsStorageReferences(t *testing.T) {
 		t.Errorf("attachments = %+v %+v", va, va.Target)
 	}
 	// the target shows those two only (not the inline volume's)
-	shown := openSynced(t, svc, "source: {resource: rel-volumeattachments}\nstages: [{filter: '"+va.Target.Filter+"'}]", 3)
-	for key, want := range map[string]bool{"rva-a": true, "rva-b": true, "rva-inline": false} {
+	shown := openSynced(t, svc, "source: {resource: rel-volumeattachments}\nstages: [{filter: '"+va.Target.Filter+"'}]", 4)
+	for key, want := range map[string]bool{"rva-a": true, "rva-b": true, "rva-inline": false, "rva-scratch": false} {
 		if idx, _ := svc.RowIndex(shown.Pane, key); (idx >= 0) != want {
 			t.Errorf("%s shown = %v, want %v", key, idx >= 0, want)
 		}
@@ -329,7 +329,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 	}
 
 	// a volume: its claim (checked by UID) and attachments
-	pvs := openSynced(t, svc, "source: {resource: rel-pvs}", 3)
+	pvs := openSynced(t, svc, "source: {resource: rel-pvs}", 4)
 	got, _ = svc.Relations(pvs.Pane, "rpv-data-0")
 	m = byID(got.Items)
 	if c := m["ref:v1/PersistentVolumeClaim/shop/data-0"]; c.Target == nil || *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name == "data-0"`}) {
@@ -348,7 +348,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 	}
 
 	// an attachment: back to its volume, and the node
-	vas := openSynced(t, svc, "source: {resource: rel-volumeattachments}", 3)
+	vas := openSynced(t, svc, "source: {resource: rel-volumeattachments}", 4)
 	got, _ = svc.Relations(vas.Pane, "rva-b")
 	m = byID(got.Items)
 	if r := m["ref:v1/PersistentVolume//pv-data-0"]; r.Target == nil || r.Target.Resource != "rel-pvs" {
@@ -356,6 +356,44 @@ func TestRelationsStorageReferences(t *testing.T) {
 	}
 	if r := m["ref:v1/Node//node-2"]; r.Target == nil || *r.Target != (relations.Target{Resource: "rel-nodes", Filter: `o.metadata.name == "node-2"`}) {
 		t.Errorf("attachment's node = %+v %+v", r, r.Target)
+	}
+}
+
+func TestRelationsPodVolumes(t *testing.T) {
+	svc, _ := relSetup(t)
+	pods := openSynced(t, svc, "source: {resource: rel-pods}", 6)
+	got, err := svc.Relations(pods.Pane, "rp-gizmo-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	m := byID(got.Items)
+	for _, r := range got.Items {
+		if r.Section == relations.SectionReference {
+			refs = append(refs, r.Label)
+		}
+	}
+	// in volume order, each claim followed by its volume; the attachments of both volumes; no config map
+	want := "persistentvolumeclaim data-0 / persistentvolume pv-data-0 / persistentvolumeclaim gizmo-0-scratch / persistentvolume pv-scratch / persistentvolumeclaim cache / rel-volumeattachments"
+	if strings.Join(refs, " / ") != want {
+		t.Errorf("references = %s", strings.Join(refs, " / "))
+	}
+	if c := m["ref:v1/PersistentVolumeClaim/shop/data-0"]; c.Target == nil || *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name == "data-0"`}) {
+		t.Errorf("claim = %+v %+v", c, c.Target)
+	}
+	if c := m["ref:v1/PersistentVolumeClaim/shop/cache"]; c.Gone != "not found" || c.Target != nil {
+		t.Errorf("missing claim = %+v", c)
+	}
+	va := m["ref:storage.k8s.io/v1/VolumeAttachment"]
+	if count(va) != 3 || va.Target.Filter != `o.spec.source.persistentVolumeName in ["pv-data-0", "pv-scratch"]` {
+		t.Errorf("attachments = %+v %+v", va, va.Target)
+	}
+	// a pod without claims: no references
+	got, _ = svc.Relations(pods.Pane, "rp-web-a")
+	for _, r := range got.Items {
+		if r.Section == relations.SectionReference {
+			t.Errorf("web-7d9f-a: %+v", r)
+		}
 	}
 }
 

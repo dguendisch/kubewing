@@ -1,5 +1,6 @@
 # Relation tapes: see rel-pods.yaml. Cluster-scoped volumes: one bound to
-# shop/data-0 and attached, one available, one released (its claim is gone).
+# shop/data-0 and attached, one available, one released (its claim is gone),
+# the one of gizmo-0's ephemeral volume.
 filter: true
 pipeline:
   source: {resource: rel-pvs}
@@ -13,3 +14,5 @@ initial:
     cells: [pv-spare, Available]
   - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-released, uid: rpv-released, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {claimRef: {namespace: shop, name: old, uid: rpvc-old}}, status: {phase: Released}}
     cells: [pv-released, Released]
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-scratch, uid: rpv-scratch, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {claimRef: {namespace: shop, name: gizmo-0-scratch, uid: rpvc-scratch}}, status: {phase: Bound}}
+    cells: [pv-scratch, Bound]

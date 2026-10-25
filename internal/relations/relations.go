@@ -265,12 +265,22 @@ var (
 	attached = Ref{APIVersion: "storage.k8s.io/v1", Kind: "VolumeAttachment", Resource: "volumeattachments.storage.k8s.io"}
 )
 
-// AttachmentsFilter matches the volume attachments of a persistent volume.
-func AttachmentsFilter(pv string) string { return "o.spec.source.persistentVolumeName == " + Quote(pv) }
+// AttachmentsFilter matches the volume attachments of persistent volumes.
+func AttachmentsFilter(pvs ...string) string {
+	if len(pvs) == 1 {
+		return "o.spec.source.persistentVolumeName == " + Quote(pvs[0])
+	}
+	q := make([]string, len(pvs))
+	for i, pv := range pvs {
+		q[i] = Quote(pv)
+	}
+	return "o.spec.source.persistentVolumeName in [" + strings.Join(q, ", ") + "]"
+}
 
 // References lists what obj refers to, by kind: a claim its volume and the
 // volume's attachments (straight there, not via the volume), a volume its
-// claim and attachments, an attachment its volume and node.
+// claim and attachments, an attachment its volume and node, a pod its
+// claims (PodVolumes goes on from them once they are read).
 func References(obj *unstructured.Unstructured) []Ref {
 	gv, _ := schema.ParseGroupVersion(obj.GetAPIVersion())
 	str := func(path ...string) string {
@@ -279,6 +289,8 @@ func References(obj *unstructured.Unstructured) []Ref {
 	}
 	var out []Ref
 	switch gv.Group + "/" + obj.GetKind() {
+	case "/Pod":
+		return podClaims(obj)
 	case "/PersistentVolumeClaim":
 		pv := str("spec", "volumeName")
 		if pv == "" {
@@ -309,6 +321,66 @@ func References(obj *unstructured.Unstructured) []Ref {
 			r.Name = node
 			out = append(out, r)
 		}
+	}
+	return out
+}
+
+// podClaims are the claims a pod's volumes use, in volume order: named
+// ones, and the claims of ephemeral volumes ("<pod>-<volume>").
+func podClaims(pod *unstructured.Unstructured) []Ref {
+	vols, _, _ := unstructured.NestedSlice(pod.Object, "spec", "volumes")
+	var out []Ref
+	seen := map[string]bool{}
+	for _, v := range vols {
+		vm, _ := v.(map[string]any)
+		name, _, _ := unstructured.NestedString(vm, "persistentVolumeClaim", "claimName")
+		if _, eph := vm["ephemeral"]; eph && name == "" {
+			if vn, _, _ := unstructured.NestedString(vm, "name"); vn != "" {
+				name = pod.GetName() + "-" + vn
+			}
+		}
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		r := pvcs
+		r.Namespace, r.Name = pod.GetNamespace(), name
+		out = append(out, r)
+	}
+	return out
+}
+
+// PodVolumes is a pod's claims as read (claims: those of its namespace,
+// full objects), each followed by its bound volume, then the attachments
+// of all those volumes. A claim that isn't there is missing (a pod pending
+// on it); an unbound one has no volume entry (its own menu says why).
+func PodVolumes(pod *unstructured.Unstructured, claims []*unstructured.Unstructured) []Ref {
+	byName := map[string]*unstructured.Unstructured{}
+	for _, c := range claims {
+		byName[c.GetName()] = c
+	}
+	var out []Ref
+	var bound []string
+	for _, r := range podClaims(pod) {
+		c, ok := byName[r.Name]
+		if !ok {
+			r.Missing = "not found"
+			out = append(out, r)
+			continue
+		}
+		r.UID = string(c.GetUID())
+		out = append(out, r)
+		if pv, _, _ := unstructured.NestedString(c.Object, "spec", "volumeName"); pv != "" {
+			v := pvs
+			v.Name = pv
+			out = append(out, v)
+			bound = append(bound, pv)
+		}
+	}
+	if len(bound) > 0 {
+		a := attached
+		a.Filter = AttachmentsFilter(bound...)
+		out = append(out, a)
 	}
 	return out
 }

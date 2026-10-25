@@ -1,5 +1,6 @@
 # Relation tapes: see rel-pods.yaml. Claims in shop: one bound (its volume
-# and attachments are references), one pending, one whose volume is gone.
+# and attachments are references), one pending, one whose volume is gone,
+# and the claim of gizmo-0's ephemeral volume.
 filter: true
 pipeline:
   source: {resource: rel-pvcs}
@@ -14,3 +15,5 @@ initial:
     cells: [pending, Pending, ""]
   - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: lost, namespace: shop, uid: rpvc-lost, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {volumeName: pv-deleted}, status: {phase: Lost}}
     cells: [lost, Lost, pv-deleted]
+  - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: gizmo-0-scratch, namespace: shop, uid: rpvc-scratch, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {volumeName: pv-scratch}, status: {phase: Bound}}
+    cells: [gizmo-0-scratch, Bound, pv-scratch]

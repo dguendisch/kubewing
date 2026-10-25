@@ -12,11 +12,12 @@
       "name": "STATUS"
     }
   ],
-  "total": 3,
+  "total": 4,
   "offset": 0,
   "order": [
     "rpv-data-0",
     "rpv-released",
+    "rpv-scratch",
     "rpv-spare"
   ],
   "rows": [
@@ -37,6 +38,14 @@
       ]
     },
     {
+      "key": "rpv-scratch",
+      "cells": [
+        "",
+        "pv-scratch",
+        "Bound"
+      ]
+    },
+    {
       "key": "rpv-spare",
       "cells": [
         "",
@@ -47,6 +56,6 @@
   ],
   "status": {
     "synced": true,
-    "objects": 3
+    "objects": 4
   }
 }

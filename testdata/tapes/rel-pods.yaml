@@ -16,8 +16,8 @@ initial:
   # matches the deployment's selector, but no replica set owns it (adopted by nothing): counts for the deployment, not the replica set
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-stray, namespace: shop, uid: rp-web-stray, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}
     cells: [web-stray, Running]
-  # run by the widget's scale selector
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: gizmo-0, namespace: shop, uid: rp-gizmo-0, labels: {widget: gizmo}, ownerReferences: [{apiVersion: e2e.kubewing/v1, kind: Widget, name: gizmo, uid: rw-gizmo, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2}, status: {phase: Running}}
+  # run by the widget's scale selector; its volumes: a claim (rel-pvcs), an ephemeral one's claim, a missing claim, a config map
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: gizmo-0, namespace: shop, uid: rp-gizmo-0, labels: {widget: gizmo}, ownerReferences: [{apiVersion: e2e.kubewing/v1, kind: Widget, name: gizmo, uid: rw-gizmo, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2, volumes: [{name: data, persistentVolumeClaim: {claimName: data-0}}, {name: scratch, ephemeral: {volumeClaimTemplate: {spec: {accessModes: [ReadWriteOnce]}}}}, {name: cache, persistentVolumeClaim: {claimName: cache}}, {name: cfg, configMap: {name: gizmo-config}}]}, status: {phase: Running}}
     cells: [gizmo-0, Running]
   # its replica set was deleted (orphan)
   - object: {apiVersion: v1, kind: Pod, metadata: {name: orphan-0, namespace: shop, uid: rp-orphan-0, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: old-5c4b, uid: rr-old-5c4b, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}

@@ -12,12 +12,13 @@
       "name": "ATTACHED"
     }
   ],
-  "total": 3,
+  "total": 4,
   "offset": 0,
   "order": [
     "rva-a",
     "rva-b",
-    "rva-inline"
+    "rva-inline",
+    "rva-scratch"
   ],
   "rows": [
     {
@@ -43,10 +44,18 @@
         "csi-inline",
         "true"
       ]
+    },
+    {
+      "key": "rva-scratch",
+      "cells": [
+        "",
+        "csi-scratch",
+        "true"
+      ]
     }
   ],
   "status": {
     "synced": true,
-    "objects": 3
+    "objects": 4
   }
 }
