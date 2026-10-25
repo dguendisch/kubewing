@@ -49,7 +49,6 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 
 Next up:
 - diff editor (show that j/k is for next/prev change)
-- specifically for namespaces: offer to jump to pods in the selected ns
 - grep highlight search results
 - better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
@@ -116,7 +115,7 @@ Still open in P0.1:
 
 ### P3 — "Operator power" (v1.0)
 
-1. Resource dependencies: done as the jump menu (`⌘J`: namespace, owners, owned; `⌘←`/`⌘→` back and forward; see the README). Open: non-owner references (pod → node, the configmaps/secrets/PVCs/service account it uses, svc → pods, pvc → pv, ingress → svc) as a "references" section from a per-kind table, with the same jump mechanics; a dependency tree view.
+1. Resource dependencies: done as the jump menu (`⌘J`: namespace, owners, owned; `⌘←`/`⌘→` back and forward; see the README). Non-owner references: a "references" section from a per-kind table (`relations.References`); done: pvc → pv and its volume attachments, pv → pvc and volume attachments, volume attachment → pv and node; namespace → pods is an owned entry. Open: more references (pod → node, the configmaps/secrets/PVCs/service account it uses, svc → pods, ingress → svc); a dependency tree view.
 1. RBAC views
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**

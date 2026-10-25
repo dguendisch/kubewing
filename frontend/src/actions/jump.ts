@@ -23,7 +23,7 @@ export interface JumpItem {
   indent?: number;
 }
 
-export const sectionTitle: Record<Relation["section"], string> = { namespace: "namespace", owner: "owners", owned: "owned", events: "events" };
+export const sectionTitle: Record<Relation["section"], string> = { namespace: "namespace", owner: "owners", owned: "owned", reference: "references", events: "events" };
 
 /** State of the open jump menu (read by the dispatcher for ⏎ / j / k). */
 export interface JumpState {
@@ -48,10 +48,12 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 /**
  * Menu rows for a row's relations, plus the owned scan's state. Pure.
  * Owned entries list the known kinds; the scan entry is replaced by what
- * the scan found (kinds already listed aren't repeated).
+ * the scan found (kinds already listed aren't repeated). References and
+ * events follow the owned section, scan entries included.
  */
 export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "scanned" | "scanError" | "scanAsked"> = {}): JumpItem[] {
   const out: JumpItem[] = [];
+  const refs: JumpItem[] = [];
   const events: JumpItem[] = [];
   for (const r of rel.items) {
     const it: JumpItem = { id: r.id, section: r.section, label: r.label, target: r.target, note: r.note };
@@ -64,7 +66,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     else if (!r.target) it.disabled = "nowhere to go";
     // no events yet is still worth watching
     else if (r.count === 0 && r.section !== "events") it.disabled = "none";
-    (r.section === "events" ? events : out).push(it);
+    (r.section === "events" ? events : r.section === "reference" ? refs : out).push(it);
   }
   // sections in a fixed order (namespace, owners, owned): the placeholder goes after the namespace entries
   if (!rel.items.some((r) => r.section === "owner")) {
@@ -99,7 +101,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     out.push({ id: "owned:none", section: "owned", label: "nothing known", disabled: "no uid to look for" });
   }
   // after the owned scan's entries
-  return [...out, ...events];
+  return [...out, ...refs, ...events];
 }
 
 /** The first entry that can be run (the highlight's start), or 0. */

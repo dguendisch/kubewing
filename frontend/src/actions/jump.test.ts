@@ -84,6 +84,28 @@ describe("jump menu items", () => {
     expect(view(nothing).at(-1)).toBe("nothing else owned |  | scanned 1 type | 0");
   });
 
+  it("references follow the owned section (scan results included), before events; gone or none are disabled", () => {
+    const pvc: Relations = {
+      kind: "PersistentVolumeClaim", name: "data", namespace: "shop", scan: true,
+      items: [
+        { id: "events", section: "events", label: "events", count: 0, target: { resource: "events" } },
+        { id: "ref:v1/PersistentVolume//pv-1", section: "reference", label: "persistentvolume pv-1", name: "pv-1", target: { resource: "persistentvolumes", filter: 'o.metadata.name == "pv-1"' } },
+        { id: "ref:storage.k8s.io/v1/VolumeAttachment", section: "reference", label: "volumeattachments", count: 1, target: { resource: "volumeattachments.storage.k8s.io" } },
+      ],
+    };
+    const scanned = { scanned: { items: [{ id: "scan:cm", section: "owned" as const, label: "configmaps", count: 1, target: { resource: "configmaps" } }], scanned: 3 } };
+    expect(jumpItems(pvc, scanned).map((i) => i.section)).toEqual(["owner", "owned", "owned", "reference", "reference", "events"]);
+    expect(view(jumpItems(pvc)).slice(2, 4)).toEqual(["persistentvolume pv-1 |  |  | 0", "volumeattachments | 1 |  | 0"]);
+    const gone = jumpItems({
+      ...pvc,
+      items: [
+        { id: "ref:pv", section: "reference", label: "persistentvolume pv-9", name: "pv-9", gone: "deleted" },
+        { id: "ref:va", section: "reference", label: "volumeattachments", count: 0, target: { resource: "volumeattachments.storage.k8s.io" } },
+      ],
+    });
+    expect(view(gone).slice(-2)).toEqual(["persistentvolume pv-9 |  | deleted | 0", "volumeattachments | 0 | none | 0"]);
+  });
+
   it("a cluster-scoped owner's scan asks first", () => {
     const node: Relations = { kind: "Node", name: "n1", scan: true, scanAll: true, items: [] };
     const ask = jumpItems(node).at(-1)!;

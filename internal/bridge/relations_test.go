@@ -188,8 +188,8 @@ func TestOwnedScan(t *testing.T) {
 	if count(pods) != 1 || len(got.Items) != 2 {
 		t.Errorf("items = %+v", got.Items)
 	}
-	// rel-* namespaced types: configmaps, deployments, pods, replicasets, widgets; e2e-deploys shares a kind
-	if got.Scanned != 5 || got.Skipped != 0 {
+	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, widgets; e2e-deploys shares a kind
+	if got.Scanned != 6 || got.Skipped != 0 {
 		t.Errorf("scanned %d skipped %d", got.Scanned, got.Skipped)
 	}
 }
@@ -265,6 +265,97 @@ func TestRelationsNodePods(t *testing.T) {
 	p := m["owned:v1/Pod"]
 	if count(p) != 3 || *p.Target != (relations.Target{Resource: "rel-pods", FieldSelector: "spec.nodeName=node-1"}) {
 		t.Errorf("pods = %+v %+v", p, p.Target)
+	}
+}
+
+func TestRelationsNamespacePods(t *testing.T) {
+	svc, _ := relSetup(t)
+	nss := openSynced(t, svc, "source: {resource: rel-namespaces}", 2)
+	got, err := svc.Relations(nss.Pane, "rn-shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// the pods in shop (lab's web-other isn't)
+	p := byID(got.Items)["owned:v1/Pod"]
+	if count(p) != 5 || *p.Target != (relations.Target{Resource: "rel-pods", Namespace: "shop"}) {
+		t.Errorf("pods = %+v %+v", p, p.Target)
+	}
+}
+
+func TestRelationsStorageReferences(t *testing.T) {
+	svc, _ := relSetup(t)
+	pvcs := openSynced(t, svc, "source: {resource: rel-pvcs}", 3)
+	got, err := svc.Relations(pvcs.Pane, "rpvc-data-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// a bound claim: its volume (cluster-scoped, checked) and that volume's attachments (counted by CEL)
+	m := byID(got.Items)
+	pv, va := m["ref:v1/PersistentVolume//pv-data-0"], m["ref:storage.k8s.io/v1/VolumeAttachment"]
+	if pv.Section != relations.SectionReference || pv.Label != "persistentvolume pv-data-0" || pv.Target == nil ||
+		*pv.Target != (relations.Target{Resource: "rel-pvs", Filter: `o.metadata.name == "pv-data-0"`}) {
+		t.Errorf("volume = %+v %+v", pv, pv.Target)
+	}
+	if count(va) != 2 || va.Label != "rel-volumeattachments" ||
+		*va.Target != (relations.Target{Resource: "rel-volumeattachments", Filter: `o.spec.source.persistentVolumeName == "pv-data-0"`}) {
+		t.Errorf("attachments = %+v %+v", va, va.Target)
+	}
+	// the target shows those two only (not the inline volume's)
+	shown := openSynced(t, svc, "source: {resource: rel-volumeattachments}\nstages: [{filter: '"+va.Target.Filter+"'}]", 3)
+	for key, want := range map[string]bool{"rva-a": true, "rva-b": true, "rva-inline": false} {
+		if idx, _ := svc.RowIndex(shown.Pane, key); (idx >= 0) != want {
+			t.Errorf("%s shown = %v, want %v", key, idx >= 0, want)
+		}
+	}
+	var ids []string
+	for _, r := range got.Items {
+		ids = append(ids, r.ID)
+	}
+	if strings.Join(ids, " ") != "ns:here ns:object ref:v1/PersistentVolume//pv-data-0 ref:storage.k8s.io/v1/VolumeAttachment events" {
+		t.Errorf("items = %v", ids)
+	}
+
+	// pending: nothing to go to yet; lost: its volume is gone
+	got, _ = svc.Relations(pvcs.Pane, "rpvc-pending")
+	if r := byID(got.Items)["ref:v1/PersistentVolume"]; r.Gone != "not bound" || r.Label != "persistentvolume" || r.Target != nil {
+		t.Errorf("pending = %+v", r)
+	}
+	if _, ok := byID(got.Items)["ref:storage.k8s.io/v1/VolumeAttachment"]; ok {
+		t.Error("pending: no attachments entry")
+	}
+	got, _ = svc.Relations(pvcs.Pane, "rpvc-lost")
+	if r := byID(got.Items)["ref:v1/PersistentVolume//pv-deleted"]; r.Gone != "deleted" || r.Target != nil {
+		t.Errorf("lost = %+v", r)
+	}
+
+	// a volume: its claim (checked by UID) and attachments
+	pvs := openSynced(t, svc, "source: {resource: rel-pvs}", 3)
+	got, _ = svc.Relations(pvs.Pane, "rpv-data-0")
+	m = byID(got.Items)
+	if c := m["ref:v1/PersistentVolumeClaim/shop/data-0"]; c.Target == nil || *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name == "data-0"`}) {
+		t.Errorf("claim = %+v %+v", c, c.Target)
+	}
+	if va := m["ref:storage.k8s.io/v1/VolumeAttachment"]; count(va) != 2 {
+		t.Errorf("attachments = %+v", va)
+	}
+	got, _ = svc.Relations(pvs.Pane, "rpv-spare")
+	if va := byID(got.Items)["ref:storage.k8s.io/v1/VolumeAttachment"]; count(va) != 0 || va.Target == nil {
+		t.Errorf("spare's attachments = %+v", va)
+	}
+	got, _ = svc.Relations(pvs.Pane, "rpv-released")
+	if c := byID(got.Items)["ref:v1/PersistentVolumeClaim/shop/old"]; c.Gone != "deleted" {
+		t.Errorf("released's claim = %+v", c)
+	}
+
+	// an attachment: back to its volume, and the node
+	vas := openSynced(t, svc, "source: {resource: rel-volumeattachments}", 3)
+	got, _ = svc.Relations(vas.Pane, "rva-b")
+	m = byID(got.Items)
+	if r := m["ref:v1/PersistentVolume//pv-data-0"]; r.Target == nil || r.Target.Resource != "rel-pvs" {
+		t.Errorf("attachment's volume = %+v", r)
+	}
+	if r := m["ref:v1/Node//node-2"]; r.Target == nil || *r.Target != (relations.Target{Resource: "rel-nodes", Filter: `o.metadata.name == "node-2"`}) {
+		t.Errorf("attachment's node = %+v %+v", r, r.Target)
 	}
 }
 

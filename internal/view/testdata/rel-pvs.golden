@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "rpv-data-0",
+    "rpv-released",
+    "rpv-spare"
+  ],
+  "rows": [
+    {
+      "key": "rpv-data-0",
+      "cells": [
+        "",
+        "pv-data-0",
+        "Bound"
+      ]
+    },
+    {
+      "key": "rpv-released",
+      "cells": [
+        "",
+        "pv-released",
+        "Released"
+      ]
+    },
+    {
+      "key": "rpv-spare",
+      "cells": [
+        "",
+        "pv-spare",
+        "Available"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

@@ -1,5 +1,6 @@
 // Package relations derives where the jump menu can go from one object:
-// its namespace, its owners (ownerReferences), what it owns and its events. Each place
+// its namespace, its owners (ownerReferences), what it owns, what it refers
+// to otherwise (a claim's volume) and its events. Each place
 // is a pipeline (source + CEL filter), so the pane it opens looks like one
 // the user could have typed. Pure: the bridge resolves kinds to resources
 // and does the lookups.
@@ -24,6 +25,7 @@ const (
 	SectionNamespace Section = "namespace"
 	SectionOwner     Section = "owner"
 	SectionOwned     Section = "owned"
+	SectionReference Section = "reference"
 	SectionEvents    Section = "events"
 )
 
@@ -204,8 +206,8 @@ var (
 )
 
 // Children lists what obj is known to own, by kind: workloads select their
-// replica sets and pods, cron jobs own jobs, nodes run pods. Anything else
-// (CRDs) is found by the owned scan.
+// replica sets and pods, cron jobs own jobs, nodes run pods, namespaces hold
+// pods. Anything else (CRDs) is found by the owned scan.
 func Children(obj *unstructured.Unstructured) []Child {
 	gv, _ := schema.ParseGroupVersion(obj.GetAPIVersion())
 	ns, uid := obj.GetNamespace(), string(obj.GetUID())
@@ -232,8 +234,107 @@ func Children(obj *unstructured.Unstructured) []Child {
 		p := pods
 		p.FieldSelector = "spec.nodeName=" + obj.GetName()
 		return []Child{p}
+	case "/Namespace":
+		p := pods
+		p.Namespace = obj.GetName()
+		return []Child{p}
 	}
 	return nil
+}
+
+// Ref is what an object refers to other than by ownerReferences: one
+// object by name (looked up), or the objects a filter matches (counted).
+type Ref struct {
+	APIVersion, Kind string
+	// Resource is the conventional resource name, used when the kind can't be resolved.
+	Resource  string
+	Namespace string
+	// Name of the one object; UID, if known, must match it (else it was recreated).
+	Name, UID string
+	// Filter matches the objects when there is no Name: a CEL filter, as
+	// no field selector covers the field (volume attachments by volume).
+	Filter string
+	// Missing says why there is nothing to refer to (yet): an unbound claim.
+	Missing string
+}
+
+var (
+	pvs      = Ref{APIVersion: "v1", Kind: "PersistentVolume", Resource: "persistentvolumes"}
+	pvcs     = Ref{APIVersion: "v1", Kind: "PersistentVolumeClaim", Resource: "persistentvolumeclaims"}
+	nodes    = Ref{APIVersion: "v1", Kind: "Node", Resource: "nodes"}
+	attached = Ref{APIVersion: "storage.k8s.io/v1", Kind: "VolumeAttachment", Resource: "volumeattachments.storage.k8s.io"}
+)
+
+// AttachmentsFilter matches the volume attachments of a persistent volume.
+func AttachmentsFilter(pv string) string { return "o.spec.source.persistentVolumeName == " + Quote(pv) }
+
+// References lists what obj refers to, by kind: a claim its volume and the
+// volume's attachments (straight there, not via the volume), a volume its
+// claim and attachments, an attachment its volume and node.
+func References(obj *unstructured.Unstructured) []Ref {
+	gv, _ := schema.ParseGroupVersion(obj.GetAPIVersion())
+	str := func(path ...string) string {
+		s, _, _ := unstructured.NestedString(obj.Object, path...)
+		return s
+	}
+	var out []Ref
+	switch gv.Group + "/" + obj.GetKind() {
+	case "/PersistentVolumeClaim":
+		pv := str("spec", "volumeName")
+		if pv == "" {
+			r := pvs
+			r.Missing = "not bound"
+			return []Ref{r}
+		}
+		r, a := pvs, attached
+		r.Name, a.Filter = pv, AttachmentsFilter(pv)
+		return []Ref{r, a}
+	case "/PersistentVolume":
+		if name := str("spec", "claimRef", "name"); name != "" {
+			r := pvcs
+			r.Namespace, r.Name, r.UID = str("spec", "claimRef", "namespace"), name, str("spec", "claimRef", "uid")
+			out = append(out, r)
+		}
+		a := attached
+		a.Filter = AttachmentsFilter(obj.GetName())
+		return append(out, a)
+	case "storage.k8s.io/VolumeAttachment":
+		if pv := str("spec", "source", "persistentVolumeName"); pv != "" {
+			r := pvs
+			r.Name = pv
+			out = append(out, r)
+		}
+		if node := str("spec", "nodeName"); node != "" {
+			r := nodes
+			r.Name = node
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// Target is the pane showing the referenced object(s), as resource.
+func (r Ref) Target(resource string) *Target {
+	if r.Name != "" {
+		return &Target{Resource: resource, Namespace: r.Namespace, Filter: NameFilter(r.Name)}
+	}
+	return &Target{Resource: resource, Namespace: r.Namespace, Filter: r.Filter}
+}
+
+// RefRelation is the entry for a reference (resource as resolved), without
+// a target (the caller checks or counts first): one object is labeled by
+// kind and name (a missing one by kind), a set by its resource.
+func RefRelation(r Ref, resource string) Relation {
+	id := "ref:" + r.APIVersion + "/" + r.Kind
+	label, _, _ := strings.Cut(resource, ".")
+	switch {
+	case r.Name != "":
+		id += "/" + r.Namespace + "/" + r.Name
+		label = strings.ToLower(r.Kind) + " " + r.Name
+	case r.Missing != "":
+		label = strings.ToLower(r.Kind)
+	}
+	return Relation{ID: id, Section: SectionReference, Label: label, Kind: r.Kind, Name: r.Name, Gone: r.Missing}
 }
 
 // Selector returns spec.selector as a selector string (matchExpressions

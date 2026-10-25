@@ -1,0 +1,58 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    },
+    {
+      "name": "VOLUME"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "rpvc-data-0",
+    "rpvc-lost",
+    "rpvc-pending"
+  ],
+  "rows": [
+    {
+      "key": "rpvc-data-0",
+      "cells": [
+        "shop",
+        "data-0",
+        "Bound",
+        "pv-data-0"
+      ]
+    },
+    {
+      "key": "rpvc-lost",
+      "cells": [
+        "shop",
+        "lost",
+        "Lost",
+        "pv-deleted"
+      ]
+    },
+    {
+      "key": "rpvc-pending",
+      "cells": [
+        "shop",
+        "pending",
+        "Pending",
+        ""
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

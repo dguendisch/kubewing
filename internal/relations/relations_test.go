@@ -119,6 +119,9 @@ func TestChildren(t *testing.T) {
 		{"node: pods running on it, in all namespaces", md("Node", "v1", "", "n1", "n1", nil), []Child{
 			{APIVersion: "v1", Kind: "Pod", Resource: "pods", FieldSelector: "spec.nodeName=n1"},
 		}},
+		{"namespace: the pods in it", md("Namespace", "v1", "", "shop", "ns1", nil), []Child{
+			{APIVersion: "v1", Kind: "Pod", Resource: "pods", Namespace: "shop"},
+		}},
 		{"a CRD kind: nothing known", md("Shoot", "core.gardener.cloud/v1beta1", "garden-x", "s", "s1", nil), nil},
 		{"same kind name in another group: nothing", md("Deployment", "example.com/v1", "shop", "d", "x", sel), nil},
 	}
@@ -134,6 +137,78 @@ func TestChildren(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReferences(t *testing.T) {
+	spec := func(m map[string]any) map[string]any { return map[string]any{"spec": m} }
+	pv := Ref{APIVersion: "v1", Kind: "PersistentVolume", Resource: "persistentvolumes"}
+	va := Ref{APIVersion: "storage.k8s.io/v1", Kind: "VolumeAttachment", Resource: "volumeattachments.storage.k8s.io"}
+	cases := []struct {
+		name string
+		obj  *unstructured.Unstructured
+		want []Ref
+	}{
+		{"bound claim: its volume, and the volume's attachments", md("PersistentVolumeClaim", "v1", "shop", "data", "c1", spec(map[string]any{"volumeName": "pv-1"})), []Ref{
+			func() Ref { r := pv; r.Name = "pv-1"; return r }(),
+			func() Ref { r := va; r.Filter = `o.spec.source.persistentVolumeName == "pv-1"`; return r }(),
+		}},
+		{"pending claim: no volume yet", md("PersistentVolumeClaim", "v1", "shop", "data", "c1", nil), []Ref{
+			func() Ref { r := pv; r.Missing = "not bound"; return r }(),
+		}},
+		{"bound volume: its claim and attachments", md("PersistentVolume", "v1", "", "pv-1", "v1", spec(map[string]any{"claimRef": map[string]any{"namespace": "shop", "name": "data", "uid": "c1"}})), []Ref{
+			{APIVersion: "v1", Kind: "PersistentVolumeClaim", Resource: "persistentvolumeclaims", Namespace: "shop", Name: "data", UID: "c1"},
+			func() Ref { r := va; r.Filter = `o.spec.source.persistentVolumeName == "pv-1"`; return r }(),
+		}},
+		{"available volume: attachments only", md("PersistentVolume", "v1", "", "pv-2", "v2", nil), []Ref{
+			func() Ref { r := va; r.Filter = `o.spec.source.persistentVolumeName == "pv-2"`; return r }(),
+		}},
+		{"attachment: its volume and node", md("VolumeAttachment", "storage.k8s.io/v1", "", "csi-1", "a1", spec(map[string]any{"nodeName": "n1", "source": map[string]any{"persistentVolumeName": "pv-1"}})), []Ref{
+			func() Ref { r := pv; r.Name = "pv-1"; return r }(),
+			{APIVersion: "v1", Kind: "Node", Resource: "nodes", Name: "n1"},
+		}},
+		{"a pod: none (yet)", md("Pod", "v1", "shop", "p", "p1", nil), nil},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := References(c.obj)
+			if len(got) != len(c.want) {
+				t.Fatalf("got %+v, want %+v", got, c.want)
+			}
+			for i := range got {
+				if got[i] != c.want[i] {
+					t.Errorf("[%d] got %+v, want %+v", i, got[i], c.want[i])
+				}
+			}
+		})
+	}
+
+	// the attachments filter is valid CEL and matches by the volume's name
+	prg, err := expr.Compile(AttachmentsFilter("pv-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"pv-1": true, "pv-10": false} {
+		ok, err := prg.Bool(map[string]any{"spec": map[string]any{"source": map[string]any{"persistentVolumeName": name}}})
+		if err != nil || ok != want {
+			t.Errorf("%s: %v (%v), want %v", name, ok, err, want)
+		}
+	}
+	// an inline volume (no persistentVolumeName): no match, no error
+	if ok, err := prg.Bool(map[string]any{"spec": map[string]any{"source": map[string]any{"inlineVolumeSpec": map[string]any{}}}}); ok || err != nil {
+		t.Errorf("inline volume: %v %v", ok, err)
+	}
+
+	one := RefRelation(Ref{APIVersion: "v1", Kind: "PersistentVolumeClaim", Namespace: "shop", Name: "data"}, "persistentvolumeclaims")
+	if one.ID != "ref:v1/PersistentVolumeClaim/shop/data" || one.Label != "persistentvolumeclaim data" || one.Section != SectionReference {
+		t.Errorf("one = %+v", one)
+	}
+	set := RefRelation(va, "volumeattachments.storage.k8s.io")
+	if set.ID != "ref:storage.k8s.io/v1/VolumeAttachment" || set.Label != "volumeattachments" {
+		t.Errorf("set = %+v", set)
+	}
+	if got := *(Ref{Name: "pv-1"}).Target("persistentvolumes"); got != (Target{Resource: "persistentvolumes", Filter: `o.metadata.name == "pv-1"`}) {
+		t.Errorf("target = %+v", got)
 	}
 }
 

@@ -91,6 +91,24 @@ func (o *Opener) ListMetadata(_ context.Context, _, resource, namespace, labelSe
 	return out, nil
 }
 
+// List implements source.Relator.
+func (o *Opener) List(_ context.Context, _, resource, namespace string) ([]*unstructured.Unstructured, error) {
+	if _, ok := o.Tapes[resource]; !ok {
+		return nil, fmt.Errorf("the server doesn't have a resource type %q", resource)
+	}
+	m, err := newMatcher(namespace, "", "")
+	if err != nil {
+		return nil, err
+	}
+	var out []*unstructured.Unstructured
+	for _, it := range o.state(resource) {
+		if m.match(it) {
+			out = append(out, it.DeepCopy())
+		}
+	}
+	return out, nil
+}
+
 // CRD implements source.Relator: a fake CustomResourceDefinition for a
 // kind served by a tape that sets one (Tape.CRD).
 func (o *Opener) CRD(_ context.Context, _, apiVersion, kind string) (*unstructured.Unstructured, error) {

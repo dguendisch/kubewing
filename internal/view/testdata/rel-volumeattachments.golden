@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "ATTACHED"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "rva-a",
+    "rva-b",
+    "rva-inline"
+  ],
+  "rows": [
+    {
+      "key": "rva-a",
+      "cells": [
+        "",
+        "csi-a",
+        "false"
+      ]
+    },
+    {
+      "key": "rva-b",
+      "cells": [
+        "",
+        "csi-b",
+        "true"
+      ]
+    },
+    {
+      "key": "rva-inline",
+      "cells": [
+        "",
+        "csi-inline",
+        "true"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

@@ -1,0 +1,15 @@
+# Relation tapes: see rel-pods.yaml. pv-data-0 is attached twice (detaching
+# from node-1, attached to node-2); an inline volume has no PV.
+filter: true
+pipeline:
+  source: {resource: rel-volumeattachments}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Attached, type: string, priority: 0}
+initial:
+  - object: {apiVersion: storage.k8s.io/v1, kind: VolumeAttachment, metadata: {name: csi-a, uid: rva-a, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {attacher: csi.example.com, nodeName: node-1, source: {persistentVolumeName: pv-data-0}}, status: {attached: false}}
+    cells: [csi-a, "false"]
+  - object: {apiVersion: storage.k8s.io/v1, kind: VolumeAttachment, metadata: {name: csi-b, uid: rva-b, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {attacher: csi.example.com, nodeName: node-2, source: {persistentVolumeName: pv-data-0}}, status: {attached: true}}
+    cells: [csi-b, "true"]
+  - object: {apiVersion: storage.k8s.io/v1, kind: VolumeAttachment, metadata: {name: csi-inline, uid: rva-inline, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {attacher: csi.example.com, nodeName: node-1, source: {inlineVolumeSpec: {csi: {driver: csi.example.com, volumeHandle: vol-x}}}}, status: {attached: true}}
+    cells: [csi-inline, "true"]

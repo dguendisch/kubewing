@@ -11,7 +11,8 @@ import (
 )
 
 // Relator reads what the jump menu needs to follow relations between
-// objects (owners, owned): metadata only, never full objects. Resources
+// objects (owners, owned, references): metadata only, except where a
+// reference is matched by a spec field no field selector covers (List). Resources
 // are named as a pipeline names them ("replicasets.apps"). Implemented by
 // real clusters and tapes.
 type Relator interface {
@@ -23,6 +24,9 @@ type Relator interface {
 	GetMetadata(ctx context.Context, cluster, resource, namespace, name string) (*unstructured.Unstructured, error)
 	// ListMetadata lists objects' metadata ("" namespace = all).
 	ListMetadata(ctx context.Context, cluster, resource, namespace, labelSel, fieldSel string) ([]*unstructured.Unstructured, error)
+	// List lists full objects ("" namespace = all), for small types only
+	// (volume attachments).
+	List(ctx context.Context, cluster, resource, namespace string) ([]*unstructured.Unstructured, error)
 	// CRD reads the CustomResourceDefinition of a custom kind (for its
 	// scale subresource); NotFound for built-in kinds.
 	CRD(ctx context.Context, cluster, apiVersion, kind string) (*unstructured.Unstructured, error)
@@ -70,6 +74,19 @@ func (o *ClusterOpener) ListMetadata(ctx context.Context, cluster, resource, nam
 		return nil, err
 	}
 	return c.ListMetadata(ctx, res, namespace, labelSel, fieldSel)
+}
+
+// List implements Relator.
+func (o *ClusterOpener) List(ctx context.Context, cluster, resource, namespace string) ([]*unstructured.Unstructured, error) {
+	c, err := o.cluster(cluster)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.Resolve(resource)
+	if err != nil {
+		return nil, err
+	}
+	return c.listPaged(ctx, res, namespace, "", "")
 }
 
 // CRD implements Relator.
@@ -133,6 +150,11 @@ func (c *Cluster) GetMetadata(ctx context.Context, res Resolved, namespace, name
 // ListMetadata lists objects as metadata-only table rows, paged.
 func (c *Cluster) ListMetadata(ctx context.Context, res Resolved, namespace, labelSel, fieldSel string) ([]*unstructured.Unstructured, error) {
 	res.Metadata = true
+	return c.listPaged(ctx, res, namespace, labelSel, fieldSel)
+}
+
+// listPaged lists objects as table rows (metadata only if res.Metadata), paged.
+func (c *Cluster) listPaged(ctx context.Context, res Resolved, namespace, labelSel, fieldSel string) ([]*unstructured.Unstructured, error) {
 	rc, err := c.restClient(res.GVR.GroupVersion())
 	if err != nil {
 		return nil, err

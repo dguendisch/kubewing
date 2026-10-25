@@ -12,6 +12,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
+	"github.com/dguendisch/kubewing/internal/expr"
 	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/source"
 )
@@ -69,7 +70,7 @@ func (s *Service) relator() (source.Relator, error) {
 
 // Relations lists where the jump menu goes from a row: its namespace, its
 // owner chain (each owner checked to exist, by UID), what it is known
-// to own (counted) and its events (counted). Read-only: no token, works on read-only contexts and
+// to own (counted), what it refers to (checked or counted) and its events (counted). Read-only: no token, works on read-only contexts and
 // on tombstones.
 func (s *Service) Relations(paneID, key string) (Relations, error) {
 	rel, err := s.relator()
@@ -104,6 +105,7 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 	out.Items = append(out.Items, relations.Namespace(obj, p, plural, nsRes)...)
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
+	out.Items = append(out.Items, references(ctx, rel, cluster, withKind(obj, kind))...)
 	if kind != "Event" {
 		out.Items = append(out.Items, eventsRelation(ctx, rel, cluster, withKind(obj, kind)))
 	}
@@ -195,6 +197,75 @@ func (s *Service) owned(ctx context.Context, rel source.Relator, cluster string,
 	}
 	wg.Wait()
 	return out
+}
+
+// references lists what obj refers to (relations.References): one object
+// looked up by name (gone if deleted or recreated), a set counted with a
+// full list and its filter (the filter's field has no field selector).
+func references(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) []relations.Relation {
+	refs := relations.References(obj)
+	out := make([]relations.Relation, len(refs))
+	var wg sync.WaitGroup
+	for i, ref := range refs {
+		resource, namespaced, err := rel.ResolveKind(cluster, ref.APIVersion, ref.Kind)
+		if err != nil {
+			resource, namespaced = ref.Resource, ref.Namespace != ""
+		}
+		if !namespaced {
+			ref.Namespace = ""
+		}
+		out[i] = relations.RefRelation(ref, resource)
+		if ref.Missing != "" {
+			continue
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := &out[i]
+			if ref.Name != "" {
+				got, err := rel.GetMetadata(ctx, cluster, resource, ref.Namespace, ref.Name)
+				switch {
+				case apierrors.IsNotFound(err):
+					r.Gone = "deleted"
+				case err != nil:
+					r.Target, r.Note = ref.Target(resource), "not checked: "+shortErr(err)
+				case ref.UID != "" && string(got.GetUID()) != ref.UID:
+					r.Gone = "recreated (another object of that name)"
+				default:
+					r.Target = ref.Target(resource)
+				}
+				return
+			}
+			r.Target = ref.Target(resource)
+			n, err := countMatching(ctx, rel, cluster, resource, ref.Namespace, ref.Filter)
+			if err != nil {
+				r.Note = "not counted: " + shortErr(err)
+				return
+			}
+			r.Count = &n
+		}()
+	}
+	wg.Wait()
+	return out
+}
+
+// countMatching lists resource's full objects and counts those the CEL filter matches.
+func countMatching(ctx context.Context, rel source.Relator, cluster, resource, namespace, filter string) (int, error) {
+	prg, err := expr.Compile(filter)
+	if err != nil {
+		return 0, err
+	}
+	list, err := rel.List(ctx, cluster, resource, namespace)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, it := range list {
+		if ok, _ := prg.Bool(it.Object); ok {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // scaleChildren: a custom resource whose CRD has a scale subresource with

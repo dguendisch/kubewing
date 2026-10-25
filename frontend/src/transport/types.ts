@@ -223,7 +223,7 @@ export interface JumpTarget {
 /** Mirrors relations.Relation: one jump menu entry. */
 export interface Relation {
   id: string;
-  section: "namespace" | "owner" | "owned" | "events";
+  section: "namespace" | "owner" | "owned" | "reference" | "events";
   label: string;
   kind?: string;
   name?: string;

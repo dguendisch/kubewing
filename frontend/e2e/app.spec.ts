@@ -2763,12 +2763,66 @@ test.describe("jump to (⌘J)", () => {
     // tape resource names; the pods are already listed above (same kind), so not repeated
     await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
     await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
-    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 6 types");
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 7 types");
     await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
     await expect.poll(async () => {
       const p = await focused(page);
       return p.status?.synced ? p.rows.map((r) => r.key).join(" ") : "";
     }).toBe("rc-gizmo-config rc-gizmo-scripts");
+  });
+
+  test("a namespace jumps to its pods; a claim to its volume and attachments, a volume to its attachments", async ({ page }) => {
+    const shown = async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.rows.map((r) => r.key).sort()}` : "";
+    };
+    await openRel(page, "rel-namespaces", 2);
+    await select(page, "rn-shop");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "rel-pods 5" }).click();
+    await expect.poll(shown).toBe("rel-pods shop rp-gizmo-0,rp-orphan-0,rp-web-a,rp-web-b,rp-web-stray");
+
+    await openRel(page, "rel-pvcs", 3);
+    await select(page, "rpvc-data-0");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page)).toMatchAriaSnapshot(`
+      - menu "jump from data-0":
+        - text: jump from persistentvolumeclaim data-0 · shop ⏎ here · ⇧⏎ split
+        - separator "namespace"
+        - menuitem "rel-pvcs in shop"
+        - menuitem "namespace object shop"
+        - separator "owners"
+        - menuitem "no owner · no ownerReferences" [disabled]
+        - separator "owned"
+        - menuitem "scan for owned… in shop"
+        - separator "references"
+        - menuitem "persistentvolume pv-data-0"
+        - menuitem "rel-volumeattachments 2"
+        - separator "events"
+        - menuitem "events 0"
+    `);
+    // straight to the attachments, by the volume's name (CEL: no field selector for it)
+    await jump(page).getByRole("menuitem", { name: "rel-volumeattachments 2" }).click();
+    await expect.poll(shown).toBe("rel-volumeattachments  rva-a,rva-b");
+    await expect(page.getByLabel("cel")).toHaveValue('o.spec.source.persistentVolumeName == "pv-data-0"');
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).rows[(await focused(page)).selected]?.key).toBe("rpvc-data-0");
+
+    // via the volume: from there, its attachments
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "persistentvolume pv-data-0" }).click();
+    await expect.poll(shown).toBe("rel-pvs  rpv-data-0");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("menuitem", { name: "persistentvolumeclaim data-0" })).toBeVisible();
+    await jump(page).getByRole("menuitem", { name: "rel-volumeattachments 2" }).click();
+    await expect.poll(shown).toBe("rel-volumeattachments  rva-a,rva-b");
+
+    // a pending claim has no volume yet
+    await openRel(page, "rel-pvcs", 3);
+    await select(page, "rpvc-pending");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("menuitem", { name: /^persistentvolume/ })).toContainText("not bound");
+    await expect(jump(page).getByRole("menuitem", { name: /^persistentvolume/ })).toBeDisabled();
   });
 
   test("the ⌘⏎ menu's jump to… opens the jump menu in its place", async ({ page }) => {
