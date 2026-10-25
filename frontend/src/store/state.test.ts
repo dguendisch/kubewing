@@ -207,6 +207,28 @@ describe("jumps and their history", () => {
     expect(S.reselected(state, "v1", "other", 2)).toBe(state);
   });
 
+  it("⌘O to a new source is a navigation; the same source (filters aside) isn't", () => {
+    const s = S.initialState("kind", "shop");
+    const at = s.panes.v1!.spec;
+    // what the dispatcher does: openHistory, then show the spec
+    const open = (x: S.UIState, spec: S.PaneSpec, key?: string) => S.updatePane(S.openHistory(x, "v1", spec, key), "v1", (p) => ({ ...p, spec }));
+    // each part of the source counts, the namespace alone too
+    for (const spec of [{ ...at, namespace: "" }, { ...at, resource: "deployments" }, { ...at, context: "prod" }, { ...at, labelSelector: "app=web" }]) {
+      expect(S.openHistory(s, "v1", spec, "k").panes.v1!.back).toEqual([{ spec: at, key: "k" }]);
+    }
+    expect(S.openHistory(s, "v1", { ...at }, "k")).toBe(s);
+    expect(S.openHistory(s, "v1", { ...at, grep: "web", filter: "true", hideHealthy: true }, "k")).toBe(s);
+    expect(S.openHistory(s, "nope", { ...at, namespace: "" }, "k")).toBe(s);
+
+    // jump, back, then ⌘O elsewhere: the forward history goes, back returns to where ⌘O started
+    let x = go(jump(s, "uid-pod", owner), "back", "uid-deploy");
+    expect(x.panes.v1!.forward).toHaveLength(1);
+    x = open(x, { ...at, resource: "services" }, "uid-pod");
+    expect([where(x), x.panes.v1!.forward]).toEqual(["services", undefined]);
+    x = go(x, "back");
+    expect([where(x), x.panes.v1!.reselect]).toEqual(["pods", "uid-pod"]);
+  });
+
   it("nowhere to go: unchanged", () => {
     const s = S.initialState();
     expect(S.moveHistory(s, "v1", "back", "k")).toEqual({ state: s });

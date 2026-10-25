@@ -42,7 +42,7 @@ export interface PaneState {
   opening?: boolean;
   error?: string;
   selected: number;
-  /** Jump history, as in a browser: the views before (⌘←) and, after going back, after (⌘→) this one; newest last. */
+  /** Navigation history (⌘J jumps, ⌘O to a new source), as in a browser: the views before (⌘←) and, after going back, after (⌘→) this one; newest last. */
   back?: HistoryEntry[];
   forward?: HistoryEntry[];
   /** After moving through the history: the row to select again once the pane shows it (by key). */
@@ -583,6 +583,17 @@ const orNone = <T>(l: T[]) => (l.length ? l : undefined);
  */
 export function pushHistory(s: UIState, paneId: string, key: string | undefined): UIState {
   return updatePane(s, paneId, (p) => ({ ...p, back: [...(p.back ?? []), { spec: p.spec, key }].slice(-historyLimit), forward: undefined, reselect: undefined }));
+}
+
+/**
+ * ⌘O ⏎: a new source (context, resource, namespace, selectors) is a
+ * navigation like a jump (pushHistory); the same source again isn't. Filter
+ * edits never go through here: they're state of the view, as form fields
+ * are on a web page, and come back with it.
+ */
+export function openHistory(s: UIState, paneId: string, spec: PaneSpec, key: string | undefined): UIState {
+  const p = s.panes[paneId];
+  return p && !sameSource(p.spec, spec) ? pushHistory(s, paneId, key) : s;
 }
 
 /**

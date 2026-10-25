@@ -2280,12 +2280,9 @@ test.describe("jump to (⌘J)", () => {
     };
     await expect.poll(pods).toBe("rp-web-b");
     expect((await focused(page)).selected).toBe(startRow);
-    await expect(page.getByLabel("back")).toHaveCount(0);
+    // behind it only the launch view, which ⌘O (openTape) left
+    await expect(page.getByLabel("back")).toHaveText("⌘← pods");
     await expect(page.getByLabel("forward")).toContainText("⌘→ rel-deployments");
-    // nothing left to go back to: says so, stays
-    await page.keyboard.press("ControlOrMeta+ArrowLeft");
-    await expect(page.getByLabel("message")).toContainText("nothing to go back to");
-    expect((await focused(page)).spec.resource).toBe("rel-pods");
     // ⌘→ redoes the jump, filter and all
     await page.keyboard.press("ControlOrMeta+ArrowRight");
     await expect.poll(async () => {
@@ -2356,6 +2353,47 @@ test.describe("jump to (⌘J)", () => {
     }).toBe("rel-events  re-6");
   });
 
+  test("⌘O to a new source is a step in the history as a jump is; the same source or a filter edit isn't", async ({ page }) => {
+    await openRel(page, "rel-pods", 6);
+    await expect(page.getByLabel("back")).toHaveText("⌘← pods"); // the launch view
+    await select(page, "rp-web-b");
+    const reopen = async (resource: string, namespace?: string) => {
+      await page.keyboard.press("ControlOrMeta+O");
+      await page.getByRole("combobox", { name: "resource" }).fill(resource);
+      if (namespace !== undefined) await page.getByRole("combobox", { name: "namespace" }).fill(namespace);
+      await page.getByRole("combobox", { name: "resource" }).press("Enter");
+    };
+    await reopen("rel-deployments");
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-deployments");
+    await expect(page.getByLabel("back")).toHaveText("⌘← rel-pods");
+    // ⌘←: the pods again, with the row that was selected
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "rel-pods" && p.status?.synced ? p.rows[p.selected]?.key : "";
+    }).toBe("rp-web-b");
+    await expect(page.getByLabel("forward")).toHaveText("⌘→ rel-deployments");
+    // the same source again, or a grep: no step (the forward history stays)
+    await reopen("rel-pods");
+    await page.keyboard.press("/");
+    await page.keyboard.type("web");
+    await expect.poll(async () => (await focused(page)).spec.grep).toBe("web");
+    await page.keyboard.press("Escape");
+    await expect(page.getByLabel("back")).toHaveText("⌘← pods");
+    await expect(page.getByLabel("forward")).toHaveText("⌘→ rel-deployments");
+    // only the namespace changes: a step, and as a new navigation it drops the forward history
+    await reopen("rel-pods", "shop");
+    await expect.poll(async () => ((await focused(page)).spec as { namespace?: string }).namespace).toBe("shop");
+    await expect(page.getByLabel("back")).toHaveText("⌘← rel-pods");
+    await expect(page.getByLabel("forward")).toHaveCount(0);
+    // back to all namespaces, the grep still there (filters belong to the view)
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.spec.grep}`;
+    }).toBe("rel-pods  web");
+  });
+
   test("a new jump after going back drops the forward history", async ({ page }) => {
     await openRel(page, "rel-pods", 6);
     await select(page, "rp-web-a");
@@ -2389,8 +2427,10 @@ test.describe("jump to (⌘J)", () => {
       const p = await focused(page);
       return p.status?.synced ? `${p.spec.resource} ${p.spec.filter} ${p.rows.map((r) => r.key)}` : "";
     }).toBe('rel-replicasets o.metadata.ownerReferences.exists(r, r.uid == "rd-web") rr-web-7d9f');
-    // a split has no back stack of its own
-    await expect(page.locator("section[data-pane]").filter({ has: page.getByLabel("back") })).toHaveCount(0);
+    // a split has no back stack of its own (the pane it came from has the launch view behind it)
+    const split = (await inspect(page)).focusedPane;
+    await expect(page.locator(`section[data-pane="${split}"]`).getByLabel("back")).toHaveCount(0);
+    await expect(page.locator(`section[data-pane="v1"]`).getByLabel("back")).toHaveText("⌘← pods");
   });
 
   test("gone owners are listed disabled with why; a custom resource's owned scan finds config maps", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { applySpec } from "../commands";
+import { openSource } from "../commands";
 import { Combobox } from "../complete/Combobox";
 import { findResource, namespaceCandidates, resourceCandidates } from "../complete/complete";
 import { useCatalog, type CatalogState } from "../complete/useCatalog";
@@ -30,7 +30,7 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
     // a cluster-scoped type has no namespace (the field is hidden for it)
     if (findResource(cat.resources, next.resource)?.namespaced === false) next = { ...next, namespace: "" };
     setUI(S.closeOverlay);
-    void applySpec(pane.id, next);
+    void openSource(pane.id, next);
   };
   const field = "rounded border border-border bg-bg px-2 py-1 text-fg outline-none focus:border-accent";
   return (

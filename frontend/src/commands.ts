@@ -560,15 +560,23 @@ export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolea
   await applySpec(paneId, spec);
 }
 
+/** ⌘O ⏎: the pane shows spec; a new source pushes its current view (and selected row), as a jump does. */
+export async function openSource(paneId: string, spec: S.PaneSpec) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane) return;
+  setUI((x) => S.openHistory(x, paneId, spec, selectedKey(pane)));
+  await applySpec(paneId, spec);
+}
+
 /**
- * ⌘← / ⌘→ in the table: the view before the last jump, or forward again to
- * the one just left; the row selected there is selected again.
+ * ⌘← / ⌘→ in the table: the view before the last jump or ⌘O, or forward
+ * again to the one just left; the row selected there is selected again.
  */
 async function moveHistory(dir: "back" | "forward") {
   const pane = S.focusedPane(useUI.getState());
   if (pane.term) return;
   const { state, entry } = S.moveHistory(useUI.getState(), pane.id, dir, selectedKey(pane));
-  if (!entry) return flash(pane.id, dir === "back" ? "nothing to go back to (⌘J jumps)" : "nothing to go forward to");
+  if (!entry) return flash(pane.id, dir === "back" ? "nothing to go back to" : "nothing to go forward to");
   setUI(() => state);
   await applySpec(pane.id, entry.spec, true);
 }

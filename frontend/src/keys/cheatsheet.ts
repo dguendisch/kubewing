@@ -94,7 +94,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("jump to namespace / owner / owned", "object.jump"),
       row("events of the row (⌘← back)", "object.events"),
       row("jump into a split below", "menu.runSplit"),
-      row("back / forward through jumps", "history.back", "history.forward"),
+      row("back / forward (jumps, ⌘O)", "history.back", "history.forward"),
     ],
   },
   {
