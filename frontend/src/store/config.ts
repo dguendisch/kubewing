@@ -16,6 +16,7 @@ export const themeTokens = [
   "deleted",
   "changed",
   "hidden",
+  "match",
   "prod",
 ] as const;
 

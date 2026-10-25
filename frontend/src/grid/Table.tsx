@@ -16,8 +16,10 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
 import { bridge, paneData } from "../store/store";
-import { layout, withAlpha, type ColorToken } from "./cells";
+import { grepRanges, layout, withAlpha, type ColorToken, type Range } from "./cells";
+import { parseGrep } from "../components/grep";
 import { rowAt, type PaneData } from "./rowcache";
+import type { RowData } from "../transport/types";
 
 /** Reads a theme token (CSS variable) so the canvas uses the same palette as the DOM. */
 function token(name: string): string {
@@ -56,6 +58,8 @@ const colorVar: Record<ColorToken, string> = {
 
 interface Props {
   serverId: string;
+  /** The pane's applied grep stage: its terms are highlighted in the cells. */
+  grep: string;
   selected: number;
   focused: boolean;
   onSelect: (row: number) => void;
@@ -68,7 +72,7 @@ interface Props {
  * Live table. Data flows bridge → paneData → updateCells (no React render).
  * Only visible rows (+ overscan) are requested from Go.
  */
-export function Table({ serverId, selected, focused, onSelect, onActivate, onContextMenu }: Props) {
+export function Table({ serverId, grep, selected, focused, onSelect, onActivate, onContextMenu }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -77,9 +81,23 @@ export function Table({ serverId, selected, focused, onSelect, onActivate, onCon
   const { theme, colors } = useMemo(() => {
     void themeGen;
     const colors: Record<string, string> = {};
-    for (const v of [...Object.values(colorVar), "hidden"]) colors[v] = token(v);
+    for (const v of [...Object.values(colorVar), "hidden", "match"]) colors[v] = token(v);
     return { theme: gridTheme(), colors };
   }, [themeGen]);
+
+  // grep highlights: ranges per row, cached by RowData (a new frame brings new objects for changed rows)
+  const terms = useMemo(() => parseGrep(grep).flatMap((t) => (t.not ? [] : [t.text])), [grep]);
+  const ranges = useMemo(() => new WeakMap<object, Range[][]>(), [terms]);
+  const rangesOf = (row: RowData): Range[][] => {
+    let r = ranges.get(row);
+    if (!r) ranges.set(row, (r = grepRanges(row.cells, terms)));
+    return r;
+  };
+  // the rows a frame doesn't change would keep their old highlights: repaint the window
+  useEffect(() => {
+    const d = data.current;
+    ref.current?.updateCells(d.order.flatMap((_, i) => d.columns.map((_, c) => ({ cell: [c, d.offset + i] as Item }))));
+  }, [ranges]);
 
   // lets overlays (context menu) anchor to a row; see actions/anchor.ts
   useEffect(() => {
@@ -150,7 +168,9 @@ export function Table({ serverId, selected, focused, onSelect, onActivate, onCon
 
   const drawCell: DrawCellCallback = (args, drawContent) => {
     const { ctx, rect, col, row, theme: t } = args;
-    const l = layout(rowAt(data.current, row), col, data.current.columns[col], Date.now());
+    const r = rowAt(data.current, row);
+    const column = data.current.columns[col];
+    const l = layout(r, col, column, Date.now());
     if (l.tint) {
       ctx.save();
       ctx.globalAlpha = 0.16;
@@ -173,6 +193,17 @@ export function Table({ serverId, selected, focused, onSelect, onActivate, onCon
     ctx.beginPath();
     ctx.rect(rect.x, rect.y, rect.width, rect.height);
     ctx.clip();
+    // age cells show "5m" but grep matched the raw timestamp: offsets don't apply
+    if (r && terms.length && column?.type !== "age") {
+      ctx.save();
+      ctx.globalAlpha = 0.45;
+      ctx.fillStyle = colors["match"]!;
+      for (const [s, e] of rangesOf(r)[col] ?? []) {
+        const x0 = x + ctx.measureText(l.text.slice(0, s)).width;
+        ctx.fillRect(x0, rect.y + 3, ctx.measureText(l.text.slice(s, e)).width, rect.height - 6);
+      }
+      ctx.restore();
+    }
     ctx.fillText(l.text, x, y);
     if (l.strike) ctx.fillRect(x, y, w, 1);
     ctx.restore();

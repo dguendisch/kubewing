@@ -15,6 +15,7 @@
   --color-deleted: #f14c4c;
   --color-changed: #e2c08d;
   --color-hidden: #c586c0;
+  --color-match: #6a8caf;
   --color-prod: #f14c4c;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 }

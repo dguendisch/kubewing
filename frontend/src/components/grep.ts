@@ -26,3 +26,42 @@ export function liveGrep(text: string): LiveGrep {
   if (!text.startsWith("!", start)) return { apply: text, pendingFrom: -1 };
   return { apply: text.slice(0, start).trimEnd(), pendingFrom: start };
 }
+
+export interface GrepTerm {
+  text: string;
+  not: boolean;
+}
+
+/**
+ * The terms of a grep stage, parsed like ParseGrep in internal/pipeline/grep.go
+ * (keep the two in sync): space-separated, `!x` negates, `"a b"` is one term,
+ * a backslash escapes the next character. Lower-cased; empty terms dropped.
+ */
+export function parseGrep(s: string): GrepTerm[] {
+  const terms: GrepTerm[] = [];
+  let cur = "";
+  let not = false, quoted = false, started = false;
+  const flush = () => {
+    if (cur) terms.push({ text: cur.toLowerCase(), not });
+    cur = "";
+    not = started = false;
+  };
+  const rs = [...s];
+  for (let i = 0; i < rs.length; i++) {
+    const r = rs[i]!;
+    if (r === "\\" && i + 1 < rs.length) {
+      cur += rs[++i];
+      started = true;
+    } else if (r === '"') {
+      quoted = !quoted;
+      started = true;
+    } else if (r === " " && !quoted) flush();
+    else if (r === "!" && !started) not = started = true;
+    else {
+      cur += r;
+      started = true;
+    }
+  }
+  flush();
+  return terms;
+}

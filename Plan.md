@@ -49,7 +49,6 @@ Done: P0 and P0.1 except for the items below (see the [README](README.md) for wh
 
 Next up:
 - diff editor (show that j/k is for next/prev change)
-- grep highlight search results
 - better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
@@ -83,6 +82,7 @@ Still open in P0.1:
    - **Errors are visible.** Missing fields stay "no match" (heterogeneous lists); other evaluation errors count as no match and are reported in the status line (`3 errors`). CEL cost limit per evaluation.
    - **Completion** for the CEL field: field paths taken from the source's live objects (`o.status.` → keys seen at that path, with how many objects have them; works for every CRD without OpenAPI) plus CEL macros/functions, through the ⌘O ranker. Keys that aren't identifiers complete as `["app.kubernetes.io/name"]` (the objects are schemaless, so not Kubernetes' `__dot__` escaping). After an operand, the operators that fit the field's type (as the key listing reports it).
    - **From the detail view:** cursor on a YAML line, `=` sets the CEL filter to `<path> == <value>`, `!` to `!=`, and applies it at once (the expression is complete).
+   - **Grep highlights** its positive terms in the shown cells (the `match` theme token), found like the Go side matches: in the lower-cased cells joined by a space, so a phrase across two cells highlights in both. Age columns aren't highlighted: grep matches their timestamp, the cell shows `5m`.
    - `↑` in an empty CEL field recalls recent expressions for the resource type.
 1. Keybindings and theme: sensible defaults + config files in `~/.kubewing/`; no settings UI yet.
 

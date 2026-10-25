@@ -201,6 +201,7 @@ function TablePane({
         {pane.serverId ? (
           <Table
             serverId={pane.serverId}
+            grep={pane.spec.grep}
             selected={pane.selected}
             focused={tableFocused}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}

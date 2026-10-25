@@ -143,6 +143,28 @@ test("grep: !x excludes; a negated term applies once finished, so typing it neve
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-1"]);
 });
 
+test("grep highlights its matches in the cells, and the highlight goes with the grep", async ({ page }) => {
+  await openTape(page);
+  const canvas = page.locator("section[data-pane] canvas").first();
+  // match-colored pixels in the first row's band (header 24px, rows 22px): blue-grey, brighter than the selected row's bluish background
+  const highlighted = () =>
+    canvas.evaluate((c: HTMLCanvasElement) => {
+      const dpr = window.devicePixelRatio;
+      const px = c.getContext("2d")!.getImageData(0, 24 * dpr, c.width, 22 * dpr).data;
+      let n = 0;
+      for (let i = 0; i < px.length; i += 4) if (px[i + 2]! > px[i]! + 35 && px[i + 2]! > 90) n++;
+      return n;
+    });
+  expect(await highlighted()).toBe(0);
+  await page.keyboard.press("/");
+  await page.keyboard.type("etcd");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["etcd-0"]);
+  await expect.poll(highlighted).toBeGreaterThan(20);
+  await page.getByLabel("filter", { exact: true }).fill("");
+  await expect.poll(async () => (await focused(page)).total).toBe(3);
+  await expect.poll(highlighted).toBe(0);
+});
+
 test("label selector: click or l focuses it and keeps focus while typing; tab moves between the filter fields", async ({ page }) => {
   await openTape(page);
   const labels = page.getByLabel("label selector");
