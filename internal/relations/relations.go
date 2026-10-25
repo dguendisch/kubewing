@@ -7,6 +7,8 @@
 package relations
 
 import (
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -254,6 +256,8 @@ type Ref struct {
 	// Filter matches the objects when there is no Name: a CEL filter, as
 	// no field selector covers the field (volume attachments by volume).
 	Filter string
+	// MetadataOnly: Filter reads metadata only, so counting needs no full objects.
+	MetadataOnly bool
 	// Missing says why there is nothing to refer to (yet): an unbound claim.
 	Missing string
 }
@@ -277,10 +281,23 @@ func AttachmentsFilter(pvs ...string) string {
 	return "o.spec.source.persistentVolumeName in [" + strings.Join(q, ", ") + "]"
 }
 
+// NamesFilter matches objects by name.
+func NamesFilter(names ...string) string {
+	if len(names) == 1 {
+		return NameFilter(names[0])
+	}
+	q := make([]string, len(names))
+	for i, n := range names {
+		q[i] = Quote(n)
+	}
+	return "o.metadata.name in [" + strings.Join(q, ", ") + "]"
+}
+
 // References lists what obj refers to, by kind: a claim its volume and the
 // volume's attachments (straight there, not via the volume), a volume its
 // claim and attachments, an attachment its volume and node, a pod its
-// claims (PodVolumes goes on from them once they are read).
+// claims and a stateful set the claims of its volumeClaimTemplates
+// (PodVolumes and StatefulSetVolumes go on from them once they are read).
 func References(obj *unstructured.Unstructured) []Ref {
 	gv, _ := schema.ParseGroupVersion(obj.GetAPIVersion())
 	str := func(path ...string) string {
@@ -291,6 +308,13 @@ func References(obj *unstructured.Unstructured) []Ref {
 	switch gv.Group + "/" + obj.GetKind() {
 	case "/Pod":
 		return podClaims(obj)
+	case "apps/StatefulSet":
+		if re := stsClaims(obj); re != "" {
+			r := pvcs
+			r.Namespace, r.Filter, r.MetadataOnly = obj.GetNamespace(), "o.metadata.name.matches("+Quote(re)+")", true
+			return []Ref{r}
+		}
+		return nil
 	case "/PersistentVolumeClaim":
 		pv := str("spec", "volumeName")
 		if pv == "" {
@@ -348,6 +372,53 @@ func podClaims(pod *unstructured.Unstructured) []Ref {
 		out = append(out, r)
 	}
 	return out
+}
+
+// stsClaims is the pattern of a stateful set's claim names, as the
+// controller names them: "<template>-<set>-<ordinal>". Every ordinal, so
+// the claims scaled-down replicas leave behind (retained by default) count
+// too. "" without volumeClaimTemplates.
+func stsClaims(sts *unstructured.Unstructured) string {
+	tmpls, _, _ := unstructured.NestedSlice(sts.Object, "spec", "volumeClaimTemplates")
+	var names []string
+	for _, t := range tmpls {
+		tm, _ := t.(map[string]any)
+		if n, _, _ := unstructured.NestedString(tm, "metadata", "name"); n != "" {
+			names = append(names, regexp.QuoteMeta(n))
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "^(" + strings.Join(names, "|") + ")-" + regexp.QuoteMeta(sts.GetName()) + "-[0-9]+$"
+}
+
+// StatefulSetVolumes is a stateful set's claims as a set, then (claims:
+// those of its namespace, full objects) the volumes bound to them and
+// their attachments, both as sets: a replica each would crowd the menu.
+func StatefulSetVolumes(sts *unstructured.Unstructured, claims []*unstructured.Unstructured) []Ref {
+	out := References(sts)
+	if len(out) == 0 {
+		return nil
+	}
+	re := regexp.MustCompile(stsClaims(sts))
+	var bound []string
+	for _, c := range claims {
+		if !re.MatchString(c.GetName()) {
+			continue
+		}
+		if pv, _, _ := unstructured.NestedString(c.Object, "spec", "volumeName"); pv != "" {
+			bound = append(bound, pv)
+		}
+	}
+	if len(bound) == 0 {
+		return out
+	}
+	slices.Sort(bound)
+	v, a := pvs, attached
+	v.Filter, v.MetadataOnly = NamesFilter(bound...), true
+	a.Filter = AttachmentsFilter(bound...)
+	return append(out, v, a)
 }
 
 // PodVolumes is a pod's claims as read (claims: those of its namespace,

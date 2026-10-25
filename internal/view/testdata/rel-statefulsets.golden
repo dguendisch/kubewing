@@ -1,0 +1,52 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "rss-cache",
+    "rss-db",
+    "rss-dbx"
+  ],
+  "rows": [
+    {
+      "key": "rss-cache",
+      "cells": [
+        "shop",
+        "cache",
+        "1/1"
+      ]
+    },
+    {
+      "key": "rss-db",
+      "cells": [
+        "shop",
+        "db",
+        "2/2"
+      ]
+    },
+    {
+      "key": "rss-dbx",
+      "cells": [
+        "shop",
+        "dbx",
+        "1/1"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

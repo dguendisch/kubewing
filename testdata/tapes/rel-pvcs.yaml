@@ -1,6 +1,6 @@
 # Relation tapes: see rel-pods.yaml. Claims in shop: one bound (its volume
 # and attachments are references), one pending, one whose volume is gone,
-# and the claim of gizmo-0's ephemeral volume.
+# the claim of gizmo-0's ephemeral volume, and the stateful sets' (rel-statefulsets).
 filter: true
 pipeline:
   source: {resource: rel-pvcs}
@@ -17,3 +17,9 @@ initial:
     cells: [lost, Lost, pv-deleted]
   - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: gizmo-0-scratch, namespace: shop, uid: rpvc-scratch, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {volumeName: pv-scratch}, status: {phase: Bound}}
     cells: [gizmo-0-scratch, Bound, pv-scratch]
+  - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: data-db-0, namespace: shop, uid: rpvc-db-0, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {volumeName: pv-db-0}, status: {phase: Bound}}
+    cells: [data-db-0, Bound, pv-db-0]
+  - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: data-db-1, namespace: shop, uid: rpvc-db-1, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {volumeName: pv-db-1}, status: {phase: Bound}}
+    cells: [data-db-1, Bound, pv-db-1]
+  - object: {apiVersion: v1, kind: PersistentVolumeClaim, metadata: {name: data-dbx-0, namespace: shop, uid: rpvc-dbx-0, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {}, status: {phase: Pending}}
+    cells: [data-dbx-0, Pending, ""]

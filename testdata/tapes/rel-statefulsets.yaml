@@ -1,0 +1,15 @@
+# Relation tapes: see rel-pods.yaml. db's claims (data-db-<ordinal>, in
+# rel-pvcs) and their volumes; dbx is a namesake whose claims must not count.
+filter: true
+pipeline:
+  source: {resource: rel-statefulsets}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: StatefulSet, metadata: {name: db, namespace: shop, uid: rss-db, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2, selector: {matchLabels: {app: db}}, volumeClaimTemplates: [{metadata: {name: data}, spec: {accessModes: [ReadWriteOnce]}}]}}
+    cells: [db, 2/2]
+  - object: {apiVersion: apps/v1, kind: StatefulSet, metadata: {name: dbx, namespace: shop, uid: rss-dbx, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 1, selector: {matchLabels: {app: dbx}}, volumeClaimTemplates: [{metadata: {name: data}, spec: {accessModes: [ReadWriteOnce]}}]}}
+    cells: [dbx, 1/1]
+  - object: {apiVersion: apps/v1, kind: StatefulSet, metadata: {name: cache, namespace: shop, uid: rss-cache, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 1, selector: {matchLabels: {app: cache}}}}
+    cells: [cache, 1/1]

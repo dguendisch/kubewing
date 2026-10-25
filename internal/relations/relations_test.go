@@ -264,6 +264,55 @@ func TestPodVolumes(t *testing.T) {
 	}
 }
 
+func TestStatefulSetVolumes(t *testing.T) {
+	tmpl := func(names ...string) map[string]any {
+		var ts []any
+		for _, n := range names {
+			ts = append(ts, map[string]any{"metadata": map[string]any{"name": n}})
+		}
+		return map[string]any{"spec": map[string]any{"volumeClaimTemplates": ts}}
+	}
+	sts := md("StatefulSet", "apps/v1", "shop", "db.x", "s1", tmpl("data", "logs"))
+	refs := References(sts)
+	if len(refs) != 1 || refs[0].Kind != "PersistentVolumeClaim" || refs[0].Namespace != "shop" || !refs[0].MetadataOnly {
+		t.Fatalf("refs = %+v", refs)
+	}
+	// the controller's names, every ordinal; the set's name is literal (a dot isn't any character)
+	prg, err := expr.Compile(refs[0].Filter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"data-db.x-0": true, "logs-db.x-12": true, "data-dbxx-0": false, "data-db.x-0-x": false, "data-db.xy-0": false, "other-db.x-0": false} {
+		if ok, _ := prg.Bool(map[string]any{"metadata": map[string]any{"name": name}}); ok != want {
+			t.Errorf("%s: %v, want %v", name, ok, want)
+		}
+	}
+	if References(md("StatefulSet", "apps/v1", "shop", "web", "s2", nil)) != nil {
+		t.Error("no volumeClaimTemplates: no references")
+	}
+
+	claim := func(name, pv string) *unstructured.Unstructured {
+		return md("PersistentVolumeClaim", "v1", "shop", name, name, map[string]any{"spec": map[string]any{"volumeName": pv}})
+	}
+	got := StatefulSetVolumes(sts, []*unstructured.Unstructured{claim("logs-db.x-0", "pv-b"), claim("data-db.x-0", "pv-a"), claim("data-db.x-1", ""), claim("data-other-0", "pv-z")})
+	var s []string
+	for _, r := range got {
+		s = append(s, r.Kind+": "+r.Filter)
+	}
+	want := []string{
+		"PersistentVolumeClaim: " + refs[0].Filter,
+		`PersistentVolume: o.metadata.name in ["pv-a", "pv-b"]`,
+		`VolumeAttachment: o.spec.source.persistentVolumeName in ["pv-a", "pv-b"]`,
+	}
+	if strings.Join(s, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got\n%s", strings.Join(s, "\n"))
+	}
+	// nothing bound yet: the claims only
+	if got := StatefulSetVolumes(sts, []*unstructured.Unstructured{claim("data-db.x-0", "")}); len(got) != 1 {
+		t.Errorf("unbound = %+v", got)
+	}
+}
+
 func TestChildTargetAndOwns(t *testing.T) {
 	c := Child{APIVersion: "apps/v1", Kind: "ReplicaSet", Namespace: "shop", LabelSelector: "app=web", OwnerUID: "d1"}
 	r := OwnedRelation(c, "replicasets.apps")

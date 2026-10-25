@@ -15,10 +15,13 @@
       "name": "VOLUME"
     }
   ],
-  "total": 4,
+  "total": 7,
   "offset": 0,
   "order": [
     "rpvc-data-0",
+    "rpvc-db-0",
+    "rpvc-db-1",
+    "rpvc-dbx-0",
     "rpvc-scratch",
     "rpvc-lost",
     "rpvc-pending"
@@ -31,6 +34,33 @@
         "data-0",
         "Bound",
         "pv-data-0"
+      ]
+    },
+    {
+      "key": "rpvc-db-0",
+      "cells": [
+        "shop",
+        "data-db-0",
+        "Bound",
+        "pv-db-0"
+      ]
+    },
+    {
+      "key": "rpvc-db-1",
+      "cells": [
+        "shop",
+        "data-db-1",
+        "Bound",
+        "pv-db-1"
+      ]
+    },
+    {
+      "key": "rpvc-dbx-0",
+      "cells": [
+        "shop",
+        "data-dbx-0",
+        "Pending",
+        ""
       ]
     },
     {
@@ -63,6 +93,6 @@
   ],
   "status": {
     "synced": true,
-    "objects": 4
+    "objects": 7
   }
 }

@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -188,8 +189,8 @@ func TestOwnedScan(t *testing.T) {
 	if count(pods) != 1 || len(got.Items) != 2 {
 		t.Errorf("items = %+v", got.Items)
 	}
-	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, widgets; e2e-deploys shares a kind
-	if got.Scanned != 6 || got.Skipped != 0 {
+	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, statefulsets, widgets; e2e-deploys shares a kind
+	if got.Scanned != 7 || got.Skipped != 0 {
 		t.Errorf("scanned %d skipped %d", got.Scanned, got.Skipped)
 	}
 }
@@ -284,7 +285,7 @@ func TestRelationsNamespacePods(t *testing.T) {
 
 func TestRelationsStorageReferences(t *testing.T) {
 	svc, _ := relSetup(t)
-	pvcs := openSynced(t, svc, "source: {resource: rel-pvcs}", 4)
+	pvcs := openSynced(t, svc, "source: {resource: rel-pvcs}", 7)
 	got, err := svc.Relations(pvcs.Pane, "rpvc-data-0")
 	if err != nil {
 		t.Fatal(err)
@@ -301,7 +302,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 		t.Errorf("attachments = %+v %+v", va, va.Target)
 	}
 	// the target shows those two only (not the inline volume's)
-	shown := openSynced(t, svc, "source: {resource: rel-volumeattachments}\nstages: [{filter: '"+va.Target.Filter+"'}]", 4)
+	shown := openSynced(t, svc, "source: {resource: rel-volumeattachments}\nstages: [{filter: '"+va.Target.Filter+"'}]", 5)
 	for key, want := range map[string]bool{"rva-a": true, "rva-b": true, "rva-inline": false, "rva-scratch": false} {
 		if idx, _ := svc.RowIndex(shown.Pane, key); (idx >= 0) != want {
 			t.Errorf("%s shown = %v, want %v", key, idx >= 0, want)
@@ -329,7 +330,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 	}
 
 	// a volume: its claim (checked by UID) and attachments
-	pvs := openSynced(t, svc, "source: {resource: rel-pvs}", 4)
+	pvs := openSynced(t, svc, "source: {resource: rel-pvs}", 6)
 	got, _ = svc.Relations(pvs.Pane, "rpv-data-0")
 	m = byID(got.Items)
 	if c := m["ref:v1/PersistentVolumeClaim/shop/data-0"]; c.Target == nil || *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name == "data-0"`}) {
@@ -348,7 +349,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 	}
 
 	// an attachment: back to its volume, and the node
-	vas := openSynced(t, svc, "source: {resource: rel-volumeattachments}", 4)
+	vas := openSynced(t, svc, "source: {resource: rel-volumeattachments}", 5)
 	got, _ = svc.Relations(vas.Pane, "rva-b")
 	m = byID(got.Items)
 	if r := m["ref:v1/PersistentVolume//pv-data-0"]; r.Target == nil || r.Target.Resource != "rel-pvs" {
@@ -393,6 +394,56 @@ func TestRelationsPodVolumes(t *testing.T) {
 	for _, r := range got.Items {
 		if r.Section == relations.SectionReference {
 			t.Errorf("web-7d9f-a: %+v", r)
+		}
+	}
+}
+
+func TestRelationsStatefulSetVolumes(t *testing.T) {
+	svc, _ := relSetup(t)
+	sets := openSynced(t, svc, "source: {resource: rel-statefulsets}", 3)
+	got, err := svc.Relations(sets.Pane, "rss-db")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, r := range got.Items {
+		if r.Section == relations.SectionReference {
+			refs = append(refs, r.Label+" "+strconv.Itoa(count(r)))
+		}
+	}
+	// counted sets: db's two claims (not dbx's), their volumes, the one attachment
+	if s := strings.Join(refs, " / "); s != "rel-pvcs 2 / rel-pvs 2 / rel-volumeattachments 1" {
+		t.Errorf("references = %s", s)
+	}
+	m := byID(got.Items)
+	c := m["ref:v1/PersistentVolumeClaim"]
+	if *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name.matches("^(data)-db-[0-9]+$")`}) {
+		t.Errorf("claims = %+v", c.Target)
+	}
+	if v := m["ref:v1/PersistentVolume"]; *v.Target != (relations.Target{Resource: "rel-pvs", Filter: `o.metadata.name in ["pv-db-0", "pv-db-1"]`}) {
+		t.Errorf("volumes = %+v", v.Target)
+	}
+	// the claims' target shows those two
+	shown := openSynced(t, svc, "source: {resource: rel-pvcs, namespace: shop}\nstages: [{filter: '"+c.Target.Filter+"'}]", 7)
+	for key, want := range map[string]bool{"rpvc-db-0": true, "rpvc-db-1": true, "rpvc-dbx-0": false} {
+		if idx, _ := svc.RowIndex(shown.Pane, key); (idx >= 0) != want {
+			t.Errorf("%s shown = %v, want %v", key, idx >= 0, want)
+		}
+	}
+
+	// dbx: its pending claim, nothing bound; no templates: no references
+	got, _ = svc.Relations(sets.Pane, "rss-dbx")
+	m = byID(got.Items)
+	if c := m["ref:v1/PersistentVolumeClaim"]; count(c) != 1 {
+		t.Errorf("dbx's claims = %+v", c)
+	}
+	if _, ok := m["ref:v1/PersistentVolume"]; ok {
+		t.Error("dbx: no volumes entry")
+	}
+	got, _ = svc.Relations(sets.Pane, "rss-cache")
+	for _, r := range got.Items {
+		if r.Section == relations.SectionReference {
+			t.Errorf("cache: %+v", r)
 		}
 	}
 }

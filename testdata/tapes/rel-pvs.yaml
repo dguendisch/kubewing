@@ -16,3 +16,7 @@ initial:
     cells: [pv-released, Released]
   - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-scratch, uid: rpv-scratch, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {claimRef: {namespace: shop, name: gizmo-0-scratch, uid: rpvc-scratch}}, status: {phase: Bound}}
     cells: [pv-scratch, Bound]
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-db-0, uid: rpv-db-0, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {claimRef: {namespace: shop, name: data-db-0, uid: rpvc-db-0}}, status: {phase: Bound}}
+    cells: [pv-db-0, Bound]
+  - object: {apiVersion: v1, kind: PersistentVolume, metadata: {name: pv-db-1, uid: rpv-db-1, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {claimRef: {namespace: shop, name: data-db-1, uid: rpvc-db-1}}, status: {phase: Bound}}
+    cells: [pv-db-1, Bound]

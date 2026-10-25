@@ -105,7 +105,8 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 	out.Items = append(out.Items, relations.Namespace(obj, p, plural, nsRes)...)
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
-	out.Items = append(out.Items, references(ctx, rel, cluster, refsOf(ctx, rel, cluster, withKind(obj, kind)))...)
+	refs, listed := refsOf(ctx, rel, cluster, withKind(obj, kind))
+	out.Items = append(out.Items, references(ctx, rel, cluster, refs, listed)...)
 	if kind != "Event" {
 		out.Items = append(out.Items, eventsRelation(ctx, rel, cluster, withKind(obj, kind)))
 	}
@@ -199,13 +200,20 @@ func (s *Service) owned(ctx context.Context, rel source.Relator, cluster string,
 	return out
 }
 
-// refsOf is what obj refers to (relations.References). A pod's claims are
-// read in full (one list of its namespace's claims) to go on to their
-// volumes and attachments; if that fails, the claims alone.
-func refsOf(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) []relations.Ref {
+// listed holds full lists already read, by listKey (counting reuses them).
+type listed map[string][]*unstructured.Unstructured
+
+func listKey(resource, namespace string) string { return resource + "\x00" + namespace }
+
+// refsOf is what obj refers to (relations.References). The claims of a pod
+// or stateful set are read in full (one list of its namespace's claims,
+// returned in listed) to go on to their volumes and attachments; if that
+// fails, the claims alone.
+func refsOf(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) ([]relations.Ref, listed) {
 	refs := relations.References(obj)
-	if obj.GetAPIVersion() != "v1" || obj.GetKind() != "Pod" || len(refs) == 0 {
-		return refs
+	gv := obj.GetAPIVersion() + "/" + obj.GetKind()
+	if len(refs) == 0 || gv != "v1/Pod" && gv != "apps/v1/StatefulSet" {
+		return refs, nil
 	}
 	resource, _, err := rel.ResolveKind(cluster, "v1", "PersistentVolumeClaim")
 	if err != nil {
@@ -213,15 +221,20 @@ func refsOf(ctx context.Context, rel source.Relator, cluster string, obj *unstru
 	}
 	claims, err := rel.List(ctx, cluster, resource, obj.GetNamespace())
 	if err != nil {
-		return refs
+		return refs, nil
 	}
-	return relations.PodVolumes(obj, claims)
+	l := listed{listKey(resource, obj.GetNamespace()): claims}
+	if gv == "v1/Pod" {
+		return relations.PodVolumes(obj, claims), l
+	}
+	return relations.StatefulSetVolumes(obj, claims), l
 }
 
 // references lists the entries of refs: one object looked up by name (gone
-// if deleted or recreated), a set counted with a full list and its filter
-// (the filter's field has no field selector).
-func references(ctx context.Context, rel source.Relator, cluster string, refs []relations.Ref) []relations.Relation {
+// if deleted or recreated), a set counted with its filter over a list
+// (full objects unless the filter reads only metadata; the filter's field
+// has no field selector), reusing what refsOf already listed.
+func references(ctx context.Context, rel source.Relator, cluster string, refs []relations.Ref, pre listed) []relations.Relation {
 	out := make([]relations.Relation, len(refs))
 	var wg sync.WaitGroup
 	for i, ref := range refs {
@@ -255,7 +268,7 @@ func references(ctx context.Context, rel source.Relator, cluster string, refs []
 				return
 			}
 			r.Target = ref.Target(resource)
-			n, err := countMatching(ctx, rel, cluster, resource, ref.Namespace, ref.Filter)
+			n, err := countMatching(ctx, rel, cluster, resource, ref, pre)
 			if err != nil {
 				r.Note = "not counted: " + shortErr(err)
 				return
@@ -267,13 +280,20 @@ func references(ctx context.Context, rel source.Relator, cluster string, refs []
 	return out
 }
 
-// countMatching lists resource's full objects and counts those the CEL filter matches.
-func countMatching(ctx context.Context, rel source.Relator, cluster, resource, namespace, filter string) (int, error) {
-	prg, err := expr.Compile(filter)
+// countMatching counts the objects of resource that ref's CEL filter matches.
+func countMatching(ctx context.Context, rel source.Relator, cluster, resource string, ref relations.Ref, pre listed) (int, error) {
+	prg, err := expr.Compile(ref.Filter)
 	if err != nil {
 		return 0, err
 	}
-	list, err := rel.List(ctx, cluster, resource, namespace)
+	list, ok := pre[listKey(resource, ref.Namespace)]
+	switch {
+	case ok:
+	case ref.MetadataOnly:
+		list, err = rel.ListMetadata(ctx, cluster, resource, ref.Namespace, "", "")
+	default:
+		list, err = rel.List(ctx, cluster, resource, ref.Namespace)
+	}
 	if err != nil {
 		return 0, err
 	}
