@@ -116,6 +116,12 @@ function withSizes(l: Extract<Layout, { type: "split" }>, sizes: number[] | unde
   return sizes ? { ...l, sizes } : { type: l.type, dir: l.dir, children: l.children };
 }
 
+/** Same arrangement of the same panes, whatever the sizes (a move that changes nothing). */
+export function sameShape(a: Layout, b: Layout): boolean {
+  if (a.type === "pane" || b.type === "pane") return a.type === b.type && (a as { id: string }).id === (b as { id: string }).id;
+  return a.dir === b.dir && a.children.length === b.children.length && a.children.every((c, i) => sameShape(c, b.children[i]!));
+}
+
 /** Child weights of a split, normalized to sum 1 (equal shares without sizes). */
 export function shares(l: Extract<Layout, { type: "split" }>): number[] {
   const n = l.children.length;

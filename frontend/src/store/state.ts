@@ -1,7 +1,7 @@
 import type { FocusContext } from "../keys/keymap";
 import type { ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
-import { insert, insertEdge, leaf, neighbor, paneIds, remove, split, valid, type Direction, type Layout, type Side } from "./layout";
+import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -476,7 +476,8 @@ export type MoveTarget = { tab: string; pane?: string; side: Side } | { newTab: 
  * watch, its shell, its history), next to another pane or to the edge of a
  * tab, also another one, or into a new tab of its own. The tab it ends up in
  * is shown with the pane focused there. A tab left empty closes; its other
- * panes regain the space. A drop onto itself is no move.
+ * panes regain the space. A drop onto itself, or one that leaves the tab
+ * arranged as it was, is no move (the drag offers no such target).
  */
 export function movePane(s: UIState, id: string, to: MoveTarget): UIState {
   const fromIndex = s.tabs.findIndex((t) => paneIds(t.layout).includes(id));
@@ -508,6 +509,8 @@ export function movePane(s: UIState, id: string, to: MoveTarget): UIState {
     const t = tabs[activeTab]!;
     const base = t.id === from.id ? rest! : t.layout;
     const layout = to.pane ? insert(base, to.pane, to.side, id) : insertEdge(base, to.side, id);
+    // e.g. the bottom of two stacked panes dropped below the top one again: no target
+    if (t.id === from.id && sameShape(layout, from.layout)) return s;
     const { maximized: _, ...kept } = t;
     tabs[activeTab] = { ...kept, layout, focused: id };
   }

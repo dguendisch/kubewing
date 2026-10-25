@@ -685,6 +685,20 @@ describe("movePane (drag and drop by the grip)", () => {
     const one = S.initialState();
     expect(S.movePane(one, "v1", { tab: "t1", side: "left" })).toBe(one);
     expect(S.movePane(one, "v1", { newTab: true })).toBe(one);
+    // targets that leave the tab arranged as it is (v1 | v2): v2 to v1's right, or to the tab's right edge
+    expect(S.movePane(s, "v2", { tab: "t1", pane: "v1", side: "right" })).toBe(s);
+    expect(S.movePane(s, "v2", { tab: "t1", side: "right" })).toBe(s);
+    expect(S.movePane(s, "v1", { tab: "t1", pane: "v2", side: "left" })).toBe(s);
+    // also when only the sizes would change
+    const sized = S.setLayout(s, { type: "split", dir: "row", children: [leaf("v1"), leaf("v2")], sizes: [0.7, 0.3] });
+    expect(S.movePane(sized, "v2", { tab: "t1", pane: "v1", side: "right" })).toBe(sized);
+    // the others are moves: across (v2 below v1), or swapped
+    expect(S.movePane(s, "v2", { tab: "t1", pane: "v1", side: "bottom" })).not.toBe(s);
+    expect(S.movePane(s, "v2", { tab: "t1", pane: "v1", side: "left" })).not.toBe(s);
+    // with three in a row (v1 | v2 | v3), v3 to v2's right stays put; to v1's right it moves
+    const three = S.splitPane(s, "row");
+    expect(S.movePane(three, "v3", { tab: "t1", pane: "v2", side: "right" })).toBe(three);
+    expect(S.movePane(three, "v3", { tab: "t1", pane: "v1", side: "right" })).not.toBe(three);
     // to the edge of its own tab with others there: a move
     expect(S.movePane(s, "v2", { tab: "t1", side: "left" }).tabs[0]!.layout).toEqual({ type: "split", dir: "row", children: [leaf("v2"), leaf("v1")] });
   });
