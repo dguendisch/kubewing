@@ -35,7 +35,7 @@ describe("native menu", () => {
     expect(i["tab.prev"]!.accelerator).toBe("CmdOrCtrl+Shift+[");
     expect(i["object.describe"]).toEqual({ label: "Describe  (d)", command: "object.describe" });
     // ⌘C is the native copy in fields, Monaco and terminals
-    expect(i["object.copyName"]).toEqual({ label: "Copy Name  (⌘C)", command: "object.copyName" });
+    expect(i["table.copy"]).toEqual({ label: "Copy  (⌘C)", command: "table.copy" });
     expect(i["filter.focus"]!.accelerator).toBeUndefined(); // ⌘F is Monaco's find in the detail view
   });
 

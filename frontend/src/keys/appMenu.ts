@@ -41,6 +41,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["View YAML", "detail.open"],
       ["Diff Last Change", "object.diff"],
       ["Describe", "object.describe"],
+      ["Copy", "table.copy"],
       ["Copy Name", "object.copyName"],
       ["Copy Cell…", "object.copyCell"],
       null,

@@ -82,7 +82,9 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("view YAML", "detail.open"),
       row("diff last change", "object.diff"),
-      row("copy name", "object.copyName"),
+      row("copy the text selected in a cell, else the name", "table.copy"),
+      row("clear the cell's text selection", "table.clearSelection"),
+      row("copy name (unbound by default: ⌘C without a selection, or the row menu)", "object.copyName"),
       row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("edit YAML…", "object.edit"),

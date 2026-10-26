@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -594,6 +594,79 @@ test("⌘C copies the selected row's name; in a text field it stays the native c
   await page.keyboard.press("ControlOrMeta+A");
   await page.keyboard.press("ControlOrMeta+C");
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("xyz");
+});
+
+test.describe("text selection in a cell", () => {
+  // e2e-wide (stable, no steps): NAMESPACE 120px, NAME grows, STATUS 120px, AGE 70px; header 24px, rows 22px, padding 8px
+  const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
+  const sel = async (page: Page) => (await focused(page)).textSel;
+  /** Viewport point over char i of a row's cell (left-aligned text). */
+  async function at(page: Page, row: number, x0: number, text: string, i: number) {
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const w = await page.evaluate(([t, n]) => {
+      const ctx = document.createElement("canvas").getContext("2d")!;
+      ctx.font = `12px ${getComputedStyle(document.body).fontFamily}`;
+      return [ctx.measureText(t.slice(0, n)).width, ctx.measureText(t.slice(0, n + 1)).width];
+    }, [text, i] as const);
+    return { x: box.x + x0 + 8 + (w[0]! + w[1]!) / 2, y: box.y + 24 + row * 22 + 11 };
+  }
+
+  test("double-click selects a word, triple-click the cell, a drag a range; ⌘C copies it; esc clears", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openTape(page, "e2e-wide", 2);
+    const row = (await focused(page)).rows[0]!;
+    const ns = row.cells[0]!, name = row.cells[1]!;
+    // double-click on a namespace selects it (one word) and opens nothing
+    const p = await at(page, 0, 0, ns, 1);
+    await page.mouse.dblclick(p.x, p.y);
+    await expect.poll(() => sel(page)).toMatchObject({ key: row.key, column: "NAMESPACE", start: 0, end: ns.length });
+    expect((await inspect(page)).overlays).toEqual([]);
+    expect((await focused(page)).selected).toBe(0);
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => clipboard(page)).toBe(ns);
+    await expect(page.getByRole("status", { name: "pane status" })).toContainText(`copied ${ns}`);
+
+    // a drag over the first three chars of the name
+    const a = await at(page, 0, 120, name, 0), b = await at(page, 0, 120, name, 2);
+    await page.mouse.move(a.x - 3, a.y);
+    await page.mouse.down();
+    await page.mouse.move(b.x + 3, b.y, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(() => sel(page)).toMatchObject({ column: "NAME", start: 0, end: 3 });
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => clipboard(page)).toBe(name.slice(0, 3));
+
+    // triple-click: the whole cell
+    await page.mouse.click(b.x, b.y, { clickCount: 3 });
+    await expect.poll(() => sel(page)).toMatchObject({ column: "NAME", start: 0, end: name.length });
+
+    // esc clears it: ⌘C is the name again
+    await page.keyboard.press("Escape");
+    await expect.poll(() => sel(page)).toBeUndefined();
+    await page.evaluate(() => navigator.clipboard.writeText(""));
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => clipboard(page)).toBe(name);
+    // ⏎ still opens the YAML
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await inspect(page)).overlays).toEqual(["detail"]);
+    await page.keyboard.press("Escape");
+  });
+
+  test("an age cell is selected whole and copies its timestamp; another row clears the selection", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openTape(page, "e2e-wide", 2);
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const { rows, columns } = await focused(page);
+    const age = rows[0]!.cells[columns.indexOf("AGE")]!;
+    expect(age).toMatch(/^\d{4}-\d\d-\d\dT/); // the cell holds the timestamp, the table shows "5m"
+    await page.mouse.dblclick(box.x + box.width - 70 + 12, box.y + 24 + 11);
+    await expect.poll(() => sel(page)).toMatchObject({ column: "AGE", age: true });
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => clipboard(page)).toBe(age);
+    // j: another row, the selection goes
+    await page.keyboard.press("j");
+    await expect.poll(() => sel(page)).toBeUndefined();
+  });
 });
 
 test("⌘O: picking a context that sets a namespace in the kubeconfig prefills it", async ({ page }) => {
@@ -2511,7 +2584,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "edit YAML… e"
         - menuitem "describe d"
         - menuitem "diff last change · no change seen yet" [disabled]
-        - menuitem "copy name ⌘C"
+        - menuitem "copy name"
         - menuitem "copy cell… ⌘⇧C"
         - menuitem "jump to… ⌘J"
         - separator

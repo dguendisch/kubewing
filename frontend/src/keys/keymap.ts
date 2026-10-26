@@ -53,6 +53,8 @@ export type CommandId =
   | "object.delete"
   | "object.diff"
   | "object.copyName"
+  | "table.copy"
+  | "table.clearSelection"
   | "object.copyCell"
   | "object.menu"
   | "object.jump"
@@ -91,7 +93,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns",
@@ -176,8 +178,10 @@ export const defaultBindings: Binding[] = [
   { key: "Delete", command: "object.delete", when: ["table"] },
   // context menu of the selected row (also right-click): every row action, generated from actions/registry.ts
   { key: "Meta+Enter", command: "object.menu", when: ["table"] },
-  // table only: in fields, Monaco and terminals ⌘C stays the native copy
-  { key: "Meta+C", command: "object.copyName", when: ["table"] },
+  // table only: in fields, Monaco and terminals ⌘C stays the native copy. The text selected
+  // in a cell (double-click a word, triple-click the cell, drag), else the row's name
+  { key: "Meta+C", command: "table.copy", when: ["table"] },
+  { key: "Escape", command: "table.clearSelection", when: ["table"] },
   // any other cell: a picker of the row's columns (right-click a cell: that one is highlighted)
   { key: "Meta+Shift+C", command: "object.copyCell", when: ["table"] },
   { key: "Escape", command: "detail.close", when: ["menu"] },

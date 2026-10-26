@@ -11,6 +11,7 @@ import { containerChoices, initialChoice, moveChoice, needsPicker } from "./comp
 import { moveShown } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
 import { rowAt } from "./grid/rowcache";
+import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -112,6 +113,11 @@ export function dispatch(cmd: CommandId) {
     }
     case "object.copyName":
       return void copyName(pane);
+    case "table.copy":
+      return void copySelection(pane);
+    case "table.clearSelection":
+      if (pane.serverId) setTextSel(pane.serverId, undefined);
+      return;
     case "object.copyCell":
       return openCells();
     case "object.menu": {
@@ -261,7 +267,27 @@ function toggleHealthy() {
   void applySpec(pane.id, { ...pane.spec, hideHealthy: !pane.spec.hideHealthy });
 }
 
-/** ⌘C in the table: the selected object's name (as kubectl takes it). */
+/** ⌘C in the table: the text selected in a cell of the row (an age cell: its timestamp), else the name. */
+async function copySelection(pane: S.PaneState) {
+  if (!pane.serverId) return;
+  const d = paneData.get(pane.serverId);
+  const sel = useTextSel.getState()[pane.serverId];
+  if (!sel) return copyName(pane);
+  const text = selectedText(sel, d.rows.get(sel.key), d.columns);
+  // the cell changed under the selection (a live update): copying the name instead would surprise
+  if (text === undefined) {
+    setTextSel(pane.serverId, undefined);
+    return flash(pane.id, "nothing copied: the selected cell changed", true);
+  }
+  try {
+    await bridge().copyText(text);
+    flash(pane.id, `copied ${text.length > 60 ? `${text.slice(0, 60)}…` : text}`);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+}
+
+/** The selected object's name (as kubectl takes it): "copy name" in the ⌘⏎ menu, ⌘C without a text selection. */
 async function copyName(pane: S.PaneState) {
   const key = selectedKey(pane);
   if (!key || !pane.serverId) return;

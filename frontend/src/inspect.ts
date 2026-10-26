@@ -1,4 +1,5 @@
 import { rowAt } from "./grid/rowcache";
+import { useTextSel } from "./grid/textsel";
 import { shownDescribe } from "./components/Detail";
 import { openTerminals } from "./term/Terminal";
 import { useConfig } from "./store/config";
@@ -50,6 +51,8 @@ export function inspect() {
             status: d?.status,
             columns: d?.columns.map((c) => c.name) ?? [],
             rows: d ? d.order.map((_, i) => rowAt(d, d.offset + i)).filter(Boolean) : [],
+            // the text selected in a cell (double-click, triple-click, drag)
+            textSel: p.serverId ? useTextSel.getState()[p.serverId] : undefined,
           },
         ];
       }),

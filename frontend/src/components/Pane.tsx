@@ -210,7 +210,6 @@ function TablePane({
             sort={S.sortOf(pane.spec.sort)}
             onSort={(column) => void applySpec(id, { ...pane.spec, sort: S.nextSort(pane.spec.sort, column) })}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}
-            onActivate={() => setUI((s) => S.openOverlay(S.focusPane(s, id), { kind: "detail", pane: id, key: keyAt(pane) }))}
             onContextMenu={(row, x, y, column) => {
               setUI((s) => S.updatePane(S.focusPane(s, id), id, (p) => ({ ...p, selected: row })));
               const key = keyAt({ ...pane, selected: row });
