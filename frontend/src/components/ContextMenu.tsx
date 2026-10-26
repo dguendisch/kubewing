@@ -114,8 +114,8 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
             onMouseMove={(e) => onPointer(e, i, it.disabled)}
             onClick={() => {
               if (it.disabled) return;
-              // the jump menu replaces this one at its anchor (it closes it itself)
-              if (it.command !== "object.jump") setUI(S.closeOverlay);
+              // the jump menu and the cell picker replace this one at its anchor (they close it themselves)
+              if (!S.replacesMenu(it.command)) setUI(S.closeOverlay);
               dispatch(it.command);
             }}
           >

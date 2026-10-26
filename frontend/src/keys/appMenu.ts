@@ -42,6 +42,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Diff Last Change", "object.diff"],
       ["Describe", "object.describe"],
       ["Copy Name", "object.copyName"],
+      ["Copy Cell…", "object.copyCell"],
       null,
       ["Exec Shell", "object.exec"],
       ["Debug Container…", "object.debug"],

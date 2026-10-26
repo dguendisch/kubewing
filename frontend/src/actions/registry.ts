@@ -32,6 +32,7 @@ export const rowActions: RowAction[] = [
   { command: "object.describe", label: "describe", group: "view", available: live },
   { command: "object.diff", label: "diff last change", group: "view", available: (r) => (r.hasPrev ? true : "no change seen yet") },
   { command: "object.copyName", label: "copy name", group: "view", available: () => true },
+  { command: "object.copyCell", label: "copy cell…", group: "view", available: () => true },
   // read-only and metadata only: also on tombstones (the last state still has its owners)
   { command: "object.jump", label: "jump to…", group: "view", available: () => true },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },

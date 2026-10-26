@@ -1,6 +1,7 @@
 import { ConfigErrors } from "./components/ConfigErrors";
 import { Confirm, ConfirmCloseTab } from "./components/Confirm";
 import { ContainerPicker } from "./components/ContainerPicker";
+import { CellPicker } from "./components/CellPicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { JumpMenu } from "./components/JumpMenu";
 import { HistoryList } from "./components/HistoryNav";
@@ -97,6 +98,7 @@ export function App() {
       <HistoryList />
       <ErrorDetail />
       <ContainerPicker />
+      <CellPicker />
       <DebugDialog />
       <OpsPodDialog />
       <ColumnsDialog />

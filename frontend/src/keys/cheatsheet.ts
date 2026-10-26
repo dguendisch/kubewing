@@ -83,6 +83,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("view YAML", "detail.open"),
       row("diff last change", "object.diff"),
       row("copy name", "object.copyName"),
+      row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("edit YAML…", "object.edit"),
       row("exec shell", "object.exec"),

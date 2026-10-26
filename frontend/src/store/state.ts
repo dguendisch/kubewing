@@ -1,6 +1,7 @@
-import type { FocusContext } from "../keys/keymap";
+import type { CommandId, FocusContext } from "../keys/keymap";
 import type { ColumnChoices, ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
+import type { CellChoice } from "../grid/cells";
 import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
@@ -150,8 +151,9 @@ export interface Overlay {
    *  jump: where the pane can go from a row (namespace, owners, owned);
    *  history: a pane's back or forward history (holding its ← / → button);
    *  error: the full text of an error in the status line (a click on it);
-   *  columns: the pane's columns (its resource type's), -o wide and custom ones. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns";
+   *  columns: the pane's columns (its resource type's), -o wide and custom ones;
+   *  cells: which of the selected row's cells to copy. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -160,12 +162,16 @@ export interface Overlay {
   text?: string;
   /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
   describeGen?: number;
-  /** forwards, menu, container, jump, history: highlighted entry. */
+  /** forwards, menu, container, jump, history, cells: highlighted entry. */
   index?: number;
-  /** menu, jump: pointer position when opened by right-click; else it's anchored to the row (rowIndex). history: below its button. */
+  /** menu, jump, cells: pointer position when opened by right-click; else it's anchored to the row (rowIndex). history: below its button. */
   at?: { x: number; y: number };
-  /** menu, jump: the row it belongs to, for anchoring. */
+  /** menu, jump, cells: the row it belongs to, for anchoring. */
   rowIndex?: number;
+  /** menu: the column right-clicked (copy cell… highlights it). */
+  column?: string;
+  /** cells: the row's cells to pick from. */
+  cells?: CellChoice[];
   pane: string;
   key?: string;
   /** closeTab: the tab to close (not the index: tabs move while the dialog is open). */
@@ -595,7 +601,12 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // no bindings of its own: ⌘C is the native copy of the selection there
   error: "dialog",
   columns: "dialog",
+  // a menu too: j/k, ⏎, Esc
+  cells: "menu",
 };
+
+/** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */
+export const replacesMenu = (cmd: CommandId) => cmd === "object.jump" || cmd === "object.copyCell";
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
   return { ...s, overlay: { ...o, restore: s.focus }, focus: overlayFocus[o.kind] };

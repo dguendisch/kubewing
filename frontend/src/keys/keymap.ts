@@ -53,6 +53,7 @@ export type CommandId =
   | "object.delete"
   | "object.diff"
   | "object.copyName"
+  | "object.copyCell"
   | "object.menu"
   | "object.jump"
   | "object.events"
@@ -90,7 +91,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns",
@@ -177,6 +178,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Enter", command: "object.menu", when: ["table"] },
   // table only: in fields, Monaco and terminals ⌘C stays the native copy
   { key: "Meta+C", command: "object.copyName", when: ["table"] },
+  // any other cell: a picker of the row's columns (right-click a cell: that one is highlighted)
+  { key: "Meta+Shift+C", command: "object.copyCell", when: ["table"] },
   { key: "Escape", command: "detail.close", when: ["menu"] },
   { key: "J", command: "row.down", when: ["menu"] },
   { key: "ArrowDown", command: "row.down", when: ["menu"] },

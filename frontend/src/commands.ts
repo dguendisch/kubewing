@@ -9,6 +9,8 @@ import { cursor, useDiffNav } from "./editor/Viewer";
 import * as S from "./store/state";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
 import { moveShown } from "./components/columnsForm";
+import { cellChoices, initialCell, wholeRow } from "./grid/cells";
+import { rowAt } from "./grid/rowcache";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -80,6 +82,7 @@ export function dispatch(cmd: CommandId) {
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, 1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, 1));
+      if (s.overlay?.kind === "cells") return setUI((x) => moveCell(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
       if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, -1));
@@ -87,6 +90,7 @@ export function dispatch(cmd: CommandId) {
       if (s.overlay?.kind === "forwards") return setUI((x) => moveForward(x, -1));
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, -1));
+      if (s.overlay?.kind === "cells") return setUI((x) => moveCell(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
@@ -108,6 +112,8 @@ export function dispatch(cmd: CommandId) {
     }
     case "object.copyName":
       return void copyName(pane);
+    case "object.copyCell":
+      return openCells();
     case "object.menu": {
       const key = selectedKey(pane);
       if (!key) return;
@@ -128,11 +134,12 @@ export function dispatch(cmd: CommandId) {
       if (o?.kind === "jump") return void runJump(o.index ?? 0, false);
       if (o?.kind === "history") return void pickHistory(o.index ?? 0);
       if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
+      if (o?.kind === "cells") return void copyCell(o.index ?? 0);
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
       if (!item || item.disabled) return;
-      // the jump menu replaces this one at its anchor (it closes it itself)
-      if (item.command !== "object.jump") setUI(S.closeOverlay);
+      // the jump menu and the cell picker replace this one at its anchor (they close it themselves)
+      if (!S.replacesMenu(item.command)) setUI(S.closeOverlay);
       return dispatch(item.command); // runs on the selected row, exactly like its shortcut
     }
     case "detail.showYaml":
@@ -264,6 +271,43 @@ async function copyName(pane: S.PaneState) {
     flash(pane.id, `copied ${name}`);
   } catch (e) {
     flash(pane.id, errorText(e), true);
+  }
+}
+
+/** The column copied last: ⌘⇧C highlights it again, so ⌘⇧C ⏎ copies the same cell of the next row. */
+let lastCell: string | undefined;
+
+/**
+ * ⌘⇧C, or "copy cell…" in the ⌘⏎ menu (opened by right-clicking a cell,
+ * that cell is highlighted): which of the selected row's cells to copy. The
+ * cells are the ones the table holds, so no bridge call; opened from the
+ * menu it takes the menu's place, at the same anchor.
+ */
+function openCells() {
+  const s = useUI.getState();
+  const pane = S.focusedPane(s);
+  const key = selectedKey(pane);
+  if (!key || !pane.serverId) return;
+  const d = paneData.get(pane.serverId);
+  const row = rowAt(d, pane.selected);
+  if (!row) return;
+  const cells = cellChoices(row, d.columns, Date.now());
+  const fromMenu = s.overlay?.kind === "menu" ? s.overlay : undefined;
+  const index = initialCell(cells, fromMenu?.column ?? lastCell);
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "cells", pane: pane.id, key, cells, index, rowIndex: pane.selected, at: fromMenu?.at }));
+}
+
+export async function copyCell(index: number) {
+  const o = useUI.getState().overlay;
+  const c = o?.cells?.[index];
+  if (o?.kind !== "cells" || !c || c.disabled) return;
+  setUI(S.closeOverlay);
+  lastCell = c.label;
+  try {
+    await bridge().copyText(c.text);
+    flash(o.pane, c.label === wholeRow ? "copied the whole row" : `copied ${c.label} ${c.text}`);
+  } catch (e) {
+    flash(o.pane, errorText(e), true);
   }
 }
 
@@ -682,6 +726,13 @@ function moveContainer(s: S.UIState, delta: number): S.UIState {
   const o = s.overlay;
   if (!o?.containers) return s;
   const index = moveChoice(o.containers, o.index ?? 0, delta);
+  return index === o.index ? s : { ...s, overlay: { ...o, index } };
+}
+
+function moveCell(s: S.UIState, delta: number): S.UIState {
+  const o = s.overlay;
+  if (!o?.cells) return s;
+  const index = moveChoice(o.cells, o.index ?? 0, delta);
   return index === o.index ? s : { ...s, overlay: { ...o, index } };
 }
 

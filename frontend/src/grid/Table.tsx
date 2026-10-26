@@ -67,8 +67,8 @@ interface Props {
   type?: string;
   onSelect: (row: number) => void;
   onActivate: () => void;
-  /** Right-click on a row: select it and open its context menu at (x, y) in the viewport. */
-  onContextMenu?: (row: number, x: number, y: number) => void;
+  /** Right-click on a cell: select its row and open its context menu at (x, y) in the viewport; column = the cell's. */
+  onContextMenu?: (row: number, x: number, y: number, column: string | undefined) => void;
   /** Right-click on the header. */
   onHeaderMenu?: () => void;
   /** A header dragged to another column's place (shown column indices). */
@@ -325,9 +325,9 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onAct
         e.preventDefault(); // no webview context menu
         onHeaderMenu?.();
       }}
-      onCellContextMenu={([, row], e) => {
+      onCellContextMenu={([col, row], e) => {
         e.preventDefault(); // no webview context menu
-        onContextMenu?.(row, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);
+        onContextMenu?.(row, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY, d.columns[col]?.name);
       }}
       keybindings={{ search: false, selectAll: false, copy: true, downFill: false, rightFill: false, clear: false }}
       getCellsForSelection

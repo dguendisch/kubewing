@@ -39,8 +39,8 @@ export function initialChoice(choices: ContainerChoice[]): number {
   return d >= 0 ? d : Math.max(0, choices.findIndex((c) => !c.disabled));
 }
 
-/** Moves the highlight by delta, skipping entries that can't be entered; stays put at the ends. */
-export function moveChoice(choices: ContainerChoice[], index: number, delta: number): number {
+/** Moves the highlight by delta, skipping disabled entries (the copy-cell picker's too); stays put at the ends. */
+export function moveChoice(choices: { disabled?: string }[], index: number, delta: number): number {
   for (let i = index + delta; i >= 0 && i < choices.length; i += delta) if (!choices[i]!.disabled) return i;
   return index;
 }
