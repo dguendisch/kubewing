@@ -1418,6 +1418,12 @@ test("diff versions: record history (⇧R), then [ / ] step through it, the chan
   await page.keyboard.press("d");
   // the diff follows the newest version until the image change has come in
   await expect(versions).toContainText("v3", tapeSteps);
+  // the header stays one line even when narrow, versions and change navigation in it (the key hints give way)
+  await page.setViewportSize({ width: 900, height: 700 });
+  const header = dialog.locator("> div").first();
+  const lineHeight = async () => (await header.evaluate((el) => el.getBoundingClientRect().height)) / (await dialog.getByText("diff (normalized)").evaluate((el) => el.getBoundingClientRect().height));
+  await expect.poll(lineHeight).toBeLessThan(1.8);
+  await page.setViewportSize({ width: 1400, height: 800 }); // the config's
   await expect(versions).toContainText("v4 ");
   await expect(versions).toContainText("newest");
   await expect(changed).toHaveText('spec.template.spec.containers[name=app].image: "web:1" → "web:2"');
@@ -1523,11 +1529,17 @@ test.describe("time-travel", () => {
     await step("ArrowRight");
     await expect.poll(() => readyCell(page)).toBe("2/2");
     await expect.poll(async () => (await focused(page)).rows[0]?.changed?.length ?? 0).toBeGreaterThan(0);
-    // the table keys still work in the past: the YAML is the version then
+    // the table keys still work in the past: the YAML is the version then (no timeline in there)
     await page.keyboard.press("Enter");
     const dialog = page.getByRole("dialog", { name: "object detail" });
     await expect(dialog.locator(".view-lines")).toContainText("replicas: 2");
+    await expect(dialog.getByRole("status", { name: "timeline" })).toHaveCount(0);
     await page.keyboard.press("Escape");
+    // → past the newest change stays at it (only esc leaves); the bar shows the history's size
+    for (let i = 0; i < 4; i++) await page.keyboard.press("ArrowRight");
+    await expect.poll(() => readyCell(page)).toBe("3/3");
+    await expect(timeline(page)).toBeVisible();
+    await expect(timeline(page).getByLabel("history size")).toHaveText(/^\d+(\.\d)? (B|KiB) \/ 512 MiB$/);
     // esc: back to live, the timeline goes
     await page.keyboard.press("Escape");
     await expect.poll(async () => (await focused(page)).status?.at ?? "").toBe("");
@@ -1574,6 +1586,17 @@ test.describe("time-travel", () => {
     // esc: back to the YAML
     await page.keyboard.press("Escape");
     await expect(field).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    // the header says what ⇧H does; the editor's right-click menu has it too (on the line clicked)
+    await expect(dialog).toContainText("⇧H: field at cursor over time");
+    await dialog.locator(".view-line", { hasText: "replicas: 3" }).click({ button: "right" });
+    await expect(page.locator(".monaco-menu .action-item", { hasText: "history of this field" })).toBeVisible();
+    // the entries: Copy, then ours; the keyboard runs it as a user would
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(values).toHaveCount(3);
+    await page.keyboard.press("Escape");
     await expect(dialog).toBeVisible();
     await page.keyboard.press("Shift+H");
     await expect(values).toHaveCount(3); // loaded: the keys go to the list now

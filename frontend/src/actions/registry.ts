@@ -14,7 +14,8 @@ import type { RowInfo, SafetyRule } from "../transport/types";
  */
 export interface RowAction {
   command: CommandId;
-  label: string;
+  /** Or per row (the diff says how many changes it steps through). */
+  label: string | ((row: RowInfo) => string);
   group: "view" | "act" | "danger";
   /** true, or why the action is unavailable for this row. */
   available: (row: RowInfo, rule: SafetyRule | undefined) => true | string;
@@ -30,7 +31,13 @@ export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true },
   { command: "object.edit", label: "edit YAML…", group: "view", available: live, mutates: true },
   { command: "object.describe", label: "describe", group: "view", available: live },
-  { command: "object.diff", label: "diff last change", group: "view", available: (r) => (r.hasPrev ? true : "no change seen yet") },
+  {
+    command: "object.diff",
+    // with recorded history the diff steps through every kept change ([ / ])
+    label: (r) => (r.changes && r.changes > 1 ? `diff changes (${r.changes})` : "diff last change"),
+    group: "view",
+    available: (r) => (r.hasPrev ? true : "no change seen yet"),
+  },
   { command: "object.copyName", label: "copy name", group: "view", available: () => true },
   { command: "object.copyCell", label: "copy cell…", group: "view", available: () => true },
   // read-only and metadata only: also on tombstones (the last state still has its owners)
@@ -61,6 +68,7 @@ export function menuFor(row: RowInfo, rule: SafetyRule | undefined, bindings: Bi
     let ok = a.available(row, rule);
     if (ok === true && a.mutates && rule?.readOnly) ok = "read-only context";
     const b = bindings.find((x) => x.command === a.command && (!x.when?.length || x.when.includes("table")));
-    return { command: a.command, label: a.label, group: a.group, shortcut: b && prettyKey(b.key), disabled: ok === true ? undefined : ok };
+    const label = typeof a.label === "function" ? a.label(row) : a.label;
+    return { command: a.command, label, group: a.group, shortcut: b && prettyKey(b.key), disabled: ok === true ? undefined : ok };
   });
 }

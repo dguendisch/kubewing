@@ -3,10 +3,10 @@
 // Store belongs to one shared watch; it is not safe for concurrent use (the
 // owner serializes calls).
 //
-// Limits are global, so the history reaches back equally far for every
-// object (time-travel shows the whole table at one moment): versions older
-// than the window go, and past the budget the oldest changes go first,
-// across all objects. Horizon is from when on the store is complete.
+// The limit is global, so the history reaches back equally far for every
+// object (time-travel shows the whole table at one moment): past the memory
+// budget the oldest changes go first, across all objects. Horizon is from
+// when on the store is complete.
 package history
 
 import (
@@ -19,25 +19,19 @@ import (
 	"github.com/dguendisch/kubewing/internal/fieldpath"
 )
 
-// Defaults for Limits.
-const (
-	DefaultWindow = time.Hour
-	DefaultBudget = 256 << 20
-)
+// DefaultBudget is a store's memory budget unless configured.
+const DefaultBudget = 512 << 20
 
 // Limits bound a store.
 type Limits struct {
-	// Window: versions older than this go (0 = DefaultWindow).
-	Window time.Duration
-	// Budget: estimated bytes of kept changes (0 = DefaultBudget); past it
-	// the oldest changes go first, across all objects.
+	// Budget: estimated bytes the store holds (0 = DefaultBudget): the
+	// newest copy of every object plus the kept changes. Past it the oldest
+	// changes go first, across all objects; the newest copies always stay,
+	// so a source bigger than the budget keeps no history at all.
 	Budget int
 }
 
 func (l Limits) withDefaults() Limits {
-	if l.Window <= 0 {
-		l.Window = DefaultWindow
-	}
 	if l.Budget <= 0 {
 		l.Budget = DefaultBudget
 	}
@@ -50,15 +44,17 @@ type Store struct {
 	objects map[string]*object
 	// started: the first Record (zero = none yet); horizon: the earliest
 	// moment the store knows every object at (≥ started; moves forward as
-	// old versions go); windowed: the last window trim (a walk over every
-	// object, at most once a second)
-	started, horizon, windowed time.Time
-	bytes                      int
+	// old versions go)
+	started, horizon time.Time
+	bytes            int
 }
 
 type object struct {
 	cur  *unstructured.Unstructured
 	hash string // cur's content hash ("" = unknown)
+	// curSize: cur's estimated size, counted in the store's bytes (the
+	// newest copies count against the budget too, but never go)
+	curSize int
 	// born: when the object was first recorded; deleted: when it went away
 	// (zero = live); see Prune
 	born, deleted time.Time
@@ -95,8 +91,17 @@ func (s *Store) RecordHashed(key string, obj *unstructured.Unstructured, hash st
 // RecordItem is RecordHashed with the server's table cells of this version
 // (for the past table; nil = none). Cells alone changing is a new version.
 func (s *Store) RecordItem(key string, obj *unstructured.Unstructured, hash string, cells []any, at time.Time) int {
+	return s.RecordSized(key, obj, hash, 0, cells, at)
+}
+
+// RecordSized is RecordItem with obj's estimated size (its JSON length,
+// see normalize.HashSize; 0 = estimate here), for the memory accounting.
+func (s *Store) RecordSized(key string, obj *unstructured.Unstructured, hash string, size int, cells []any, at time.Time) int {
+	if size <= 0 {
+		size = sizeOf(obj.Object)
+	}
 	if s.started.IsZero() {
-		s.started, s.horizon, s.windowed = at, at, at
+		s.started, s.horizon = at, at
 	}
 	o, ok := s.objects[key]
 	if !ok || !o.deleted.IsZero() {
@@ -104,8 +109,9 @@ func (s *Store) RecordItem(key string, obj *unstructured.Unstructured, hash stri
 		if ok {
 			s.drop(o)
 		}
-		s.objects[key] = &object{cur: obj, hash: hash, born: at, first: 1, at: []time.Time{at}, cells: [][]any{cells}, size: []int{0}}
-		s.trim(at)
+		s.objects[key] = &object{cur: obj, hash: hash, curSize: size, born: at, first: 1, at: []time.Time{at}, cells: [][]any{cells}, size: []int{0}}
+		s.bytes += size
+		s.trim()
 		return 1
 	}
 	sameCells := equalCells(o.cells[len(o.cells)-1], cells)
@@ -121,13 +127,14 @@ func (s *Store) RecordItem(key string, obj *unstructured.Unstructured, hash stri
 		return o.last()
 	}
 	n := sizeOf(d) + sizeOf(cells)
-	o.cur = obj
+	s.bytes += size - o.curSize
+	o.cur, o.curSize = obj, size
 	o.at = append(o.at, at)
 	o.cells = append(o.cells, cells)
 	o.deltas = append(o.deltas, d)
 	o.size = append(o.size, n)
 	s.bytes += n
-	s.trim(at)
+	s.trim()
 	return o.last()
 }
 
@@ -155,23 +162,10 @@ func sizeOf(v any) int {
 	return len(b) + 64
 }
 
-// trim applies the window (at most once a second: it walks every object)
-// and the budget (past it, down to 90% so it doesn't run on every event):
-// the oldest versions go first, across all objects, and the horizon moves
-// to the newest dropped one.
-func (s *Store) trim(now time.Time) {
-	if now.Sub(s.windowed) >= time.Second {
-		s.windowed = now
-		cut := now.Add(-s.limits.Window)
-		if s.horizon.Before(cut) {
-			for _, o := range s.objects {
-				for len(o.at) > 1 && !o.at[1].After(cut) {
-					s.dropOldest(o)
-				}
-			}
-			s.horizon = cut
-		}
-	}
+// trim applies the budget (past it, down to 90% so it doesn't run on every
+// event): the oldest versions go first, across all objects, and the
+// horizon moves to the newest dropped one.
+func (s *Store) trim() {
 	if s.bytes <= s.limits.Budget {
 		return
 	}
@@ -211,6 +205,7 @@ func (s *Store) dropOldest(o *object) {
 }
 
 func (s *Store) drop(o *object) {
+	s.bytes -= o.curSize
 	for _, n := range o.size {
 		s.bytes -= n
 	}
@@ -465,5 +460,16 @@ func touches(d []fieldpath.Change, p fieldpath.Path) bool {
 // Len returns the number of objects with history (for tests and status).
 func (s *Store) Len() int { return len(s.objects) }
 
-// Bytes returns the estimated size of the kept changes.
+// Bytes returns the estimated memory the store holds: every object's
+// newest copy plus the kept changes (JSON sizes; Go's maps take more).
 func (s *Store) Bytes() int { return s.bytes }
+
+// SetLimits changes the limits (zero fields = defaults) and applies them now
+// (a lower budget drops old versions at once).
+func (s *Store) SetLimits(l Limits) {
+	s.limits = l.withDefaults()
+	s.trim()
+}
+
+// Limits returns the store's limits.
+func (s *Store) Limits() Limits { return s.limits }

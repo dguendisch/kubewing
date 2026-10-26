@@ -57,6 +57,16 @@ export function ago(iso: string, now = Date.now()): string {
   return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ${s % 60}s ago` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ago`;
 }
 
+/** 3.4 MiB, 512 MiB, 820 KiB. Pure. */
+export function size(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KiB", "MiB", "GiB"];
+  let v = bytes / 1024;
+  let u = 0;
+  while (v >= 1024 && u < units.length - 1) [v, u] = [v / 1024, u + 1];
+  return `${v >= 10 ? Math.round(v) : v.toFixed(1)} ${units[u]}`;
+}
+
 /** 12:03:14 in local time. Pure. */
 export function clock(iso: string): string {
   const d = new Date(iso);

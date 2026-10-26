@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { applySpec, moveColumn, openColumns } from "../commands";
-import { RecordButton, TravelBadge, TravelBar } from "./Travel";
+import { RecordButton, TravelBadge, TravelBar, usePaneStatus } from "./Travel";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
@@ -405,17 +405,6 @@ function Syncing({ stalled }: { stalled: boolean }) {
 function PaneFooter({ pane }: { pane: S.PaneState }) {
   const st = usePaneStatus(pane.serverId);
   return st?.at ? <TravelBar pane={pane} at={st.at} behind={st.behind} /> : <StatusLine pane={pane} />;
-}
-
-/** The pane's status from its frames (re-renders when it changes). */
-function usePaneStatus(serverId: string | undefined) {
-  const [st, setSt] = useState(serverId ? paneData.get(serverId).status : undefined);
-  useEffect(() => {
-    if (!serverId) return;
-    setSt(paneData.get(serverId).status);
-    return paneData.subscribe(serverId, (x) => setSt((prev) => (prev === x.status ? prev : x.status)));
-  }, [serverId]);
-  return st;
 }
 
 function StatusLine({ pane }: { pane: S.PaneState }) {

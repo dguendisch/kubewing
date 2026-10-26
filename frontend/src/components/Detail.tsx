@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { dispatch } from "../commands";
-import { useDiffNav, useDiffRange, Viewer } from "../editor/Viewer";
+import { useDiffNav, useDiffRange, Viewer, type ContextAction } from "../editor/Viewer";
+import { prettyKey } from "../keys/keymap";
 import { bridge, useUI } from "../store/store";
+import { useKey, usePaneStatus } from "./Travel";
 import type { DescribeResult, Detail as DetailData, DiffInfo } from "../transport/types";
 
 /**
@@ -93,13 +95,36 @@ export function Detail() {
     return () => void (live = false);
   }, [describe, overlay?.key, serverId, gen]);
 
+  const st = usePaneStatus(serverId);
+  const fieldKey = useKey("travel.field");
   if (!overlay || overlay.kind !== "detail") return null;
   const diff = !!overlay.diff;
+  // the field at the cursor: its values over time (needs recorded history)
+  const field = !describe && st?.recording;
+  const hints = [
+    diff ? "j/k: changes" : "",
+    diff && !describe && info ? "[/]: versions" : "",
+    field && fieldKey ? `${prettyKey(fieldKey)}: field at cursor over time` : "",
+    ...(describe ? ["d: diff", "r: re-run"] : ["d: diff", "⇧D: describe"]),
+    "y: yaml",
+    "e: edit",
+    "w: wrap",
+    "⌘F find",
+    "esc: close",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const fieldActions: ContextAction[] | undefined = field
+    ? [{ id: "kubewing.fieldHistory", label: "history of this field", key: fieldKey && prettyKey(fieldKey), run: () => dispatch("travel.field") }]
+    : undefined;
   return (
     <div role="dialog" aria-label="object detail" className="absolute inset-6 z-20 flex flex-col border border-accent bg-bg-elev shadow-2xl">
-      <div className="flex gap-3 border-b border-border px-3 py-1 text-fg-muted">
-        <span className="text-fg">{data && "name" in data ? data.name : "…"}</span>
-        <span>
+      {/* one line: the parts don't wrap inside; the key hints give way first (truncated, full text on hover) */}
+      <div className="flex items-center gap-3 whitespace-nowrap border-b border-border px-3 py-1 text-fg-muted">
+        <span className="min-w-0 max-w-[40%] shrink truncate text-fg" title={data && "name" in data ? data.name : undefined}>
+          {data && "name" in data ? data.name : "…"}
+        </span>
+        <span className="shrink-0">
           {describe
             ? diff
               ? `describe diff (look ${described && "prevAt" in described && described.prevAt ? `${ago(described.prevAt)} ago` : "–"} → now, times ignored)`
@@ -109,12 +134,14 @@ export function Detail() {
               : "yaml"}
         </span>
         {diff && !describe && info ? <VersionNav info={info} /> : null}
-        {diff && !describe && data && "yaml" in data && !info ? <span title="record history (status line, or ⇧R in the table) keeps the last 20 versions to step through with [ / ]">previous → current</span> : null}
+        {diff && !describe && data && "yaml" in data && !info ? (
+          <span className="shrink-0" title="record history (status line, or ⇧R in the table) keeps this source's versions, within its memory budget, to step through with [ / ]">
+            previous → current
+          </span>
+        ) : null}
         {diff ? <DiffNav /> : null}
-        <span className="ml-auto">
-          {diff ? "j/k: changes · " : ""}
-          {diff && !describe && info ? "[/]: versions · " : ""}
-          {describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · e: edit · w: wrap · ⌘F find · esc: close
+        <span className="ml-auto min-w-0 truncate" title={hints}>
+          {hints}
         </span>
       </div>
       {diff && !describe && info?.changes?.length ? <Changes changes={info.changes} /> : null}
@@ -143,9 +170,9 @@ export function Detail() {
           </div>
         ) : diff ? (
           // one diff editor across versions: Monaco swaps the models, the scroll position stays
-          <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} />
+          <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} contextActions={fieldActions} />
         ) : (
-          <Viewer key="yaml" label="yaml" value={data.yaml} />
+          <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={fieldActions} />
         )}
       </div>
     </div>
@@ -166,7 +193,7 @@ export function VersionNav({ info }: { info: DiffInfo }) {
   };
   const when = (iso?: string) => (iso ? `${ago(iso)} ago` : "");
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex shrink-0 items-center gap-1">
       <button type="button" aria-label="older version" title="older version ([)" className={btn} disabled={info.to <= info.first} onMouseDown={go("diff.older")}>
         ‹
       </button>
@@ -206,7 +233,7 @@ export function DiffNav() {
     dispatch(cmd);
   };
   return (
-    <span className="flex items-center gap-1">
+    <span className="flex shrink-0 items-center gap-1">
       <button type="button" aria-label="previous change" title="previous change (k)" className={btn} disabled={!total} onMouseDown={go("diff.prev")}>
         ↑
       </button>

@@ -2,12 +2,23 @@ import { useEffect, useRef, useState } from "react";
 import { dispatch, toggleRecording, travel } from "../commands";
 import { useConfig } from "../store/config";
 import { prettyKey, type CommandId } from "../keys/keymap";
-import { bridge, setUI, useUI } from "../store/store";
+import { bridge, paneData, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
-import { ago, at as momentAt, clock, position, setTimeline, useTimelines } from "../store/travel";
+import { ago, at as momentAt, clock, position, setTimeline, size, useTimelines } from "../store/travel";
+
+/** The pane's status from its frames (re-renders when it changes). */
+export function usePaneStatus(serverId: string | undefined) {
+  const [st, setSt] = useState(serverId ? paneData.get(serverId).status : undefined);
+  useEffect(() => {
+    if (!serverId) return;
+    setSt(paneData.get(serverId).status);
+    return paneData.subscribe(serverId, (x) => setSt((prev) => (prev === x.status ? prev : x.status)));
+  }, [serverId]);
+  return st;
+}
 
 /** The live key of a command, for hints (keybindings.yaml may rebind it). */
-function useKey(cmd: CommandId) {
+export function useKey(cmd: CommandId) {
   return useConfig((c) => c.bindings.find((b) => b.command === cmd)?.key);
 }
 
@@ -99,6 +110,15 @@ export function TravelBar({ pane, at, behind }: { pane: S.PaneState; at: string;
       <span className="shrink-0">now</span>
       {behind ? <span aria-label="live changes since">+{behind} since</span> : null}
       <span className="shrink-0">{tl ? `${tl.changes.length} changes` : ""}</span>
+      {tl ? (
+        <span
+          aria-label="history size"
+          title={`recorded history of this source (all its objects, every split): ~${size(tl.bytes)} of ${size(tl.budget)}; past it the oldest changes go · history.budget in config.yaml (⌘⇧, reloads)`}
+          className={`shrink-0 ${tl.bytes > tl.budget * 0.8 ? "text-changed" : ""}`}
+        >
+          {size(tl.bytes)} / {size(tl.budget)}
+        </span>
+      ) : null}
       {pane.flash ? (
         // messages show here while the timeline replaces the status line
         <span aria-label="message" className={`truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>

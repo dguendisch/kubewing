@@ -40,6 +40,9 @@ export interface Timeline {
   at?: string;
   /** Moments a row of the pane changed, ascending. */
   changes: string[];
+  /** The source's recorded history: estimated bytes (all its objects) and its budget. */
+  bytes: number;
+  budget: number;
 }
 
 /** Mirrors view.FieldHistory: one field's values over a row's history. */
@@ -342,6 +345,8 @@ export interface RowInfo {
   namespace?: string;
   deleted?: boolean;
   hasPrev?: boolean;
+  /** With recorded history: how many changes of the row are kept (the diff steps through them). */
+  changes?: number;
   pod?: boolean;
   containers?: string[];
   /** Every container exec can enter, for the picker. */

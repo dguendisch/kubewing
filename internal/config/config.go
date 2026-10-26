@@ -17,7 +17,6 @@ import (
 	"regexp"
 	"slices"
 	"sort"
-	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
@@ -51,30 +50,25 @@ type Config struct {
 }
 
 // HistoryLimits bound recorded history (per source, while recording): how
-// far back it reaches and how much memory it may take. Applies to
-// recordings started afterwards. (Not history.yaml: see History.)
+// much memory it may take; how far back it reaches follows from that. A
+// reload applies it to running recordings too. (Not history.yaml: see History.)
 type HistoryLimits struct {
-	// Window is a Go duration ("1h", "30m"); "" = 1h.
-	Window string `json:"window,omitempty"`
-	// Budget is a quantity of bytes ("256Mi", "1Gi"); "" = 256Mi.
+	// Budget is a quantity of bytes ("512Mi", "1Gi"); "" = 512Mi. It caps
+	// the whole history of a source: its objects' newest copies and the
+	// changes; the oldest changes go first.
 	Budget string `json:"budget,omitempty"`
 }
 
-// Parse returns the limits (zero = the default); invalid values are reported by Load.
-func (h HistoryLimits) Parse() (window time.Duration, budget int64, err error) {
-	if h.Window != "" {
-		if window, err = time.ParseDuration(h.Window); err != nil || window < time.Minute || window > 24*time.Hour {
-			return 0, 0, fmt.Errorf("history.window: %q is not a duration between 1m and 24h", h.Window)
-		}
+// Parse returns the budget in bytes (0 = the default); invalid values are reported by Load.
+func (h HistoryLimits) Parse() (budget int64, err error) {
+	if h.Budget == "" {
+		return 0, nil
 	}
-	if h.Budget != "" {
-		q, qerr := resource.ParseQuantity(h.Budget)
-		if qerr != nil || q.Value() < 1<<20 || q.Value() > 64<<30 {
-			return 0, 0, fmt.Errorf("history.budget: %q is not a size between 1Mi and 64Gi", h.Budget)
-		}
-		budget = q.Value()
+	q, err := resource.ParseQuantity(h.Budget)
+	if err != nil || q.Value() < 1<<20 || q.Value() > 64<<30 {
+		return 0, fmt.Errorf("history.budget: %q is not a size between 1Mi and 64Gi", h.Budget)
 	}
-	return window, budget, nil
+	return q.Value(), nil
 }
 
 // OpsPod configures ops pods on nodes (ops-toolbelt's ops-pod).
@@ -229,7 +223,7 @@ func Load(dir string) Effective {
 		default:
 			e.Config.Terminal.Scrollback = n
 		}
-		if _, _, err := c.History.Parse(); err != nil {
+		if _, err := c.History.Parse(); err != nil {
 			errf("config.yaml", "%v", err)
 		} else {
 			e.Config.History = c.History

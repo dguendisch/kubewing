@@ -116,11 +116,18 @@ func remove(node any, segs []string) {
 
 // Hash returns a stable content hash of a (normalized) object.
 func Hash(obj *unstructured.Unstructured) string {
+	h, _ := HashSize(obj)
+	return h
+}
+
+// HashSize is Hash plus the size of the object's JSON encoding (a cheap
+// estimate of the memory it holds; it's encoded for the hash anyway).
+func HashSize(obj *unstructured.Unstructured) (string, int) {
 	// encoding/json sorts map keys, so the encoding is canonical.
 	b, err := json.Marshal(obj.Object)
 	if err != nil {
-		return ""
+		return "", 0
 	}
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:12])
+	return hex.EncodeToString(sum[:12]), len(b)
 }

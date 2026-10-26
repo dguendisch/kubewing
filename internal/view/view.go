@@ -52,6 +52,7 @@ type Versions interface {
 	Range(key string) (first, last int)
 	Pair(key string, to int) (history.Pair, bool)
 	Recording() bool
+	Usage() (bytes int, limits history.Limits, ok bool)
 	// for time-travel
 	At(t time.Time) map[string]history.Version
 	Span() (history.Span, bool)
@@ -1070,6 +1071,10 @@ type Timeline struct {
 	// grep applied to the live rows; deleted ones too), ascending, at most
 	// a few hundred (the newest).
 	Changes []string `json:"changes"`
+	// Bytes is the source's recorded history's estimated size (all its
+	// objects, not only the pane's rows); Budget its limit.
+	Bytes  int `json:"bytes"`
+	Budget int `json:"budget"`
 }
 
 const maxTimelineChanges = 500
@@ -1084,6 +1089,9 @@ func (v *View) Timeline() (Timeline, error) {
 		return Timeline{}, ErrNoHistory
 	}
 	tl := Timeline{Horizon: rfc(sp.Horizon), Newest: rfc(sp.Newest), Changes: []string{}}
+	if b, l, ok := v.opts.History.Usage(); ok {
+		tl.Bytes, tl.Budget = b, l.Budget
+	}
 	if !v.at.IsZero() {
 		tl.At = rfc(v.at)
 	}
@@ -1324,6 +1332,17 @@ func scalar(v any) string {
 		return string(b)
 	}
 	return fmt.Sprint(v)
+}
+
+// Changes returns how many changes of a row the history keeps (0 without
+// recorded history for it).
+func (v *View) Changes(key string) int {
+	e, ok := v.entries[key]
+	if !ok || v.opts.History == nil || e.item.Norm == nil {
+		return 0
+	}
+	first, last := v.opts.History.Range(key)
+	return max(0, last-first)
 }
 
 // Deleted reports whether a row key is a tombstone.

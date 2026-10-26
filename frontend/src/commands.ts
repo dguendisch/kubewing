@@ -903,10 +903,8 @@ async function travelOnce(paneId: string, id: string, move: TravelMove) {
       next = await b.setTime(id, to ?? "");
     } else if ("step" in move) {
       if (move.step === 0) return;
-      const r = await b.step(id, move.step);
-      next = r.timeline;
-      // forward past the newest change: back to live
-      if (!r.moved && move.step > 0) next = await b.setTime(id, "");
+      // past the newest change it stays there (Esc, End or t go back to live)
+      next = (await b.step(id, move.step)).timeline;
     } else {
       // enter: recording on (if needed), then the newest change, or now if there is none
       const wasRecording = !!paneData.get(id).status?.recording;

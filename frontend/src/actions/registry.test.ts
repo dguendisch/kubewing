@@ -71,3 +71,12 @@ describe("row actions menu", () => {
     for (const a of rowActions) expect(commandsSrc).toContain(`case "${a.command}"`);
   });
 });
+
+describe("diff entry", () => {
+  const label = (r: RowInfo) => menuFor(r, undefined).find((i) => i.command === "object.diff")!.label;
+  it("says how many changes recorded history steps through", () => {
+    expect(label({ ...pod, changes: undefined })).toBe("diff last change");
+    expect(label({ ...pod, changes: 1 })).toBe("diff last change");
+    expect(label({ ...pod, changes: 7 })).toBe("diff changes (7)");
+  });
+});

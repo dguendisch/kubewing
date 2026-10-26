@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -188,20 +187,26 @@ func TestHistoryLimits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("history: {window: 30m, budget: 64Mi}\n")
+	write("history: {budget: 64Mi}\n")
 	e := Load(dir)
-	w, b, err := e.Config.History.Parse()
-	if err != nil || w != 30*time.Minute || b != 64<<20 || len(e.Errors) != 0 {
-		t.Fatalf("%v %v %v %v", w, b, err, e.Errors)
+	b, err := e.Config.History.Parse()
+	if err != nil || b != 64<<20 || len(e.Errors) != 0 {
+		t.Fatalf("%v %v %v", b, err, e.Errors)
 	}
-	for _, bad := range []string{"history: {window: 5s}\n", "history: {window: soon}\n", "history: {budget: 10}\n", "history: {budget: 1Ti}\n"} {
+	for _, bad := range []string{"history: {budget: 10}\n", "history: {budget: 1Ti}\n", "history: {budget: lots}\n"} {
 		write(bad)
 		e := Load(dir)
-		if len(e.Errors) != 1 || !strings.Contains(e.Errors[0], "history.") {
+		if len(e.Errors) != 1 || !strings.Contains(e.Errors[0], "history.budget") {
 			t.Errorf("%q: errors %v", bad, e.Errors)
 		}
-		if w, b, _ := e.Config.History.Parse(); w != 0 || b != 0 {
-			t.Errorf("%q: kept %v %v", bad, w, b)
+		if b, _ := e.Config.History.Parse(); b != 0 {
+			t.Errorf("%q: kept %v", bad, b)
 		}
+	}
+	// window is gone: an old config says so, the rest still loads
+	write("history: {window: 1h, budget: 64Mi}\n")
+	e = Load(dir)
+	if b, _ := e.Config.History.Parse(); len(e.Errors) != 1 || !strings.Contains(e.Errors[0], `unknown field "window"`) || b != 64<<20 {
+		t.Errorf("old window: errors %v, budget %v", e.Errors, b)
 	}
 }

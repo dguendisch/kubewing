@@ -112,6 +112,9 @@ type RowInfo struct {
 	Deleted   bool   `json:"deleted,omitempty"`
 	// HasPrev: a previous version exists, so the diff view has something to show.
 	HasPrev bool `json:"hasPrev,omitempty"`
+	// Changes: with history recorded, how many changes of the row are kept
+	// (the diff steps through them); 0 = only the last one, without history.
+	Changes int `json:"changes,omitempty"`
 	// Pod is true for v1 Pods (exec, port-forward).
 	Pod        bool     `json:"pod,omitempty"`
 	Containers []string `json:"containers,omitempty"`
@@ -153,13 +156,13 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 	}
 	pn.mu.Lock()
 	it, ok := pn.view.Item(key)
-	deleted, hasPrev := pn.view.Deleted(key), pn.view.HasPrev(key)
+	deleted, hasPrev, changes := pn.view.Deleted(key), pn.view.HasPrev(key), pn.view.Changes(key)
 	r := row{cluster: pn.p.Source.Cluster, res: pn.res, typed: pn.p.Source.Resource, item: it}
 	pn.mu.Unlock()
 	if !ok {
 		return RowInfo{}, fmt.Errorf("object %s not found", key)
 	}
-	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Pod: r.isPod()}
+	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod()}
 	if info.Pod {
 		info.Containers = containers(r)
 		info.ContainerInfo = podContainers(r)

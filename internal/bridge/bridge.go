@@ -154,10 +154,12 @@ func (s *Service) Config() config.Effective {
 
 // ReloadConfig re-reads the config files and emits ConfigEvent. Diff rules
 // apply to watches started afterwards: a pane joining a running watch (a
-// split) keeps its rules, so one history never mixes two rule sets.
+// split) keeps its rules, so one history never mixes two rule sets. The
+// history limits apply at once, to running recordings too.
 func (s *Service) ReloadConfig() config.Effective {
 	cfg := config.Load(s.opts.ConfigDir)
 	s.setConfig(cfg)
+	s.reg.SetLimits(s.historyLimits())
 	s.emit.Emit(ConfigEvent, cfg)
 	return cfg
 }
@@ -420,8 +422,8 @@ func (s *Service) historyLimits() history.Limits {
 	s.mu.Lock()
 	h := s.cfg.Config.History
 	s.mu.Unlock()
-	w, b, _ := h.Parse()
-	return history.Limits{Window: w, Budget: int(b)}
+	b, _ := h.Parse()
+	return history.Limits{Budget: int(b)}
 }
 
 // Time-travel: a pane shows its objects as they were at a moment, from the

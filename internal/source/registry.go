@@ -157,6 +157,33 @@ func (h *History) Field(key string, p fieldpath.Path) []history.FieldChange {
 	return h.sh.hist.Field(key, p)
 }
 
+// Usage is the recorded history's estimated size and limits; ok false if not recording.
+func (h *History) Usage() (bytes int, limits history.Limits, ok bool) {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return 0, history.Limits{}, false
+	}
+	return h.sh.hist.Bytes(), h.sh.hist.Limits(), true
+}
+
+// SetLimits applies new limits to every recording watch now (config reload).
+func (r *Registry) SetLimits(l history.Limits) {
+	r.mu.Lock()
+	shs := make([]*shared, 0, len(r.shared))
+	for _, sh := range r.shared {
+		shs = append(shs, sh)
+	}
+	r.mu.Unlock()
+	for _, sh := range shs {
+		sh.hmu.Lock()
+		if sh.hist != nil {
+			sh.hist.SetLimits(l)
+		}
+		sh.hmu.Unlock()
+	}
+}
+
 // Same reports whether h and o read the same shared watch.
 func (h *History) Same(o *History) bool { return o != nil && h.sh == o.sh }
 
@@ -391,8 +418,9 @@ func (r *Registry) record(sh *shared, ev Event) Event {
 // recordItem needs hmu held and hist set.
 func (sh *shared) recordItem(it Item, now time.Time) Item {
 	norm := sh.norm.Normalize(it.Object)
-	it.Norm, it.Hash = norm, normalize.Hash(norm)
-	sh.hist.RecordItem(itemKey(it), norm, it.Hash, it.Cells, now)
+	hash, size := normalize.HashSize(norm)
+	it.Norm, it.Hash = norm, hash
+	sh.hist.RecordSized(itemKey(it), norm, hash, size, it.Cells, now)
 	return it
 }
 

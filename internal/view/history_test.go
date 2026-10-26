@@ -21,6 +21,8 @@ func (r *recorder) Recording() bool { return r.on }
 
 func (r *recorder) Span() (history.Span, bool) { return r.Store.Span(), r.on }
 
+func (r *recorder) Usage() (int, history.Limits, bool) { return r.Bytes(), r.Limits(), r.on }
+
 func (r *recorder) item(it source.Item, at time.Time) source.Item {
 	if !r.on {
 		return it

@@ -68,46 +68,16 @@ func TestRecordUnchanged(t *testing.T) {
 	}
 }
 
-// Past the window the oldest versions go (the oldest kept stays as the
-// baseline); the numbers stay and the horizon moves.
-func TestWindow(t *testing.T) {
-	s := New(Limits{Window: 3 * time.Second})
-	for i := range 6 {
-		s.Record("u", pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
-	}
-	// at t0+5s the window starts at t0+2s: version 3 (t0+2s) is the baseline
-	if first, last := s.Range("u"); first != 3 || last != 6 {
-		t.Fatalf("range = %d..%d", first, last)
-	}
-	if h := s.Span().Horizon; !h.Equal(t0.Add(2 * time.Second)) {
-		t.Fatalf("horizon = %v", h)
-	}
-	for n := 3; n <= 6; n++ {
-		v, ok := s.Get("u", n)
-		if !ok || !reflect.DeepEqual(v.Object.Object, pod(int64(n-1), "a:1").Object) {
-			t.Fatalf("version %d: %v", n, v.Object)
-		}
-	}
-	if v, _ := s.Get("u", 3); v.Changes != nil {
-		t.Fatalf("the oldest kept version has no previous one: %v", v.Changes)
-	}
-	// an object that hasn't changed in the window keeps its one version
-	s.Record("q", pod(0, "q:1"), t0.Add(5*time.Second))
-	s.Record("u", pod(9, "a:1"), t0.Add(30*time.Second))
-	if first, last := s.Range("q"); first != 1 || last != 1 {
-		t.Fatalf("quiet object: %d..%d", first, last)
-	}
-}
-
 // Past the budget the oldest changes go first, across all objects, down
 // to 90% of it; the horizon moves to the newest dropped one.
 func TestBudget(t *testing.T) {
-	s := New(Limits{Budget: 2000})
+	// the four newest copies (~250 bytes each) count too: room for a few changes on top
+	s := New(Limits{Budget: 3000})
 	for i := range 40 {
 		key := fmt.Sprint("k", i%4)
 		s.Record(key, pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
 	}
-	if s.Bytes() > 2000 {
+	if s.Bytes() > 3000 {
 		t.Fatalf("bytes = %d over budget", s.Bytes())
 	}
 	h := s.Span().Horizon
@@ -269,10 +239,13 @@ func TestDeleteAndPrune(t *testing.T) {
 
 // Pair reads a version and the one before together, clamped to the kept ones.
 func TestPair(t *testing.T) {
-	s := New(Limits{Window: 2 * time.Second}) // at t0+4s: versions 3 (t0+2s) … 5
+	s := New(Limits{})
 	for i := range 5 {
 		s.Record("u", pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
 	}
+	// versions 1 and 2 dropped (as the budget does): 3 (t0+2s) … 5 kept
+	s.dropOldest(s.objects["u"])
+	s.dropOldest(s.objects["u"])
 	p, ok := s.Pair("u", 0)
 	if !ok || p.First != 3 || p.Last != 5 || p.Cur.N != 5 || p.Prev == nil || p.Prev.N != 4 || len(p.Cur.Changes) != 1 {
 		t.Fatalf("newest: %+v", p)
@@ -288,5 +261,46 @@ func TestPair(t *testing.T) {
 	}
 	if _, ok := s.Pair("x", 0); ok {
 		t.Fatal("unknown key")
+	}
+}
+
+// Bytes counts each object's newest copy and the kept changes; a forgotten
+// object gives all of it back.
+func TestBytes(t *testing.T) {
+	s := New(Limits{})
+	s.Record("a", pod(0, "a:1"), t0)
+	one := s.Bytes()
+	if one < 100 {
+		t.Fatalf("one object: %d", one)
+	}
+	s.Record("a", pod(1, "a:1"), t0.Add(time.Second))
+	if s.Bytes() <= one {
+		t.Fatalf("a change adds: %d", s.Bytes())
+	}
+	s.Forget("a")
+	if s.Bytes() != 0 {
+		t.Fatalf("after forget: %d", s.Bytes())
+	}
+}
+
+// New limits apply at once: a lower budget drops old versions now.
+func TestSetLimits(t *testing.T) {
+	s := New(Limits{})
+	for i := range 20 {
+		s.Record("a", pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
+	}
+	if first, _ := s.Range("a"); first != 1 {
+		t.Fatalf("first = %d", first)
+	}
+	s.SetLimits(Limits{Budget: 1500})
+	if s.Bytes() > 1500 || s.Limits().Budget != 1500 {
+		t.Fatalf("bytes %d, limits %+v", s.Bytes(), s.Limits())
+	}
+	if first, last := s.Range("a"); first == 1 || last != 20 {
+		t.Fatalf("range %d..%d", first, last)
+	}
+	s.SetLimits(Limits{})
+	if s.Limits().Budget != DefaultBudget {
+		t.Fatal("zero budget is the default")
 	}
 }

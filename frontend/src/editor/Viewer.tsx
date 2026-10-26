@@ -66,16 +66,33 @@ export const useDiffNav = create<{ index: number; total: number; go?: (target: "
 /** The open object diff's place in the object's history, for [ / ] (set by the detail view). */
 export const useDiffRange = create<{ range?: { to: number; first: number; last: number } }>(() => ({}));
 
+/** An entry of the editor's right-click menu (on the line clicked: Monaco moves the cursor there first). */
+export interface ContextAction {
+  id: string;
+  label: string;
+  /** Shown with the label, e.g. "⇧H" (Monaco's own keybinding display would intercept the key). */
+  key?: string;
+  run: () => void;
+}
+
 interface Props {
   /** Shown text; with `original` the viewer is a side-by-side diff (original → value). */
   value: string;
   original?: string;
   language?: "yaml" | "plaintext";
   label: string;
+  /** Extra right-click entries (the diff: on its right side). */
+  contextActions?: ContextAction[];
+}
+
+function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAction[] | undefined) {
+  return (actions ?? []).map((a, i) =>
+    ed.addAction({ id: a.id, label: a.key ? `${a.label} (${a.key})` : a.label, contextMenuGroupId: "kubewing", contextMenuOrder: i, run: a.run }),
+  );
 }
 
 /** Read-only Monaco viewer (YAML/text) or diff viewer; focuses itself on mount. */
-export function Viewer({ value, original, language = "yaml", label }: Props) {
+export function Viewer({ value, original, language = "yaml", label, contextActions }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
@@ -101,8 +118,10 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
           cursor.line = 0;
           ed.onDidChangeCursorPosition((e) => (cursor.line = e.position.lineNumber - 1));
         }
+        const acts = addActions(ed, contextActions);
         dispose = () => {
           if (cursor.text === value) cursor.text = undefined;
+          acts.forEach((a) => a.dispose());
           ed.dispose();
           model.dispose();
         };
@@ -115,6 +134,12 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
         ed.setModel({ original: a, modified: b });
         const mod = ed.getModifiedEditor();
         mod.focus();
+        // the right side's cursor line, for "the field at the cursor" (⇧H) in the diff
+        if (language === "yaml") {
+          cursor.text = value;
+          cursor.line = 0;
+        }
+        const acts = addActions(mod, contextActions);
         // first line of each change on the modified side (a pure deletion: the line after it)
         const starts = () => (ed.getLineChanges() ?? []).map((c) => c.modifiedStartLineNumber || c.modifiedEndLineNumber + 1);
         const sync = () => {
@@ -129,10 +154,15 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
             first = false;
             sync();
           }),
-          mod.onDidChangeCursorPosition(sync),
+          mod.onDidChangeCursorPosition((e) => {
+            if (language === "yaml") cursor.line = e.position.lineNumber - 1;
+            sync();
+          }),
         ];
         useDiffNav.setState({ index: 0, total: 0, go: (t) => ed.goToDiff(t) });
         dispose = () => {
+          if (cursor.text === value) cursor.text = undefined;
+          acts.forEach((a) => a.dispose());
           subs.forEach((d) => d.dispose());
           useDiffNav.setState({ index: 0, total: 0, go: undefined });
           ed.dispose();
@@ -146,7 +176,7 @@ export function Viewer({ value, original, language = "yaml", label }: Props) {
       editor.current = undefined;
       dispose();
     };
-  }, [value, original, language, mode]);
+  }, [value, original, language, mode, contextActions?.map((a) => a.id).join()]);
 
   // toggling wrap keeps the editor (cursor, scroll position)
   useEffect(() => editor.current?.updateOptions(wordWrap(wrap)), [wrap]);

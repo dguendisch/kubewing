@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { Timeline } from "../transport/types";
-import { ago, at, position, shifted } from "./travel";
+import { ago, at, position, shifted, size } from "./travel";
 
 const t = (s: number) => new Date(Date.UTC(2026, 0, 1, 12, 0, s)).toISOString();
-const tl: Timeline = { horizon: t(0), newest: t(100), at: t(50), changes: [t(10), t(50), t(90)] };
+const tl: Timeline = { horizon: t(0), newest: t(100), at: t(50), changes: [t(10), t(50), t(90)], bytes: 0, budget: 0 };
 
 describe("time-travel moments", () => {
   it("shifts within the span; past the newest is live", () => {
@@ -22,6 +22,13 @@ describe("time-travel moments", () => {
     expect(at(tl, 0.105)).toBe(t(10));
     expect(at(tl, 0.3)).toBe(t(30));
     expect(at(tl, 2)).toBe(t(100));
+  });
+
+  it("sizes in binary units", () => {
+    expect(size(512)).toBe("512 B");
+    expect(size(3.4 * 1024 * 1024)).toBe("3.4 MiB");
+    expect(size(512 * 1024 * 1024)).toBe("512 MiB");
+    expect(size(820 * 1024)).toBe("820 KiB");
   });
 
   it("says how long ago", () => {
