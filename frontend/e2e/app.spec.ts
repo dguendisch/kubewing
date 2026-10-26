@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string }; serverId?: string; total: number; selected: number; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string }; serverId?: string; total: number; selected: number; widths?: Record<string, number>; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -42,6 +42,15 @@ const focused = async (page: Page) => {
   return s.panes[s.focusedPane]!;
 };
 
+// e2e-pods steps run on wall-clock time from the watch start (restart at 2s, recreate
+// at 3s); the default 5s poll leaves too little slack for them on a loaded machine.
+const tapeSteps = { timeout: 10_000 };
+
+// e2e-pods after its last step (recreate at 3s): rows no longer shift.
+async function afterTapeSteps(page: Page) {
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.key), tapeSteps).toContain("e-api-0-b");
+}
+
 test("live table shows server-side columns and rows", async ({ page }) => {
   await openTape(page);
   const p = await focused(page);
@@ -51,10 +60,28 @@ test("live table shows server-side columns and rows", async ({ page }) => {
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
 });
 
+test("columns resize by dragging a header edge; the width stays with the pane", async ({ page }) => {
+  await openTape(page);
+  const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+  // NAMESPACE is the first column, 120px wide; its right edge is the resize handle
+  const y = box.y + 12;
+  await page.mouse.move(box.x + 119, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 160, y, { steps: 4 });
+  await page.mouse.move(box.x + 200, y, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => (await focused(page)).widths?.["NAMESPACE"]).toBe(200);
+  // the next resource keeps it: same column name
+  await page.keyboard.press("ControlOrMeta+O");
+  await page.getByRole("combobox", { name: "resource" }).fill("e2e-pods");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).widths?.["NAMESPACE"]).toBe(200);
+});
+
 test("keyed diff: restart is a changed cell, recreate is remove + add", async ({ page }) => {
   await openTape(page);
-  await expect.poll(async () => (await focused(page)).rows.find((r) => r.key === "e-api-1")?.changed).toEqual([3]);
-  await expect.poll(async () => (await focused(page)).rows.map((r) => [r.key, r.mark ?? ""])).toEqual([
+  await expect.poll(async () => (await focused(page)).rows.find((r) => r.key === "e-api-1")?.changed, tapeSteps).toEqual([3]);
+  await expect.poll(async () => (await focused(page)).rows.map((r) => [r.key, r.mark ?? ""]), tapeSteps).toEqual([
     ["e-etcd-0", ""],
     ["e-api-0", "deleted"],
     ["e-api-0-b", "added"],
@@ -597,6 +624,8 @@ test.describe("⌘O completion", () => {
     await page.keyboard.press("ControlOrMeta+O");
     const resource = page.getByRole("combobox", { name: "resource" });
     await resource.fill("svc");
+    // Tab only completes once the catalog has arrived and the list shows
+    await expect(options(page, "resource").first()).toContainText("services");
     await page.keyboard.press("Tab");
     await expect(resource).toHaveValue("services");
     await expect(resource).toBeFocused();
@@ -1005,7 +1034,7 @@ test.describe("detail view (Monaco)", () => {
   // Wait for the tape's last step (recreate at t=3s) so rows don't shift while navigating.
   async function openApi1(page: Page) {
     await openTape(page);
-    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toContain("e-api-0-b");
+    await afterTapeSteps(page);
     const rows = (await focused(page)).rows;
     for (let i = 0; i < rows.findIndex((r) => r.key === "e-api-1"); i++) await page.keyboard.press("j");
     await page.keyboard.press("Enter");
@@ -2288,7 +2317,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   // its scripted steps (restart at 2s, recreate at 3s) are done
   async function openSettled(page: Page) {
     await openTape(page);
-    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toContain("e-api-0-b");
+    await afterTapeSteps(page);
   }
 
   test("⌘⏎ anchors the menu to the selected row (below it, flush with the row)", async ({ page }) => {

@@ -204,6 +204,8 @@ function TablePane({
             grep={pane.spec.grep}
             selected={pane.selected}
             focused={tableFocused}
+            widths={pane.widths}
+            onResize={(column, width) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, widths: { ...p.widths, [column]: width } })))}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}
             onActivate={() => setUI((s) => S.openOverlay(S.focusPane(s, id), { kind: "detail", pane: id, key: keyAt(pane) }))}
             onContextMenu={(row, x, y) => {

@@ -62,6 +62,9 @@ interface Props {
   grep: string;
   selected: number;
   focused: boolean;
+  /** Column widths the user resized, by column name. */
+  widths?: Record<string, number>;
+  onResize: (column: string, width: number) => void;
   onSelect: (row: number) => void;
   onActivate: () => void;
   /** Right-click on a row: select it and open its context menu at (x, y) in the viewport. */
@@ -72,7 +75,7 @@ interface Props {
  * Live table. Data flows bridge → paneData → updateCells (no React render).
  * Only visible rows (+ overscan) are requested from Go.
  */
-export function Table({ serverId, grep, selected, focused, onSelect, onActivate, onContextMenu }: Props) {
+export function Table({ serverId, grep, selected, focused, widths, onResize, onSelect, onActivate, onContextMenu }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -154,12 +157,17 @@ export function Table({ serverId, grep, selected, focused, onSelect, onActivate,
   }, [selected, focused]);
 
   const d = data.current;
-  const columns: GridColumn[] = d.columns.map((c) => ({
-    title: c.name,
-    id: c.name,
-    grow: c.name === "NAME" ? 1 : undefined,
-    width: c.name === "NAME" ? 260 : c.type === "age" ? 70 : 120,
-  }));
+  // a resized column stops growing: it keeps the width it was dragged to
+  const columns: GridColumn[] = d.columns.map((c) => {
+    const w = widths?.[c.name];
+    if (w !== undefined) return { title: c.name, id: c.name, width: w };
+    return {
+      title: c.name,
+      id: c.name,
+      grow: c.name === "NAME" ? 1 : undefined,
+      width: c.name === "NAME" ? 260 : c.type === "age" ? 70 : 120,
+    };
+  });
 
   const getCellContent = ([col, row]: Item): GridCell => {
     const l = layout(rowAt(data.current, row), col, data.current.columns[col], Date.now());
@@ -235,6 +243,10 @@ export function Table({ serverId, grep, selected, focused, onSelect, onActivate,
       drawCell={drawCell}
       theme={theme}
       onVisibleRegionChanged={onVisible}
+      // drag a header edge; double-click it to fit the visible cells
+      onColumnResize={(c, _, __, withGrow) => onResize(c.id!, withGrow)}
+      minColumnWidth={40}
+      maxColumnWidth={2000}
       smoothScrollY
       rowSelect="single"
       rowMarkers="none"

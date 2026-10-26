@@ -49,6 +49,8 @@ export interface PaneState {
   forward?: HistoryEntry[];
   /** After moving through the history: the row to select again once the pane shows it (by key). */
   reselect?: string;
+  /** Column widths the user dragged to, by column name; others keep their defaults. */
+  widths?: Record<string, number>;
 }
 
 /** A view in a pane's jump history: its spec and the row selected there. */

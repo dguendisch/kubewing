@@ -43,6 +43,7 @@ export function inspect() {
             serverId: p.serverId,
             error: p.error,
             selected: p.selected,
+            widths: p.widths,
             total: d?.total ?? 0,
             status: d?.status,
             columns: d?.columns.map((c) => c.name) ?? [],
