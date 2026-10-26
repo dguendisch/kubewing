@@ -26,6 +26,26 @@ export interface Status {
   filterError?: string;
   /** The source records history (shared by its splits): the detail diff steps through versions. */
   recording?: boolean;
+  /** Time-travel: the pane shows its objects as of this moment (RFC 3339); unset = live. */
+  at?: string;
+  /** Live events since, applied behind the past. */
+  behind?: number;
+}
+
+/** Mirrors view.Timeline: what a pane can travel over (RFC 3339 times). */
+export interface Timeline {
+  horizon: string;
+  newest: string;
+  /** The moment shown; unset = live. */
+  at?: string;
+  /** Moments a row of the pane changed, ascending. */
+  changes: string[];
+}
+
+/** Mirrors view.FieldHistory: one field's values over a row's history. */
+export interface FieldHistory {
+  path: string;
+  changes: { at: string; value?: string; absent?: boolean; version: number }[];
 }
 
 export interface Frame {
@@ -497,6 +517,14 @@ export interface Transport {
   object(pane: string, key: string, to?: number): Promise<Detail>;
   /** Starts or stops history recording for the pane's source (every split on it). */
   setRecording(pane: string, on: boolean): Promise<void>;
+  /** Shows the pane as of `at` (RFC 3339; "" = live); starts recording if needed. */
+  setTime(pane: string, at: string): Promise<Timeline>;
+  /** To the next (1) or previous (-1) change of the pane's rows. */
+  step(pane: string, dir: number): Promise<{ moved: boolean; timeline: Timeline }>;
+  timeline(pane: string): Promise<Timeline>;
+  /** How the field on a line (0-based) of the row's normalized YAML went (version `to`, 0 = the one shown). */
+  /** which: the text the line is of, the YAML view's ("yaml") or the diff's normalized one ("norm"). */
+  fieldHistory(pane: string, key: string, to: number, line: number, which: "yaml" | "norm"): Promise<FieldHistory>;
   close(pane: string): Promise<void>;
   contexts(): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */

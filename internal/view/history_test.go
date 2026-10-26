@@ -19,18 +19,20 @@ type recorder struct {
 
 func (r *recorder) Recording() bool { return r.on }
 
+func (r *recorder) Span() (history.Span, bool) { return r.Store.Span(), r.on }
+
 func (r *recorder) item(it source.Item, at time.Time) source.Item {
 	if !r.on {
 		return it
 	}
 	it.Norm = it.Object.DeepCopy()
-	r.RecordHashed(key(it), it.Norm, "", at)
+	r.RecordItem(key(it), it.Norm, "", it.Cells, at)
 	return it
 }
 
 func recView(t *testing.T, on bool) (*View, *recorder) {
 	t.Helper()
-	r := &recorder{Store: history.New(0), on: on}
+	r := &recorder{Store: history.New(history.Limits{}), on: on}
 	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "pods"}}, Options{History: r})
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +127,7 @@ func TestRecordingStartsLater(t *testing.T) {
 // Views on one source read one history (splits): a view that joins late
 // still steps back to versions from before it existed.
 func TestSharedHistory(t *testing.T) {
-	r := &recorder{Store: history.New(0), on: true}
+	r := &recorder{Store: history.New(history.Limits{}), on: true}
 	first := r.item(stagePod("b", "api-1", "Running", "api", 0), t0)
 	v1, _ := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "pods"}}, Options{History: r})
 	v1.Apply(source.Event{Type: source.Relist, Items: []source.Item{first}}, t0)

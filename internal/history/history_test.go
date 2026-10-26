@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/dguendisch/kubewing/internal/fieldpath"
 )
 
 var t0 = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -21,7 +23,7 @@ func pod(restarts int64, image string) *unstructured.Unstructured {
 }
 
 func TestRecordAndGet(t *testing.T) {
-	s := New(10)
+	s := New(Limits{})
 	want := []*unstructured.Unstructured{pod(0, "a:1"), pod(1, "a:1"), pod(1, "a:2"), pod(2, "a:2")}
 	for i, o := range want {
 		if n := s.Record("u", o, t0.Add(time.Duration(i)*time.Second)); n != i+1 {
@@ -59,40 +61,189 @@ func TestRecordAndGet(t *testing.T) {
 
 // An unchanged object (resync, relist) isn't a new version.
 func TestRecordUnchanged(t *testing.T) {
-	s := New(10)
+	s := New(Limits{})
 	s.Record("u", pod(0, "a:1"), t0)
 	if n := s.Record("u", pod(0, "a:1"), t0.Add(time.Second)); n != 1 {
 		t.Fatalf("no-op recorded as version %d", n)
 	}
 }
 
-// Past the depth the oldest versions go; the numbers stay.
-func TestDepth(t *testing.T) {
-	s := New(3)
+// Past the window the oldest versions go (the oldest kept stays as the
+// baseline); the numbers stay and the horizon moves.
+func TestWindow(t *testing.T) {
+	s := New(Limits{Window: 3 * time.Second})
 	for i := range 6 {
 		s.Record("u", pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
 	}
-	if first, last := s.Range("u"); first != 4 || last != 6 {
+	// at t0+5s the window starts at t0+2s: version 3 (t0+2s) is the baseline
+	if first, last := s.Range("u"); first != 3 || last != 6 {
 		t.Fatalf("range = %d..%d", first, last)
 	}
-	if _, ok := s.Get("u", 3); ok {
-		t.Fatal("dropped version still there")
+	if h := s.Span().Horizon; !h.Equal(t0.Add(2 * time.Second)) {
+		t.Fatalf("horizon = %v", h)
 	}
-	for n := 4; n <= 6; n++ {
+	for n := 3; n <= 6; n++ {
 		v, ok := s.Get("u", n)
 		if !ok || !reflect.DeepEqual(v.Object.Object, pod(int64(n-1), "a:1").Object) {
 			t.Fatalf("version %d: %v", n, v.Object)
 		}
 	}
-	if v, _ := s.Get("u", 4); v.Changes != nil {
+	if v, _ := s.Get("u", 3); v.Changes != nil {
 		t.Fatalf("the oldest kept version has no previous one: %v", v.Changes)
+	}
+	// an object that hasn't changed in the window keeps its one version
+	s.Record("q", pod(0, "q:1"), t0.Add(5*time.Second))
+	s.Record("u", pod(9, "a:1"), t0.Add(30*time.Second))
+	if first, last := s.Range("q"); first != 1 || last != 1 {
+		t.Fatalf("quiet object: %d..%d", first, last)
+	}
+}
+
+// Past the budget the oldest changes go first, across all objects, down
+// to 90% of it; the horizon moves to the newest dropped one.
+func TestBudget(t *testing.T) {
+	s := New(Limits{Budget: 2000})
+	for i := range 40 {
+		key := fmt.Sprint("k", i%4)
+		s.Record(key, pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
+	}
+	if s.Bytes() > 2000 {
+		t.Fatalf("bytes = %d over budget", s.Bytes())
+	}
+	h := s.Span().Horizon
+	if !h.After(t0) {
+		t.Fatal("horizon didn't move")
+	}
+	// every object is complete from the horizon on: each one's oldest kept
+	// version is at or before it, or the object was born after
+	for k := range 4 {
+		key := fmt.Sprint("k", k)
+		first, last := s.Range(key)
+		v, _ := s.Get(key, first)
+		if v.At.After(h) || last <= first {
+			t.Fatalf("%s: oldest kept %v after horizon %v (range %d..%d)", key, v.At, h, first, last)
+		}
+	}
+	// the newest version is always there
+	if v, ok := s.Get("k3", 10); !ok || !reflect.DeepEqual(v.Object.Object, pod(39, "a:1").Object) {
+		t.Fatalf("newest: %v", v.Object)
+	}
+}
+
+// The table as of a moment: each object's version then, objects not born
+// yet or deleted already left out.
+func TestAt(t *testing.T) {
+	s := New(Limits{})
+	s.Record("a", pod(0, "a:1"), t0)
+	s.Record("a", pod(1, "a:1"), t0.Add(2*time.Second))
+	s.Record("b", pod(0, "b:1"), t0.Add(time.Second))
+	s.Delete("b", t0.Add(3*time.Second))
+	for _, tc := range []struct {
+		at   time.Duration
+		want map[string]int64
+	}{
+		{0, map[string]int64{"a": 0}},
+		{time.Second, map[string]int64{"a": 0, "b": 0}},
+		{2 * time.Second, map[string]int64{"a": 1, "b": 0}},
+		{3 * time.Second, map[string]int64{"a": 1}},
+		{-time.Hour, map[string]int64{"a": 0}}, // before the horizon: answered for it
+	} {
+		got := map[string]int64{}
+		for k, v := range s.At(t0.Add(tc.at)) {
+			got[k] = v.Object.Object["status"].(map[string]any)["containerStatuses"].([]any)[0].(map[string]any)["restartCount"].(int64)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("at +%v: %v, want %v", tc.at, got, tc.want)
+		}
+	}
+	if sp := s.Span(); !sp.Horizon.Equal(t0) || !sp.Newest.Equal(t0.Add(3*time.Second)) {
+		t.Fatalf("span = %+v", sp)
+	}
+}
+
+// The moments something changed: not the starting state, adds and deletes
+// included, limited to some keys on request.
+func TestChanges(t *testing.T) {
+	s := New(Limits{})
+	s.Record("a", pod(0, "a:1"), t0)
+	s.Record("b", pod(0, "b:1"), t0)
+	s.Record("a", pod(1, "a:1"), t0.Add(2*time.Second))
+	s.Record("c", pod(0, "c:1"), t0.Add(3*time.Second))
+	s.Delete("b", t0.Add(4*time.Second))
+	s.Record("a", pod(2, "a:1"), t0.Add(4*time.Second))
+	all := s.Changes(t0, t0.Add(time.Hour), nil)
+	want := []time.Time{t0.Add(2 * time.Second), t0.Add(3 * time.Second), t0.Add(4 * time.Second)}
+	if !reflect.DeepEqual(all, want) {
+		t.Fatalf("changes = %v", all)
+	}
+	if got := s.Changes(t0, t0.Add(time.Hour), func(k string) bool { return k == "c" }); len(got) != 1 || !got[0].Equal(t0.Add(3*time.Second)) {
+		t.Fatalf("only c: %v", got)
+	}
+	if got := s.Changes(t0.Add(3*time.Second), t0.Add(3*time.Second), nil); len(got) != 1 {
+		t.Fatalf("one moment: %v", got)
+	}
+}
+
+// Server cells are kept with each version; cells alone changing (a server
+// column computed from something normalized away) is a new version.
+func TestCells(t *testing.T) {
+	s := New(Limits{})
+	s.RecordItem("a", pod(0, "a:1"), "h", []any{"a", "0"}, t0)
+	if n := s.RecordItem("a", pod(0, "a:1"), "h", []any{"a", "0"}, t0.Add(time.Second)); n != 1 {
+		t.Fatalf("unchanged recorded as %d", n)
+	}
+	if n := s.RecordItem("a", pod(0, "a:1"), "h", []any{"a", "1"}, t0.Add(2*time.Second)); n != 2 {
+		t.Fatalf("cells change recorded as %d", n)
+	}
+	v, _ := s.Get("a", 1)
+	if !reflect.DeepEqual(v.Cells, []any{"a", "0"}) {
+		t.Fatalf("cells of 1: %v", v.Cells)
+	}
+	p, _ := s.Pair("a", 0)
+	if !reflect.DeepEqual(p.Prev.Cells, []any{"a", "0"}) || !reflect.DeepEqual(p.Cur.Cells, []any{"a", "1"}) {
+		t.Fatalf("pair cells: %v / %v", p.Prev.Cells, p.Cur.Cells)
+	}
+}
+
+// A field's values over time: the starting value, then each change of it.
+func TestField(t *testing.T) {
+	s := New(Limits{})
+	s.Record("u", pod(0, "a:1"), t0)
+	s.Record("u", pod(0, "a:2"), t0.Add(time.Second)) // not the field
+	s.Record("u", pod(1, "a:2"), t0.Add(2*time.Second))
+	s.Record("u", pod(3, "a:2"), t0.Add(3*time.Second))
+	p := fieldpath.Path{{Key: "status"}, {Key: "containerStatuses"}, {By: "name", Val: "app"}, {Key: "restartCount"}}
+	got := s.Field("u", p)
+	if len(got) != 3 {
+		t.Fatalf("got %+v", got)
+	}
+	for i, w := range []struct {
+		at time.Duration
+		v  int64
+	}{{0, 0}, {2 * time.Second, 1}, {3 * time.Second, 3}} {
+		if !got[i].At.Equal(t0.Add(w.at)) || got[i].Value != w.v || !got[i].Present {
+			t.Errorf("%d: %+v, want %v at +%v", i, got[i], w.v, w.at)
+		}
+	}
+	// a field that appears later starts absent
+	q := fieldpath.Path{{Key: "metadata"}, {Key: "labels"}}
+	s.Record("u", func() *unstructured.Unstructured {
+		o := pod(3, "a:2")
+		o.SetLabels(map[string]string{"x": "y"})
+		return o
+	}(), t0.Add(4*time.Second))
+	if got := s.Field("u", q); len(got) != 2 || got[0].Present || !got[1].Present {
+		t.Fatalf("labels: %+v", got)
+	}
+	if s.Field("nope", p) != nil {
+		t.Fatal("unknown key")
 	}
 }
 
 // A deleted object's history stays until pruned; back under the same key
 // it starts over.
 func TestDeleteAndPrune(t *testing.T) {
-	s := New(3)
+	s := New(Limits{})
 	for i := range 3 {
 		s.Record(fmt.Sprint(i), pod(0, "a:1"), t0)
 	}
@@ -118,7 +269,7 @@ func TestDeleteAndPrune(t *testing.T) {
 
 // Pair reads a version and the one before together, clamped to the kept ones.
 func TestPair(t *testing.T) {
-	s := New(3)
+	s := New(Limits{Window: 2 * time.Second}) // at t0+4s: versions 3 (t0+2s) … 5
 	for i := range 5 {
 		s.Record("u", pod(int64(i), "a:1"), t0.Add(time.Duration(i)*time.Second))
 	}

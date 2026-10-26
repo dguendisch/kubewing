@@ -59,4 +59,8 @@ type Status struct {
 	// Recording: the source records history (all its splits), so the
 	// detail diff steps through versions
 	Recording bool `json:"recording,omitempty"`
+	// At: the pane shows the past, as of this moment (RFC 3339; "" = live);
+	// Behind: live events since, applied behind it
+	At     string `json:"at,omitempty"`
+	Behind int    `json:"behind,omitempty"`
 }

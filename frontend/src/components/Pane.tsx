@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec, moveColumn, openColumns, toggleRecording } from "../commands";
+import { applySpec, moveColumn, openColumns } from "../commands";
+import { RecordButton, TravelBadge, TravelBar } from "./Travel";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
@@ -219,30 +220,12 @@ function TablePane({
         ) : null}
         {pane.error ? <div role="alert" className="absolute inset-x-0 top-0 p-3 text-deleted">{pane.error}</div> : null}
       </div>
-      <StatusLine pane={pane} />
+      <PaneFooter pane={pane} />
     </>
   );
 }
 
 /** Opens the column dialog (same as o); shows its key, which keybindings.yaml may change. */
-/** Record history on/off for the pane's source (shared by its splits); off by default, it costs per event. */
-function RecordButton({ paneId, on, pushRight }: { paneId: string; on: boolean; pushRight: boolean }) {
-  const key = useConfig((c) => c.bindings.find((b) => b.command === "history.toggleRecording")?.key);
-  return (
-    <button
-      type="button"
-      aria-label="record history"
-      aria-pressed={on}
-      title={`${on ? "recording: the diff steps through the last 20 versions ([ / ]); click to stop and drop them" : "record history: keep the last 20 versions of each object, for the diff ([ / ]); costs per event"}${key ? ` (${prettyKey(key)})` : ""}`}
-      className={`${pushRight ? "ml-auto" : ""} shrink-0 ${on ? "text-deleted" : "hover:text-fg"}`}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={() => void toggleRecording(paneId)}
-    >
-      <span aria-hidden>{on ? "●" : "⏸︎"}</span> {on ? "recording" : "record history"}
-    </button>
-  );
-}
-
 function ColumnsButton({ paneId, pushRight }: { paneId: string; pushRight: boolean }) {
   const key = useConfig((c) => c.bindings.find((b) => b.command === "view.columns")?.key);
   return (
@@ -308,10 +291,12 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
 
   const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
   const { context, resource, namespace, fieldSelector } = pane.spec;
+  const st = usePaneStatus(pane.serverId);
   return (
-    <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
+    <header className={`flex items-center gap-2 border-b bg-bg-elev px-2 py-1 ${st?.at ? "border-accent" : "border-border"}`}>
       <HistoryButtons pane={pane} />
       <Badges rule={rule} />
+      {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
       <span className="shrink-0 text-fg-muted">{context || pane.context || "(current)"}</span>
       <span className="shrink-0 font-semibold text-accent">{resource}</span>
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
@@ -414,6 +399,23 @@ function Syncing({ stalled }: { stalled: boolean }) {
       {stalled ? "○" : <span className="text-accent motion-safe:animate-pulse">●</span>} syncing
     </span>
   );
+}
+
+/** While the pane shows the past the timeline replaces the status line. */
+function PaneFooter({ pane }: { pane: S.PaneState }) {
+  const st = usePaneStatus(pane.serverId);
+  return st?.at ? <TravelBar pane={pane} at={st.at} behind={st.behind} /> : <StatusLine pane={pane} />;
+}
+
+/** The pane's status from its frames (re-renders when it changes). */
+function usePaneStatus(serverId: string | undefined) {
+  const [st, setSt] = useState(serverId ? paneData.get(serverId).status : undefined);
+  useEffect(() => {
+    if (!serverId) return;
+    setSt(paneData.get(serverId).status);
+    return paneData.subscribe(serverId, (x) => setSt((prev) => (prev === x.status ? prev : x.status)));
+  }, [serverId]);
+  return st;
 }
 
 function StatusLine({ pane }: { pane: S.PaneState }) {

@@ -53,7 +53,15 @@ func (a *App) Object(pane, key string) (view.Detail, error) { return a.svc.Objec
 func (a *App) ObjectAt(pane, key string, to int) (view.Detail, error) {
 	return a.svc.ObjectAt(pane, key, to)
 }
-func (a *App) SetRecording(pane string, on bool) error { return a.svc.SetRecording(pane, on) }
+func (a *App) SetRecording(pane string, on bool) error        { return a.svc.SetRecording(pane, on) }
+func (a *App) SetTime(pane, at string) (view.Timeline, error) { return a.svc.SetTime(pane, at) }
+func (a *App) Step(pane string, dir int) (bridge.StepResult, error) {
+	return a.svc.Step(pane, dir)
+}
+func (a *App) Timeline(pane string) (view.Timeline, error) { return a.svc.Timeline(pane) }
+func (a *App) FieldHistory(pane, key string, to, line int, which string) (view.FieldHistory, error) {
+	return a.svc.FieldHistory(pane, key, to, line, which)
+}
 func (a *App) Close(pane string) error                 { return a.svc.Close(pane) }
 func (a *App) Contexts() (bridge.ContextList, error)   { return a.ContextsFn() }
 func (a *App) Catalog(context string) catalog.Snapshot { return a.svc.Catalog(context) }

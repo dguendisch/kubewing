@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { rank, type Candidate } from "./complete";
 
 interface Props {
@@ -47,6 +47,13 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
     const m = rank(q, candidates, 1)[0];
     return q.trim() && m && !m.fuzzy && !m.candidate.disabled ? 0 : -1;
   };
+  // candidates can arrive after the typing (the catalog loads in the background): preselect
+  // when they do (keyed on their count: callers pass a new array each render, and a
+  // deliberate "nothing selected" must stay)
+  const loaded = candidates.length;
+  useEffect(() => {
+    if (typed && open && active < 0) setActive(preselect(value));
+  }, [loaded]);
   const accept = (c: Candidate) => {
     if (c.disabled) return; // shown with its reason, can't be picked
     onChange(c.value);

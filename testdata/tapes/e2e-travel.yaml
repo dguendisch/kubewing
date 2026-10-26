@@ -1,0 +1,23 @@
+# E2E tape for time-travel: like e2e-versions, but the first change waits 5s, so recording (⇧R, t) reliably starts before it.
+pipeline:
+  source: {resource: e2e-travel}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+  - {name: Age, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: prod, uid: v-web, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 1, template: {spec: {containers: [{name: app, image: "web:1"}]}}}}
+    cells: [web, 1/1, 2h]
+steps:
+  - at: 5s
+    update:
+      object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: prod, uid: v-web, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2, template: {spec: {containers: [{name: app, image: "web:1"}]}}}}
+      cells: [web, 2/2, 2h]
+  - at: 5500ms
+    update:
+      object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: prod, uid: v-web, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 3, template: {spec: {containers: [{name: app, image: "web:1"}]}}}}
+      cells: [web, 3/3, 2h]
+  - at: 6s
+    update:
+      object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: prod, uid: v-web, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 3, template: {spec: {containers: [{name: app, image: "web:2"}]}}}}
+      cells: [web, 3/3, 2h]

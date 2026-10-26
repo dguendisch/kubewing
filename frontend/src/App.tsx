@@ -5,6 +5,7 @@ import { CellPicker } from "./components/CellPicker";
 import { ContextMenu } from "./components/ContextMenu";
 import { JumpMenu } from "./components/JumpMenu";
 import { HistoryList } from "./components/HistoryNav";
+import { FieldList } from "./components/Travel";
 import { ErrorDetail } from "./components/ErrorDetail";
 import { DebugDialog } from "./components/Debug";
 import { ColumnsDialog } from "./components/Columns";
@@ -87,6 +88,7 @@ export function App() {
         ))}
       </main>
       <Detail />
+      <FieldList />
       <Edit />
       <OpenSource />
       <Confirm />

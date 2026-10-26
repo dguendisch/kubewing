@@ -17,7 +17,9 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"time"
 
+	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/normalize"
@@ -45,6 +47,34 @@ type Config struct {
 	Debug    Debug         `json:"debug"`
 	OpsPod   OpsPod        `json:"opsPod"`
 	Terminal Terminal      `json:"terminal"`
+	History  HistoryLimits `json:"history"`
+}
+
+// HistoryLimits bound recorded history (per source, while recording): how
+// far back it reaches and how much memory it may take. Applies to
+// recordings started afterwards. (Not history.yaml: see History.)
+type HistoryLimits struct {
+	// Window is a Go duration ("1h", "30m"); "" = 1h.
+	Window string `json:"window,omitempty"`
+	// Budget is a quantity of bytes ("256Mi", "1Gi"); "" = 256Mi.
+	Budget string `json:"budget,omitempty"`
+}
+
+// Parse returns the limits (zero = the default); invalid values are reported by Load.
+func (h HistoryLimits) Parse() (window time.Duration, budget int64, err error) {
+	if h.Window != "" {
+		if window, err = time.ParseDuration(h.Window); err != nil || window < time.Minute || window > 24*time.Hour {
+			return 0, 0, fmt.Errorf("history.window: %q is not a duration between 1m and 24h", h.Window)
+		}
+	}
+	if h.Budget != "" {
+		q, qerr := resource.ParseQuantity(h.Budget)
+		if qerr != nil || q.Value() < 1<<20 || q.Value() > 64<<30 {
+			return 0, 0, fmt.Errorf("history.budget: %q is not a size between 1Mi and 64Gi", h.Budget)
+		}
+		budget = q.Value()
+	}
+	return window, budget, nil
 }
 
 // OpsPod configures ops pods on nodes (ops-toolbelt's ops-pod).
@@ -198,6 +228,11 @@ func Load(dir string) Effective {
 			errf("config.yaml", "terminal.scrollback: %d is not between %d and %d lines", n, MinScrollback, MaxScrollback)
 		default:
 			e.Config.Terminal.Scrollback = n
+		}
+		if _, _, err := c.History.Parse(); err != nil {
+			errf("config.yaml", "%v", err)
+		} else {
+			e.Config.History = c.History
 		}
 		e.Config.OpsPod = c.OpsPod
 		e.Config.Debug.Image = c.Debug.Image

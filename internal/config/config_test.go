@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -177,5 +178,30 @@ func TestBadTheme(t *testing.T) {
 	}
 	if len(got.Errors) != 3 {
 		t.Errorf("errors:\n%s", strings.Join(got.Errors, "\n"))
+	}
+}
+
+func TestHistoryLimits(t *testing.T) {
+	dir := t.TempDir()
+	write := func(s string) {
+		if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("history: {window: 30m, budget: 64Mi}\n")
+	e := Load(dir)
+	w, b, err := e.Config.History.Parse()
+	if err != nil || w != 30*time.Minute || b != 64<<20 || len(e.Errors) != 0 {
+		t.Fatalf("%v %v %v %v", w, b, err, e.Errors)
+	}
+	for _, bad := range []string{"history: {window: 5s}\n", "history: {window: soon}\n", "history: {budget: 10}\n", "history: {budget: 1Ti}\n"} {
+		write(bad)
+		e := Load(dir)
+		if len(e.Errors) != 1 || !strings.Contains(e.Errors[0], "history.") {
+			t.Errorf("%q: errors %v", bad, e.Errors)
+		}
+		if w, b, _ := e.Config.History.Parse(); w != 0 || b != 0 {
+			t.Errorf("%q: kept %v %v", bad, w, b)
+		}
 	}
 }

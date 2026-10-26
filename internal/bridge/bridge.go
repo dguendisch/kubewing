@@ -7,6 +7,7 @@ package bridge
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/safety"
@@ -380,13 +382,18 @@ func (s *Service) ObjectAt(paneID, key string, to int) (view.Detail, error) {
 }
 
 // SetRecording starts or stops history recording for a pane's source: it's
-// the shared watch's, so every split on that source follows.
+// the shared watch's, so every split on that source follows. Stopping
+// brings panes showing the past back to live.
 func (s *Service) SetRecording(paneID string, on bool) error {
 	pn, err := s.pane(paneID)
 	if err != nil {
 		return err
 	}
-	pn.sub.History.SetRecording(on)
+	if on {
+		pn.sub.History.Record(s.historyLimits())
+	} else {
+		pn.sub.History.Stop()
+	}
 	// the other splits show it in their status line too
 	s.mu.Lock()
 	var same []*pane
@@ -397,9 +404,109 @@ func (s *Service) SetRecording(paneID string, on bool) error {
 	}
 	s.mu.Unlock()
 	for _, p := range same {
+		if !on {
+			p.mu.Lock()
+			_ = p.view.SetTime(time.Time{})
+			p.mu.Unlock()
+		}
 		p.poke()
 	}
 	return nil
+}
+
+// historyLimits are the config's history limits (invalid ones were
+// reported and dropped by config.Load: the defaults then).
+func (s *Service) historyLimits() history.Limits {
+	s.mu.Lock()
+	h := s.cfg.Config.History
+	s.mu.Unlock()
+	w, b, _ := h.Parse()
+	return history.Limits{Window: w, Budget: int(b)}
+}
+
+// Time-travel: a pane shows its objects as they were at a moment, from the
+// recorded history of its source; stages, columns and the detail view work
+// on them as on the live ones. Each pane has its own moment.
+
+// SetTime shows the pane as of at (RFC 3339; "" = live). It starts
+// recording if the source doesn't record yet: the timeline begins then.
+func (s *Service) SetTime(paneID, at string) (view.Timeline, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return view.Timeline{}, err
+	}
+	var t time.Time
+	if at != "" {
+		if t, err = time.Parse(time.RFC3339Nano, at); err != nil {
+			return view.Timeline{}, fmt.Errorf("time %q: %w", at, err)
+		}
+		if !pn.sub.History.Recording() {
+			if err := s.SetRecording(paneID, true); err != nil {
+				return view.Timeline{}, err
+			}
+		}
+	}
+	pn.mu.Lock()
+	err = pn.view.SetTime(t)
+	var tl view.Timeline
+	if err == nil {
+		tl, err = pn.view.Timeline()
+		if errors.Is(err, view.ErrNoHistory) && at == "" {
+			err = nil // back to live without recording: nothing to show
+		}
+	}
+	pn.mu.Unlock()
+	pn.poke()
+	return tl, err
+}
+
+// Step moves the pane's moment to the next (dir > 0) or previous change
+// of its rows; from live, back goes to the newest change. Moved false:
+// nothing that way.
+func (s *Service) Step(paneID string, dir int) (StepResult, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return StepResult{}, err
+	}
+	pn.mu.Lock()
+	moved, err := pn.view.Step(dir)
+	var tl view.Timeline
+	if err == nil {
+		tl, err = pn.view.Timeline()
+	}
+	pn.mu.Unlock()
+	pn.poke()
+	return StepResult{Moved: moved, Timeline: tl}, err
+}
+
+// StepResult: where a step went.
+type StepResult struct {
+	Moved    bool          `json:"moved"`
+	Timeline view.Timeline `json:"timeline"`
+}
+
+// Timeline returns what a pane can travel over (refused without recording).
+func (s *Service) Timeline(paneID string) (view.Timeline, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return view.Timeline{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	return pn.view.Timeline()
+}
+
+// FieldHistory returns how the field on line (0-based) of a row's YAML
+// went over time; which: the YAML view's text ("yaml") or the normalized
+// version to's ("norm", 0 = the one shown).
+func (s *Service) FieldHistory(paneID, key string, to, line int, which string) (view.FieldHistory, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return view.FieldHistory{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	return pn.view.FieldAt(key, to, line, which)
 }
 
 // Close stops a pane.

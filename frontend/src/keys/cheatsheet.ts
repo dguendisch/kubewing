@@ -103,6 +103,17 @@ const sections: { title: string; rows: Row[] }[] = [
     ],
   },
   {
+    title: "time-travel",
+    rows: [
+      row("into the past / back to live (starts recording)", "travel.toggle"),
+      row("previous / next change of the pane's rows", "travel.prev", "travel.next"),
+      row("one minute back / forward", "travel.back", "travel.forward"),
+      row("to the start of the recording", "travel.start"),
+      row("back to live", "travel.live"),
+      row("history of the field under the cursor (YAML)", "travel.field"),
+    ],
+  },
+  {
     title: "detail view",
     rows: [
       row("back to YAML", "detail.showYaml"),

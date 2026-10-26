@@ -7,6 +7,7 @@ import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursor, useDiffNav, useDiffRange } from "./editor/Viewer";
 import * as S from "./store/state";
+import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
 import { moveShown } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
@@ -84,6 +85,7 @@ export function dispatch(cmd: CommandId) {
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, 1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, 1));
       if (s.overlay?.kind === "cells") return setUI((x) => moveCell(x, 1));
+      if (s.overlay?.kind === "field") return setUI((x) => moveField(x, 1));
       return setUI((x) => S.moveSelection(x, 1, total));
     case "row.up":
       if (s.overlay?.kind === "jump") return setUI((x) => moveJump(x, -1));
@@ -92,6 +94,7 @@ export function dispatch(cmd: CommandId) {
       if (s.overlay?.kind === "menu") return setUI((x) => moveMenu(x, -1));
       if (s.overlay?.kind === "container") return setUI((x) => moveContainer(x, -1));
       if (s.overlay?.kind === "cells") return setUI((x) => moveCell(x, -1));
+      if (s.overlay?.kind === "field") return setUI((x) => moveField(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
@@ -141,6 +144,7 @@ export function dispatch(cmd: CommandId) {
       if (o?.kind === "history") return void pickHistory(o.index ?? 0);
       if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
       if (o?.kind === "cells") return void copyCell(o.index ?? 0);
+      if (o?.kind === "field") return void pickField(o.pane, o.field?.changes[o.index ?? 0]?.at);
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
       if (!item || item.disabled) return;
@@ -185,6 +189,24 @@ export function dispatch(cmd: CommandId) {
       return void openColumns(pane.id);
     case "history.toggleRecording":
       return void toggleRecording(pane.id);
+    case "travel.toggle":
+      return void travel(pane.id, paneData.get(pane.serverId ?? "").status?.at ? { live: true } : { enter: true });
+    case "travel.prev":
+    case "travel.next":
+      return void travel(pane.id, { step: cmd === "travel.prev" ? -1 : 1 });
+    case "travel.back":
+    case "travel.forward":
+      return void travel(pane.id, { shift: cmd === "travel.back" ? -60_000 : 60_000 });
+    case "travel.start":
+      return void travel(pane.id, { start: true });
+    case "travel.live":
+      if (pane.serverId && useTextSel.getState()[pane.serverId]) {
+        // Esc clears a text selection first, as in the live table
+        return setTextSel(pane.serverId, undefined);
+      }
+      return void travel(pane.id, { live: true });
+    case "travel.field":
+      return void openFieldHistory();
     case "portforward.list":
       return setUI((x) => (x.overlay?.kind === "forwards" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "forwards", pane: pane.id, index: 0 })));
     case "portforward.stop": {
@@ -193,6 +215,11 @@ export function dispatch(cmd: CommandId) {
       return;
     }
     case "detail.close":
+      // the field list goes back to the detail view it came from
+      if (s.overlay?.kind === "field" && s.overlay.back) {
+        const back = s.overlay.back;
+        return setUI((x) => ({ ...x, overlay: back, focus: "detail" }));
+      }
       return setUI(S.closeOverlay);
     case "detail.toggleDiff":
       // in describe: diff against the previous describe; elsewhere the object diff (from the newest version)
@@ -825,4 +852,106 @@ export async function toggleRecording(paneId: string) {
   } catch (e) {
     flash(paneId, `record history: ${(e as Error).message}`, true);
   }
+}
+
+type TravelMove = { enter: true } | { live: true } | { step: number } | { shift: number } | { start: true } | { to: string };
+
+/**
+ * One time-travel call per pane at a time (each rebuilds the table in Go);
+ * moves made meanwhile wait, merged: steps add up (← ← is two changes back,
+ * a held arrow is one call per answer), any other move replaces them.
+ */
+const traveling = new Map<string, TravelMove | null>();
+
+function merge(a: TravelMove | null, b: TravelMove): TravelMove {
+  if (a && "step" in a && "step" in b) return { step: a.step + b.step };
+  return b;
+}
+
+/**
+ * Moves a pane in time (Go rebuilds it as of the moment; frames follow).
+ * Entering starts at the newest change and starts recording if needed.
+ */
+export async function travel(paneId: string, move: TravelMove) {
+  const id = useUI.getState().panes[paneId]?.serverId;
+  if (!id) return;
+  if (traveling.has(id)) {
+    traveling.set(id, merge(traveling.get(id) ?? null, move));
+    return;
+  }
+  traveling.set(id, null);
+  let next: TravelMove | null = move;
+  while (next) {
+    await travelOnce(paneId, id, next);
+    next = traveling.get(id) ?? null;
+    traveling.set(id, null);
+  }
+  traveling.delete(id);
+}
+
+async function travelOnce(paneId: string, id: string, move: TravelMove) {
+  try {
+    const b = bridge();
+    const tl = useTimelines.getState().byPane[id];
+    let next;
+    if ("live" in move) next = await b.setTime(id, "");
+    else if ("to" in move) next = await b.setTime(id, move.to);
+    else if ("start" in move) next = tl ? await b.setTime(id, tl.horizon) : undefined;
+    else if ("shift" in move) {
+      const cur = tl ?? (await b.timeline(id));
+      const to = shifted(cur, move.shift);
+      next = await b.setTime(id, to ?? "");
+    } else if ("step" in move) {
+      if (move.step === 0) return;
+      const r = await b.step(id, move.step);
+      next = r.timeline;
+      // forward past the newest change: back to live
+      if (!r.moved && move.step > 0) next = await b.setTime(id, "");
+    } else {
+      // enter: recording on (if needed), then the newest change, or now if there is none
+      const wasRecording = !!paneData.get(id).status?.recording;
+      next = await b.setTime(id, new Date().toISOString());
+      const r = await b.step(id, -1);
+      if (r.moved) next = r.timeline;
+      if (!wasRecording) flash(paneId, "recording history from now on: the timeline starts here", false);
+    }
+    setTimeline(id, next);
+  } catch (e) {
+    flash(paneId, `time-travel: ${(e as Error).message}`, true);
+  }
+}
+
+/** ⇧H in the YAML: how the field under the cursor went over time (needs recording). */
+async function openFieldHistory() {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "detail" || o.view === "describe" || !o.key) return;
+  const pane = useUI.getState().panes[o.pane];
+  if (!pane?.serverId || cursor.text === undefined) return;
+  if (!paneData.get(pane.serverId).status?.recording) return flash(pane.id, "field history needs record history (⇧R in the table)", true);
+  try {
+    // the line is one of the YAML view (the object) or of the diff's right side (normalized)
+    const fh = await bridge().fieldHistory(pane.serverId, o.key, o.diff ? (o.version ?? 0) : 0, cursor.line, o.diff ? "norm" : "yaml");
+    if (!fh.changes.length) return flash(pane.id, `no history of ${fh.path}`, true);
+    setUI((x) => ({
+      ...x,
+      overlay: { kind: "field", pane: pane.id, key: o.key, field: fh, index: fh.changes.length - 1, back: o, restore: o.restore },
+      focus: "menu",
+    }));
+  } catch (e) {
+    flash(pane.id, `field history: ${(e as Error).message}`, true);
+  }
+}
+
+function moveField(s: S.UIState, d: number): S.UIState {
+  const o = s.overlay;
+  const n = o?.field?.changes.length ?? 0;
+  if (o?.kind !== "field" || !n) return s;
+  return { ...s, overlay: { ...o, index: Math.max(0, Math.min(n - 1, (o.index ?? 0) + d)) } };
+}
+
+/** ⏎ on a field's change: the pane goes to that moment (the detail view closes, the table shows it then). */
+function pickField(paneId: string, at: string | undefined) {
+  if (!at) return;
+  setUI(S.closeOverlay); // the field list (with the detail view behind it)
+  void travel(paneId, { to: at });
 }

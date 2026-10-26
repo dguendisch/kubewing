@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help", "edit", "editpreview"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help", "edit", "editpreview", "travel"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -83,7 +83,15 @@ export type CommandId =
   | "term.findPrev"
   | "term.findClose"
   | "view.columns"
-  | "history.toggleRecording";
+  | "history.toggleRecording"
+  | "travel.toggle"
+  | "travel.prev"
+  | "travel.next"
+  | "travel.back"
+  | "travel.forward"
+  | "travel.start"
+  | "travel.live"
+  | "travel.field";
 
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
@@ -100,6 +108,7 @@ export const commandIds: readonly CommandId[] = [
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "history.toggleRecording",
+  "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",
 ];
 
 export interface Binding {
@@ -152,6 +161,17 @@ export const defaultBindings: Binding[] = [
   { key: "O", command: "view.columns", when: ["table"] },
   // record history for the source (off by default: it costs per event)
   { key: "Shift+R", command: "history.toggleRecording", when: ["table"] },
+  // time-travel: t in the table; while in the past ("travel": the table keys still apply) the arrows move in time
+  { key: "T", command: "travel.toggle", when: ["table", "travel"] },
+  { key: "ArrowLeft", command: "travel.prev", when: ["travel"] },
+  { key: "ArrowRight", command: "travel.next", when: ["travel"] },
+  { key: "Shift+ArrowLeft", command: "travel.back", when: ["travel"] },
+  { key: "Shift+ArrowRight", command: "travel.forward", when: ["travel"] },
+  { key: "Home", command: "travel.start", when: ["travel"] },
+  { key: "End", command: "travel.live", when: ["travel"] },
+  { key: "Escape", command: "travel.live", when: ["travel"] },
+  // in the YAML: the history of the field under the cursor
+  { key: "Shift+H", command: "travel.field", when: ["detail"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },
@@ -312,6 +332,29 @@ export function fieldReserved(key: string): boolean {
 }
 
 /** Resolves a chord in a focus context; context-specific bindings win over global ones. */
+/**
+ * The contexts a key resolves in, most specific first: a table showing the
+ * past ("travel") has the travel keys, then the table's.
+ */
+export function keyContexts(focus: FocusContext, traveling: boolean): FocusContext[] {
+  return focus === "table" && traveling ? ["travel", "table"] : [focus];
+}
+
+/** resolve over keyContexts: the first context with a binding for the key wins. */
+export function resolveIn(key: string, contexts: FocusContext[], bindings: Binding[] = defaultBindings): CommandId | undefined {
+  for (const c of contexts) {
+    const cmd = resolveOwn(key, c, bindings);
+    if (cmd) return cmd;
+  }
+  return resolve(key, contexts[contexts.length - 1]!, bindings);
+}
+
+/** A binding for key in exactly this context (no global fallback). */
+function resolveOwn(key: string, focus: FocusContext, bindings: Binding[]): CommandId | undefined {
+  for (const b of bindings) if (b.key === key && b.when?.includes(focus)) return b.command;
+  return undefined;
+}
+
 export function resolve(key: string, focus: FocusContext, bindings: Binding[] = defaultBindings): CommandId | undefined {
   if (focus === "terminal" && terminalReserved(key)) return undefined;
   // the editor is a text field: keys are text (Esc leaves it)

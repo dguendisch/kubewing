@@ -20,8 +20,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/expr"
+	"github.com/dguendisch/kubewing/internal/fieldpath"
 	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
@@ -50,6 +52,12 @@ type Versions interface {
 	Range(key string) (first, last int)
 	Pair(key string, to int) (history.Pair, bool)
 	Recording() bool
+	// for time-travel
+	At(t time.Time) map[string]history.Version
+	Span() (history.Span, bool)
+	Changes(from, to time.Time, keep func(key string) bool) []time.Time
+	VersionAt(key string, t time.Time) int
+	Field(key string, p fieldpath.Path) []history.FieldChange
 }
 
 func (o *Options) defaults() {
@@ -94,6 +102,9 @@ type entry struct {
 
 	addedAt   time.Time
 	deletedAt time.Time
+	// goneLater: in the past, back in a step backward (it's deleted later);
+	// marked like a deleted row, but there at this moment
+	goneLater bool
 	changedAt []time.Time // per column
 	hiddenAt  time.Time
 }
@@ -123,7 +134,14 @@ type View struct {
 
 	entries map[string]*entry
 	synced  bool
-	err     string
+
+	// time-travel: at is the moment shown (zero = live). Then entries are
+	// the objects as they were at it (from the history) and live holds the
+	// live ones, which events keep updating (behind counts them).
+	at     time.Time
+	live   map[string]*entry
+	behind int
+	err    string
 
 	sorted []*entry // cached display order; nil when dirty
 
@@ -442,8 +460,27 @@ func (v *View) resolveSort() {
 	}
 }
 
-// Apply feeds one source event into the view.
+// Apply feeds one source event into the view. While showing the past, it
+// updates the live objects behind it (and counts it).
 func (v *View) Apply(ev source.Event, now time.Time) {
+	if !v.at.IsZero() {
+		past, dirty := v.entries, v.colsDirty
+		v.entries = v.live
+		v.apply(ev, now)
+		v.live, v.entries = v.entries, past
+		if ev.Type != source.Error {
+			v.behind++
+		}
+		if v.colsDirty && !dirty {
+			// new server columns: the past is rendered with them too
+			v.travel(v.at, false)
+		}
+		return
+	}
+	v.apply(ev, now)
+}
+
+func (v *View) apply(ev source.Event, now time.Time) {
 	if ev.Type != source.Error {
 		v.sorted = nil
 	}
@@ -819,7 +856,7 @@ func (v *View) rowData(e *entry, now time.Time) RowData {
 	r := RowData{Key: e.key, Cells: e.cells}
 	active := func(t time.Time) bool { return !t.IsZero() && now.Sub(t) < v.opts.HighlightFor }
 	switch {
-	case !e.deletedAt.IsZero():
+	case !e.deletedAt.IsZero(), e.goneLater:
 		r.Mark = MarkDeleted
 	case active(e.addedAt):
 		r.Mark = MarkAdded
@@ -848,7 +885,12 @@ func signature(r RowData) string {
 // Frame computes the update for the current viewport. ok is false when the
 // client is already up to date.
 func (v *View) Frame(now time.Time) (f Frame, ok bool) {
-	v.prune(now)
+	if v.at.IsZero() {
+		v.prune(now)
+	} else {
+		// markers of a past moment are about the step there; they stay
+		now = v.at
+	}
 	rows := v.rows()
 
 	end := min(v.offset+v.limit, len(rows))
@@ -871,6 +913,9 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 	}
 	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs}
 	status.Recording = v.opts.History != nil && v.opts.History.Recording()
+	if !v.at.IsZero() {
+		status.At, status.Behind = v.at.UTC().Format(time.RFC3339Nano), v.behind
+	}
 	if v.matchErrs > 0 {
 		status.FilterError = v.firstErr
 	}
@@ -962,6 +1007,10 @@ func (v *View) ObjectAt(key string, to int) (Detail, bool) {
 	d := Detail{Key: key, Name: e.item.Object.GetName(), Deleted: !e.deletedAt.IsZero()}
 	d.YAML = toYAML(e.item.Object)
 	d.CurNorm = toYAML(e.norm)
+	if to <= 0 && !v.at.IsZero() && v.opts.History != nil {
+		// in the past: the version then (diffed against the one before)
+		to = v.opts.History.VersionAt(key, v.at)
+	}
 	p, ok := v.pair(e, to)
 	if !ok {
 		if e.prev != nil {
@@ -1002,6 +1051,279 @@ func (v *View) HasPrev(key string) bool {
 		}
 	}
 	return e.prev != nil
+}
+
+// Time-travel. The view shows the objects as they were at a moment, from
+// the history; filters, sort, columns and the detail view work on them as
+// on the live ones. Markers say what changed in the step to that moment.
+
+// ErrNoHistory: time-travel needs a source that records history.
+var ErrNoHistory = errors.New("not recording history")
+
+// Timeline is what a pane can travel over.
+type Timeline struct {
+	// Horizon..Newest is the recorded span (RFC 3339); At the moment shown ("" = live).
+	Horizon string `json:"horizon"`
+	Newest  string `json:"newest"`
+	At      string `json:"at,omitempty"`
+	// Changes are the moments a row of the pane changed (its filter and
+	// grep applied to the live rows; deleted ones too), ascending, at most
+	// a few hundred (the newest).
+	Changes []string `json:"changes"`
+}
+
+const maxTimelineChanges = 500
+
+// Timeline returns the pane's timeline.
+func (v *View) Timeline() (Timeline, error) {
+	if v.opts.History == nil {
+		return Timeline{}, ErrNoHistory
+	}
+	sp, ok := v.opts.History.Span()
+	if !ok {
+		return Timeline{}, ErrNoHistory
+	}
+	tl := Timeline{Horizon: rfc(sp.Horizon), Newest: rfc(sp.Newest), Changes: []string{}}
+	if !v.at.IsZero() {
+		tl.At = rfc(v.at)
+	}
+	// the pane's rows: its filter applies to every object it has seen at
+	// some point (live or past), so changes to rows it hides don't tick
+	shown := map[string]bool{}
+	for _, m := range []map[string]*entry{v.entries, v.live} {
+		for k, e := range m {
+			if e.match {
+				shown[k] = true
+			}
+		}
+	}
+	keep := func(k string) bool {
+		if _, ok := v.liveOrPast(k); !ok {
+			return true // gone from both: deleted before, still in the history
+		}
+		return shown[k]
+	}
+	ch := v.opts.History.Changes(sp.Horizon, sp.Newest, keep)
+	if len(ch) > maxTimelineChanges {
+		ch = ch[len(ch)-maxTimelineChanges:]
+	}
+	for _, t := range ch {
+		tl.Changes = append(tl.Changes, rfc(t))
+	}
+	return tl, nil
+}
+
+func (v *View) liveOrPast(k string) (*entry, bool) {
+	if e, ok := v.entries[k]; ok {
+		return e, true
+	}
+	e, ok := v.live[k]
+	return e, ok
+}
+
+func rfc(t time.Time) string { return t.UTC().Format(time.RFC3339Nano) }
+
+// At returns the moment shown (zero = live).
+func (v *View) At() time.Time { return v.at }
+
+// SetTime shows the objects as they were at t (clamped to the recorded
+// span); zero t goes back to live.
+func (v *View) SetTime(t time.Time) error {
+	if t.IsZero() {
+		if v.at.IsZero() {
+			return nil
+		}
+		v.entries, v.live, v.at, v.behind = v.live, nil, time.Time{}, 0
+		// stages or columns may have changed in the past: the live rows follow
+		v.firstErr, v.matchErrs = "", 0
+		for _, e := range v.entries {
+			e.matchErr = false
+			v.render(e)
+			if len(e.changedAt) != len(v.cols) {
+				e.changedAt = make([]time.Time, len(v.cols))
+			}
+		}
+		v.sorted = nil
+		return nil
+	}
+	if v.opts.History == nil || !v.opts.History.Recording() {
+		return ErrNoHistory
+	}
+	sp, _ := v.opts.History.Span()
+	if t.Before(sp.Horizon) {
+		t = sp.Horizon
+	}
+	v.travel(t, true)
+	return nil
+}
+
+// travel builds the entries for t. marks: diff them against the moment
+// shown before (the step's markers); without, the past is rebuilt in place
+// (new columns) and the markers stay. Forward, a row new in the step is
+// added and one gone stays as deleted; backward, a row that wasn't there
+// yet just goes and one back (deleted later) is marked deleted.
+func (v *View) travel(t time.Time, marks bool) {
+	forward := !v.at.IsZero() && t.After(v.at)
+	if v.at.IsZero() {
+		v.live = v.entries
+		v.behind = 0
+		// clear the live rows' errors from the count; the past's are its own
+		v.firstErr, v.matchErrs = "", 0
+		for _, e := range v.live {
+			e.matchErr = false
+		}
+	}
+	before := v.entries
+	if before == nil || v.at.IsZero() {
+		before = nil
+	}
+	vs := v.opts.History.At(t)
+	past := make(map[string]*entry, len(vs))
+	v.firstErr, v.matchErrs = "", 0
+	for k, ver := range vs {
+		e := &entry{key: k, changedAt: make([]time.Time, len(v.cols))}
+		e.item = source.Item{Object: ver.Object, Cells: ver.Cells, Norm: ver.Object}
+		e.norm = ver.Object
+		past[k] = e
+	}
+	v.entries = past
+	for _, e := range past {
+		v.render(e)
+	}
+	if marks && before != nil {
+		for k, e := range past {
+			old, ok := before[k]
+			switch {
+			case (!ok || !old.deletedAt.IsZero()) && forward:
+				e.addedAt = t
+			case !ok || !old.deletedAt.IsZero():
+				e.goneLater = true
+			default:
+				for i := range v.cols {
+					if !v.cols[i].timeDerived && i < len(old.cells) && old.cells[i] != e.cells[i] {
+						e.changedAt[i] = t
+					}
+				}
+			}
+		}
+		// rows gone in a step forward stay as tombstones of the step
+		for k, old := range before {
+			if _, ok := past[k]; !ok && old.deletedAt.IsZero() && forward {
+				e := &entry{key: k, item: old.item, norm: old.norm, changedAt: make([]time.Time, len(v.cols)), deletedAt: t}
+				past[k] = e
+				v.render(e)
+			}
+		}
+	} else if !marks && before != nil {
+		for k, e := range past {
+			if old, ok := before[k]; ok {
+				e.addedAt, e.deletedAt, e.hiddenAt, e.goneLater = old.addedAt, old.deletedAt, old.hiddenAt, old.goneLater
+			}
+		}
+	}
+	v.at = t
+	v.sorted = nil
+}
+
+// Step moves the moment shown n changes of the pane's rows forward (n > 0)
+// or back (n < 0); from live, back starts at the newest change. Past the
+// last change that way it stops there; moved false: not even one step.
+func (v *View) Step(n int) (bool, error) {
+	tl, err := v.Timeline()
+	if err != nil || n == 0 {
+		return false, err
+	}
+	// the stops: the start (horizon), then each change
+	stops := []time.Time{}
+	h, _ := time.Parse(time.RFC3339Nano, tl.Horizon)
+	stops = append(stops, h)
+	for _, c := range tl.Changes {
+		if t, _ := time.Parse(time.RFC3339Nano, c); t.After(h) {
+			stops = append(stops, t)
+		}
+	}
+	// where the moment is, between stops: at a stop it's that stop; between
+	// two (or after the last, live included) back goes to the one before it,
+	// forward to the one after
+	i := len(stops) // live: after the last
+	if !v.at.IsZero() {
+		i = sort.Search(len(stops), func(i int) bool { return !stops[i].Before(v.at) })
+	}
+	var to int
+	switch {
+	case i < len(stops) && stops[i].Equal(v.at):
+		to = i + n
+	case n < 0:
+		to = i + n // i is the next stop: one back is the one before the moment
+	default:
+		to = i + n - 1
+	}
+	to = max(0, min(to, len(stops)-1))
+	if !v.at.IsZero() && stops[to].Equal(v.at) {
+		return false, nil
+	}
+	return true, v.SetTime(stops[to])
+}
+
+// FieldHistory is one field's values over a row's history.
+type FieldHistory struct {
+	Path    string       `json:"path"`
+	Changes []FieldValue `json:"changes"`
+}
+
+// FieldValue is a field's value from At on (Absent: not set).
+type FieldValue struct {
+	At      string `json:"at"`
+	Value   string `json:"value,omitempty"`
+	Absent  bool   `json:"absent,omitempty"`
+	Version int    `json:"version"`
+}
+
+// FieldAt returns the history of the field on line (0-based) of a row's
+// YAML as the detail view shows it: which "yaml" (the object, Detail.YAML)
+// or "norm" (the normalized version to, Detail.CurNorm; 0 = the one shown).
+// A field the noise rules drop has no history.
+func (v *View) FieldAt(key string, to, line int, which string) (FieldHistory, error) {
+	if v.opts.History == nil || !v.opts.History.Recording() {
+		return FieldHistory{}, ErrNoHistory
+	}
+	d, ok := v.ObjectAt(key, to)
+	if !ok {
+		return FieldHistory{}, fmt.Errorf("object %s not found", key)
+	}
+	text := d.CurNorm
+	if which == "yaml" {
+		text = d.YAML
+	}
+	var obj map[string]any
+	if err := sigsyaml.Unmarshal([]byte(text), &obj); err != nil {
+		return FieldHistory{}, err
+	}
+	p, err := fieldpath.AtLine(text, line, obj)
+	if err != nil {
+		return FieldHistory{}, err
+	}
+	fh := FieldHistory{Path: p.String(), Changes: []FieldValue{}}
+	for _, c := range v.opts.History.Field(key, p) {
+		fv := FieldValue{At: rfc(c.At), Version: c.N, Absent: !c.Present}
+		if c.Present {
+			fv.Value = scalar(c.Value)
+		}
+		fh.Changes = append(fh.Changes, fv)
+	}
+	return fh, nil
+}
+
+// scalar renders a field value on one line (maps and lists as JSON).
+func scalar(v any) string {
+	switch x := v.(type) {
+	case string:
+		return x
+	case map[string]any, []any:
+		b, _ := json.Marshal(x)
+		return string(b)
+	}
+	return fmt.Sprint(v)
 }
 
 // Deleted reports whether a row key is a tombstone.

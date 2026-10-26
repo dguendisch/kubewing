@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dguendisch/kubewing/internal/fieldpath"
 	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 )
@@ -36,8 +37,6 @@ type Registry struct {
 
 	// Now stamps recorded versions; tests replace it.
 	Now func() time.Time
-	// HistoryDepth is the versions kept per object (0 = history.DefaultDepth).
-	HistoryDepth int
 	// TombstoneFor is how long a deleted object's history stays (0 = 1m;
 	// past every view's tombstone row).
 	TombstoneFor time.Duration
@@ -83,10 +82,9 @@ type Subscription struct {
 // History reads a shared watch's versions and switches its recording;
 // safe for concurrent use.
 type History struct {
-	sh    *shared
-	reg   *Registry
-	depth int
-	now   func() time.Time
+	sh  *shared
+	reg *Registry
+	now func() time.Time
 }
 
 // Range returns the oldest and newest kept version of key (0, 0 if none).
@@ -109,6 +107,56 @@ func (h *History) Pair(key string, to int) (history.Pair, bool) {
 	return h.sh.hist.Pair(key, to)
 }
 
+// At is every object as it was at t (see history.Store.At); nil if not recording.
+func (h *History) At(t time.Time) map[string]history.Version {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return nil
+	}
+	return h.sh.hist.At(t)
+}
+
+// Span is the recorded time span; ok false if not recording.
+func (h *History) Span() (history.Span, bool) {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return history.Span{}, false
+	}
+	return h.sh.hist.Span(), true
+}
+
+// Changes returns the moments in [from, to] the objects keep accepts changed.
+func (h *History) Changes(from, to time.Time, keep func(key string) bool) []time.Time {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return nil
+	}
+	return h.sh.hist.Changes(from, to, keep)
+}
+
+// VersionAt returns key's version current at t (0 = none).
+func (h *History) VersionAt(key string, t time.Time) int {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return 0
+	}
+	return h.sh.hist.VersionAt(key, t)
+}
+
+// Field returns how one field of key went over its kept versions.
+func (h *History) Field(key string, p fieldpath.Path) []history.FieldChange {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return nil
+	}
+	return h.sh.hist.Field(key, p)
+}
+
 // Same reports whether h and o read the same shared watch.
 func (h *History) Same(o *History) bool { return o != nil && h.sh == o.sh }
 
@@ -120,15 +168,32 @@ func (h *History) Recording() bool {
 }
 
 // SetRecording starts or stops recording for the watch (every subscriber
-// on it). Starting takes the current objects as their first versions, so
-// the next change already diffs; stopping drops the history. Lock order:
-// hmu, then the registry's mu (as fanout).
+// on it) with the default limits; see Record.
 func (h *History) SetRecording(on bool) {
+	if on {
+		h.Record(history.Limits{})
+	} else {
+		h.Stop()
+	}
+}
+
+// Stop stops recording and drops the history.
+func (h *History) Stop() {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	h.sh.hist = nil
+}
+
+// Record starts recording for the watch (every subscriber on it) within
+// limits; already recording, it changes nothing. The current objects are
+// the first versions, so the next change already diffs. Lock order: hmu,
+// then the registry's mu (as fanout).
+func (h *History) Record(limits history.Limits) {
 	h.sh.hmu.Lock()
 	defer h.sh.hmu.Unlock()
 	switch {
-	case on && h.sh.hist == nil:
-		h.sh.hist = history.New(h.depth)
+	case h.sh.hist == nil:
+		h.sh.hist = history.New(limits)
 		now := h.now()
 		h.reg.mu.Lock()
 		items := make([]Item, 0, len(h.sh.items))
@@ -139,8 +204,6 @@ func (h *History) SetRecording(on bool) {
 		for _, it := range items {
 			h.sh.recordItem(it, now)
 		}
-	case !on:
-		h.sh.hist = nil
 	}
 }
 
@@ -190,7 +253,7 @@ func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscripti
 	}
 	sh.subs[sub] = ch
 	var once sync.Once
-	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, depth: r.HistoryDepth, now: r.Now}, close: func() {
+	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, now: r.Now}, close: func() {
 		once.Do(func() { r.unsubscribe(sh, sub) })
 	}}, nil
 }
@@ -329,7 +392,7 @@ func (r *Registry) record(sh *shared, ev Event) Event {
 func (sh *shared) recordItem(it Item, now time.Time) Item {
 	norm := sh.norm.Normalize(it.Object)
 	it.Norm, it.Hash = norm, normalize.Hash(norm)
-	sh.hist.RecordHashed(itemKey(it), norm, it.Hash, now)
+	sh.hist.RecordItem(itemKey(it), norm, it.Hash, it.Cells, now)
 	return it
 }
 

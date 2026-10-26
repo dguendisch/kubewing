@@ -47,16 +47,21 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works). Also done: column resizing and the column configurator per resource type (`o`: `-o wide`, custom path/CEL columns; `columns.yaml`), on `render.columns` with server columns by name. Copying any cell of a row (`⌘⇧C`, right-click a cell → copy cell…), and text selection inside a cell (double/triple-click, drag; `⌘C`). The diff headers show `j/k: changes`; the pane status line says "● connected" once synced, the dot green-grey.
 
-Done: history store per shared source (`internal/fieldpath` diff, `internal/history`, last 20 versions per object), `[`/`]` step through versions in the detail diff with the changed field paths above it. Opt-in per source ("record history" in the status line, `⇧R`), since it costs: a recording watch handles ~200k events/s (normalize + hash + diff, ~5 µs/event) vs. ~1M/s without. Off, everything is as before (each view keeps the previous version).
+Done: history store per shared source (`internal/fieldpath` diff, `internal/history`), `[`/`]` step through versions in the detail diff with the changed field paths above it. Opt-in per source ("record history" in the status line, `⇧R`), since it costs: a recording watch handles ~200k events/s (normalize + hash + diff, ~5 µs/event) vs. ~1M/s without. Off, everything is as before (each view keeps the previous version).
+
+Done: time-travel (P1, see below): `t` shows the pane as it was, with a timeline instead of the status line; `←`/`→` change to change, `⇧←`/`⇧→` a minute, `Home`/`End`, `Esc` live; `⇧H` in the YAML lists a field's values over time. The history's limits are global now (`history.window`, default 1h; `history.budget`, default 256Mi), so it reaches back equally far for every object. Cost: a step rebuilds the table from the history, ~50 ms for 10k objects with 10 versions each; quick presses merge into one step. Open: pinning, linked time cursors across splits.
 
 Next up:
-- Budget, eviction and pinning for the history, once time-travel reads it.
+- When opening from command line, add a flag to open either in existing window (if present) in a new tab (default) or in a new process.
 - add tooltip to cells not fitting their text (or if significantly easier, add it always)
 - user facing documentation
-- When opening from command line, add a flag to open either in existing window (if present) in a new tab or in a new process.
+- bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails)
+- monaco editor: add cmd+d (to delete a line) and opt+up/down to move a line up/down
+- allow to rename tabs and allow to give a pane a name (maybe rendered as a label in the top bar)
+- smooth horizontal scrolling (currently it jumps column by column)
 
 Still open in P0.1:
-- Completion for a context picked in `⌘O` before any pane is open on it (shows a hint instead).
+- Completion and regular UI for a context picked in `⌘O` (instead of system UI's drop down)
 
 ### P0 — "The Core" (v0.1)
 
@@ -108,7 +113,13 @@ Still open in P0.1:
    - Lists matched by key (containers by `name`, conditions by `type`) via OpenAPI `x-kubernetes-list-map-keys`, not by index.
    - Replaces the hidden-change marker with "what changed" and the text detail diff with a semantic one.
    - Exposes a change stream for filters: "only rows whose `spec` changed", "image changed in last 10m".
-1. **Time-travel** — scrub over the per-object history buffer from P0 (scope: since watch start), per-field ("when did this flip?") on top of the field-path engine.
+1. **Time-travel** — scrub the whole table over time (rows as they were at a moment, deleted ones included) from the P0 history buffer (scope: since recording started), per-field ("when did this flip?") on top of the field-path engine. Brings the history's global budget, oldest-first eviction and pinning (see History buffer decision): a moment in the table needs every object's history to reach back equally far, which a per-object version cap doesn't give. Done except pinning and linked cursors:
+   - **Entering / leaving:** `t` in the table shows the pane in the past (starting recording if it was off: the timeline begins then), at the newest change; `t`, `Esc`, `End` or the header badge go back to live. Each pane has its own moment.
+   - **Timeline** replaces the status line while in the past: the recorded span as a bar, a tick per change of the pane's rows (its filter applied), the cursor at the moment; a click goes there (snapped to a near change). `←`/`→` previous/next change, `⇧←`/`⇧→` one minute, `Home` the start. The header turns accent and shows "⏸ 12:03:14"; live changes keep arriving behind ("+37 since"), so going back is instant.
+   - **The table then:** every row as it was (deleted-later objects back, later ones hidden); filters, sort and columns apply to the past objects; server cells are recorded with each version. Markers are the step's: forward, rows new in the step are added and gone ones deleted; backward, rows back (deleted later) are marked deleted.
+   - **The detail view then:** the version current at the moment, diffed against the one before.
+   - **When did this flip:** `⇧H` on a YAML line lists that field's values over time (list items matched by key, as the diff); `⏎` takes the pane to that moment.
+   - **Follow-ups:** pinning objects or views against eviction; linking the moment of splits (pods and nodes at the same time).
 1. **Multi-pod log tail** — stern-like, live filter.
 1. **Decoders** — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 
@@ -183,10 +194,10 @@ Still open in P0.1:
    - **Storage:** the newest normalized object per UID, plus one delta per older version. A delta is a list of field-path changes that carries both the old and the new value, so it applies in reverse: version n−1 = undo(delta n, version n). Going back is a walk from the newest object; dropping the oldest version drops its delta, with no keyframes to rebase. The same changes are the input for the P1 field-path engine ("what changed").
    - **Opt-in:** off by default ("record history" per source, in the pane's status line): recording cuts a watch's throughput ~5× (~1M → ~200k events/s). Off, each view keeps only the previous version, as before. Switching on takes the current objects as first versions; switching off drops the history.
    - **Where:** in the shared watch (`source.Registry`), not in each view. Splits on one source share one history (and its on/off), and while recording the object is normalized once per event, not once per split. The noise rules are fixed per watch: a config reload applies to watches started afterwards, so one history never mixes two rule sets.
-   - **Limits, first step:** the last N versions per object (default 20). Each new version is recorded at a version number that counts up per object, so stepping back through versions stays stable while updates come in.
+   - **Limits:** global, so every object reaches back equally far: versions older than the window go (default 1h, `history.window`), and past the memory budget (default 256Mi, `history.budget`) the oldest changes go first across all objects (down to 90%, so it doesn't run per event). An object's oldest kept version stays as its baseline. The horizon (from when on the table can be shown) moves forward as old versions go. Each version is recorded at a number that counts up per object, so stepping through versions stays stable while updates come in.
    - **Tombstones:** a deleted object keeps its history until the view drops its tombstone; a recreate under the same name is another UID, so another history.
    - **Lifecycle:** history scoped to the shared watch — dropped when the last view on that source closes (comes free with the ref-counted registry).
-   - **Later, once time-travel reads it:** global memory budget as hard cap (default ~256 MB) + per-object time window (default 1h) in `config.yaml`; eviction oldest-delta-first across all objects (one coherent "history reaches back ~X min" horizon, shown in the UI); pinning objects/views under investigation.
+   - **Later:** pinning objects/views under investigation against eviction (within budget).
    - **Deferred (P2):** on-disk persistence (e.g. SQLite/Pebble in `~/.kubewing/cache/`) for hours of history / restart survival. Blocker: secrets would land on disk in plaintext — needs encryption or an exclusion rule first.
 1. **Testing: assert on state, not pixels.** UI regressions are caught by checking the app's state as data at every layer. Full-app screenshot diffs are not used.
    - **Go core: view-model goldens (most tests).** Scenario tapes (starting objects + scripted watch events: add/update/delete/relist/recreate under the same name) run through `pipeline → bridge output` against a fake cluster. The resulting cell deltas, row keys and diff markers are compared to golden files. Property tests (e.g. `rapid`) for the keyed diff: re-sorting produces no "changed" markers, AGE ticks never count as a diff, recreate shows as remove+add, a no-op relist produces no deltas. The bridge rule is tested too: nothing sent outside the requested row range, no full objects unless asked for, rate stays at or below 10 Hz under event storms. envtest only where needed (apply, dry-run).

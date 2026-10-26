@@ -1,5 +1,5 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { ColumnChoices, ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ColumnChoices, ContextList, DebugOptions, EditPreview, FieldHistory, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
@@ -153,7 +153,7 @@ export interface Overlay {
    *  error: the full text of an error in the status line (a click on it);
    *  columns: the pane's columns (its resource type's), -o wide and custom ones;
    *  cells: which of the selected row's cells to copy. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells";
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -196,6 +196,10 @@ export interface Overlay {
   edit?: EditState;
   /** columns: the pane's columns, loaded before it opens. */
   columns?: ColumnChoices;
+  /** field: a field's values over time (⇧H in the YAML); ⏎ takes the pane there. */
+  field?: FieldHistory;
+  /** field: the detail view it was opened from, back on Esc. */
+  back?: Overlay;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -605,6 +609,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   columns: "dialog",
   // a menu too: j/k, ⏎, Esc
   cells: "menu",
+  field: "menu",
 };
 
 /** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */

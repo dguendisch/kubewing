@@ -1,8 +1,15 @@
 import { useEffect } from "react";
 import { dispatch } from "../commands";
 import { useConfig } from "../store/config";
-import { bridge, useUI } from "../store/store";
-import { chord, commandIds, fieldReserved, resolve, suppressedDefaults, type CommandId } from "./keymap";
+import { bridge, paneData, useUI } from "../store/store";
+import * as S from "../store/state";
+import { chord, commandIds, fieldReserved, keyContexts, resolveIn, suppressedDefaults, type CommandId } from "./keymap";
+
+/** The focused pane shows the past (its frames say so). */
+function traveling(s: S.UIState): boolean {
+  const id = S.focusedPane(s).serverId;
+  return !!id && !!paneData.get(id).status?.at;
+}
 
 /**
  * Owns all shortcuts: resolves keydown via the keymap and suppresses webview
@@ -19,7 +26,8 @@ export function useKeys() {
       if (e.target instanceof Element && e.target.closest(".find-widget") && fieldReserved(c)) return;
       // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
       if (c === "Meta+F" && e.target instanceof Element && e.target.closest(".monaco-editor")) return;
-      const cmd = resolve(c, useUI.getState().focus, useConfig.getState().bindings);
+      const s = useUI.getState();
+      const cmd = resolveIn(c, keyContexts(s.focus, traveling(s)), useConfig.getState().bindings);
       if (cmd) {
         e.preventDefault();
         e.stopPropagation();

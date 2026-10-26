@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -1460,6 +1460,131 @@ test("diff versions: record history (⇧R), then [ / ] step through it, the chan
   await page.keyboard.press("d");
   await expect(dialog).toContainText("previous → current");
   await expect(versions).toHaveCount(0);
+});
+
+// e2e-travel: READY 1/1 → 2/2 (5s) → 3/3 (5.5s), then the image changes (6s), on the
+// clock of the watch. Each test opens its own namespace: its own watch (the backend is
+// shared), so the tape and the history start fresh. record: ⇧R as soon as the pane is
+// there, well before the first change.
+test.describe("time-travel", () => {
+  async function openTravel(page: Page, record = false) {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-travel");
+    await page.getByRole("combobox", { name: "namespace" }).fill(`travel-${test.info().testId.slice(0, 8)}`);
+    await page.getByRole("combobox", { name: "resource" }).press("Enter");
+    if (record) {
+      await expect.poll(async () => (await focused(page)).spec.resource === "e2e-travel" && !!(await focused(page)).serverId).toBe(true);
+      await page.keyboard.press("Shift+R");
+    }
+    await expect
+      .poll(async () => {
+        const p = await focused(page);
+        return p.spec.resource === "e2e-travel" && !!p.serverId && p.status?.synced ? p.total : -1;
+      })
+      .toBe(1);
+  }
+  const readyCell = async (page: Page) => (await focused(page)).rows[0]?.cells.find((c) => /^\d\/\d$/.test(c));
+  const timeline = (page: Page) => page.getByRole("status", { name: "timeline" });
+  // recording from the start, then all three changes in
+  async function recorded(page: Page) {
+    await openTravel(page, true);
+    await expect(page.getByRole("button", { name: "record history" })).toHaveAttribute("aria-pressed", "true");
+    // recording began before the first change: all three are on the timeline later
+    expect(await readyCell(page)).toBe("1/1");
+    await expect.poll(async () => (await focused(page)).rows[0]?.cells.join(" "), tapeSteps).toContain("3/3");
+    // the image change (4s) comes after the scale to 3: in the YAML once it's there
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("web:2", tapeSteps);
+    await page.keyboard.press("Escape");
+  }
+
+  test("t goes to the newest change; ←/→ step through the table as it was, esc back to live", async ({ page }) => {
+    await recorded(page);
+    await page.keyboard.press("t");
+    await expect(timeline(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "time-travel" })).toBeVisible();
+    await expect(timeline(page)).toContainText("3 changes");
+    expect(await readyCell(page)).toBe("3/3"); // the newest change is the image: 3 ready then
+    // one step at a time: each waits for the moment to move (quick presses would add up)
+    const moment = async () => (await focused(page)).status?.at ?? "";
+    const step = async (key: string) => {
+      const before = await moment();
+      await page.keyboard.press(key);
+      await expect.poll(moment).not.toBe(before);
+    };
+    await step("ArrowLeft"); // the scale to 3
+    expect(await readyCell(page)).toBe("3/3");
+    await step("ArrowLeft"); // the scale to 2
+    await expect.poll(() => readyCell(page)).toBe("2/2");
+    await step("ArrowLeft"); // the start
+    await expect.poll(() => readyCell(page)).toBe("1/1");
+    // the step marks the changed cell
+    await step("ArrowRight");
+    await expect.poll(() => readyCell(page)).toBe("2/2");
+    await expect.poll(async () => (await focused(page)).rows[0]?.changed?.length ?? 0).toBeGreaterThan(0);
+    // the table keys still work in the past: the YAML is the version then
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "object detail" });
+    await expect(dialog.locator(".view-lines")).toContainText("replicas: 2");
+    await page.keyboard.press("Escape");
+    // esc: back to live, the timeline goes
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await focused(page)).status?.at ?? "").toBe("");
+    await expect(timeline(page)).toHaveCount(0);
+    expect(await readyCell(page)).toBe("3/3");
+  });
+
+  test("t without recording starts it; a click on the timeline goes there", async ({ page }) => {
+    await openTravel(page);
+    await page.keyboard.press("t"); // starts recording: the timeline begins now
+    // the timeline replaces the status line, with its own record button and the messages
+    await expect(timeline(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: "record history" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByLabel("message")).toContainText("recording history from now on");
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await focused(page)).rows[0]?.cells.join(" "), tapeSteps).toContain("3/3");
+    await page.keyboard.press("t");
+    // the bar has its span and ticks before the click maps onto it
+    await expect(timeline(page)).toContainText("3 changes");
+    const slider = page.getByRole("slider", { name: "moment" });
+    const box = (await slider.boundingBox())!;
+    await page.mouse.click(box.x + 1, box.y + box.height / 2); // the far left: the start
+    await expect.poll(() => readyCell(page)).toBe("1/1");
+    expect((await inspect(page)).focus).toBe("table"); // the bar doesn't take the focus
+    // the header badge goes back to live
+    await page.getByRole("button", { name: "time-travel" }).click();
+    await expect.poll(async () => (await focused(page)).status?.at ?? "").toBe("");
+  });
+
+  test("⇧H in the YAML: the field's values over time, ⏎ takes the table there", async ({ page }) => {
+    await recorded(page);
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "object detail" });
+    await expect(dialog.locator(".view-lines")).toContainText("replicas: 3");
+    // the cursor onto the replicas line
+    await dialog.locator(".view-line", { hasText: "replicas: 3" }).click();
+    await page.keyboard.press("Shift+H");
+    const field = page.getByRole("dialog", { name: "field history" });
+    const values = field.getByRole("menuitem");
+    await expect(values).toHaveCount(3);
+    await expect(field).toContainText("spec.replicas");
+    await expect(values.nth(0)).toContainText("1");
+    await expect(values.nth(2)).toContainText("3");
+    // esc: back to the YAML
+    await page.keyboard.press("Escape");
+    await expect(field).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await page.keyboard.press("Shift+H");
+    await expect(values).toHaveCount(3); // loaded: the keys go to the list now
+    await page.keyboard.press("k"); // the change to 2
+    await expect(values.nth(1)).toHaveAttribute("aria-current", "true");
+    await page.keyboard.press("Enter");
+    await expect(field).toHaveCount(0);
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(() => readyCell(page)).toBe("2/2");
+    await expect(timeline(page)).toBeVisible();
+  });
 });
 
 // Object actions on the static tape: web-1 (2 containers, ports 8080/9090), web-3 (1 container),

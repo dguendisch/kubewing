@@ -39,7 +39,8 @@ const followEvery = 2000;
  * (⇧D) kubectl describe output.
  */
 export function Detail() {
-  const overlay = useUI((s) => s.overlay);
+  // the field history (⇧H) opens over the detail view: it stays, with its editor and cursor
+  const overlay = useUI((s) => (s.overlay?.kind === "field" ? s.overlay.back : s.overlay));
   const serverId = useUI((s) => (s.overlay ? s.panes[s.overlay.pane]?.serverId : undefined));
   const [data, setData] = useState<DetailData | { error: string }>();
   const [described, setDescribed] = useState<DescribeResult | { error: string }>();

@@ -424,3 +424,68 @@ func child(n any, s Step) (any, error) {
 	}
 	return nil, fmt.Errorf("%T has no children", n)
 }
+
+// Equal compares two decoded JSON values (numbers by value).
+func Equal(a, b any) bool {
+	switch x := a.(type) {
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for k, v := range x {
+			w, ok := y[k]
+			if !ok || !Equal(v, w) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		y, ok := b.([]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for i := range x {
+			if !Equal(x[i], y[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return equal(a, b)
+}
+
+// Lookup returns the value at p in obj (present false if a step is missing).
+func Lookup(obj map[string]any, p Path) (v any, present bool) {
+	var n any = obj
+	for _, s := range p {
+		c, err := child(n, s)
+		if err != nil {
+			return nil, false
+		}
+		n = c
+	}
+	return n, true
+}
+
+// Overlaps reports whether a and b are the same field, or one is inside
+// the other (a change at one may change the other).
+func Overlaps(a, b Path) bool {
+	n := min(len(a), len(b))
+	for i := 0; i < n; i++ {
+		if !sameStep(a[i], b[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameStep(a, b Step) bool {
+	switch {
+	case a.By != "" || b.By != "":
+		return a.By == b.By && a.Val == b.Val
+	case a.List || b.List:
+		return a.List && b.List && a.Index == b.Index
+	}
+	return a.Key == b.Key
+}

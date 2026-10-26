@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalKey, chord, collisions, commandIds, defaultBindings, fieldReserved, mergeBindings, prettyKey, resolve, suppressedDefaults } from "./keymap";
+import { canonicalKey, chord, collisions, commandIds, defaultBindings, fieldReserved, mergeBindings, keyContexts, prettyKey, resolve, resolveIn, suppressedDefaults } from "./keymap";
 
 describe("chord", () => {
   it("canonicalizes", () => {
@@ -263,5 +263,24 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     // as macOS delivers them: ⇧] types "}"
     expect(resolve(chord({ key: "}", code: "BracketRight", metaKey: true, shiftKey: true }), "table")).toBe("tab.next");
     expect(resolve(chord({ key: "{", code: "BracketLeft", metaKey: true, shiftKey: true }), "table")).toBe("tab.prev");
+  });
+});
+
+describe("time-travel keys", () => {
+  it("in the past the arrows move in time, the table keys still work", () => {
+    const ctx = keyContexts("table", true);
+    expect(resolveIn("ArrowLeft", ctx)).toBe("travel.prev");
+    expect(resolveIn("Shift+ArrowRight", ctx)).toBe("travel.forward");
+    expect(resolveIn("Escape", ctx)).toBe("travel.live");
+    expect(resolveIn("J", ctx)).toBe("row.down");
+    expect(resolveIn("Meta+D", ctx)).toBe("pane.splitDown"); // a global
+  });
+
+  it("the live table keeps its keys", () => {
+    const ctx = keyContexts("table", false);
+    expect(resolveIn("ArrowLeft", ctx)).toBeUndefined();
+    expect(resolveIn("Escape", ctx)).toBe("table.clearSelection");
+    expect(resolveIn("T", ctx)).toBe("travel.toggle");
+    expect(keyContexts("detail", true)).toEqual(["detail"]);
   });
 });
