@@ -1,4 +1,4 @@
-import type { Config, FramePayload, PortForward, SessionPayload, Transport } from "./types";
+import type { Config, FramePayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
 
 /** WebSocket transport to the headless Go backend (tests, browser dev). */
 export function wsTransport(url: string): Transport {
@@ -6,6 +6,7 @@ export function wsTransport(url: string): Transport {
   const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   const frameListeners = new Set<(p: FramePayload) => void>();
   const configListeners = new Set<(c: Config) => void>();
+  const columnsListeners = new Set<(c: Record<string, TypeView>) => void>();
   const sessionListeners = new Set<(p: SessionPayload) => void>();
   const forwardListeners = new Set<(l: PortForward[]) => void>();
   let ws: WebSocket;
@@ -21,6 +22,10 @@ export function wsTransport(url: string): Transport {
       }
       if (msg.event === "kw:config") {
         configListeners.forEach((cb) => cb(msg.data));
+        return;
+      }
+      if (msg.event === "kw:columns") {
+        columnsListeners.forEach((cb) => cb(msg.data));
         return;
       }
       if (msg.event === "kw:session") {
@@ -51,6 +56,10 @@ export function wsTransport(url: string): Transport {
     update: (p, y) => call("Update", p, y),
     preview: (p, d) => call("Preview", p, d),
     fieldKeys: (p, path) => call("FieldKeys", p, path),
+    columnChoices: (p) => call("ColumnChoices", p),
+    columnConfigs: () => call("ColumnConfigs"),
+    setTypeColumns: (t, c) => call("SetTypeColumns", t, c),
+    setColumnWidths: (t, w) => call("SetColumnWidths", t, w),
     setViewport: (p, o, l) => call("SetViewport", p, o, l),
     resync: (p) => call("Resync", p),
     object: (p, k) => call("Object", p, k),
@@ -100,6 +109,10 @@ export function wsTransport(url: string): Transport {
     onConfig: (cb) => {
       configListeners.add(cb);
       return () => configListeners.delete(cb);
+    },
+    onColumns: (cb) => {
+      columnsListeners.add(cb);
+      return () => columnsListeners.delete(cb);
     },
     onSession: (cb) => {
       sessionListeners.add(cb);

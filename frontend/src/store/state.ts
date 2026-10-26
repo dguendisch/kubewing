@@ -1,5 +1,5 @@
 import type { FocusContext } from "../keys/keymap";
-import type { ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ColumnChoices, ContextList, DebugOptions, EditPreview, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
@@ -18,6 +18,21 @@ export interface PaneSpec {
   jumpFilter?: string;
   /** Hides healthy objects of the healthKinds (other kinds pass). */
   hideHealthy?: boolean;
+  /** Sorts by a column (a header click): its name, "-" in front = descending; unset = kubectl's order. */
+  sort?: string;
+}
+
+/** A header click: by that column ascending, then descending, then back to kubectl's order. */
+export function nextSort(current: string | undefined, column: string): string | undefined {
+  if (current === column) return `-${column}`;
+  if (current === `-${column}`) return undefined;
+  return column;
+}
+
+/** The sorted column and its direction, from PaneSpec.sort. */
+export function sortOf(sort: string | undefined): { column: string; desc: boolean } | undefined {
+  if (!sort) return undefined;
+  return sort.startsWith("-") ? { column: sort.slice(1), desc: true } : { column: sort, desc: false };
 }
 
 /**
@@ -49,8 +64,8 @@ export interface PaneState {
   forward?: HistoryEntry[];
   /** After moving through the history: the row to select again once the pane shows it (by key). */
   reselect?: string;
-  /** Column widths the user dragged to, by column name; others keep their defaults. */
-  widths?: Record<string, number>;
+  /** Resource type the server pane resolved to (pods, deployments.apps): its column settings apply. */
+  type?: string;
 }
 
 /** A view in a pane's jump history: its spec and the row selected there. */
@@ -128,8 +143,9 @@ export interface Overlay {
    *  edit: a row's object in the YAML editor, then the server's dry-run diff;
    *  jump: where the pane can go from a row (namespace, owners, owned);
    *  history: a pane's back or forward history (holding its ← / → button);
-   *  error: the full text of an error in the status line (a click on it). */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error";
+   *  error: the full text of an error in the status line (a click on it);
+   *  columns: the pane's columns (its resource type's), -o wide and custom ones. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -164,6 +180,8 @@ export interface Overlay {
   opsDefaults?: OpsPodDefaults;
   /** edit: the editor's state; confirm: the edit being written (a failed write reopens the editor with it). */
   edit?: EditState;
+  /** columns: the pane's columns, loaded before it opens. */
+  columns?: ColumnChoices;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -570,6 +588,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   history: "menu",
   // no bindings of its own: ⌘C is the native copy of the selection there
   error: "dialog",
+  columns: "dialog",
 };
 
 export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
@@ -601,6 +620,7 @@ export function pipelineYAML(spec: PaneSpec): string {
     ...(spec.hideHealthy ? [{ hideHealthy: true }] : []),
     ...(spec.filter ? [{ filter: spec.filter }] : []),
     ...(spec.grep ? [{ grep: spec.grep }] : []),
+    ...(spec.sort ? [{ sort: [spec.sort] }] : []),
   ];
   if (stages.length) p.stages = stages;
   return JSON.stringify(p);

@@ -63,6 +63,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Filter by Labels", "filter.focusLabels"],
       ["Filter by CEL", "filter.focusCel"],
       ["Hide Healthy", "filter.toggleHealthy"],
+      ["Columns…", "view.columns"],
       null,
       ["Toggle Line Wrap", "detail.toggleWrap"],
       null,

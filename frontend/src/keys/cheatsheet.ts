@@ -70,6 +70,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("filter by label selector", "filter.focusLabels"),
       row("filter by CEL expression", "filter.focusCel"),
       row("hide / show healthy pods and workloads", "filter.toggleHealthy"),
+      row("columns: -o wide, custom ones (also right-click the header)", "view.columns"),
       row("leave the filter bar", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),
       row("page down / up", "row.pageDown", "row.pageUp"),

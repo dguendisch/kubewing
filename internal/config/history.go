@@ -6,14 +6,16 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 
 	"sigs.k8s.io/yaml"
 )
 
-// HistoryFile is the one file kubewing writes in its directory: what it
-// remembers between runs (recent debug images, the window's size). Hand-edited files stay
-// read-only; this one is the app's and is rewritten as a whole.
+// HistoryFile is one of the two files kubewing writes in its directory (the
+// other is ColumnsFile): what it remembers between runs (recent debug
+// images, the window's size). Hand-edited files stay read-only; this one is
+// the app's and is rewritten as a whole.
 const HistoryFile = "history.yaml"
 
 // MaxDebugImages is how many recent debug images are kept.
@@ -126,23 +128,27 @@ func (s *HistoryStore) RemoveDebugImage(image string) error {
 	return s.save()
 }
 
-// save writes atomically (temp file + rename), so a crash never leaves half a file.
 func (s *HistoryStore) save() error {
-	if s.dir == "" {
+	return writeAtomic(s.dir, HistoryFile, "# Written by kubewing (recent debug/ops pod images, last ops pod settings, window size); safe to delete.\n", s.h)
+}
+
+// writeAtomic writes v as YAML to dir/file (temp file + rename), so a crash
+// never leaves half a file; dir "" writes nothing.
+func writeAtomic(dir, file, header string, v any) error {
+	if dir == "" {
 		return nil
 	}
-	b, err := yaml.Marshal(s.h)
+	b, err := yaml.Marshal(v)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.dir, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
+	if err := os.MkdirAll(dir, 0o755); err != nil && !errors.Is(err, fs.ErrExist) {
 		return err
 	}
-	tmp, err := os.CreateTemp(s.dir, ".history-*.yaml")
+	tmp, err := os.CreateTemp(dir, "."+strings.TrimSuffix(file, ".yaml")+"-*.yaml")
 	if err != nil {
 		return err
 	}
-	header := "# Written by kubewing (recent debug/ops pod images, last ops pod settings, window size); safe to delete.\n"
 	if _, err := tmp.Write(append([]byte(header), b...)); err != nil {
 		tmp.Close()
 		os.Remove(tmp.Name())
@@ -152,7 +158,7 @@ func (s *HistoryStore) save() error {
 		os.Remove(tmp.Name())
 		return err
 	}
-	return os.Rename(tmp.Name(), filepath.Join(s.dir, HistoryFile))
+	return os.Rename(tmp.Name(), filepath.Join(dir, file))
 }
 
 func dedupe(in []string, max int) []string {

@@ -1,6 +1,7 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
 // (config.yaml, keybindings.yaml, themes/*.yaml). kubewing only reads them:
-// the one file it writes there is its own history.yaml (see HistoryStore).
+// the files it writes there are its own history.yaml (see HistoryStore) and
+// columns.yaml (see ColumnStore).
 // Missing files mean defaults;
 // invalid parts fall back to defaults and are reported in Effective.Errors,
 // so one typo never prevents the app from starting.

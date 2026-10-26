@@ -6,6 +6,7 @@ import { JumpMenu } from "./components/JumpMenu";
 import { HistoryList } from "./components/HistoryNav";
 import { ErrorDetail } from "./components/ErrorDetail";
 import { DebugDialog } from "./components/Debug";
+import { ColumnsDialog } from "./components/Columns";
 import { OpsPodDialog } from "./components/OpsPod";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
@@ -98,6 +99,7 @@ export function App() {
       <ContainerPicker />
       <DebugDialog />
       <OpsPodDialog />
+      <ColumnsDialog />
       <TabSwitcher />
       <Help />
       <DragPreview />

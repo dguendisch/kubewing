@@ -1,8 +1,7 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { celContext, celGlobals, keyCandidates, operatorCandidates } from "../complete/cel";
-import { rank, type Candidate, type Match } from "../complete/complete";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { CelSuggestions, useCelCompletion } from "../complete/useCelCompletion";
 import { bridge, paneData } from "../store/store";
-import type { FieldKeys, Preview } from "../transport/types";
+import type { Preview } from "../transport/types";
 
 interface Props {
   field: "filter" | "labels";
@@ -47,8 +46,6 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
   // the dry run and the draft it was computed for (it lags the typing by the debounce)
   const [result, setResult] = useState<{ draft: string; preview: Preview }>();
   const preview = result?.draft === draft ? result.preview : undefined;
-  const [caret, setCaret] = useState(0);
-  const [list, setList] = useState<{ matches: Match[]; from: number; active: number }>();
   const [history, setHistory] = useState(-1);
   const pending = draft !== applied;
   const cel = field === "filter";
@@ -78,55 +75,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
   }, [draft, serverId, pending, objects]);
 
   // completion: field keys from Go (per path), plus CEL functions; operators after an operand
-  const keys = useRef(new Map<string, Promise<FieldKeys | undefined>>());
-  const fieldKeys = (id: string, path: string[]) => {
-    const k = JSON.stringify(path);
-    return keys.current.get(k) ?? keys.current.set(k, bridge().fieldKeys(id, path).catch(() => undefined)).get(k)!;
-  };
-  useEffect(() => keys.current.clear(), [serverId, objects]);
-  useEffect(() => {
-    if (!cel || !focused || !serverId) return setList(undefined);
-    const ctx = celContext(draft, caret);
-    if (!ctx || (!ctx.word && ctx.path === undefined && !ctx.operator)) return setList(undefined);
-    let live = true;
-    const op = ctx.operator;
-    // the left operand's type: its key's entry at the parent path
-    const key = op?.path?.at(-1);
-    const cands = op
-      ? key === undefined
-        ? Promise.resolve(operatorCandidates(op))
-        : fieldKeys(serverId, op.path!.slice(0, -1)).then((f) => operatorCandidates(op, f?.keys.find((k) => k.key === key)?.type))
-      : ctx.path === undefined
-        ? Promise.resolve(celGlobals)
-        : fieldKeys(serverId, ctx.path).then((f) => keyCandidates(f, ctx));
-    void cands.then((cands) => {
-      if (!live) return;
-      const matches = rank(ctx.word, cands, 30);
-      // nothing more to add when the text is complete (an operator's value adds a space)
-      const typed = draft.slice(ctx.from, caret);
-      if (!matches.length || (matches.length === 1 && matches[0]!.candidate.value.trimEnd() === typed)) return setList(undefined);
-      setList({ matches, from: ctx.from, active: ctx.word && !matches[0]!.fuzzy ? 0 : -1 });
-    });
-    return () => void (live = false);
-  }, [draft, caret, focused, serverId, cel]);
-
-  // the caret after an accept, placed as soon as the new value is in the DOM: a later
-  // frame could land after the next keys (typing on after `!= `) and move it back
-  const place = useRef<number>(undefined);
-  useLayoutEffect(() => {
-    if (place.current === undefined) return;
-    input.current?.setSelectionRange(place.current, place.current);
-    place.current = undefined;
-  });
-  const accept = (c: Candidate) => {
-    if (!list) return;
-    const next = draft.slice(0, list.from) + c.value + draft.slice(caret);
-    const at = list.from + c.value.length;
-    place.current = at;
-    setDraft(next);
-    setCaret(at);
-    setList(undefined);
-  };
+  const { list, accept, onKeyDown: completionKeys, trackCaret, close } = useCelCompletion({ input, value: draft, setValue: setDraft, serverId, enabled: cel && focused });
 
   const apply = async () => {
     // ⏎ may beat the debounced dry run: check this exact draft first
@@ -141,26 +90,10 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const n = list?.matches.length ?? 0;
-    if (list && n && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      e.preventDefault();
-      const d = e.key === "ArrowDown" ? 1 : -1;
-      return setList({ ...list, active: list.active < 0 ? (d > 0 ? 0 : n - 1) : (list.active + d + n) % n });
-    }
-    if (list && n && e.key === "Tab" && !e.shiftKey) {
-      e.preventDefault();
-      return accept(list.matches[Math.max(0, list.active)]!.candidate);
-    }
+    if (completionKeys(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      if (list && list.active >= 0) return accept(list.matches[list.active]!.candidate);
       return void apply();
-    }
-    if (e.key === "Escape" && list) {
-      // the list closes first; a second Esc leaves the field (keymap)
-      e.preventDefault();
-      e.stopPropagation();
-      return setList(undefined);
     }
     // ↑/↓ in a CEL field without suggestions: recent filters
     if (cel && !list && (e.key === "ArrowUp" || e.key === "ArrowDown") && recent.length && (history >= 0 || !draft)) {
@@ -188,14 +121,14 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
         value={draft}
         onChange={(e) => {
           setDraft(e.target.value);
-          setCaret(e.target.selectionStart ?? e.target.value.length);
+          trackCaret(e.target);
           setHistory(-1);
         }}
-        onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+        onSelect={(e) => trackCaret(e.currentTarget)}
         onKeyDown={onKeyDown}
         onFocus={onFocus}
         onBlur={(e) => {
-          setList(undefined);
+          close();
           // leaving the field applies it, like ⏎ (an invalid draft stays, marked red);
           // the window losing focus (app switch) is not leaving the field
           if (pending && document.hasFocus()) void apply();
@@ -215,26 +148,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
           {status}
         </div>
       ) : null}
-      {list ? (
-        <ul role="listbox" aria-label="cel suggestions" className="absolute top-full left-0 z-40 mt-px max-h-64 min-w-64 overflow-y-auto border border-border bg-bg-elev">
-          {list.matches.map((m, i) => (
-            <li
-              key={m.candidate.value + m.candidate.label}
-              role="option"
-              aria-selected={i === list.active}
-              ref={i === list.active ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                accept(m.candidate);
-              }}
-              className={`flex justify-between gap-3 px-2 py-0.5 ${i === list.active ? "bg-bg-hover text-fg" : "text-fg-muted"}`}
-            >
-              <span className="text-fg">{m.candidate.label}</span>
-              {m.candidate.detail ? <span className="shrink-0">{m.candidate.detail}</span> : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {list ? <CelSuggestions list={list} accept={accept} /> : null}
     </div>
   );
 });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec } from "../commands";
+import { applySpec, moveColumn, openColumns } from "../commands";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
@@ -204,8 +204,11 @@ function TablePane({
             grep={pane.spec.grep}
             selected={pane.selected}
             focused={tableFocused}
-            widths={pane.widths}
-            onResize={(column, width) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, widths: { ...p.widths, [column]: width } })))}
+            type={pane.type}
+            onHeaderMenu={() => void openColumns(id)}
+            onColumnMoved={(from, to) => void moveColumn(id, from, to)}
+            sort={S.sortOf(pane.spec.sort)}
+            onSort={(column) => void applySpec(id, { ...pane.spec, sort: S.nextSort(pane.spec.sort, column) })}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}
             onActivate={() => setUI((s) => S.openOverlay(S.focusPane(s, id), { kind: "detail", pane: id, key: keyAt(pane) }))}
             onContextMenu={(row, x, y) => {
@@ -219,6 +222,24 @@ function TablePane({
       </div>
       <StatusLine pane={pane} />
     </>
+  );
+}
+
+/** Opens the column dialog (same as o); shows its key, which keybindings.yaml may change. */
+function ColumnsButton({ paneId, pushRight }: { paneId: string; pushRight: boolean }) {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "view.columns")?.key);
+  return (
+    <button
+      type="button"
+      aria-label="columns"
+      title={`columns: -o wide, custom ones${key ? ` (${prettyKey(key)})` : ""}`}
+      className={`${pushRight ? "ml-auto" : ""} shrink-0 hover:text-fg`}
+      // keeps the focus where it is: the dialog restores it on close
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => void openColumns(paneId)}
+    >
+      <span aria-hidden>▥</span> columns
+    </button>
   );
 }
 
@@ -400,6 +421,7 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
           {pane.flash.text}
         </span>
       ) : null}
+      {pane.type ? <ColumnsButton paneId={pane.id} pushRight={!pane.flash} /> : null}
     </footer>
   );
 }

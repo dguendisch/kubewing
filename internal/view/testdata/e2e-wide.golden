@@ -1,0 +1,49 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "w-web-0",
+    "w-web-1"
+  ],
+  "rows": [
+    {
+      "key": "w-web-0",
+      "cells": [
+        "prod",
+        "web-0",
+        "Running",
+        "2026-01-01T10:00:00Z"
+      ]
+    },
+    {
+      "key": "w-web-1",
+      "cells": [
+        "prod",
+        "web-1",
+        "Running",
+        "2026-01-04T09:55:00Z"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useReducer, useRef } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   DataEditor,
   GridCellKind,
   type DataEditorRef,
   type DrawCellCallback,
+  type DrawHeaderCallback,
   type GridCell,
   type GridColumn,
   type GridSelection,
@@ -15,7 +16,7 @@ import {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
-import { bridge, paneData } from "../store/store";
+import { bridge, paneData, useColumns } from "../store/store";
 import { grepRanges, layout, withAlpha, type ColorToken, type Range } from "./cells";
 import { parseGrep } from "../components/grep";
 import { rowAt, type PaneData } from "./rowcache";
@@ -62,20 +63,30 @@ interface Props {
   grep: string;
   selected: number;
   focused: boolean;
-  /** Column widths the user resized, by column name. */
-  widths?: Record<string, number>;
-  onResize: (column: string, width: number) => void;
+  /** Resource type (pods, deployments.apps): its dragged column widths apply, and a drag saves them. */
+  type?: string;
   onSelect: (row: number) => void;
   onActivate: () => void;
   /** Right-click on a row: select it and open its context menu at (x, y) in the viewport. */
   onContextMenu?: (row: number, x: number, y: number) => void;
+  /** Right-click on the header. */
+  onHeaderMenu?: () => void;
+  /** A header dragged to another column's place (shown column indices). */
+  onColumnMoved?: (from: number, to: number) => void;
+  /** The sorted column, if any (PaneSpec.sort): its header shows the direction. */
+  sort?: { column: string; desc: boolean };
+  /** A click on a header (not its resize edge): sort by that column. */
+  onSort?: (column: string) => void;
 }
+
+/** How long after the last resize step the widths are saved (a drag fires one per mouse move). */
+const saveWidthsAfter = 300;
 
 /**
  * Live table. Data flows bridge → paneData → updateCells (no React render).
  * Only visible rows (+ overscan) are requested from Go.
  */
-export function Table({ serverId, grep, selected, focused, widths, onResize, onSelect, onActivate, onContextMenu }: Props) {
+export function Table({ serverId, grep, selected, focused, type, onSelect, onActivate, onContextMenu, onHeaderMenu, onColumnMoved, sort, onSort }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -156,10 +167,29 @@ export function Table({ serverId, grep, selected, focused, widths, onResize, onS
     if (focused) ref.current?.scrollTo(0, selected, "vertical");
   }, [selected, focused]);
 
+  // widths: the type's saved ones, under the ones of a drag not saved yet
+  const saved = useColumns((c) => (type ? c.types[type]?.widths : undefined));
+  const [dragged, setDragged] = useState<Record<string, number>>({});
+  const save = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(save.current), []);
+  const widths = { ...saved, ...dragged };
+  const onColumnResize = (column: string, width: number) => {
+    const next = { ...dragged, [column]: width };
+    setDragged(next);
+    clearTimeout(save.current);
+    if (!type) return;
+    save.current = setTimeout(() => {
+      // the push (onColumns) brings them back as saved; drop the local ones once it did
+      bridge()
+        .setColumnWidths(type, { ...useColumns.getState().types[type]?.widths, ...next })
+        .then(() => setDragged((d) => (d === next ? {} : d)), () => {}); // a drag since keeps its own
+    }, saveWidthsAfter);
+  };
+
   const d = data.current;
   // a resized column stops growing: it keeps the width it was dragged to
   const columns: GridColumn[] = d.columns.map((c) => {
-    const w = widths?.[c.name];
+    const w = widths[c.name];
     if (w !== undefined) return { title: c.name, id: c.name, width: w };
     return {
       title: c.name,
@@ -172,6 +202,31 @@ export function Table({ serverId, grep, selected, focused, widths, onResize, onS
   const getCellContent = ([col, row]: Item): GridCell => {
     const l = layout(rowAt(data.current, row), col, data.current.columns[col], Date.now());
     return { kind: GridCellKind.Text, data: l.text, displayData: l.text, allowOverlay: false, readonly: true };
+  };
+
+  // the sorted column's header: Glide draws it as usual, then a small triangle at its right edge
+  const drawHeader: DrawHeaderCallback = (args, drawContent) => {
+    drawContent();
+    if (!sort || args.column.id?.toUpperCase() !== sort.column.toUpperCase()) return;
+    const { ctx, rect } = args;
+    const s = 4;
+    const x = rect.x + rect.width - 10;
+    const y = rect.y + rect.height / 2;
+    ctx.save();
+    ctx.fillStyle = colors["fg"]!;
+    ctx.beginPath();
+    if (sort.desc) {
+      ctx.moveTo(x - s, y - s / 2);
+      ctx.lineTo(x + s, y - s / 2);
+      ctx.lineTo(x, y + s / 2 + 1);
+    } else {
+      ctx.moveTo(x - s, y + s / 2);
+      ctx.lineTo(x + s, y + s / 2);
+      ctx.lineTo(x, y - s / 2 - 1);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   };
 
   const drawCell: DrawCellCallback = (args, drawContent) => {
@@ -241,14 +296,24 @@ export function Table({ serverId, grep, selected, focused, widths, onResize, onS
       headerHeight={24}
       getCellContent={getCellContent}
       drawCell={drawCell}
+      drawHeader={drawHeader}
+      // a click sorts by the column; Glide sends none for the resize edge or a drag to another column
+      onHeaderClicked={(col) => {
+        const name = d.columns[col]?.name;
+        if (name) onSort?.(name);
+      }}
       theme={theme}
       onVisibleRegionChanged={onVisible}
-      // drag a header edge; double-click it to fit the visible cells
-      onColumnResize={(c, _, __, withGrow) => onResize(c.id!, withGrow)}
+      // drag a header to move the column (it's saved for the type, as the column dialog does);
+      // drag a header edge to resize, double-click it to fit the visible cells
+      onColumnMoved={onColumnMoved}
+      onColumnResize={(c, _, __, withGrow) => onColumnResize(c.id!, withGrow)}
       minColumnWidth={40}
       maxColumnWidth={2000}
       smoothScrollY
       rowSelect="single"
+      // rows only: a header click or a moved column selects no column (resizing would then size all selected ones)
+      columnSelect="none"
       rowMarkers="none"
       gridSelection={selection}
       onGridSelectionChange={(s) => {
@@ -256,6 +321,10 @@ export function Table({ serverId, grep, selected, focused, widths, onResize, onS
         if (r !== undefined) onSelect(r);
       }}
       onCellActivated={onActivate}
+      onHeaderContextMenu={(_, e) => {
+        e.preventDefault(); // no webview context menu
+        onHeaderMenu?.();
+      }}
       onCellContextMenu={([, row], e) => {
         e.preventDefault(); // no webview context menu
         onContextMenu?.(row, e.bounds.x + e.localEventX, e.bounds.y + e.localEventY);

@@ -60,6 +60,8 @@ type Options struct {
 	User string
 	// History remembers recent debug images; nil = in memory only.
 	History *config.HistoryStore
+	// Columns are the column settings per resource type; nil = in memory only.
+	Columns *config.ColumnStore
 	// Actor performs object actions (delete …); nil disables them.
 	Actor source.Actor
 }
@@ -104,6 +106,9 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")
 	}
+	if s.opts.Columns == nil {
+		s.opts.Columns = config.OpenColumns("")
+	}
 	if opts.Config != nil {
 		s.setConfig(*opts.Config)
 	} else {
@@ -140,7 +145,7 @@ func (s *Service) Config() config.Effective {
 }
 
 // ReloadConfig re-reads the config files and emits ConfigEvent. Diff rules
-// apply to panes opened (or rebuilt by Update) afterwards.
+// apply to panes opened afterwards.
 func (s *Service) ReloadConfig() config.Effective {
 	cfg := config.Load(s.opts.ConfigDir)
 	s.setConfig(cfg)
@@ -157,6 +162,10 @@ type pane struct {
 	kick   chan struct{}
 	p      pipeline.Pipeline
 	res    source.Resolved
+	// typ is the resource type the column settings are kept by (resourceName);
+	// explicit: the pipeline brought its own render, the type's columns don't apply
+	typ      string
+	explicit bool
 	// seq numbers frames per pane, monotonic across view rebuilds (Update),
 	// so clients can drop stale frames.
 	seq uint64
@@ -177,6 +186,8 @@ type OpenResult struct {
 	Kind       string `json:"kind"`
 	Resource   string `json:"resource"`
 	Namespaced bool   `json:"namespaced"`
+	// Type is the resource type column settings are kept by (pods, deployments.apps).
+	Type string `json:"type"`
 }
 
 // Open starts a pane for a pipeline given as YAML.
@@ -205,6 +216,10 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	if err != nil {
 		return OpenResult{}, err
 	}
+	typ, explicit := resourceName(sub.Resolved, p.Source.Resource), len(p.Render.Columns) > 0
+	if !explicit {
+		p.Render.Columns = s.opts.Columns.Get(typ).Columns
+	}
 	v, err := view.New(p, s.viewOptions(sub.Resolved.Namespaced && p.Source.AllNamespaces()))
 	if err != nil {
 		sub.Close()
@@ -214,16 +229,18 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.next++
 	id := fmt.Sprintf("p%d", s.next)
 	ctx, cancel := context.WithCancel(context.Background())
-	pn := &pane{id: id, view: v, sub: sub, cancel: cancel, kick: make(chan struct{}, 1), p: p, res: sub.Resolved}
+	pn := &pane{id: id, view: v, sub: sub, cancel: cancel, kick: make(chan struct{}, 1), p: p, res: sub.Resolved, typ: typ, explicit: explicit}
 	s.panes[id] = pn
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
-	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced}, nil
+	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ}, nil
 }
 
-// Update replaces a pane's pipeline (e.g. filter bar edits). If the source
-// is unchanged the shared watch is kept and only the view is rebuilt.
+// Update replaces a pane's stages and columns (e.g. filter bar edits) in
+// place: the shared watch, objects and diff state are kept. The source can't
+// change. Unless the pane was opened with its own columns, its type's ones
+// stay (see SetTypeColumns).
 func (s *Service) Update(paneID, pipelineYAML string) error {
 	p, err := pipeline.Parse([]byte(pipelineYAML))
 	if err != nil {
@@ -234,46 +251,29 @@ func (s *Service) Update(paneID, pipelineYAML string) error {
 		return err
 	}
 	pn.mu.Lock()
-	sameSource := pn.p.Source == p.Source
-	if sameSource && equalColumns(pn.p.Render.Columns, p.Render.Columns) {
-		// filter/grep/sort only: keep objects and diff state
-		err := pn.view.SetStages(p.Stages)
-		if err == nil {
-			pn.p = *p
-		}
+	if pn.p.Source != p.Source {
 		pn.mu.Unlock()
-		if err == nil {
-			pn.poke()
-		}
-		return err
-	}
-	pn.mu.Unlock()
-	if !sameSource {
 		return fmt.Errorf("changing the source of a pane is not supported; open a new pane")
 	}
-	v, err := view.New(*p, s.viewOptions(pn.res.Namespaced && p.Source.AllNamespaces()))
-	if err != nil {
-		return err
+	if !pn.explicit {
+		// the frontend doesn't send columns: the type's ones stay
+		p.Render = pn.p.Render
 	}
-	// Re-subscribe to get a fresh snapshot for the new view.
-	sub, err := s.reg.Subscribe(source.Key{
-		Cluster: p.Source.Cluster, Resource: p.Source.Resource, Namespace: p.Source.Namespace,
-		LabelSelector: p.Source.LabelSelector, FieldSelector: p.Source.FieldSelector,
-	})
-	if err != nil {
-		return err
+	// keep objects and diff state: stages and columns change in place
+	err = pn.view.SetStages(p.Stages)
+	if err == nil && !equalColumns(pn.p.Render.Columns, p.Render.Columns) {
+		if err = pn.view.SetRender(p.Render); err != nil {
+			_ = pn.view.SetStages(pn.p.Stages) // can't fail: applied before
+		}
 	}
-	pn.cancel()
-	pn.sub.Close()
-
-	pn.mu.Lock()
-	v.SetViewport(pn.view.Viewport())
-	pn.view, pn.sub, pn.p = v, sub, *p
-	ctx, cancel := context.WithCancel(context.Background())
-	pn.cancel = cancel
+	if err == nil {
+		pn.p = *p
+	}
 	pn.mu.Unlock()
-	go s.pump(ctx, pn)
-	return nil
+	if err == nil {
+		pn.poke()
+	}
+	return err
 }
 
 func equalColumns(a, b []pipeline.Column) bool { return slices.Equal(a, b) }

@@ -5,7 +5,7 @@ columns:
   - {name: Name, type: string, priority: 0}
   - {name: Status, type: string, priority: 0}
   - {name: Restarts, type: integer, priority: 0}
-  - {name: Age, type: date, priority: 0}
+  - {name: Age, type: string, priority: 0}
 initial:
   - object: {apiVersion: v1, kind: Pod, metadata: {name: api-0, namespace: prod, uid: e-api-0, labels: {app: api}, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
     cells: [api-0, Running, 0, 2h]

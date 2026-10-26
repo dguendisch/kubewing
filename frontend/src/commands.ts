@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
-import { bridge, paneData, setUI, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, DebugOptions, JumpTarget, OpsPodOptions, Pending } from "./transport/types";
+import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
+import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
@@ -8,6 +8,7 @@ import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursor, useDiffNav } from "./editor/Viewer";
 import * as S from "./store/state";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
+import { moveShown } from "./components/columnsForm";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -167,6 +168,8 @@ export function dispatch(cmd: CommandId) {
       if (!key) return;
       return setUI((x) => S.openOverlay(x, { kind: "portforward", pane: pane.id, key }));
     }
+    case "view.columns":
+      return void openColumns(pane.id);
     case "portforward.list":
       return setUI((x) => (x.overlay?.kind === "forwards" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "forwards", pane: pane.id, index: 0 })));
     case "portforward.stop": {
@@ -375,6 +378,46 @@ async function submitEdit() {
  * A selected row that stands for a node (a node, a pod's node) prefills it;
  * nothing selected (a terminal pane, an empty table) starts empty.
  */
+/** The column dialog of a pane: its choices are loaded first (a pane still opening has none yet). */
+export async function openColumns(paneId: string) {
+  const p = useUI.getState().panes[paneId];
+  if (!p?.serverId || !p.type) return;
+  const columns = await bridge()
+    .columnChoices(p.serverId)
+    .catch(() => undefined);
+  if (!columns) return;
+  setUI((x) => S.openOverlay(S.closeOverlay(S.focusPane(x, paneId)), { kind: "columns", pane: paneId, columns }));
+}
+
+/**
+ * A header dragged to another place in the table: the type's columns are
+ * saved in the new order, so every pane of the type follows (like the
+ * column dialog). A refusal shows in the status line.
+ */
+export async function moveColumn(paneId: string, from: number, to: number) {
+  const p = useUI.getState().panes[paneId];
+  if (!p?.serverId || !p.type) return;
+  const type = p.type;
+  try {
+    const choices = await bridge().columnChoices(p.serverId);
+    const shown = choices.options.filter((o) => o.shown && !o.missing).map((o) => o.name);
+    const next = moveShown(shown, useColumns.getState().types[type]?.columns, choices.defaults, from, to);
+    if (next !== undefined) await bridge().setTypeColumns(type, next);
+  } catch (e) {
+    flash(paneId, `moving the column failed: ${errorText(e)}`, true);
+  }
+}
+
+/** The column dialog's ⏎: Go validates and saves; the error, if any, is shown in the dialog. */
+export async function submitColumns(type: string, columns: ColumnSpec[] | null): Promise<string | undefined> {
+  try {
+    await bridge().setTypeColumns(type, columns);
+  } catch (e) {
+    return String((e as Error).message ?? e);
+  }
+  setUI(S.closeOverlay);
+}
+
 async function openOpsPod() {
   const s = useUI.getState();
   if (s.overlay?.kind === "opspod") return;
@@ -684,7 +727,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
       bridge().close(res.pane).catch(() => {}); // superseded or pane closed meanwhile
       return;
     }
-    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, opening: false })));
+    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
   }

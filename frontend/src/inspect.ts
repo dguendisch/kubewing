@@ -2,7 +2,7 @@ import { rowAt } from "./grid/rowcache";
 import { shownDescribe } from "./components/Detail";
 import { openTerminals } from "./term/Terminal";
 import { useConfig } from "./store/config";
-import { paneData, useUI } from "./store/store";
+import { paneData, useColumns, useUI } from "./store/store";
 import * as S from "./store/state";
 
 /**
@@ -43,7 +43,9 @@ export function inspect() {
             serverId: p.serverId,
             error: p.error,
             selected: p.selected,
-            widths: p.widths,
+            type: p.type,
+            // the type's column settings (columns.yaml)
+            view: p.type ? useColumns.getState().types[p.type] : undefined,
             total: d?.total ?? 0,
             status: d?.status,
             columns: d?.columns.map((c) => c.name) ?? [],

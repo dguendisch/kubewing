@@ -48,6 +48,42 @@ export interface OpenResult {
   kind: string;
   resource: string;
   namespaced: boolean;
+  /** Resource type column settings are kept by (pods, deployments.apps). */
+  type: string;
+}
+
+/** Mirrors pipeline.Column: a custom column (path or expr), else a server column by name. */
+export interface ColumnSpec {
+  name: string;
+  path?: string;
+  expr?: string;
+  type?: ColumnType;
+}
+
+/** Mirrors config.TypeView: a resource type's columns (none = server defaults) and dragged widths. */
+export interface TypeView {
+  columns?: ColumnSpec[];
+  widths?: Record<string, number>;
+}
+
+/** Mirrors view.ColumnOption: a column the column dialog offers. */
+export interface ColumnOption {
+  name: string;
+  type?: ColumnType;
+  /** > 0: a server column kubectl shows only with -o wide. */
+  priority?: number;
+  shown: boolean;
+  path?: string;
+  expr?: string;
+  /** A configured server column this resource doesn't have. */
+  missing?: boolean;
+}
+
+/** Mirrors view.ColumnChoices. */
+export interface ColumnChoices {
+  options: ColumnOption[];
+  /** The columns shown without settings, in order. */
+  defaults: string[];
 }
 
 export interface Detail {
@@ -429,6 +465,14 @@ export interface Transport {
   /** Keys at a dot path ("" = top level) across the pane's objects, for CEL completion. */
   /** Keys at a path: one step per key, as in the object ([] = top level). */
   fieldKeys(pane: string, path: string[]): Promise<FieldKeys>;
+  /** The pane's columns for the column dialog: shown ones in order, then the other server columns. */
+  columnChoices(pane: string): Promise<ColumnChoices>;
+  /** Every resource type's column settings, by type. */
+  columnConfigs(): Promise<Record<string, TypeView>>;
+  /** Saves a type's shown columns (null = defaults) and applies them to its panes; rejects an invalid column. */
+  setTypeColumns(type: string, columns: ColumnSpec[] | null): Promise<void>;
+  /** Saves a type's dragged column widths (null = defaults). */
+  setColumnWidths(type: string, widths: Record<string, number> | null): Promise<void>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;
   resync(pane: string): Promise<void>;
   object(pane: string, key: string): Promise<Detail>;
@@ -500,6 +544,8 @@ export interface Transport {
   setMenu(menus: AppMenu[]): Promise<void>;
   onFrame(cb: (p: FramePayload) => void): () => void;
   onConfig(cb: (c: Config) => void): () => void;
+  /** A type's column settings changed (any client): all types' settings. */
+  onColumns(cb: (c: Record<string, TypeView>) => void): () => void;
   onSession(cb: (p: SessionPayload) => void): () => void;
   onPortForwards(cb: (l: PortForward[]) => void): () => void;
   /** A native menu item was chosen: its command id. */

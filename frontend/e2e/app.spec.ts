@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string }; serverId?: string; total: number; selected: number; widths?: Record<string, number>; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -60,22 +60,238 @@ test("live table shows server-side columns and rows", async ({ page }) => {
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
 });
 
-test("columns resize by dragging a header edge; the width stays with the pane", async ({ page }) => {
-  await openTape(page);
-  const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
-  // NAMESPACE is the first column, 120px wide; its right edge is the resize handle
-  const y = box.y + 12;
-  await page.mouse.move(box.x + 119, y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 160, y, { steps: 4 });
-  await page.mouse.move(box.x + 200, y, { steps: 4 });
-  await page.mouse.up();
-  await expect.poll(async () => (await focused(page)).widths?.["NAMESPACE"]).toBe(200);
-  // the next resource keeps it: same column name
-  await page.keyboard.press("ControlOrMeta+O");
-  await page.getByRole("combobox", { name: "resource" }).fill("e2e-pods");
-  await page.keyboard.press("Enter");
-  await expect.poll(async () => (await focused(page)).widths?.["NAMESPACE"]).toBe(200);
+test.describe("columns (per resource type)", () => {
+  // one backend serves the whole run, and columns.yaml with it: leave e2e-wide as it was
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(async () => {
+      const b = (window as unknown as { __kw: { bridge(): { setTypeColumns(t: string, c: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
+      await b.setTypeColumns("e2e-wide", null);
+      await b.setColumnWidths("e2e-wide", null);
+    });
+  });
+  const dialog = (page: Page) => page.getByRole("dialog", { name: "columns" });
+  const columnList = (page: Page) => dialog(page).getByRole("listbox", { name: "columns" }).getByRole("option");
+
+  test("dragging a header edge saves the width for the type; a new pane of it has it too", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    // NAMESPACE is the first column, 120px wide; its right edge is the resize handle
+    const y = box.y + 12;
+    await page.mouse.move(box.x + 119, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 160, y, { steps: 4 });
+    await page.mouse.move(box.x + 200, y, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await focused(page)).view?.widths?.["NAMESPACE"]).toBe(200);
+    await page.keyboard.press("ControlOrMeta+D");
+    await expect.poll(async () => (await focused(page)).view?.widths?.["NAMESPACE"]).toBe(200);
+  });
+
+  test("o: -o wide shows the wide columns in every pane of the type; esc cancels, reset goes back", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("ControlOrMeta+D"); // a second pane of the type
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    await page.keyboard.press("o");
+    await expect(dialog(page)).toBeVisible();
+    // the keyboard starts in the list, no click needed
+    await expect(columnList(page).first()).toBeFocused();
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP\s*wide/, /NODE\s*wide/]);
+    // esc: nothing changes
+    await page.getByLabel("wide", { exact: true }).check();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeHidden();
+    expect((await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    // so does the cancel button
+    await page.keyboard.press("o");
+    await page.getByLabel("wide", { exact: true }).check();
+    await dialog(page).getByRole("button", { name: "cancel" }).click();
+    await expect(dialog(page)).toBeHidden();
+    expect((await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+
+    await page.keyboard.press("o");
+    await page.getByLabel("wide", { exact: true }).check();
+    await dialog(page).getByRole("button", { name: "OK" }).click();
+    await expect(dialog(page)).toBeHidden();
+    const wide = ["NAMESPACE", "NAME", "STATUS", "AGE", "IP", "NODE"];
+    await expect.poll(async () => (await focused(page)).columns).toEqual(wide);
+    expect((await focused(page)).rows.map((r) => r.cells[4])).toEqual(["10.0.0.1", "10.0.0.2"]);
+    // the other pane follows, live (its own frames: polled too)
+    await expect.poll(async () => Object.values((await inspect(page)).panes).filter((p) => p.spec.resource === "e2e-wide").map((p) => p.columns)).toEqual([wide, wide]);
+    expect((await focused(page)).view?.columns?.map((c) => c.name)).toEqual(wide);
+
+    // reset: the server's defaults, saved as no settings
+    await page.keyboard.press("o");
+    await dialog(page).getByRole("button", { name: "reset columns" }).click();
+    await dialog(page).getByRole("button", { name: "OK" }).click();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    expect((await focused(page)).view?.columns).toBeUndefined();
+  });
+
+  test("reorder and hide with the keyboard; a custom column by field path, completed from the objects", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    const options = columnList(page);
+    await expect(options.first()).toBeFocused();
+    await page.keyboard.press("Space"); // NAMESPACE off
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("ArrowDown"); // STATUS
+    await page.keyboard.press("Alt+ArrowUp"); // before NAME
+    await expect(options.nth(1)).toHaveText(/STATUS/);
+    // node name, by completing the path one key at a time
+    const path = dialog(page).getByRole("combobox", { name: "column path" });
+    await path.fill("spec.nod");
+    await page.getByRole("option", { name: /nodeName/ }).click();
+    await expect(path).toHaveValue("spec.nodeName");
+    await page.getByLabel("column name").fill("host");
+    await path.press("Enter");
+    await expect(options).toHaveText([/NAMESPACE/, /STATUS/, /NAME/, /AGE/, /HOST\s*spec\.nodeName/, /IP/, /NODE/]);
+    // a bad CEL expression is refused by Go, the dialog stays
+    await page.getByLabel("column source").selectOption("expr");
+    await page.getByLabel("column expression").fill("o.spec.");
+    await page.getByLabel("column expression").press("Enter");
+    await options.first().focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog(page).getByRole("alert")).toBeVisible();
+    await page.getByRole("button", { name: "remove SPEC" }).click();
+    await options.first().focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toBeHidden();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["STATUS", "NAME", "AGE", "HOST"]);
+    expect((await focused(page)).rows.map((r) => r.cells[3])).toEqual(["node-a", "node-b"]);
+  });
+
+  test("CEL columns complete from the objects, as the filter bar's CEL field", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    await page.getByLabel("column source").selectOption("expr");
+    const expr = page.getByLabel("column expression");
+    await expr.fill("o.spec.");
+    const list = dialog(page).getByRole("listbox", { name: "cel suggestions" });
+    await expect(list.getByRole("option").first()).toBeVisible();
+    await expect(list).toContainText("nodeName");
+    await page.keyboard.type("nod");
+    await page.keyboard.press("Tab");
+    await expect(expr).toHaveValue("o.spec.nodeName");
+    await expect(list).toBeHidden();
+    // ⏎ on a highlighted suggestion takes it, the next ⏎ adds the column; esc closes only the list
+    await page.keyboard.type(".size() > 0 && o.metadata.lab");
+    await expect(list).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(list).toBeHidden();
+    await expect(dialog(page)).toBeVisible();
+    await expr.fill("o.spec.nodeName");
+    await page.getByLabel("column name").fill("node2");
+    await expr.press("Enter");
+    await expect(columnList(page)).toContainText(["NODE2"]);
+  });
+
+  test("the status line's columns button opens it; the focus comes back to the table", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.getByRole("status", { name: "pane status" }).getByRole("button", { name: "columns" }).click();
+    await expect(dialog(page)).toBeVisible();
+    await expect(columnList(page).first()).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeHidden();
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test("reorder by drag & drop in the dialog", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    // AGE onto NAME: it lands where NAME was
+    await columnList(page).nth(3).dragTo(columnList(page).nth(1));
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /AGE/, /NAME/, /STATUS/, /IP/, /NODE/]);
+    await dialog(page).getByRole("button", { name: "OK" }).click();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "AGE", "NAME", "STATUS"]);
+  });
+
+  test("drag a header in the table to move the column: saved for the type, the other panes follow", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("ControlOrMeta+D");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    // NAMESPACE (120px, first) onto STATUS: NAME grows, so STATUS (120px) sits right before AGE (70px) at the right
+    // edge; pressed mid-header (not the resize edge) and moved past Glide's 20px drag threshold
+    const y = box.y + 12;
+    await page.mouse.move(box.x + 40, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 160, y, { steps: 6 });
+    await page.mouse.move(box.x + box.width - 140, y, { steps: 10 });
+    await page.mouse.up();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAME", "STATUS", "NAMESPACE", "AGE"]);
+    await expect
+      .poll(async () => Object.values((await inspect(page)).panes).filter((p) => p.spec.resource === "e2e-wide").map((p) => p.columns))
+      .toEqual([["NAME", "STATUS", "NAMESPACE", "AGE"], ["NAME", "STATUS", "NAMESPACE", "AGE"]]);
+    expect((await focused(page)).view?.columns?.map((c) => c.name)).toEqual(["NAME", "STATUS", "NAMESPACE", "AGE"]);
+  });
+
+  test("a header click sorts by the column: ascending, descending, back to kubectl's order", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const names = async () => (await focused(page)).rows.map((r) => r.cells[1]);
+    await expect.poll(names).toEqual(["web-0", "web-1"]);
+    // the NODE column isn't shown: sort by NAME (the column after NAMESPACE, which ends at 120px)
+    const name = () => page.mouse.click(box.x + 180, box.y + 12);
+    // the sorted header shows a triangle near its right edge: bright pixels there, none before the click
+    // (Glide draws the headers on its overlay canvas, the one after the cells')
+    const canvas = page.locator("section[data-pane] canvas").nth(1);
+    const nameEnd = box.width - 190; // NAME grows: STATUS (120) and AGE (70) follow it
+    const arrow = () =>
+      canvas.evaluate((c: HTMLCanvasElement, x: number) => {
+        const dpr = window.devicePixelRatio;
+        const px = c.getContext("2d")!.getImageData((x - 16) * dpr, 6 * dpr, 12 * dpr, 12 * dpr).data;
+        let n = 0;
+        for (let i = 0; i < px.length; i += 4) if (px[i]! + px[i + 1]! + px[i + 2]! > 450) n++;
+        return n;
+      }, nameEnd);
+    expect(await arrow()).toBe(0);
+    await name();
+    await expect.poll(async () => (await focused(page)).spec.sort).toBe("NAME");
+    await expect.poll(names).toEqual(["web-0", "web-1"]);
+    await expect.poll(arrow).toBeGreaterThan(4);
+    await name();
+    await expect.poll(async () => (await focused(page)).spec.sort).toBe("-NAME");
+    await expect.poll(names).toEqual(["web-1", "web-0"]);
+    await name();
+    await expect.poll(async () => (await focused(page)).spec.sort).toBeUndefined();
+    await expect.poll(names).toEqual(["web-0", "web-1"]);
+    await expect.poll(arrow).toBe(0);
+    // a click on the resize edge doesn't sort
+    await page.mouse.click(box.x + 119, box.y + 12);
+    await page.waitForTimeout(300);
+    expect((await focused(page)).spec.sort).toBeUndefined();
+  });
+
+  test("AGE sorts by time, not by its text: 5m before 3d ascending", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    // web-0 is 3 days old, web-1 5 minutes ("3d" < "5m" as text, the other way round in time)
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const age = () => page.mouse.click(box.x + box.width - 35, box.y + 12); // AGE is last, 70px
+    const names = async () => (await focused(page)).rows.map((r) => r.cells[1]);
+    await age();
+    await expect.poll(async () => (await focused(page)).spec.sort).toBe("AGE");
+    await expect.poll(names).toEqual(["web-1", "web-0"]);
+    await age();
+    await expect.poll(async () => (await focused(page)).spec.sort).toBe("-AGE");
+    await expect.poll(names).toEqual(["web-0", "web-1"]);
+  });
+
+  test("the path and CEL fields are equally wide", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    const path = (await dialog(page).getByRole("combobox", { name: "column path" }).boundingBox())!;
+    await page.getByLabel("column source").selectOption("expr");
+    const cel = (await page.getByLabel("column expression").boundingBox())!;
+    expect(Math.round(path.width)).toBe(Math.round(cel.width));
+    expect(Math.round(path.x)).toBe(Math.round(cel.x));
+  });
+
+  test("right-click on the header opens it too", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    await page.mouse.click(box.x + 60, box.y + 12, { button: "right" });
+    await expect(dialog(page)).toBeVisible();
+  });
 });
 
 test("keyed diff: restart is a changed cell, recreate is remove + add", async ({ page }) => {

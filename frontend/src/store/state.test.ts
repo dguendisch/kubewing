@@ -366,6 +366,20 @@ describe("pipelineYAML", () => {
     expect(JSON.parse(f).stages).toEqual([{ filter: 'o.status.phase == "Running"' }, { grep: "oom" }]);
     const h = S.pipelineYAML({ context: "", resource: "po", namespace: "", labelSelector: "", grep: "", filter: "", hideHealthy: true });
     expect(JSON.parse(h).stages).toEqual([{ hideHealthy: true }]);
+    const s = S.pipelineYAML({ context: "", resource: "po", namespace: "", labelSelector: "", grep: "oom", filter: "", sort: "-AGE" });
+    expect(JSON.parse(s).stages).toEqual([{ grep: "oom" }, { sort: ["-AGE"] }]);
+  });
+});
+
+describe("header click sort", () => {
+  it("cycles ascending, descending, kubectl's order; another column starts ascending", () => {
+    expect(S.nextSort(undefined, "AGE")).toBe("AGE");
+    expect(S.nextSort("AGE", "AGE")).toBe("-AGE");
+    expect(S.nextSort("-AGE", "AGE")).toBeUndefined();
+    expect(S.nextSort("-AGE", "NAME")).toBe("NAME");
+    expect(S.sortOf("-AGE")).toEqual({ column: "AGE", desc: true });
+    expect(S.sortOf("NAME")).toEqual({ column: "NAME", desc: false });
+    expect(S.sortOf(undefined)).toBeUndefined();
   });
 });
 

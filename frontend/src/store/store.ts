@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { Transport } from "../transport/types";
 import { applyFrame, emptyPane, type PaneData } from "../grid/rowcache";
 import { b64decode, sessions } from "../term/sessions";
-import type { ContextList, PortForward } from "../transport/types";
+import type { ContextList, PortForward, TypeView } from "../transport/types";
 import { menuSpec } from "../keys/appMenu";
 import type { Binding } from "../keys/keymap";
 import { applyConfig, useConfig } from "./config";
@@ -56,6 +56,9 @@ export const paneData = new PaneDataStore();
 /** Active port-forwards (pushed by Go on every change). */
 export const usePortForwards = create<{ list: PortForward[] }>(() => ({ list: [] }));
 
+/** Column settings per resource type (columns.yaml; pushed by Go on every change). */
+export const useColumns = create<{ types: Record<string, TypeView> }>(() => ({ types: {} }));
+
 let transport: Transport | undefined;
 
 export function connect(t: Transport) {
@@ -70,6 +73,8 @@ export function connect(t: Transport) {
   });
   t.onPortForwards((l) => usePortForwards.setState({ list: l }, true));
   t.portForwards().then((l) => usePortForwards.setState({ list: l }, true), () => {});
+  t.onColumns((c) => useColumns.setState({ types: c ?? {} }, true));
+  t.columnConfigs().then((c) => useColumns.setState({ types: c ?? {} }, true), () => {});
   t.onConfig((c) => {
     clearRules(); // context rules may have changed; panes refetch on render
     applyConfig(c);

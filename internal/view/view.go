@@ -5,6 +5,7 @@
 package view
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,7 +52,9 @@ func (o *Options) defaults() {
 
 // colSpec is an effective, compiled column.
 type colSpec struct {
-	info        ColumnInfo
+	info ColumnInfo
+	// priority > 0: a server column kubectl shows only with -o wide
+	priority    int32
 	timeDerived bool
 	numeric     bool
 	// exactly one of the following is used
@@ -96,9 +99,13 @@ type View struct {
 	hideHealthy bool
 	sortBy      [][]string // raw sort specs, resolved against cols
 
-	userCols bool
-	cols     []colSpec
-	sortKeys []sortKey
+	// shown: the configured columns (empty = the server's defaults), resolved
+	// against serverDefs, the column definitions of the last relist (nil = none
+	// yet, or the source isn't a server table)
+	shown      []pipeline.Column
+	serverDefs []metav1.TableColumnDefinition
+	cols       []colSpec
+	sortKeys   []sortKey
 
 	entries map[string]*entry
 	synced  bool
@@ -142,17 +149,30 @@ func New(p pipeline.Pipeline, opts Options) (*View, error) {
 		return nil, err
 	}
 	v.filters, v.greps, v.hideHealthy, v.sortBy = st.filters, st.greps, st.hideHealthy, st.sortBy
-	if len(p.Render.Columns) > 0 {
-		v.userCols = true
-		cols, err := compileColumns(p.Render.Columns)
-		if err != nil {
-			return nil, err
-		}
-		v.setColumns(cols)
-	} else {
-		v.setColumns(defaultColumns(opts.Namespaced))
+	cols, err := v.resolveColumns(p.Render.Columns, nil)
+	if err != nil {
+		return nil, err
 	}
+	v.shown = p.Render.Columns
+	v.setColumns(cols)
 	return v, nil
+}
+
+// SetRender replaces the shown columns in place: objects and diff state are
+// kept, the cells are rendered again. On error the view is unchanged.
+func (v *View) SetRender(r pipeline.Render) error {
+	p := v.p
+	p.Render = r
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	cols, err := v.resolveColumns(r.Columns, v.serverDefs)
+	if err != nil {
+		return err
+	}
+	v.p.Render, v.shown = r, r.Columns
+	v.setColumns(cols)
+	return nil
 }
 
 type stages struct {
@@ -238,8 +258,118 @@ func defaultColumns(namespaced bool) []colSpec {
 	return cols
 }
 
-// serverColumns maps server-side table columns (priority 0, like kubectl
-// without -o wide). Date columns are time-derived; "Age" is re-derived from
+// resolveColumns compiles the shown columns: none = the server's defaults
+// (or NAME/AGE without a server table); otherwise in order, custom ones
+// compiled, server ones looked up by name among all server columns (a name
+// the resource doesn't have is left out).
+func (v *View) resolveColumns(render []pipeline.Column, defs []metav1.TableColumnDefinition) ([]colSpec, error) {
+	available := v.availableColumns(defs)
+	if len(render) == 0 {
+		var out []colSpec
+		for _, c := range available {
+			if c.priority == 0 {
+				out = append(out, c)
+			}
+		}
+		return out, nil
+	}
+	var out []colSpec
+	for _, c := range render {
+		if !c.Server() {
+			cs, err := compileColumns([]pipeline.Column{c})
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, cs...)
+			continue
+		}
+		if i := slices.IndexFunc(available, func(a colSpec) bool { return strings.EqualFold(a.info.Name, c.Name) }); i >= 0 {
+			out = append(out, available[i])
+		}
+	}
+	return out, nil
+}
+
+// availableColumns are all server columns, -o wide ones too; without a
+// server table (nil defs) the built-in NAMESPACE/NAME/AGE.
+func (v *View) availableColumns(defs []metav1.TableColumnDefinition) []colSpec {
+	if defs == nil {
+		return defaultColumns(v.opts.Namespaced)
+	}
+	return serverColumns(defs, v.opts.Namespaced)
+}
+
+// ColumnOption is a column the column configurator offers: a server column
+// (Priority > 0: -o wide only), or a custom one of the shown columns.
+type ColumnOption struct {
+	Name     string `json:"name"`
+	Type     string `json:"type,omitempty"`
+	Priority int32  `json:"priority,omitempty"`
+	Shown    bool   `json:"shown"`
+	// Path or Expr: a custom column
+	Path string `json:"path,omitempty"`
+	Expr string `json:"expr,omitempty"`
+	// Missing: a server column of the config this resource doesn't have
+	Missing bool `json:"missing,omitempty"`
+}
+
+// ColumnChoices are what the column configurator offers for a pane.
+type ColumnChoices struct {
+	// Options: the shown columns in order, then the server columns not shown
+	// (in the server's order).
+	Options []ColumnOption `json:"options"`
+	// Defaults: the columns shown without settings, in order.
+	Defaults []string `json:"defaults"`
+}
+
+// ColumnChoices lists the pane's columns for the column configurator.
+func (v *View) ColumnChoices() ColumnChoices {
+	defaults := []string{}
+	for _, c := range v.availableColumns(v.serverDefs) {
+		if c.priority == 0 {
+			defaults = append(defaults, c.info.Name)
+		}
+	}
+	opts := v.columnOptions()
+	if opts == nil {
+		opts = []ColumnOption{}
+	}
+	return ColumnChoices{Options: opts, Defaults: defaults}
+}
+
+func (v *View) columnOptions() []ColumnOption {
+	available := v.availableColumns(v.serverDefs)
+	var out []ColumnOption
+	shown := map[string]bool{}
+	if len(v.shown) == 0 {
+		for _, c := range v.cols {
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Shown: true})
+			shown[strings.ToUpper(c.info.Name)] = true
+		}
+	}
+	for _, c := range v.shown {
+		shown[strings.ToUpper(c.Name)] = true
+		if !c.Server() {
+			out = append(out, ColumnOption{Name: c.Name, Type: string(c.Type), Shown: true, Path: c.Path, Expr: c.Expr})
+			continue
+		}
+		o := ColumnOption{Name: c.Name, Shown: true, Missing: true}
+		if i := slices.IndexFunc(available, func(a colSpec) bool { return strings.EqualFold(a.info.Name, c.Name) }); i >= 0 {
+			a := available[i]
+			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true}
+		}
+		out = append(out, o)
+	}
+	for _, c := range available {
+		if !shown[strings.ToUpper(c.info.Name)] {
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority})
+		}
+	}
+	return out
+}
+
+// serverColumns maps all server-side table columns, -o wide ones (priority >
+// 0) too. Date columns are time-derived; "Age" is re-derived from
 // creationTimestamp so the frontend can render it against its own clock.
 func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool) []colSpec {
 	var out []colSpec
@@ -248,21 +378,22 @@ func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool) []colSp
 		out = append(out, colSpec{info: ColumnInfo{Name: "NAMESPACE"}, path: ns, cellIndex: -1})
 	}
 	for i, d := range defs {
-		if d.Priority != 0 {
-			continue
-		}
-		cs := colSpec{info: ColumnInfo{Name: strings.ToUpper(d.Name)}, cellIndex: i}
+		cs := colSpec{info: ColumnInfo{Name: strings.ToUpper(d.Name)}, priority: d.Priority, cellIndex: i}
 		switch d.Type {
 		case "integer", "number":
 			cs.numeric = true
 			cs.info.Type = string(pipeline.TypeNumber)
 		case "date":
 			cs.timeDerived = true
-			if strings.EqualFold(d.Name, "age") {
-				cs.creation = true
-				cs.cellIndex = -1
-				cs.info.Type = string(pipeline.TypeAge)
-			}
+		}
+		// apiservers send Age as text ("5m", type string), CRD printer columns as a date: either
+		// way it's re-derived from the creation timestamp, so it ticks and sorts by time
+		if strings.EqualFold(d.Name, "age") {
+			cs.timeDerived = true
+			cs.creation = true
+			cs.cellIndex = -1
+			cs.numeric = false
+			cs.info.Type = string(pipeline.TypeAge)
 		}
 		out = append(out, cs)
 	}
@@ -308,8 +439,11 @@ func (v *View) Apply(ev source.Event, now time.Time) {
 		return
 	case source.Relist:
 		v.err = ""
-		if !v.userCols && ev.Columns != nil {
-			v.setColumns(serverColumns(ev.Columns, v.opts.Namespaced))
+		if ev.Columns != nil {
+			v.serverDefs = ev.Columns
+			// can't fail: custom columns compiled before
+			cols, _ := v.resolveColumns(v.shown, ev.Columns)
+			v.setColumns(cols)
 		}
 		seen := make(map[string]bool, len(ev.Items))
 		for _, it := range ev.Items {
@@ -425,6 +559,9 @@ func (v *View) render(e *entry) {
 			if f, ok := numericValue(cells[i]); ok {
 				e.nums[i] = f
 			}
+		} else if f, ok := humanDuration(cells[i]); ok {
+			// a duration as kubectl prints it (Last Seen: "5m", "2d3h"): sorted by its length
+			e.nums[i] = f
 		}
 	}
 	v.evalMatch(e)
@@ -520,6 +657,34 @@ func humanBytes(b float64) string {
 	return strconv.FormatFloat(b, 'f', 1, 64) + units[i]
 }
 
+// humanDuration parses a duration as kubectl prints it (duration.HumanDuration:
+// "10s", "5m", "2d3h", "3y45d") into seconds; anything else is not one.
+func humanDuration(s string) (float64, bool) {
+	if s == "" || s[0] < '0' || s[0] > '9' {
+		return 0, false
+	}
+	units := map[byte]float64{'s': 1, 'm': 60, 'h': 3600, 'd': 86400, 'y': 365 * 86400}
+	var total, n float64
+	digits := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c >= '0' && c <= '9':
+			n = n*10 + float64(c-'0')
+			digits = true
+		case units[c] > 0 && digits:
+			total += n * units[c]
+			n, digits = 0, false
+		default:
+			return 0, false
+		}
+	}
+	if digits {
+		return 0, false // a bare number isn't a duration
+	}
+	return total, true
+}
+
 func numericValue(s string) (float64, bool) {
 	if f, err := strconv.ParseFloat(s, 64); err == nil {
 		return f, true
@@ -572,10 +737,17 @@ func (v *View) rows() []*entry {
 
 func (v *View) less(a, b *entry) bool {
 	for _, sk := range v.sortKeys {
-		// empty cells sort last in either direction
+		// empty cells sort last in either direction; so does one that isn't a duration
+		// (<unknown>) next to one that is
 		ae, be := a.cells[sk.col] == "", b.cells[sk.col] == ""
 		if ae != be {
 			return be
+		}
+		if !v.cols[sk.col].numeric {
+			ad, bd := !math.IsNaN(a.nums[sk.col]), !math.IsNaN(b.nums[sk.col])
+			if ad != bd {
+				return ad
+			}
 		}
 		if c := v.compare(sk.col, a, b); c != 0 {
 			return (c < 0) != sk.desc
@@ -593,6 +765,16 @@ func (v *View) less(a, b *entry) bool {
 
 func (v *View) compare(col int, a, b *entry) int {
 	x, y := a.cells[col], b.cells[col]
+	if v.cols[col].info.Type == string(pipeline.TypeAge) {
+		// the cell is a timestamp, shown as an age: ascending = youngest first, as the column reads
+		return strings.Compare(y, x)
+	}
+	if !v.cols[col].numeric {
+		// durations as text ("5m" vs "2d3h") compare by their length when both are one
+		if fx, fy := a.nums[col], b.nums[col]; !math.IsNaN(fx) && !math.IsNaN(fy) {
+			return cmp.Compare(fx, fy)
+		}
+	}
 	if v.cols[col].numeric {
 		fx, fy := a.nums[col], b.nums[col]
 		okx, oky := !math.IsNaN(fx), !math.IsNaN(fy)

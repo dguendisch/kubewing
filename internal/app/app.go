@@ -6,6 +6,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
@@ -36,6 +37,16 @@ func (a *App) Preview(pane string, d bridge.Draft) (view.Preview, error) {
 }
 func (a *App) FieldKeys(pane string, path []string) (bridge.FieldKeys, error) {
 	return a.svc.FieldKeys(pane, path)
+}
+func (a *App) ColumnChoices(pane string) (view.ColumnChoices, error) {
+	return a.svc.ColumnChoices(pane)
+}
+func (a *App) ColumnConfigs() map[string]config.TypeView { return a.svc.ColumnConfigs() }
+func (a *App) SetTypeColumns(typ string, cols []pipeline.Column) error {
+	return a.svc.SetTypeColumns(typ, cols)
+}
+func (a *App) SetColumnWidths(typ string, widths map[string]int) error {
+	return a.svc.SetColumnWidths(typ, widths)
 }
 func (a *App) Resync(pane string) error                     { return a.svc.Resync(pane) }
 func (a *App) Object(pane, key string) (view.Detail, error) { return a.svc.Object(pane, key) }

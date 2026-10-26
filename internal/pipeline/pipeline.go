@@ -69,7 +69,8 @@ func (s Stage) Kind() (string, error) {
 
 // Render describes how rows are displayed.
 type Render struct {
-	// Columns overrides the default columns when non-empty.
+	// Columns are the shown columns, in order; empty = the server's default
+	// columns (kubectl get without -o wide).
 	Columns []Column `json:"columns,omitempty"`
 }
 
@@ -83,13 +84,18 @@ const (
 	TypeAge    ColumnType = "age"    // timestamp rendered relative by the frontend; never diffed
 )
 
-// Column is one rendered column; exactly one of Path or Expr must be set.
+// Column is one rendered column: a custom one (Path or Expr), or with
+// neither set a server column by name (NAMESPACE, READY, IP …, -o wide ones
+// too). A server column the resource doesn't have is left out.
 type Column struct {
 	Name string     `json:"name"`
 	Path string     `json:"path,omitempty"` // dot path, e.g. metadata.name or spec.containers[0].image
 	Expr string     `json:"expr,omitempty"` // CEL over `o`
 	Type ColumnType `json:"type,omitempty"`
 }
+
+// Server reports whether the column refers to a server column by name.
+func (c Column) Server() bool { return c.Path == "" && c.Expr == "" }
 
 // TimeDerived reports whether the column changes with wall-clock time and
 // must therefore be excluded from diffing.
@@ -119,8 +125,11 @@ func (p *Pipeline) Validate() error {
 		if c.Name == "" {
 			return fmt.Errorf("render.columns[%d]: name is required", i)
 		}
-		if (c.Path == "") == (c.Expr == "") {
-			return fmt.Errorf("render.columns[%d] (%s): set exactly one of path, expr", i, c.Name)
+		if c.Path != "" && c.Expr != "" {
+			return fmt.Errorf("render.columns[%d] (%s): set path or expr, not both", i, c.Name)
+		}
+		if c.Server() && c.Type != TypeText {
+			return fmt.Errorf("render.columns[%d] (%s): a server column has its type from the server", i, c.Name)
 		}
 		switch c.Type {
 		case TypeText, TypeNumber, TypeBytes, TypeAge:

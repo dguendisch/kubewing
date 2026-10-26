@@ -45,11 +45,11 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### Status
 
-Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works).
+Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works). Also done: column resizing and the column configurator per resource type (`o`: `-o wide`, custom path/CEL columns; `columns.yaml`), on `render.columns` with server columns by name.
 
 Next up:
+- copy arbitrary cell data
 - diff editor (show that j/k is for next/prev change)
-- better column sizing + resizing
 - History buffer (snapshots + deltas, budget, pinning); the diff keeps only the previous version so far.
 
 Still open in P0.1:

@@ -53,6 +53,7 @@ func TestParseErrors(t *testing.T) {
 		"path and expr":    "source: {resource: pods}\nrender: {columns: [{name: A, path: a, expr: b}]}",
 		"bad type":         "source: {resource: pods}\nrender: {columns: [{name: A, path: a, type: wat}]}",
 		"duplicate column": "source: {resource: pods}\nrender: {columns: [{name: A, path: a}, {name: a, path: b}]}",
+		"typed server col": "source: {resource: pods}\nrender: {columns: [{name: IP, type: number}]}",
 	}
 	for name, in := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -60,5 +61,15 @@ func TestParseErrors(t *testing.T) {
 				t.Fatalf("expected error for %q", strings.TrimSpace(in))
 			}
 		})
+	}
+}
+
+func TestServerColumnRef(t *testing.T) {
+	p, err := Parse([]byte("source: {resource: pods}\nrender: {columns: [{name: IP}, {name: X, path: a}]}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.Render.Columns[0].Server() || p.Render.Columns[1].Server() {
+		t.Fatalf("Server(): %+v", p.Render.Columns)
 	}
 }

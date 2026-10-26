@@ -76,7 +76,8 @@ export type CommandId =
   | "term.find"
   | "term.findNext"
   | "term.findPrev"
-  | "term.findClose";
+  | "term.findClose"
+  | "view.columns";
 
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
@@ -92,6 +93,7 @@ export const commandIds: readonly CommandId[] = [
   "object.delete", "object.diff", "object.copyName", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
+  "view.columns",
 ];
 
 export interface Binding {
@@ -140,6 +142,8 @@ export const defaultBindings: Binding[] = [
   { key: "L", command: "filter.focusLabels", when: ["table"] },
   { key: "C", command: "filter.focusCel", when: ["table"] },
   { key: "H", command: "filter.toggleHealthy", when: ["table"] },
+  // as in kubectl get -o wide
+  { key: "O", command: "view.columns", when: ["table"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },

@@ -66,6 +66,7 @@ func main() {
 		*stateDir = opts.ConfigDir
 	}
 	opts.History = config.OpenHistory(*stateDir)
+	opts.Columns = config.OpenColumns(*stateDir)
 	// ops pods are named after the user, as ops-toolbelt's $(whoami); tapes: a fixed one (e2e)
 	if *tapes != "" {
 		opts.User = "e2e"
