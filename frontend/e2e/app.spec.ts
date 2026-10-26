@@ -1531,6 +1531,15 @@ test.describe("object actions", () => {
     await expect(bar.getByLabel("matches")).toHaveText("1 of 1");
     await expect(field).toBeFocused(); // toggles keep the focus in the field
     await bar.getByRole("button", { name: /whole word/ }).click();
+    // a click into the terminal: the bar stays, but ⏎ is the shell's again
+    await page.locator(".xterm").click();
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await expect(bar).toBeVisible();
+    await page.keyboard.type("echo hi");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("$ echo hi\necho hi"); // not a find step
+    await field.click();
+    expect((await inspect(page)).focus).toBe("termfind");
     // regex (⌥⌘R): lines that are exactly 2 digits starting with 9 — 90 … 99
     await field.fill("^9\\d$");
     await page.keyboard.press("Alt+Meta+R");

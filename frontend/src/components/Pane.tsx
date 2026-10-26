@@ -94,7 +94,7 @@ export function Pane({ id }: { id: string }) {
                 void bridge().sessionInput(pane.term!.session, b64encode(d)).catch(() => {});
               }}
               onResize={(c, r) => void bridge().sessionResize(pane.term!.session, c, r).catch(() => {})}
-              onFocus={() => setUI((s) => S.focusPane(s, id))}
+              onFocus={() => setUI((s) => S.focusTerminal(s, id))}
             />
           </div>
         </>

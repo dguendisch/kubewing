@@ -528,6 +528,18 @@ describe("terminal panes", () => {
     expect(s.focus).toBe("terminal");
   });
 
+  it("a click into the terminal takes the keys from its open find bar, keeping the bar", () => {
+    let s = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
+    s = apply(s, (x) => S.updateFind(S.openFind(x), "v2", (f) => ({ ...f, query: "25" })));
+    expect(s.focus).toBe("termfind");
+    s = apply(s, (x) => S.focusTerminal(x, "v2"));
+    expect(s.focus).toBe("terminal");
+    expect(s.panes.v2!.term?.find).toMatchObject({ open: true, query: "25" });
+    // from the table pane too
+    s = apply(apply(s, S.openFind), (x) => S.cyclePane(x, -1));
+    expect(apply(s, (x) => S.focusTerminal(x, "v2")).focus).toBe("terminal");
+  });
+
   it("splitting a terminal pane opens a table, not a second view of the session", () => {
     let s = apply(S.initialState(), (x) => S.openTerminal(x, term("s1")));
     s = apply(s, (x) => S.splitPane(x, "row"));

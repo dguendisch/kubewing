@@ -121,6 +121,12 @@ export function closeFind(s: UIState): UIState {
   return { ...next, focus: "terminal" }; // paneFocus turns it into "ended" for a finished session
 }
 
+/** A click into the terminal: the shell has the keys again (⏎ included); an open find bar stays, with its highlights. */
+export function focusTerminal(s: UIState, paneId: string): UIState {
+  const next = focusPane(s, paneId);
+  return next.focus === "termfind" ? { ...next, focus: "terminal" } : next; // paneFocus turns it into "ended" for a finished session
+}
+
 export function updateFind(s: UIState, paneId: string, f: (x: TermFind) => TermFind): UIState {
   return updatePane(s, paneId, (q) => (q.term ? { ...q, term: { ...q.term, find: f(q.term.find ?? noFind) } } : q));
 }
