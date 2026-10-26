@@ -11,6 +11,12 @@ import (
 type Item struct {
 	Object *unstructured.Unstructured
 	Cells  []any
+	// Norm and Hash are set by the registry: the normalized object (shared,
+	// read-only; also kept in the watch's history) and its content hash.
+	// Unset for items that didn't pass a registry, e.g. events fed to a
+	// view directly.
+	Norm *unstructured.Unstructured
+	Hash string
 }
 
 // EventType enumerates source events.

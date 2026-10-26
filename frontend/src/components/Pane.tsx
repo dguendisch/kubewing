@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec, moveColumn, openColumns } from "../commands";
+import { applySpec, moveColumn, openColumns, toggleRecording } from "../commands";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
@@ -225,6 +225,24 @@ function TablePane({
 }
 
 /** Opens the column dialog (same as o); shows its key, which keybindings.yaml may change. */
+/** Record history on/off for the pane's source (shared by its splits); off by default, it costs per event. */
+function RecordButton({ paneId, on, pushRight }: { paneId: string; on: boolean; pushRight: boolean }) {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "history.toggleRecording")?.key);
+  return (
+    <button
+      type="button"
+      aria-label="record history"
+      aria-pressed={on}
+      title={`${on ? "recording: the diff steps through the last 20 versions ([ / ]); click to stop and drop them" : "record history: keep the last 20 versions of each object, for the diff ([ / ]); costs per event"}${key ? ` (${prettyKey(key)})` : ""}`}
+      className={`${pushRight ? "ml-auto" : ""} shrink-0 ${on ? "text-deleted" : "hover:text-fg"}`}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => void toggleRecording(paneId)}
+    >
+      <span aria-hidden>{on ? "●" : "⏸︎"}</span> {on ? "recording" : "record history"}
+    </button>
+  );
+}
+
 function ColumnsButton({ paneId, pushRight }: { paneId: string; pushRight: boolean }) {
   const key = useConfig((c) => c.bindings.find((b) => b.command === "view.columns")?.key);
   return (
@@ -388,7 +406,7 @@ function healthyTitle(kind: string) {
   return `hide ${what} (h)`;
 }
 
-/** The not-yet-synced marker: live's dot, pulsing while the initial list loads; a still ring once the
+/** The not-yet-synced marker: connected's dot, pulsing while the initial list loads; a still ring once the
  *  source reports an error, since the error beside it is then the news. */
 function Syncing({ stalled }: { stalled: boolean }) {
   return (
@@ -409,7 +427,13 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
   const st = d?.status;
   return (
     <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
-      {st?.synced ? <span>● live</span> : <Syncing stalled={!!st?.error} />}
+      {st?.synced ? (
+        <span>
+          <span className="text-connected">●</span> connected
+        </span>
+      ) : (
+        <Syncing stalled={!!st?.error} />
+      )}
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
@@ -420,7 +444,8 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
           {pane.flash.text}
         </span>
       ) : null}
-      {pane.type ? <ColumnsButton paneId={pane.id} pushRight={!pane.flash} /> : null}
+      <RecordButton paneId={pane.id} on={!!st?.recording} pushRight={!pane.flash} />
+      {pane.type ? <ColumnsButton paneId={pane.id} pushRight={false} /> : null}
     </footer>
   );
 }

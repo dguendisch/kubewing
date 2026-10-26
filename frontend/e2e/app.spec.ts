@@ -1386,6 +1386,82 @@ test.describe("detail view (Monaco)", () => {
   });
 });
 
+// e2e-versions: deployment web scaled 1 → 2 (1s) → 3 (1.5s), then a new image (2s): four versions.
+test("diff without recorded history: previous → current, no versions; record history is off", async ({ page }) => {
+  await openTape(page, "e2e-versions", 1);
+  const record = page.getByRole("button", { name: "record history" });
+  await expect(record).toHaveAttribute("aria-pressed", "false");
+  // after the scale-up to 3 (1.5s): the diff then has a previous version
+  await expect.poll(async () => (await focused(page)).rows[0]?.cells, tapeSteps).toContain("3/3");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("d");
+  const dialog = page.getByRole("dialog", { name: "object detail" });
+  await expect(dialog.locator('[data-viewer="diff"] .monaco-diff-editor')).toBeVisible();
+  await expect(dialog).toContainText("previous → current");
+  await expect(dialog.getByRole("status", { name: "diff versions" })).toHaveCount(0);
+  await page.keyboard.press("["); // nothing to step to
+  expect((await inspect(page)).overlays).toEqual(["detail"]);
+});
+
+test("diff versions: record history (⇧R), then [ / ] step through it, the changed fields above the diff", async ({ page }) => {
+  await openTape(page, "e2e-versions", 1);
+  // before the tape's first change (1s): the current object is the first version
+  await page.keyboard.press("Shift+R");
+  const record = page.getByRole("button", { name: "record history" });
+  await expect(record).toHaveAttribute("aria-pressed", "true");
+  await expect(record).toHaveText(/recording/);
+  await page.keyboard.press("Enter");
+  await expect(page.locator('[data-viewer="single"] .monaco-editor')).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "object detail" });
+  const versions = dialog.getByRole("status", { name: "diff versions" });
+  const changed = dialog.getByRole("list", { name: "changed fields" });
+  await page.keyboard.press("d");
+  // the diff follows the newest version until the image change has come in
+  await expect(versions).toContainText("v3", tapeSteps);
+  await expect(versions).toContainText("v4 ");
+  await expect(versions).toContainText("newest");
+  await expect(changed).toHaveText('spec.template.spec.containers[name=app].image: "web:1" → "web:2"');
+  await page.keyboard.press("[");
+  await expect(versions).toContainText("v2");
+  await expect(versions).toContainText("1 newer");
+  await expect(changed).toHaveText("spec.replicas: 2 → 3");
+  const diff = dialog.locator('[data-viewer="diff"]');
+  await expect(diff.locator(".editor.original .view-lines")).toContainText("replicas: 2");
+  await expect(diff.locator(".editor.modified .view-lines")).toContainText("replicas: 3");
+  // quick presses add up (each steps from the version asked for, not the one loaded)
+  await page.keyboard.press("[");
+  await page.keyboard.press("[");
+  // the oldest: nothing before it, and [ stops there
+  await expect(versions).toHaveText(/^v1 \(\d+s ago\) · 3 newer$/);
+  await expect(dialog).toContainText("version 1 is the oldest seen since watch start");
+  await expect(dialog.getByRole("button", { name: "older version" })).toBeDisabled();
+  await page.keyboard.press("[");
+  expect((await inspect(page)).overlays).toEqual(["detail"]);
+  await expect(versions).toHaveText(/^v1 /);
+  // the buttons don't take the focus; ] back to the newest
+  await dialog.getByRole("button", { name: "newer version" }).click();
+  await expect(changed).toHaveText("spec.replicas: 1 → 2");
+  expect((await inspect(page)).focus).toBe("detail");
+  await page.keyboard.press("]");
+  await page.keyboard.press("]");
+  await expect(versions).toContainText("newest");
+  await expect(dialog.getByRole("button", { name: "newer version" })).toBeDisabled();
+  // d leaves the diff; back in, it starts at the newest again
+  await page.keyboard.press("[");
+  await page.keyboard.press("d");
+  await expect(versions).toHaveCount(0);
+  await page.keyboard.press("d");
+  await expect(versions).toContainText("newest");
+  // stopped (the status line's button), the history goes: back to previous → current
+  await page.keyboard.press("Escape");
+  await record.click();
+  await expect(record).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("d");
+  await expect(dialog).toContainText("previous → current");
+  await expect(versions).toHaveCount(0);
+});
+
 // Object actions on the static tape: web-1 (2 containers, ports 8080/9090), web-3 (1 container),
 // web-4 (init, sidecar, crash-looping and running containers), cfg (a ConfigMap).
 test.describe("object actions", () => {

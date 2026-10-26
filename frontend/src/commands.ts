@@ -5,7 +5,7 @@ import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
-import { cursor, useDiffNav } from "./editor/Viewer";
+import { cursor, useDiffNav, useDiffRange } from "./editor/Viewer";
 import * as S from "./store/state";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
 import { moveShown } from "./components/columnsForm";
@@ -149,7 +149,7 @@ export function dispatch(cmd: CommandId) {
       return dispatch(item.command); // runs on the selected row, exactly like its shortcut
     }
     case "detail.showYaml":
-      return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false } } : x));
+      return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false, version: undefined } } : x));
     case "object.describe": {
       // from the table, or switching an open detail view to describe
       if (s.overlay?.kind === "detail") return setUI((x) => ({ ...x, overlay: { ...x.overlay!, view: "describe", diff: false, describeGen: (x.overlay!.describeGen ?? 0) + 1 } }));
@@ -183,6 +183,8 @@ export function dispatch(cmd: CommandId) {
     }
     case "view.columns":
       return void openColumns(pane.id);
+    case "history.toggleRecording":
+      return void toggleRecording(pane.id);
     case "portforward.list":
       return setUI((x) => (x.overlay?.kind === "forwards" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "forwards", pane: pane.id, index: 0 })));
     case "portforward.stop": {
@@ -193,11 +195,14 @@ export function dispatch(cmd: CommandId) {
     case "detail.close":
       return setUI(S.closeOverlay);
     case "detail.toggleDiff":
-      // in describe: diff against the previous describe; elsewhere the object diff
-      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff } } : x));
+      // in describe: diff against the previous describe; elsewhere the object diff (from the newest version)
+      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, version: undefined } } : x));
     case "diff.next":
     case "diff.prev":
       return useDiffNav.getState().go?.(cmd === "diff.next" ? "next" : "previous");
+    case "diff.older":
+    case "diff.newer":
+      return setUI((x) => S.stepVersion(x, cmd === "diff.older" ? -1 : 1, useDiffRange.getState().range));
     case "detail.toggleWrap":
       return setUI((x) => ({ ...x, wrap: !x.wrap }));
     case "detail.refresh":
@@ -807,5 +812,17 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
+  }
+}
+
+/** Record history on/off for a pane's source; the status line shows it once the next frame says so. */
+export async function toggleRecording(paneId: string) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane?.serverId) return;
+  const on = !paneData.get(pane.serverId).status?.recording;
+  try {
+    await bridge().setRecording(pane.serverId, on);
+  } catch (e) {
+    flash(paneId, `record history: ${(e as Error).message}`, true);
   }
 }

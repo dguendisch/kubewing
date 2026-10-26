@@ -1,0 +1,39 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "v-web"
+  ],
+  "rows": [
+    {
+      "key": "v-web",
+      "cells": [
+        "prod",
+        "web",
+        "1/1",
+        "2026-01-01T10:00:00Z"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}

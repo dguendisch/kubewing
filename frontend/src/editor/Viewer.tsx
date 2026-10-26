@@ -63,6 +63,9 @@ export const cursor: { text?: string; line: number } = { line: 0 };
  */
 export const useDiffNav = create<{ index: number; total: number; go?: (target: "next" | "previous") => void }>(() => ({ index: 0, total: 0 }));
 
+/** The open object diff's place in the object's history, for [ / ] (set by the detail view). */
+export const useDiffRange = create<{ range?: { to: number; first: number; last: number } }>(() => ({}));
+
 interface Props {
   /** Shown text; with `original` the viewer is a side-by-side diff (original → value). */
   value: string;

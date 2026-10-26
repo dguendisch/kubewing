@@ -48,6 +48,8 @@ export type CommandId =
   | "detail.toggleWrap"
   | "diff.next"
   | "diff.prev"
+  | "diff.older"
+  | "diff.newer"
   | "source.open"
   | "config.reload"
   | "object.delete"
@@ -80,7 +82,8 @@ export type CommandId =
   | "term.findNext"
   | "term.findPrev"
   | "term.findClose"
-  | "view.columns";
+  | "view.columns"
+  | "history.toggleRecording";
 
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
@@ -91,12 +94,12 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev",
+  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
-  "view.columns",
+  "view.columns", "history.toggleRecording",
 ];
 
 export interface Binding {
@@ -147,6 +150,8 @@ export const defaultBindings: Binding[] = [
   { key: "H", command: "filter.toggleHealthy", when: ["table"] },
   // as in kubectl get -o wide
   { key: "O", command: "view.columns", when: ["table"] },
+  // record history for the source (off by default: it costs per event)
+  { key: "Shift+R", command: "history.toggleRecording", when: ["table"] },
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },
@@ -170,6 +175,9 @@ export const defaultBindings: Binding[] = [
   // next/previous change in a diff (vim-like, as in the table); no-ops elsewhere
   { key: "J", command: "diff.next", when: ["detail", "editpreview"] },
   { key: "K", command: "diff.prev", when: ["detail", "editpreview"] },
+  // older/newer version of the object in its diff (the shared watch's history)
+  { key: "[", command: "diff.older", when: ["detail"] },
+  { key: "]", command: "diff.newer", when: ["detail"] },
   // the YAML line under the cursor becomes the pane's CEL filter
   { key: "=", command: "filter.fromDetail", when: ["detail"] },
   { key: "!", command: "filter.fromDetailNot", when: ["detail"] },

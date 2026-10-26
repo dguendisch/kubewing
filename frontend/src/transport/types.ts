@@ -24,6 +24,8 @@ export interface Status {
   /** Objects the CEL filter failed on (a missing field is a plain no-match). */
   filterErrors?: number;
   filterError?: string;
+  /** The source records history (shared by its splits): the detail diff steps through versions. */
+  recording?: boolean;
 }
 
 export interface Frame {
@@ -93,6 +95,22 @@ export interface Detail {
   prevNorm?: string;
   curNorm: string;
   deleted?: boolean;
+  /** Which versions prevNorm → curNorm are; absent if the history has nothing for the row. */
+  diff?: DiffInfo;
+}
+
+/** Mirrors view.DiffInfo: a detail diff's place in the object's history. Versions count up per object. */
+export interface DiffInfo {
+  /** 0: `to` is the oldest kept version, nothing before it. */
+  from: number;
+  to: number;
+  fromAt?: string;
+  toAt: string;
+  /** The versions kept (at most a few dozen). */
+  first: number;
+  last: number;
+  /** What changed from → to, as `path: old → new`. */
+  changes?: string[];
 }
 
 export interface ContextList {
@@ -475,7 +493,10 @@ export interface Transport {
   setColumnWidths(type: string, widths: Record<string, number> | null): Promise<void>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;
   resync(pane: string): Promise<void>;
-  object(pane: string, key: string): Promise<Detail>;
+  /** A row's detail; `to` diffs that version against the one before (omitted / 0 = the newest). */
+  object(pane: string, key: string, to?: number): Promise<Detail>;
+  /** Starts or stops history recording for the pane's source (every split on it). */
+  setRecording(pane: string, on: boolean): Promise<void>;
   close(pane: string): Promise<void>;
   contexts(): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */

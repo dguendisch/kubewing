@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 
 	"github.com/dguendisch/kubewing/internal/expr"
+	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/source"
@@ -33,9 +34,22 @@ type Options struct {
 	HighlightFor time.Duration
 	// TombstoneFor is how long deleted rows stay visible (marked deleted).
 	TombstoneFor time.Duration
-	Normalizer   *normalize.Normalizer
+	// Normalizer applies to items that come without Norm; items from a
+	// watch recording history come normalized by it.
+	Normalizer *normalize.Normalizer
+	// History is the shared watch's history (Subscription.History), read
+	// for rows whose items it recorded; nil = none (only the previous
+	// version, kept by the view).
+	History Versions
 	// Namespaced controls default columns when the server provides none.
 	Namespaced bool
+}
+
+// Versions reads an object's recorded versions (source.History).
+type Versions interface {
+	Range(key string) (first, last int)
+	Pair(key string, to int) (history.Pair, bool)
+	Recording() bool
 }
 
 func (o *Options) defaults() {
@@ -68,7 +82,7 @@ type entry struct {
 	key   string
 	item  source.Item
 	norm  *unstructured.Unstructured
-	prev  *unstructured.Unstructured // previous normalized version, for the detail diff
+	prev  *unstructured.Unstructured // previous normalized version, for the detail diff without history
 	hash  string
 	cells []string
 	nums  []float64 // parsed numeric cells (NaN if not numeric)
@@ -478,8 +492,13 @@ func key(it source.Item) string {
 // works on a copy.
 func (v *View) upsert(it source.Item, now time.Time) {
 	k := key(it)
-	norm := v.opts.Normalizer.Normalize(it.Object)
-	hash := normalize.Hash(norm)
+	norm, hash := it.Norm, it.Hash
+	if norm == nil {
+		norm = v.opts.Normalizer.Normalize(it.Object)
+	}
+	if hash == "" {
+		hash = normalize.Hash(norm)
+	}
 
 	e, ok := v.entries[k]
 	if ok && e.deletedAt.IsZero() && e.hash == hash && slices.Equal(e.item.Cells, it.Cells) {
@@ -497,7 +516,7 @@ func (v *View) upsert(it source.Item, now time.Time) {
 		return
 	}
 
-	oldCells := e.cells
+	oldCells, oldHash := e.cells, e.hash
 	e.prev = e.norm
 	e.item, e.norm, e.hash = it, norm, hash
 	v.render(e)
@@ -511,7 +530,7 @@ func (v *View) upsert(it source.Item, now time.Time) {
 			visible = true
 		}
 	}
-	if !visible && e.prev != nil && normalize.Hash(e.prev) != hash {
+	if !visible && oldHash != hash {
 		e.hiddenAt = now
 	}
 }
@@ -851,6 +870,7 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 		}
 	}
 	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs}
+	status.Recording = v.opts.History != nil && v.opts.History.Recording()
 	if v.matchErrs > 0 {
 		status.FilterError = v.firstErr
 	}
@@ -895,9 +915,8 @@ func (v *View) objectCount() int {
 	return n
 }
 
-// Detail holds the full (managedFields-stripped) object and the previous
-// and current normalized versions for the detail diff. Only produced on
-// explicit request.
+// Detail holds the full (managedFields-stripped) object and two normalized
+// versions for the detail diff. Only produced on explicit request.
 type Detail struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
@@ -905,10 +924,37 @@ type Detail struct {
 	PrevNorm string `json:"prevNorm,omitempty"`
 	CurNorm  string `json:"curNorm"`
 	Deleted  bool   `json:"deleted,omitempty"`
+	// Diff: which versions PrevNorm and CurNorm are, and what can be
+	// stepped to; nil if the history has nothing for the row.
+	Diff *DiffInfo `json:"diff,omitempty"`
 }
 
-// Object returns the detail for a row key.
-func (v *View) Object(key string) (Detail, bool) {
+// DiffInfo places a detail diff in an object's history. Versions count up
+// per object; First..Last are the ones kept (at most a few dozen).
+type DiffInfo struct {
+	// From → To are the versions diffed (From 0: To is the first, nothing before)
+	From int `json:"from"`
+	To   int `json:"to"`
+	// FromAt / ToAt: when they were seen (RFC 3339; FromAt "" with From 0)
+	FromAt string `json:"fromAt,omitempty"`
+	ToAt   string `json:"toAt"`
+	First  int    `json:"first"`
+	Last   int    `json:"last"`
+	// Changes: To's field paths that differ from From, as `path: old → new`
+	Changes []string `json:"changes,omitempty"`
+}
+
+// Object returns the detail for a row key: its newest version diffed
+// against the one before.
+func (v *View) Object(key string) (Detail, bool) { return v.ObjectAt(key, 0) }
+
+// ObjectAt returns the detail for a row key with version to diffed against
+// the one before it; to ≤ 0 or past the newest = the newest, before the
+// oldest kept = the oldest. With history recorded for the row the versions
+// come from it, which can be a few events ahead of the row under an event
+// storm (still queued for the view); the YAML is the row's object. Without,
+// it's the previous version against the current one (to is ignored).
+func (v *View) ObjectAt(key string, to int) (Detail, bool) {
 	e, ok := v.entries[key]
 	if !ok {
 		return Detail{}, false
@@ -916,16 +962,46 @@ func (v *View) Object(key string) (Detail, bool) {
 	d := Detail{Key: key, Name: e.item.Object.GetName(), Deleted: !e.deletedAt.IsZero()}
 	d.YAML = toYAML(e.item.Object)
 	d.CurNorm = toYAML(e.norm)
-	if e.prev != nil {
-		d.PrevNorm = toYAML(e.prev)
+	p, ok := v.pair(e, to)
+	if !ok {
+		if e.prev != nil {
+			d.PrevNorm = toYAML(e.prev)
+		}
+		return d, true
 	}
+	d.CurNorm = toYAML(p.Cur.Object)
+	info := &DiffInfo{To: p.Cur.N, ToAt: p.Cur.At.UTC().Format(time.RFC3339), First: p.First, Last: p.Last}
+	if p.Prev != nil {
+		info.From, info.FromAt = p.Prev.N, p.Prev.At.UTC().Format(time.RFC3339)
+		d.PrevNorm = toYAML(p.Prev.Object)
+		for _, c := range p.Cur.Changes {
+			info.Changes = append(info.Changes, c.String())
+		}
+	}
+	d.Diff = info
 	return d, true
+}
+
+// pair reads a row's versions from the history, if it recorded the row.
+func (v *View) pair(e *entry, to int) (history.Pair, bool) {
+	if v.opts.History == nil || e.item.Norm == nil {
+		return history.Pair{}, false
+	}
+	return v.opts.History.Pair(e.key, to)
 }
 
 // HasPrev reports whether a row has a previous version (for the detail diff).
 func (v *View) HasPrev(key string) bool {
 	e, ok := v.entries[key]
-	return ok && e.prev != nil
+	if !ok {
+		return false
+	}
+	if v.opts.History != nil && e.item.Norm != nil {
+		if first, last := v.opts.History.Range(key); last > first {
+			return true
+		}
+	}
+	return e.prev != nil
 }
 
 // Deleted reports whether a row key is a tombstone.

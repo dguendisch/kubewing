@@ -21,6 +21,7 @@ var podDefs = []metav1.TableColumnDefinition{
 
 func widePod(uid, name, ip string) source.Item {
 	it := stagePod(uid, name, "Running", "api", 0)
+	it.Object.Object["status"].(map[string]any)["podIP"] = ip // the cell and the object change together, as from a server
 	it.Cells = []any{name, "Running", "2h", ip}
 	return it
 }

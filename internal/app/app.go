@@ -50,11 +50,15 @@ func (a *App) SetColumnWidths(typ string, widths map[string]int) error {
 }
 func (a *App) Resync(pane string) error                     { return a.svc.Resync(pane) }
 func (a *App) Object(pane, key string) (view.Detail, error) { return a.svc.Object(pane, key) }
-func (a *App) Close(pane string) error                      { return a.svc.Close(pane) }
-func (a *App) Contexts() (bridge.ContextList, error)        { return a.ContextsFn() }
-func (a *App) Catalog(context string) catalog.Snapshot      { return a.svc.Catalog(context) }
-func (a *App) Config() config.Effective                     { return a.svc.Config() }
-func (a *App) ReloadConfig() config.Effective               { return a.svc.ReloadConfig() }
+func (a *App) ObjectAt(pane, key string, to int) (view.Detail, error) {
+	return a.svc.ObjectAt(pane, key, to)
+}
+func (a *App) SetRecording(pane string, on bool) error { return a.svc.SetRecording(pane, on) }
+func (a *App) Close(pane string) error                 { return a.svc.Close(pane) }
+func (a *App) Contexts() (bridge.ContextList, error)   { return a.ContextsFn() }
+func (a *App) Catalog(context string) catalog.Snapshot { return a.svc.Catalog(context) }
+func (a *App) Config() config.Effective                { return a.svc.Config() }
+func (a *App) ReloadConfig() config.Effective          { return a.svc.ReloadConfig() }
 func (a *App) ContextRule(cluster string) (safety.Rule, error) {
 	return a.svc.ContextRule(cluster)
 }

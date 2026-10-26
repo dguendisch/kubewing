@@ -1,0 +1,95 @@
+# 2026/10/26 12:40:29.582647 [TestRoundTrip] [rapid] draw akeys: []string{"a", "x.y"}
+# 2026/10/26 12:40:29.582659 [TestRoundTrip] [rapid] draw a.akind: 1
+# 2026/10/26 12:40:29.582659 [TestRoundTrip] [rapid] draw a.astr: ""
+# 2026/10/26 12:40:29.582660 [TestRoundTrip] [rapid] draw a.x.ykind: 3
+# 2026/10/26 12:40:29.582661 [TestRoundTrip] [rapid] draw a.x.ynames: []string{"n1", "n2"}
+# 2026/10/26 12:40:29.582662 [TestRoundTrip] [rapid] draw a.x.y[n1]keys: []string{"a", "b"}
+# 2026/10/26 12:40:29.582663 [TestRoundTrip] [rapid] draw a.x.y[n1].akind: 1
+# 2026/10/26 12:40:29.582663 [TestRoundTrip] [rapid] draw a.x.y[n1].astr: ""
+# 2026/10/26 12:40:29.582664 [TestRoundTrip] [rapid] draw a.x.y[n1].bkind: 0
+# 2026/10/26 12:40:29.582664 [TestRoundTrip] [rapid] draw a.x.y[n1].bnum: 0
+# 2026/10/26 12:40:29.582665 [TestRoundTrip] [rapid] draw a.x.y[n2]keys: []string{}
+# 2026/10/26 12:40:29.582667 [TestRoundTrip] [rapid] draw m.a: 0
+# 2026/10/26 12:40:29.582667 [TestRoundTrip] [rapid] draw m.b: 0
+# 2026/10/26 12:40:29.582667 [TestRoundTrip] [rapid] draw m.c: 0
+# 2026/10/26 12:40:29.582668 [TestRoundTrip] [rapid] draw m.x.y: 2
+# 2026/10/26 12:40:29.582668 [TestRoundTrip] [rapid] draw m.x.y[0]: 0
+# 2026/10/26 12:40:29.582669 [TestRoundTrip] [rapid] draw m.x.y[1]: 2
+# 2026/10/26 12:40:29.582669 [TestRoundTrip] [rapid] draw m.x.yshuffle: false
+# 2026/10/26 12:40:29.582669 [TestRoundTrip] [rapid] draw m.x.yadd: false
+# 2026/10/26 12:40:29.582670 [TestRoundTrip] [rapid] draw m.name: 0
+# 2026/10/26 12:40:29.582670 [TestRoundTrip] [rapid] draw m.type: 0
+# 2026/10/26 12:40:29.582687 [TestRoundTrip] revert:
+#  got {"a":"","x.y":[{"name":"n2"},{"a":"","b":0,"name":"n1"}]}
+# want {"a":"","x.y":[{"a":"","b":0,"name":"n1"},{"name":"n2"}]}
+# a: "" → ∅
+# ["x.y"][name=n1]: {"a":"","b":0,"name":"n1"} → ∅
+# 
+v0.4.8#4236583036318978869
+0x5555555555555
+0x0
+0x0
+0x5555555555555
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x3
+0x5555555555555
+0x0
+0x0
+0x5555555555555
+0x0
+0x1
+0x0
+0x5555555555555
+0x0
+0x0
+0x5555555555555
+0x0
+0x1
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0

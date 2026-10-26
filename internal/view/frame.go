@@ -56,4 +56,7 @@ type Status struct {
 	// missing field); FilterError is one of the messages.
 	FilterErrors int    `json:"filterErrors,omitempty"`
 	FilterError  string `json:"filterError,omitempty"`
+	// Recording: the source records history (all its splits), so the
+	// detail diff steps through versions
+	Recording bool `json:"recording,omitempty"`
 }

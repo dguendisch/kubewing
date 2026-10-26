@@ -92,7 +92,8 @@ func (s *Service) leasedWatch(cluster, resource string) (*leasedWatch, error) {
 	if w, ok := s.leased[k]; ok {
 		return w, nil
 	}
-	sub, err := s.reg.Subscribe(source.Key{Cluster: cluster, Resource: resource})
+	// the config's rules: a pane joining this watch later keeps them (s.mu held)
+	sub, err := s.reg.SubscribeWith(source.Key{Cluster: cluster, Resource: resource}, s.norm)
 	if err != nil {
 		return nil, err
 	}

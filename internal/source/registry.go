@@ -4,8 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dguendisch/kubewing/internal/history"
+	"github.com/dguendisch/kubewing/internal/normalize"
 )
 
 // Key identifies a shared watch.
@@ -22,15 +26,26 @@ type Opener interface {
 
 // Registry shares one watch per key between all subscribers (splits on the
 // same source), ref-counted: the watch stops when the last subscriber leaves.
+// A watch can record history (off by default, it costs per event): it then
+// normalizes its objects once for all subscribers and keeps their recent
+// versions (History).
 type Registry struct {
 	opener Opener
 	mu     sync.Mutex
 	shared map[Key]*shared
+
+	// Now stamps recorded versions; tests replace it.
+	Now func() time.Time
+	// HistoryDepth is the versions kept per object (0 = history.DefaultDepth).
+	HistoryDepth int
+	// TombstoneFor is how long a deleted object's history stays (0 = 1m;
+	// past every view's tombstone row).
+	TombstoneFor time.Duration
 }
 
 // NewRegistry creates a registry.
 func NewRegistry(o Opener) *Registry {
-	return &Registry{opener: o, shared: map[Key]*shared{}}
+	return &Registry{opener: o, shared: map[Key]*shared{}, Now: time.Now}
 }
 
 type shared struct {
@@ -40,6 +55,15 @@ type shared struct {
 	refs    int
 	subs    map[int]chan Event
 	nextSub int
+
+	// norm is fixed for the watch's life, so its history never mixes two
+	// rule sets; hmu guards hist (read by subscribers, written by fanout
+	// outside the registry lock); hist nil = not recording
+	norm *normalize.Normalizer
+	hmu  sync.Mutex
+	hist *history.Store
+	// pruned: the last Prune, a walk over every object (at most once a second)
+	pruned time.Time
 
 	// current state, replayed to late subscribers
 	synced  bool
@@ -52,17 +76,88 @@ type shared struct {
 type Subscription struct {
 	Events   <-chan Event
 	Resolved Resolved
+	History  *History
 	close    func()
+}
+
+// History reads a shared watch's versions and switches its recording;
+// safe for concurrent use.
+type History struct {
+	sh    *shared
+	reg   *Registry
+	depth int
+	now   func() time.Time
+}
+
+// Range returns the oldest and newest kept version of key (0, 0 if none).
+func (h *History) Range(key string) (first, last int) {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return 0, 0
+	}
+	return h.sh.hist.Range(key)
+}
+
+// Pair reconstructs version to of key and the one before it (see history.Store.Pair).
+func (h *History) Pair(key string, to int) (history.Pair, bool) {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	if h.sh.hist == nil {
+		return history.Pair{}, false
+	}
+	return h.sh.hist.Pair(key, to)
+}
+
+// Same reports whether h and o read the same shared watch.
+func (h *History) Same(o *History) bool { return o != nil && h.sh == o.sh }
+
+// Recording reports whether the watch records history.
+func (h *History) Recording() bool {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	return h.sh.hist != nil
+}
+
+// SetRecording starts or stops recording for the watch (every subscriber
+// on it). Starting takes the current objects as their first versions, so
+// the next change already diffs; stopping drops the history. Lock order:
+// hmu, then the registry's mu (as fanout).
+func (h *History) SetRecording(on bool) {
+	h.sh.hmu.Lock()
+	defer h.sh.hmu.Unlock()
+	switch {
+	case on && h.sh.hist == nil:
+		h.sh.hist = history.New(h.depth)
+		now := h.now()
+		h.reg.mu.Lock()
+		items := make([]Item, 0, len(h.sh.items))
+		for _, it := range h.sh.items {
+			items = append(items, it)
+		}
+		h.reg.mu.Unlock()
+		for _, it := range items {
+			h.sh.recordItem(it, now)
+		}
+	case !on:
+		h.sh.hist = nil
+	}
 }
 
 // Close unsubscribes.
 func (s *Subscription) Close() { s.close() }
 
-// Subscribe attaches to (or starts) the shared watch for k. A late
+// Subscribe attaches to (or starts) the shared watch for k with the default
+// noise rules; see SubscribeWith.
+func (r *Registry) Subscribe(k Key) (*Subscription, error) { return r.SubscribeWith(k, nil) }
+
+// SubscribeWith attaches to (or starts) the shared watch for k. A late
 // subscriber first receives a Relist with the current state. Watches are
 // shared by what they resolve to: "no", "node" and "nodes" are one watch,
-// and a cluster-scoped type ignores the namespace.
-func (r *Registry) Subscribe(k Key) (*Subscription, error) {
+// and a cluster-scoped type ignores the namespace. norm (nil = the default
+// rules) only applies when this call starts the watch; joining one keeps
+// its rules.
+func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscription, error) {
 	res, err := r.opener.Resolve(k.Cluster, k.Resource)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %q: %w", k.Resource, err)
@@ -72,8 +167,11 @@ func (r *Registry) Subscribe(k Key) (*Subscription, error) {
 	defer r.mu.Unlock()
 	sh, ok := r.shared[id]
 	if !ok {
+		if norm == nil {
+			norm = normalize.New()
+		}
 		ctx, cancel := context.WithCancel(context.Background())
-		sh = &shared{key: id, res: res, cancel: cancel, subs: map[int]chan Event{}, items: map[string]Item{}}
+		sh = &shared{key: id, res: res, cancel: cancel, subs: map[int]chan Event{}, items: map[string]Item{}, norm: norm}
 		r.shared[id] = sh
 		in := make(chan Event, 256)
 		go r.opener.Watch(ctx, k.Cluster, res, k, in)
@@ -92,7 +190,7 @@ func (r *Registry) Subscribe(k Key) (*Subscription, error) {
 	}
 	sh.subs[sub] = ch
 	var once sync.Once
-	return &Subscription{Events: ch, Resolved: sh.res, close: func() {
+	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, depth: r.HistoryDepth, now: r.Now}, close: func() {
 		once.Do(func() { r.unsubscribe(sh, sub) })
 	}}, nil
 }
@@ -152,6 +250,12 @@ func (r *Registry) fanout(ctx context.Context, sh *shared, in <-chan Event) {
 		case <-ctx.Done():
 			return
 		case ev := <-in:
+			// outside the registry lock: a 10k-object relist must not stall
+			// subscribes on other watches. hmu (before r.mu) stays held until
+			// the items are stored, so a recording that starts meanwhile
+			// seeds from exactly what the history has seen.
+			sh.hmu.Lock()
+			ev = r.record(sh, ev)
 			r.mu.Lock()
 			switch ev.Type {
 			case Relist:
@@ -178,8 +282,55 @@ func (r *Registry) fanout(ctx context.Context, sh *shared, in <-chan Event) {
 				}
 			}
 			r.mu.Unlock()
+			sh.hmu.Unlock()
 		}
 	}
+}
+
+// record normalizes the event's objects into the watch's history and
+// returns the event with each item's Norm and Hash set; unchanged when the
+// watch doesn't record. hmu must be held.
+func (r *Registry) record(sh *shared, ev Event) Event {
+	if sh.hist == nil {
+		return ev
+	}
+	now := r.Now()
+	tomb := r.TombstoneFor
+	if tomb <= 0 {
+		tomb = time.Minute
+	}
+	if now.Sub(sh.pruned) >= time.Second {
+		sh.hist.Prune(now.Add(-tomb))
+		sh.pruned = now
+	}
+	switch ev.Type {
+	case Relist:
+		items := make([]Item, len(ev.Items))
+		seen := make(map[string]bool, len(ev.Items))
+		for i, it := range ev.Items {
+			items[i] = sh.recordItem(it, now)
+			seen[itemKey(it)] = true
+		}
+		sh.hist.Keys(func(k string) {
+			if !seen[k] {
+				sh.hist.Delete(k, now)
+			}
+		})
+		ev.Items = items
+	case Added, Modified:
+		ev.Item = sh.recordItem(ev.Item, now)
+	case Deleted:
+		sh.hist.Delete(itemKey(ev.Item), now)
+	}
+	return ev
+}
+
+// recordItem needs hmu held and hist set.
+func (sh *shared) recordItem(it Item, now time.Time) Item {
+	norm := sh.norm.Normalize(it.Object)
+	it.Norm, it.Hash = norm, normalize.Hash(norm)
+	sh.hist.RecordHashed(itemKey(it), norm, it.Hash, now)
+	return it
 }
 
 func drain(ch chan Event) {

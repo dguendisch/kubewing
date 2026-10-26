@@ -125,16 +125,22 @@ func (s *Service) setConfig(cfg config.Effective) {
 	s.guard.SetPolicy(safety.NewPolicy(cfg.Config.Contexts))
 }
 
-// viewOptions are the view options for a new pane.
-func (s *Service) viewOptions(namespaced bool) view.Options {
+// viewOptions are the view options for a new pane on sub.
+func (s *Service) viewOptions(sub *source.Subscription, namespaced bool) view.Options {
 	vo := s.opts.View
 	vo.Namespaced = namespaced
+	vo.History = sub.History
 	if vo.Normalizer == nil {
-		s.mu.Lock()
-		vo.Normalizer = s.norm
-		s.mu.Unlock()
+		vo.Normalizer = s.normalizer()
 	}
 	return vo
+}
+
+// normalizer applies the config's diff ignore rules.
+func (s *Service) normalizer() *normalize.Normalizer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.norm
 }
 
 // Config returns the effective user configuration.
@@ -145,7 +151,8 @@ func (s *Service) Config() config.Effective {
 }
 
 // ReloadConfig re-reads the config files and emits ConfigEvent. Diff rules
-// apply to panes opened afterwards.
+// apply to watches started afterwards: a pane joining a running watch (a
+// split) keeps its rules, so one history never mixes two rule sets.
 func (s *Service) ReloadConfig() config.Effective {
 	cfg := config.Load(s.opts.ConfigDir)
 	s.setConfig(cfg)
@@ -201,10 +208,10 @@ func (s *Service) Open(pipelineYAML string) (OpenResult, error) {
 
 // OpenPipeline starts a pane for a pipeline.
 func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
-	sub, err := s.reg.Subscribe(source.Key{
+	sub, err := s.reg.SubscribeWith(source.Key{
 		Cluster: p.Source.Cluster, Resource: p.Source.Resource, Namespace: p.Source.Namespace,
 		LabelSelector: p.Source.LabelSelector, FieldSelector: p.Source.FieldSelector,
-	})
+	}, s.normalizer())
 	if cat := s.opts.Catalog; cat != nil {
 		// the connection exists now, so tracking can't trigger a login; a
 		// resolve miss may be a CRD the catalog doesn't know yet
@@ -220,7 +227,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	if !explicit {
 		p.Render.Columns = s.opts.Columns.Get(typ).Columns
 	}
-	v, err := view.New(p, s.viewOptions(sub.Resolved.Namespaced && p.Source.AllNamespaces()))
+	v, err := view.New(p, s.viewOptions(sub, sub.Resolved.Namespaced && p.Source.AllNamespaces()))
 	if err != nil {
 		sub.Close()
 		return OpenResult{}, err
@@ -354,18 +361,45 @@ func (s *Service) Resync(paneID string) error {
 
 // Object returns the full object and normalized versions for one row; the
 // only call that ships object content over the bridge.
-func (s *Service) Object(paneID, key string) (view.Detail, error) {
+func (s *Service) Object(paneID, key string) (view.Detail, error) { return s.ObjectAt(paneID, key, 0) }
+
+// ObjectAt is Object with version to of the row diffed against the one
+// before it (0 = the newest), for stepping through the history.
+func (s *Service) ObjectAt(paneID, key string, to int) (view.Detail, error) {
 	pn, err := s.pane(paneID)
 	if err != nil {
 		return view.Detail{}, err
 	}
 	pn.mu.Lock()
 	defer pn.mu.Unlock()
-	d, ok := pn.view.Object(key)
+	d, ok := pn.view.ObjectAt(key, to)
 	if !ok {
 		return view.Detail{}, fmt.Errorf("object %s not found", key)
 	}
 	return d, nil
+}
+
+// SetRecording starts or stops history recording for a pane's source: it's
+// the shared watch's, so every split on that source follows.
+func (s *Service) SetRecording(paneID string, on bool) error {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return err
+	}
+	pn.sub.History.SetRecording(on)
+	// the other splits show it in their status line too
+	s.mu.Lock()
+	var same []*pane
+	for _, p := range s.panes {
+		if p.sub.History.Same(pn.sub.History) {
+			same = append(same, p)
+		}
+	}
+	s.mu.Unlock()
+	for _, p := range same {
+		p.poke()
+	}
+	return nil
 }
 
 // Close stops a pane.

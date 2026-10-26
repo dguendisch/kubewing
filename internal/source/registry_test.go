@@ -8,6 +8,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	k8stypes "k8s.io/apimachinery/pkg/types"
+
+	"github.com/dguendisch/kubewing/internal/normalize"
 )
 
 type fakeOpener struct {
@@ -121,5 +123,152 @@ func TestRegistrySharesByResolvedResource(t *testing.T) {
 	defer d.Close()
 	if r.Active() != 3 {
 		t.Fatalf("active = %d, want 3", r.Active())
+	}
+}
+
+func labelled(name, v string) Item {
+	it := pod(name)
+	it.Object.SetLabels(map[string]string{"v": v})
+	it.Object.SetResourceVersion(v)
+	return it
+}
+
+// By default a watch records nothing: items pass through as they came.
+func TestRegistryNotRecording(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	a, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods"})
+	defer a.Close()
+	f.feed <- Event{Type: Relist, Items: []Item{labelled("x", "1")}}
+	f.feed <- Event{Type: Modified, Item: labelled("x", "2")}
+	recv(t, a.Events)
+	if ev := recv(t, a.Events); ev.Item.Norm != nil || ev.Item.Hash != "" || a.History.Recording() {
+		t.Fatalf("recorded without being asked: %+v", ev.Item)
+	}
+	if _, last := a.History.Range("uid-x"); last != 0 {
+		t.Fatal("history kept")
+	}
+}
+
+// One watch, one history: both subscribers read the same versions, the
+// items come normalized, and a noise-only change is no new version.
+func TestRegistryHistory(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	k := Key{Cluster: "c", Resource: "pods"}
+	a, _ := r.Subscribe(k)
+	defer a.Close()
+	a.History.SetRecording(true)
+	f.feed <- Event{Type: Relist, Items: []Item{labelled("x", "1")}}
+	if ev := recv(t, a.Events); ev.Items[0].Norm == nil || ev.Items[0].Hash == "" || ev.Items[0].Norm.GetResourceVersion() != "" {
+		t.Fatalf("relist item not normalized: %+v", ev.Items[0])
+	}
+	f.feed <- Event{Type: Modified, Item: labelled("x", "2")}
+	recv(t, a.Events)
+	b, _ := r.Subscribe(k)
+	defer b.Close()
+	recv(t, b.Events)
+	if !b.History.Recording() {
+		t.Fatal("recording is the watch's, not the subscriber's")
+	}
+	for _, s := range []*Subscription{a, b} {
+		p, ok := s.History.Pair("uid-x", 0)
+		if !ok || p.First != 1 || p.Last != 2 || p.Prev.Object.GetLabels()["v"] != "1" || p.Cur.Object.GetLabels()["v"] != "2" {
+			t.Fatalf("%+v", p)
+		}
+	}
+	// resourceVersion alone is noise
+	x := labelled("x", "2")
+	x.Object.SetResourceVersion("99")
+	f.feed <- Event{Type: Modified, Item: x}
+	recv(t, a.Events)
+	if _, last := a.History.Range("uid-x"); last != 2 {
+		t.Fatalf("noise recorded as version %d", last)
+	}
+}
+
+// A watch keeps the rules it started with: a subscriber joining with other
+// rules (a config reload in between) gets the running watch's.
+func TestRegistryRulesFixedPerWatch(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	k := Key{Cluster: "c", Resource: "pods"}
+	a, _ := r.SubscribeWith(k, normalize.New(normalize.Rule{Path: "metadata.labels"}))
+	defer a.Close()
+	b, _ := r.SubscribeWith(k, normalize.New())
+	defer b.Close()
+	b.History.SetRecording(true)
+	f.feed <- Event{Type: Relist, Items: []Item{labelled("x", "1")}}
+	recv(t, a.Events)
+	if ev := recv(t, b.Events); ev.Items[0].Norm.GetLabels() != nil {
+		t.Fatalf("joining subscriber changed the rules: %v", ev.Items[0].Norm.GetLabels())
+	}
+}
+
+// A deleted object's history stays readable for a while, then goes.
+func TestRegistryHistoryTombstone(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	r.Now = func() time.Time { return now }
+	r.TombstoneFor = time.Minute
+	a, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods"})
+	defer a.Close()
+	a.History.SetRecording(true)
+	f.feed <- Event{Type: Relist, Items: []Item{labelled("x", "1"), labelled("y", "1")}}
+	recv(t, a.Events)
+	f.feed <- Event{Type: Deleted, Item: pod("x")}
+	recv(t, a.Events)
+	if _, last := a.History.Range("uid-x"); last != 1 {
+		t.Fatal("history gone with the delete")
+	}
+	now = now.Add(2 * time.Minute)
+	f.feed <- Event{Type: Modified, Item: labelled("y", "2")}
+	recv(t, a.Events)
+	if _, last := a.History.Range("uid-x"); last != 0 {
+		t.Fatal("tombstone history not pruned")
+	}
+	// a relist without y deletes it too
+	f.feed <- Event{Type: Relist, Items: nil}
+	recv(t, a.Events)
+	now = now.Add(2 * time.Minute)
+	f.feed <- Event{Type: Relist, Items: nil}
+	recv(t, a.Events)
+	if _, last := a.History.Range("uid-y"); last != 0 {
+		t.Fatal("relisted-away object kept")
+	}
+}
+
+// Switched on mid-watch, recording starts from the current objects (the
+// next change already diffs); switched off, the history goes.
+func TestRegistryRecordingToggle(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	a, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods"})
+	defer a.Close()
+	f.feed <- Event{Type: Relist, Items: []Item{labelled("x", "1")}}
+	recv(t, a.Events)
+	a.History.SetRecording(true)
+	if first, last := a.History.Range("uid-x"); first != 1 || last != 1 {
+		t.Fatalf("not seeded: %d..%d", first, last)
+	}
+	f.feed <- Event{Type: Modified, Item: labelled("x", "2")}
+	if ev := recv(t, a.Events); ev.Item.Norm == nil {
+		t.Fatal("item not normalized while recording")
+	}
+	if p, ok := a.History.Pair("uid-x", 0); !ok || p.Prev == nil || p.Prev.Object.GetLabels()["v"] != "1" {
+		t.Fatalf("%+v", p)
+	}
+	a.History.SetRecording(true) // again: no reset
+	if _, last := a.History.Range("uid-x"); last != 2 {
+		t.Fatal("switching on again reset the history")
+	}
+	a.History.SetRecording(false)
+	if _, last := a.History.Range("uid-x"); last != 0 || a.History.Recording() {
+		t.Fatal("history kept after switching off")
+	}
+	f.feed <- Event{Type: Modified, Item: labelled("x", "3")}
+	if ev := recv(t, a.Events); ev.Item.Norm != nil {
+		t.Fatal("still normalizing after switching off")
 	}
 }

@@ -177,6 +177,8 @@ export interface Overlay {
   /** closeTab: the tab to close (not the index: tabs move while the dialog is open). */
   tabId?: string;
   diff?: boolean;
+  /** detail diff: the version shown (diffed against the one before); unset = follow the newest. */
+  version?: number;
   /** confirm, container: the prepared action. */
   pending?: Pending;
   /** container: the pod's containers to pick from. */
@@ -618,6 +620,22 @@ export function setEdit(s: UIState, f: (e: EditState) => EditState): UIState {
   if (o?.kind !== "edit" || !o.edit) return s;
   const edit = f(o.edit);
   return { ...s, overlay: { ...o, edit }, focus: edit.preview ? "editpreview" : "edit" };
+}
+
+/**
+ * [ / ]: the detail diff one version older or newer, within the kept ones
+ * (`range` is the loaded diff's). Steps from the version asked for, not the
+ * loaded one, so quick presses add up while a load is under way. Stepping to
+ * the newest follows it again (version unset), so new changes show as they
+ * come in.
+ */
+export function stepVersion(s: UIState, dir: -1 | 1, range: { to: number; first: number; last: number } | undefined): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "detail" || !o.diff || o.view === "describe" || !range) return s;
+  const from = o.version ?? range.to;
+  const to = Math.max(range.first, Math.min(from + dir, range.last));
+  if (to === from) return s;
+  return { ...s, overlay: { ...o, version: to >= range.last ? undefined : to } };
 }
 
 export function closeOverlay(s: UIState): UIState {

@@ -12,6 +12,7 @@
   --color-fg-muted: #8a8a8a;
   --color-accent: #ec7414;
   --color-added: #89c796;
+  --color-connected: #72c087; /* green-grey: synced, watches running */
   --color-deleted: #f14c4c;
   --color-changed: #e2c08d;
   --color-hidden: #c586c0;

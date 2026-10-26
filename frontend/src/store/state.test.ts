@@ -777,3 +777,38 @@ describe("movePane (drag and drop by the grip)", () => {
     expect(S.activeTab(s).maximized).toBeUndefined();
   });
 });
+
+describe("detail diff versions ([ / ])", () => {
+  const range = { to: 5, first: 3, last: 5 };
+  const diffOpen = (version?: number): S.UIState =>
+    S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "yaml", diff: true, version });
+
+  it("steps back to older versions and stops at the oldest kept", () => {
+    let s = S.stepVersion(diffOpen(), -1, range);
+    expect(s.overlay?.version).toBe(4);
+    s = S.stepVersion(s, -1, { ...range, to: 4 });
+    expect(s.overlay?.version).toBe(3);
+    const same = S.stepVersion(s, -1, { ...range, to: 3 });
+    expect(same).toBe(s);
+  });
+
+  it("quick presses add up while the last step is still loading", () => {
+    // range still the newest's (v5), version already asked for v4: the next [ goes to v3
+    expect(S.stepVersion(diffOpen(4), -1, range).overlay?.version).toBe(3);
+    expect(S.stepVersion(diffOpen(3), -1, range)).toEqual(diffOpen(3));
+  });
+
+  it("back at the newest it follows new versions again", () => {
+    const s = S.stepVersion(diffOpen(4), 1, { ...range, to: 4 });
+    expect(s.overlay && "version" in s.overlay ? s.overlay.version : "absent").toBeUndefined();
+    expect(S.stepVersion(diffOpen(), 1, range).overlay?.version).toBeUndefined();
+  });
+
+  it("only in the object diff, once loaded", () => {
+    const yaml = S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "yaml" });
+    expect(S.stepVersion(yaml, -1, range)).toBe(yaml);
+    const describe = S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "describe", diff: true });
+    expect(S.stepVersion(describe, -1, range)).toBe(describe);
+    expect(S.stepVersion(diffOpen(), -1, undefined).overlay?.version).toBeUndefined();
+  });
+});

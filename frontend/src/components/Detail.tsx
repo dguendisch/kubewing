@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { dispatch } from "../commands";
-import { useDiffNav, Viewer } from "../editor/Viewer";
+import { useDiffNav, useDiffRange, Viewer } from "../editor/Viewer";
 import { bridge, useUI } from "../store/store";
-import type { DescribeResult, Detail as DetailData } from "../transport/types";
+import type { DescribeResult, Detail as DetailData, DiffInfo } from "../transport/types";
 
 /**
  * One describe call per look: StrictMode runs effects twice and a remount
@@ -29,9 +29,14 @@ function ago(iso: string, now = Date.now()): string {
   return s < 60 ? `${s}s` : s < 3600 ? `${Math.round(s / 60)}m` : `${Math.round(s / 3600)}h`;
 }
 
+/** While the object diff follows the newest version, how often it looks for a newer one. */
+const followEvery = 2000;
+
 /**
- * Detail overlay, in Monaco: full YAML, (d) diff of the previous vs. current
- * normalized object, or (⇧D) kubectl describe output.
+ * Detail overlay, in Monaco: full YAML, (d) diff of a version of the
+ * normalized object against the one before ([ / ] older and newer, from the
+ * shared watch's history; the newest by default, followed as it changes), or
+ * (⇧D) kubectl describe output.
  */
 export function Detail() {
   const overlay = useUI((s) => s.overlay);
@@ -40,12 +45,36 @@ export function Detail() {
   const [described, setDescribed] = useState<DescribeResult | { error: string }>();
   const describe = overlay?.kind === "detail" && overlay.view === "describe";
   const gen = overlay?.describeGen ?? 0;
+  const version = overlay?.kind === "detail" ? overlay.version : undefined;
+  const follow = overlay?.kind === "detail" && !!overlay.diff && !describe && version === undefined;
 
+  // another row: start over; another version: keep showing the last one until it's there
+  useEffect(() => setData(undefined), [overlay?.key, serverId, overlay?.kind]);
   useEffect(() => {
-    setData(undefined);
     if (!overlay || overlay.kind !== "detail" || !serverId || !overlay.key) return;
-    bridge().object(serverId, overlay.key).then(setData, (e: Error) => setData({ error: e.message }));
-  }, [overlay?.key, serverId, overlay?.kind]);
+    let live = true;
+    const key = overlay.key;
+    const load = () =>
+      bridge()
+        .object(serverId, key, version)
+        .then(
+          (d) => live && setData((cur) => (cur && "yaml" in cur && same(cur, d) ? cur : d)),
+          (e: Error) => live && setData({ error: e.message }),
+        );
+    void load();
+    // the newest version moves on while the diff is open: follow it
+    const t = follow ? setInterval(load, followEvery) : undefined;
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [overlay?.key, serverId, overlay?.kind, version, follow]);
+
+  const info = data && "yaml" in data ? data.diff : undefined;
+  useEffect(() => {
+    useDiffRange.setState({ range: info ? { to: info.to, first: info.first, last: info.last } : undefined });
+    return () => useDiffRange.setState({ range: undefined });
+  }, [info?.to, info?.first, info?.last]);
 
   // d toggles text ↔ diff without a new look; r (describeGen) takes one
   useEffect(() => {
@@ -75,12 +104,19 @@ export function Detail() {
               ? `describe diff (look ${described && "prevAt" in described && described.prevAt ? `${ago(described.prevAt)} ago` : "–"} → now, times ignored)`
               : "describe"
             : diff
-              ? "diff (prev → current, normalized)"
+              ? "diff (normalized)"
               : "yaml"}
         </span>
+        {diff && !describe && info ? <VersionNav info={info} /> : null}
+        {diff && !describe && data && "yaml" in data && !info ? <span title="record history (status line, or ⇧R in the table) keeps the last 20 versions to step through with [ / ]">previous → current</span> : null}
         {diff ? <DiffNav /> : null}
-        <span className="ml-auto">{describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · e: edit · w: wrap · ⌘F find · esc: close</span>
+        <span className="ml-auto">
+          {diff ? "j/k: changes · " : ""}
+          {diff && !describe && info ? "[/]: versions · " : ""}
+          {describe ? "d: diff · r: re-run · " : "d: diff · ⇧D: describe · "}y: yaml · e: edit · w: wrap · ⌘F find · esc: close
+        </span>
       </div>
+      {diff && !describe && info?.changes?.length ? <Changes changes={info.changes} /> : null}
       <div className="min-h-0 flex-1">
         {describe ? (
           !described ? (
@@ -99,14 +135,63 @@ export function Detail() {
         ) : "error" in data ? (
           <div className="p-3 text-deleted">{data.error}</div>
         ) : diff && !data.prevNorm ? (
-          <div className="p-3 text-fg-muted">no previous version seen since watch start</div>
+          <div className="p-3 text-fg-muted">
+            {!info || info.last === info.to
+              ? "no previous version seen since watch start"
+              : `version ${info.to} is the oldest${info.to > 1 ? " kept" : " seen since watch start"}: nothing before it to compare (] newer)`}
+          </div>
         ) : diff ? (
+          // one diff editor across versions: Monaco swaps the models, the scroll position stays
           <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} />
         ) : (
           <Viewer key="yaml" label="yaml" value={data.yaml} />
         )}
       </div>
     </div>
+  );
+}
+
+/** A newer response that shows the same thing keeps the old object (no Monaco reload while following). */
+function same(a: DetailData, b: DetailData) {
+  return a.yaml === b.yaml && a.curNorm === b.curNorm && a.prevNorm === b.prevNorm && a.diff?.to === b.diff?.to && a.diff?.first === b.diff?.first && a.diff?.last === b.diff?.last;
+}
+
+/** Older/newer version ([ / ]): which two versions are diffed, when they were seen, how many are kept. */
+export function VersionNav({ info }: { info: DiffInfo }) {
+  const btn = "rounded border border-border px-1.5 leading-tight text-fg enabled:hover:border-accent disabled:opacity-40";
+  const go = (cmd: "diff.older" | "diff.newer") => (e: React.MouseEvent) => {
+    e.preventDefault(); // the editor keeps the focus
+    dispatch(cmd);
+  };
+  const when = (iso?: string) => (iso ? `${ago(iso)} ago` : "");
+  return (
+    <span className="flex items-center gap-1">
+      <button type="button" aria-label="older version" title="older version ([)" className={btn} disabled={info.to <= info.first} onMouseDown={go("diff.older")}>
+        ‹
+      </button>
+      <span role="status" aria-label="diff versions" title={`versions ${info.first}–${info.last} kept`}>
+        {info.from ? `v${info.from} (${when(info.fromAt)}) → v${info.to} (${when(info.toAt)})` : `v${info.to} (${when(info.toAt)})`}
+        {info.to === info.last ? " · newest" : ` · ${info.last - info.to} newer`}
+      </span>
+      <button type="button" aria-label="newer version" title="newer version (])" className={btn} disabled={info.to >= info.last} onMouseDown={go("diff.newer")}>
+        ›
+      </button>
+    </span>
+  );
+}
+
+/** The field paths that changed, above the diff (the first few; the rest counted). */
+function Changes({ changes }: { changes: string[] }) {
+  const shown = changes.slice(0, 5);
+  return (
+    <ul aria-label="changed fields" className="border-b border-border px-3 py-0.5 font-mono text-fg-muted">
+      {shown.map((c) => (
+        <li key={c} className="truncate" title={c}>
+          {c}
+        </li>
+      ))}
+      {changes.length > shown.length ? <li>… {changes.length - shown.length} more</li> : null}
+    </ul>
   );
 }
 
