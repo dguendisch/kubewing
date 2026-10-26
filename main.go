@@ -39,6 +39,7 @@ func main() {
 	catalogFile := flag.String("catalog", "", "with -tapes: fake resource types/namespaces for completion (e.g. testdata/catalog.yaml)")
 	configDir := flag.String("config", "", "config directory (default: $KUBEWING_HOME or ~/.kubewing; headless: none)")
 	stateDir := flag.String("state", "", "where history.yaml (recent debug images) is written (default: the config directory; headless: none, kept in memory)")
+	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
 	flag.Parse()
 
 	var opener interface {
@@ -81,6 +82,21 @@ func main() {
 	emit := &wailsEmitter{}
 	svc := bridge.New(source.NewRegistry(opener), emit, opts)
 	api := app.New(svc)
+	var win *application.WebviewWindow
+	var single *application.SingleInstanceOptions
+	if !*newProcess {
+		// a later launch lands here; until the window exists there is nothing to open a tab in
+		var err error
+		single, err = app.SingleInstance(opts.ConfigDir, func(l app.Launch) {
+			if win != nil {
+				emit.Emit(app.LaunchEvent, l)
+				app.BringToFront(emit.app, win)
+			}
+		})
+		if err != nil {
+			log.Printf("starting a kubewing of its own: %v", err)
+		}
+	}
 	a := application.New(application.Options{
 		Name:        "kubewing",
 		Description: "keyboard-driven Kubernetes UI",
@@ -89,13 +105,15 @@ func main() {
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:         application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
 		OnShutdown:  svc.Shutdown, // exec sessions and port-forwards end with the app
+		// a launch with a kubewing already running on this config directory exits in here
+		SingleInstance: single,
 	})
 	emit.app = a
 	// before the frontend sends its menus (and should it never): no ⌘W "Close Window", no ⌘R "Reload"
 	a.Menu.Set(app.BaseMenu(nil, emit.Emit))
 	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emit.Emit)) }
 	// reopens in the size it was last closed in (history.yaml)
-	app.NewMainWindow(a, opts.History, application.WebviewWindowOptions{
+	win = app.NewMainWindow(a, opts.History, application.WebviewWindowOptions{
 		Title:  "kubewing",
 		Width:  1400,
 		Height: 860,
@@ -116,7 +134,7 @@ func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTap
 	hub := bridge.NewHub()
 	api := app.New(bridge.New(source.NewRegistry(opener), hub, opts))
 	if fromTapes {
-		api.ContextsFn = func() (bridge.ContextList, error) {
+		api.ContextsFn = func(string) (bridge.ContextList, error) {
 			// tape-dev sets a namespace like a kubeconfig context can (e2e: new panes start in it)
 			return bridge.ContextList{Contexts: []string{"tape", "tape-dev", "tape-live", "tape-prod"}, Current: "tape", Namespaces: map[string]string{"tape-dev": "prod"}}, nil
 		}

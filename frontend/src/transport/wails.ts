@@ -1,5 +1,5 @@
 import { Call, Clipboard, Events } from "@wailsio/runtime";
-import type { Config, FramePayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
+import type { Config, FramePayload, Launch, PortForward, SessionPayload, Transport, TypeView } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
 const call = <T>(method: string, ...args: unknown[]) =>
@@ -24,7 +24,7 @@ export function wailsTransport(): Transport {
     timeline: (p) => call("Timeline", p),
     fieldHistory: (p, k, to, line, which) => call("FieldHistory", p, k, to, line, which),
     close: (p) => call("Close", p),
-    contexts: () => call("Contexts"),
+    contexts: (c) => call("Contexts", c),
     catalog: (c) => call("Catalog", c),
     contextRule: (c) => call("ContextRule", c),
     prepare: (k, p, key) => call("Prepare", k, p, key),
@@ -67,5 +67,6 @@ export function wailsTransport(): Transport {
     onSession: (cb) => Events.On("kw:session", (ev) => cb(ev.data as SessionPayload)),
     onPortForwards: (cb) => Events.On("kw:portforwards", (ev) => cb(ev.data as PortForward[])),
     onCommand: (cb) => Events.On("kw:command", (ev) => cb(ev.data as string)),
+    onLaunch: (cb) => Events.On("kw:launch", (ev) => cb(ev.data as Launch)),
   };
 }

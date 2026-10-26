@@ -24,7 +24,7 @@ func (o *ClusterOpener) cluster(name string) (*Cluster, error) {
 	}
 	// "" (current context) and its name are the same connection
 	for _, c := range o.clusters {
-		if name != "" && c.Context == name {
+		if c.is(name) {
 			o.clusters[name] = c
 			return c, nil
 		}
@@ -35,6 +35,12 @@ func (o *ClusterOpener) cluster(name string) (*Cluster, error) {
 	}
 	o.clusters[name] = c
 	return c, nil
+}
+
+// is reports whether cluster names c's context by name.
+func (c *Cluster) is(cluster string) bool {
+	ref, ctx := SplitCluster(cluster)
+	return ctx != "" && c.Kubeconfig == ref && c.Context == ctx
 }
 
 // Resolve implements Opener.
@@ -65,7 +71,7 @@ func (o *ClusterOpener) Connected(cluster string) bool {
 		return true
 	}
 	for _, c := range o.clusters {
-		if cluster != "" && c.Context == cluster {
+		if c.is(cluster) {
 			return true
 		}
 	}

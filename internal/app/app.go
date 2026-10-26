@@ -9,15 +9,14 @@ import (
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/safety"
-	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/view"
 )
 
 // App is bound to the frontend.
 type App struct {
 	svc *bridge.Service
-	// Contexts lists available clusters; overridable for tests.
-	ContextsFn func() (bridge.ContextList, error)
+	// Contexts lists the contexts of a cluster's kubeconfig ("" = kubewing's own); overridable for tests.
+	ContextsFn func(cluster string) (bridge.ContextList, error)
 	// MenuFn installs the native menu (see menu.go); nil without one (headless, tests).
 	MenuFn func([]Menu)
 }
@@ -62,11 +61,11 @@ func (a *App) Timeline(pane string) (view.Timeline, error) { return a.svc.Timeli
 func (a *App) FieldHistory(pane, key string, to, line int, which string) (view.FieldHistory, error) {
 	return a.svc.FieldHistory(pane, key, to, line, which)
 }
-func (a *App) Close(pane string) error                 { return a.svc.Close(pane) }
-func (a *App) Contexts() (bridge.ContextList, error)   { return a.ContextsFn() }
-func (a *App) Catalog(context string) catalog.Snapshot { return a.svc.Catalog(context) }
-func (a *App) Config() config.Effective                { return a.svc.Config() }
-func (a *App) ReloadConfig() config.Effective          { return a.svc.ReloadConfig() }
+func (a *App) Close(pane string) error                             { return a.svc.Close(pane) }
+func (a *App) Contexts(cluster string) (bridge.ContextList, error) { return a.ContextsFn(cluster) }
+func (a *App) Catalog(context string) catalog.Snapshot             { return a.svc.Catalog(context) }
+func (a *App) Config() config.Effective                            { return a.svc.Config() }
+func (a *App) ReloadConfig() config.Effective                      { return a.svc.ReloadConfig() }
 func (a *App) ContextRule(cluster string) (safety.Rule, error) {
 	return a.svc.ContextRule(cluster)
 }
@@ -145,13 +144,4 @@ func (a *App) SetMenu(menus []Menu) {
 	if a.MenuFn != nil {
 		a.MenuFn(menus)
 	}
-}
-
-// KubeContexts reads contexts from kubeconfig.
-func KubeContexts() (bridge.ContextList, error) {
-	names, cur, ns, err := source.Contexts()
-	if err != nil {
-		return bridge.ContextList{}, err
-	}
-	return bridge.ContextList{Contexts: names, Current: cur, Namespaces: ns}, nil
 }

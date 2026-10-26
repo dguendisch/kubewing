@@ -16,7 +16,11 @@ export function OpenSource() {
 }
 
 function OpenDialog({ pane }: { pane: S.PaneState }) {
-  const list = useContexts((c) => c.list);
+  // a tab a terminal opened stays in that terminal's kubeconfig
+  const { kubeconfig } = S.splitCluster(pane.spec.context);
+  // until the re-read below answers, the list may be another kubeconfig's
+  const loaded = useContexts((c) => c.list);
+  const list = loaded && S.splitCluster(loaded.current).kubeconfig === kubeconfig ? loaded : undefined;
   const contexts = [...(list?.contexts ?? [])].sort();
   // a field selector comes only from a jump (events: involvedObject.kind=…) and has no field
   // here: it would ride along, unseen, onto a resource it doesn't apply to
@@ -25,8 +29,8 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
 
   // re-read on every open: contexts added to the kubeconfig meanwhile show up
   useEffect(() => {
-    bridge().contexts().then((list) => useContexts.setState({ list }), () => {});
-  }, []);
+    bridge().contexts(kubeconfig ? `${kubeconfig}/` : "").then((list) => useContexts.setState({ list }), () => {});
+  }, [kubeconfig]);
 
   const submit = (next = spec) => {
     // a cluster-scoped type has no namespace (the field is hidden for it)
@@ -49,11 +53,20 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
       }}
     >
       <label className="flex flex-col gap-1 text-fg-muted">
-        context
+        <span>
+          context
+          {list?.kubeconfig && (
+            <span className="ml-2 truncate" title={list.kubeconfig.join("\n")}>
+              · kubeconfig {list.kubeconfig.join(", ")}
+            </span>
+          )}
+        </span>
         <select aria-label="context" className={field} value={spec.context} onChange={(e) => setSpec({ ...spec, context: e.target.value, namespace: S.contextNamespace(list, e.target.value) })}>
-          <option value="">(current)</option>
+          <option value={kubeconfig ? `${kubeconfig}/` : ""}>(current)</option>
           {contexts.map((c) => (
-            <option key={c}>{c}</option>
+            <option key={c} value={c}>
+              {S.clusterLabel(c)}
+            </option>
           ))}
         </select>
       </label>

@@ -51,12 +51,14 @@ Done: history store per shared source (`internal/fieldpath` diff, `internal/hist
 
 Done: time-travel (P1, see below): `t` shows the pane as it was, with a timeline instead of the status line; `←`/`→` change to change, `⇧←`/`⇧→` a minute, `Home`/`End`, `Esc` live; `⇧H` in the YAML lists a field's values over time. The history's limit is a global memory budget now (`history.budget`, default 512Mi; a config reload applies it to running recordings too), so it reaches back equally far for every object; there's no time window (it would only cut history the budget still has room for). The timeline shows the source's history size against its budget. Cost: a step rebuilds the table from the history, ~50 ms for 10k objects with 10 versions each; quick presses merge into one step. Open: pinning, linked time cursors across splits.
 
+Done: launching kubewing while one runs on the same config directory opens a new tab in it on the launching terminal's kubeconfig and current context, and brings it to the front (Wails' single-instance lock, keyed by the config directory; the `$KUBECONFIG` path is handed over encrypted with `instance.key`); `-new-process` starts a separate one. A cluster is `@n/<context>` for such a kubeconfig (`internal/source/kubeconfig.go`), a plain context name for kubewing's own; the references live as long as the process.
+
 Next up:
-- When opening from command line, add a flag to open either in existing window (if present) in a new tab (default) or in a new process.
 - add tooltip to cells not fitting their text (or if significantly easier, add it always)
 - user facing documentation
-- bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails)
+- bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails) and then splits panes, such kubewing commands should not apply while in monace editor
 - monaco editor: add cmd+d (to delete a line) and opt+up/down to move a line up/down
+- label/CEL completion should show completion on arrow down
 - allow to rename tabs and allow to give a pane a name (maybe rendered as a label in the top bar)
 - smooth horizontal scrolling (currently it jumps column by column)
 

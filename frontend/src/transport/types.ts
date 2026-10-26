@@ -141,6 +141,16 @@ export interface ContextList {
   current: string;
   /** Namespace a context sets in the kubeconfig, for those that set one. */
   namespaces?: Record<string, string>;
+  /** The files of a terminal's own kubeconfig (its contexts are clusters like "@1/dev"); unset: kubewing's own. */
+  kubeconfig?: string[];
+}
+
+/** Mirrors app.Launch: a later launch from a terminal, opened as a tab on its kubeconfig. */
+export interface Launch {
+  cluster: string;
+  namespace?: string;
+  /** The terminal's kubeconfig couldn't be read. */
+  error?: string;
 }
 
 /** Mirrors bridge.Draft: a filter bar edit not applied yet. */
@@ -531,7 +541,8 @@ export interface Transport {
   /** which: the text the line is of, the YAML view's ("yaml") or the diff's normalized one ("norm"). */
   fieldHistory(pane: string, key: string, to: number, line: number, which: "yaml" | "norm"): Promise<FieldHistory>;
   close(pane: string): Promise<void>;
-  contexts(): Promise<ContextList>;
+  /** The contexts of a cluster's kubeconfig ("" = kubewing's own; "@1/…" a terminal's). */
+  contexts(cluster: string): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */
   catalog(context: string): Promise<Catalog>;
   /** Safety rule for a pane's cluster ("" = current context). */
@@ -604,4 +615,6 @@ export interface Transport {
   onPortForwards(cb: (l: PortForward[]) => void): () => void;
   /** A native menu item was chosen: its command id. */
   onCommand(cb: (command: string) => void): () => void;
+  /** kubewing was launched again from a terminal: open a tab on its kubeconfig. */
+  onLaunch(cb: (l: Launch) => void): () => void;
 }

@@ -242,10 +242,11 @@ export interface UIState {
   wrap: boolean;
 }
 
-/** Namespace a context starts in: the kubeconfig's, else "" (all). "" = the current context. */
+/** Namespace a context starts in: the kubeconfig's, else "" (all). "" (or "@1/") = the current context. */
 export function contextNamespace(list: ContextList | undefined, context: string): string {
   if (!list) return "";
-  return list.namespaces?.[context || list.current] ?? "";
+  // "@1/" is that kubeconfig's current context, as "" is kubewing's own
+  return list.namespaces?.[splitCluster(context).context ? context : list.current] ?? "";
 }
 
 export const initialSpec = (context = "", namespace = ""): PaneSpec => ({
@@ -435,6 +436,26 @@ export function closePane(s: UIState, id = activeTab(s).focused): UIState {
   // a pane closing on its own (an ended session) must not pull focus out of the pane in use
   const moved = index === s.activeTab && t.focused === id;
   return moved ? { ...s, tabs, panes, focus: "table", overlay: undefined } : { ...s, tabs, panes };
+}
+
+/**
+ * A cluster names a kubeconfig context: "dev" (kubewing's own kubeconfig, ""
+ * its current context) or "@1/dev" (a terminal's own kubeconfig that launched
+ * kubewing again; see internal/source/kubeconfig.go).
+ */
+export function splitCluster(cluster: string): { kubeconfig: string; context: string } {
+  const m = /^(@\d+)\/(.*)$/s.exec(cluster);
+  return m ? { kubeconfig: m[1]!, context: m[2]! } : { kubeconfig: "", context: cluster };
+}
+
+/** A cluster as shown: the context's name, "(current)" for the current one. */
+export const clusterLabel = (cluster: string) => splitCluster(cluster).context || "(current)";
+
+/** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
+export function launchTab(s: UIState, cluster: string, namespace = ""): UIState {
+  const next = newTab(s);
+  const id = next.tabs[next.activeTab]!.focused;
+  return { ...next, panes: { ...next.panes, [id]: { id, spec: initialSpec(cluster, namespace), selected: 0 } } };
 }
 
 export function newTab(s: UIState): UIState {

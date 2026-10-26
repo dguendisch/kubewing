@@ -20,7 +20,7 @@ contexts:
 		t.Fatal(err)
 	}
 	t.Setenv("KUBECONFIG", kc)
-	names, cur, ns, err := Contexts()
+	names, cur, ns, err := Contexts("")
 	if err != nil {
 		t.Fatal(err)
 	}

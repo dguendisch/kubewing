@@ -297,7 +297,9 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       <HistoryButtons pane={pane} />
       <Badges rule={rule} />
       {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
-      <span className="shrink-0 text-fg-muted">{context || pane.context || "(current)"}</span>
+      <span className="shrink-0 text-fg-muted" title={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}>
+        {S.splitCluster(context).context || pane.context || "(current)"}
+      </span>
       <span className="shrink-0 font-semibold text-accent">{resource}</span>
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
       {fieldSelector ? (

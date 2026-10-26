@@ -622,6 +622,9 @@ describe("contextNamespace", () => {
     expect(S.contextNamespace(list, "a")).toBe("shoot--x");
     expect(S.contextNamespace(list, "b")).toBe("");
     expect(S.contextNamespace(undefined, "")).toBe("");
+    const other = { contexts: ["@1/g", "@1/s"], current: "@1/g", namespaces: { "@1/g": "garden", "@1/s": "kube-system" } };
+    expect(S.contextNamespace(other, "@1/")).toBe("garden"); // that kubeconfig's current context
+    expect(S.contextNamespace(other, "@1/s")).toBe("kube-system");
   });
   it("seeds the first pane and the defaults for new panes", () => {
     const s = S.initialState("", "shoot--x");
@@ -810,5 +813,31 @@ describe("detail diff versions ([ / ])", () => {
     const describe = S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "describe", diff: true });
     expect(S.stepVersion(describe, -1, range)).toBe(describe);
     expect(S.stepVersion(diffOpen(), -1, undefined).overlay?.version).toBeUndefined();
+  });
+});
+
+describe("clusters", () => {
+  it("splits a terminal's kubeconfig reference off the context name", () => {
+    expect(S.splitCluster("")).toEqual({ kubeconfig: "", context: "" });
+    expect(S.splitCluster("dev")).toEqual({ kubeconfig: "", context: "dev" });
+    expect(S.splitCluster("@1/dev")).toEqual({ kubeconfig: "@1", context: "dev" });
+    expect(S.splitCluster("@12/")).toEqual({ kubeconfig: "@12", context: "" });
+    expect(S.splitCluster("@1/a/b")).toEqual({ kubeconfig: "@1", context: "a/b" });
+    expect(S.splitCluster("@x/dev")).toEqual({ kubeconfig: "", context: "@x/dev" });
+    expect(S.clusterLabel("@3/shoot--p--s")).toBe("shoot--p--s");
+    expect(S.clusterLabel("@3/")).toBe("(current)");
+  });
+
+  it("a launch opens a fresh tab on its cluster, not a copy of the focused one", () => {
+    let s = S.initialState("dev", "shop");
+    s = S.updatePane(s, "v1", (p) => ({ ...p, spec: { ...p.spec, resource: "deployments", filter: "x" } }));
+    const next = apply(s, (x) => S.launchTab(x, "@1/shoot", "kube-system"));
+    expect(next.tabs).toHaveLength(2);
+    expect(next.activeTab).toBe(1);
+    const p = S.focusedPane(next);
+    expect(p.spec).toEqual(S.initialSpec("@1/shoot", "kube-system"));
+    // ⌘T from there stays on that kubeconfig's context
+    expect(S.focusedPane(apply(next, S.newTab)).spec.context).toBe("@1/shoot");
+    expect(next.panes.v1!.spec.resource).toBe("deployments");
   });
 });

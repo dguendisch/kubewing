@@ -19,7 +19,6 @@ import (
 	"k8s.io/client-go/discovery/cached/memory"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 // tableAccept asks for server-side Table output including full objects, so
@@ -28,26 +27,27 @@ const tableAccept = "application/json;as=Table;v=v1;g=meta.k8s.io,application/js
 
 // Cluster is a connection to one kubeconfig context.
 type Cluster struct {
-	Context string
-	Config  *rest.Config
-	http    *http.Client
-	mapper  meta.RESTMapper
+	// Context is the context's name in its kubeconfig, Kubeconfig that
+	// kubeconfig's reference ("" = kubewing's own; see SplitCluster).
+	Context    string
+	Kubeconfig string
+	Config     *rest.Config
+	http       *http.Client
+	mapper     meta.RESTMapper
 	// deferred is the discovery-backed mapper under mapper; Reset drops
 	// both its mapping and the discovery cache.
 	deferred *restmapper.DeferredDiscoveryRESTMapper
 	disco    discovery.CachedDiscoveryInterface
 }
 
-// Kubeconfig returns the kubeconfig loading rules honoring $KUBECONFIG.
-func Kubeconfig() clientcmd.ClientConfig {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{})
-}
-
-// Contexts lists kubeconfig contexts, the current one, and the namespace
-// each context sets (only those that set one).
-func Contexts() (names []string, current string, namespaces map[string]string, err error) {
-	raw, err := Kubeconfig().RawConfig()
+// Contexts lists the contexts of a cluster's kubeconfig (see SplitCluster),
+// its current one, and the namespace each context sets (only those that set one).
+func Contexts(cluster string) (names []string, current string, namespaces map[string]string, err error) {
+	cc, err := clientConfig(cluster)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	raw, err := cc.RawConfig()
 	if err != nil {
 		return nil, "", nil, err
 	}
@@ -61,14 +61,17 @@ func Contexts() (names []string, current string, namespaces map[string]string, e
 	return names, raw.CurrentContext, namespaces, nil
 }
 
-// Connect builds a cluster connection for a context ("" = current).
-func Connect(ctxName string) (*Cluster, error) {
-	rules := clientcmd.NewDefaultClientConfigLoadingRules()
-	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: ctxName})
+// Connect builds a cluster connection (see SplitCluster; "" = the current context).
+func Connect(cluster string) (*Cluster, error) {
+	cc, err := clientConfig(cluster)
+	if err != nil {
+		return nil, err
+	}
 	cfg, err := cc.ClientConfig()
 	if err != nil {
 		return nil, err
 	}
+	ref, ctxName := SplitCluster(cluster)
 	if ctxName == "" {
 		raw, _ := cc.RawConfig()
 		ctxName = raw.CurrentContext
@@ -79,7 +82,12 @@ func Connect(ctxName string) (*Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newCluster(ctxName, cfg, hc)
+	c, err := newCluster(ctxName, cfg, hc)
+	if err != nil {
+		return nil, err
+	}
+	c.Kubeconfig = ref
+	return c, nil
 }
 
 func newCluster(ctxName string, cfg *rest.Config, hc *http.Client) (*Cluster, error) {

@@ -532,6 +532,10 @@ type ContextList struct {
 	// Namespaces holds the namespace a context sets, for those that set one;
 	// new panes on that context start in it.
 	Namespaces map[string]string `json:"namespaces,omitempty"`
+	// Kubeconfig lists the files of a kubeconfig other than kubewing's own
+	// (opened from a terminal with its own $KUBECONFIG); its contexts are
+	// clusters such as "@1/dev".
+	Kubeconfig []string `json:"kubeconfig,omitempty"`
 }
 
 // Catalog returns completion data for a context ("" = current). It never

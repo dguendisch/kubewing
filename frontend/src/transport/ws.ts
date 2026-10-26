@@ -69,7 +69,7 @@ export function wsTransport(url: string): Transport {
     timeline: (p) => call("Timeline", p),
     fieldHistory: (p, k, to, line, which) => call("FieldHistory", p, k, to, line, which),
     close: (p) => call("Close", p),
-    contexts: () => call("Contexts"),
+    contexts: (c) => call("Contexts", c),
     catalog: (c) => call("Catalog", c),
     contextRule: (c) => call("ContextRule", c),
     prepare: (k, p, key) => call("Prepare", k, p, key),
@@ -127,7 +127,8 @@ export function wsTransport(url: string): Transport {
       forwardListeners.add(cb);
       return () => forwardListeners.delete(cb);
     },
-    // no native menu in the browser
+    // no native menu in the browser, and no second launch to hand over
     onCommand: () => () => {},
+    onLaunch: () => () => {},
   };
 }

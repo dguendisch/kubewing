@@ -171,7 +171,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
       }}
     >
       <div className="text-fg">
-        node shell <span className="text-fg-muted">on a node of {nodes?.context || cluster || "the current context"}</span>
+        node shell <span className="text-fg-muted">on a node of {nodes?.context || S.splitCluster(cluster).context || "the current context"}</span>
       </div>
       <div className="flex min-h-0 gap-3">
         <div className="flex w-[32rem] shrink-0 flex-col gap-2">

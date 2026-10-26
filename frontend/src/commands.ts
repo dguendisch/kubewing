@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, Launch, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
@@ -367,6 +367,15 @@ export async function copyCell(index: number) {
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
+}
+
+/**
+ * kubewing was launched again from a terminal: a tab on that terminal's
+ * kubeconfig, at its current context and namespace (not a copy of this tab).
+ */
+export function openLaunch(l: Launch) {
+  setUI((x) => S.launchTab(x, l.cluster, l.namespace ?? ""));
+  if (l.error) flash(S.focusedPane(useUI.getState()).id, `kubeconfig: ${l.error}`, true);
 }
 
 /** Shows a short message in a pane's status line. */

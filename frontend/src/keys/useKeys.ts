@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { dispatch } from "../commands";
+import { dispatch, openLaunch } from "../commands";
 import { useConfig } from "../store/config";
 import { bridge, paneData, useUI } from "../store/store";
 import * as S from "../store/state";
@@ -47,6 +47,7 @@ export function useKeys() {
     const offMenu = bridge().onCommand((c) => {
       if (known.has(c)) dispatch(c as CommandId);
     });
+    const offLaunch = bridge().onLaunch(openLaunch);
     window.addEventListener("keydown", onKey, { capture: true });
     window.addEventListener("keyup", onKeyUp, { capture: true });
     window.addEventListener("blur", onBlur);
@@ -55,6 +56,7 @@ export function useKeys() {
       window.removeEventListener("keyup", onKeyUp, { capture: true });
       window.removeEventListener("blur", onBlur);
       offMenu();
+      offLaunch();
     };
   }, []);
 }

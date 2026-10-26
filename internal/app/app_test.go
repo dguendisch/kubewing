@@ -14,7 +14,7 @@ import (
 func newTestApp() *App {
 	svc := bridge.New(source.NewRegistry(&tape.Opener{Tapes: map[string]*tape.Tape{}}), bridge.NewHub(), bridge.Options{})
 	a := New(svc)
-	a.ContextsFn = func() (bridge.ContextList, error) {
+	a.ContextsFn = func(string) (bridge.ContextList, error) {
 		return bridge.ContextList{Contexts: []string{"c"}, Current: "c"}, nil
 	}
 	return a
@@ -64,7 +64,7 @@ func TestDispatchErrors(t *testing.T) {
 			t.Errorf("%s(%v): got %v, want %q", tc.method, tc.args, err, tc.want)
 		}
 	}
-	res, err := bridge.Dispatch(a, "Contexts", nil)
+	res, err := bridge.Dispatch(a, "Contexts", []json.RawMessage{json.RawMessage(`""`)})
 	if err != nil || res.(bridge.ContextList).Current != "c" {
 		t.Errorf("Contexts: %v, %v", res, err)
 	}

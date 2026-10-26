@@ -16,7 +16,7 @@ import { contextNamespace, initialState, orphanedServerPanes, orphanedSessions, 
  */
 export const useUI = create<UIState>(() => initialState());
 
-/** Kubeconfig contexts: loaded before the first render, re-read on every ⌘O. */
+/** Kubeconfig contexts: kubewing's own loaded before the first render; ⌘O re-reads its pane's kubeconfig's. */
 export const useContexts = create<{ list?: ContextList }>(() => ({}));
 
 /** All UI updates go through here; touchTab keeps the MRU tab order in sync. */
@@ -106,7 +106,7 @@ export function connect(t: Transport) {
  * Without a readable kubeconfig everything starts in all namespaces.
  */
 export async function loadContexts() {
-  const list = await bridge().contexts().catch(() => undefined);
+  const list = await bridge().contexts("").catch(() => undefined);
   useContexts.setState({ list });
   const ns = contextNamespace(list, "");
   if (ns) useUI.setState(initialState("", ns), true);
