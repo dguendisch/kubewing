@@ -598,13 +598,11 @@ func (s *Service) contextName(cluster string) (string, error) {
 }
 
 // ContextRule returns the safety rule (label, color, read-only …) for a
-// pane's cluster ("" = current context).
-func (s *Service) ContextRule(cluster string) (safety.Rule, error) {
-	name, err := s.contextName(cluster)
-	if err != nil {
-		return safety.Rule{}, err
-	}
-	return s.guard.Rule(name), nil
+// context name, a pane's resolved one (OpenResult.Context): not a cluster,
+// as "@1/dev" is "dev" too, and resolving "dev" would look in kubewing's
+// own kubeconfig.
+func (s *Service) ContextRule(context string) safety.Rule {
+	return s.guard.Rule(context)
 }
 
 // row is one object of a pane, resolved for an action.

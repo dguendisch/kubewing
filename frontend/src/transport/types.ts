@@ -617,8 +617,8 @@ export interface Transport {
   contexts(cluster: string): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */
   catalog(context: string): Promise<Catalog>;
-  /** Safety rule for a pane's cluster ("" = current context). */
-  contextRule(cluster: string): Promise<SafetyRule>;
+  /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
+  contextRule(context: string): Promise<SafetyRule>;
   /** Checks a mutation against the safety policy (Go decides); throws if refused. */
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */

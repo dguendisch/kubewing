@@ -94,9 +94,8 @@ func TestDeleteNeedsPreparedToken(t *testing.T) {
 func TestReadOnlyContextRefusesDelete(t *testing.T) {
 	svc, log, res := deleteSetup(t, []config.ContextRule{{Match: "tape", Label: "PROD", ReadOnly: true}})
 	waitRow(t, log, res.Pane, "s-web-0", func(view.RowData) bool { return true })
-	r, err := svc.ContextRule("")
-	if err != nil || !r.ReadOnly || r.Label != "PROD" || r.Context != "tape" {
-		t.Errorf("rule for the current context: %+v %v", r, err)
+	if r := svc.ContextRule(res.Context); !r.ReadOnly || r.Label != "PROD" || r.Context != "tape" {
+		t.Errorf("rule for the pane's context: %+v", r)
 	}
 	if _, err := svc.Prepare("delete", res.Pane, "s-web-0"); err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("prepare on read-only: %v", err)
