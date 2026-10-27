@@ -150,6 +150,9 @@ const sections: { title: string; rows: Row[] }[] = [
   {
     title: "logs",
     rows: [
+      row("scroll down / up a line", "logs.lineDown", "logs.lineUp"),
+      row("page down / up", "logs.pageDown", "logs.pageUp"),
+      row("first / latest line", "logs.top", "logs.bottom"),
       row("filter the lines (fzf-like; !x excludes)", "logs.focusFilter"),
       row("leave the filter", "logs.blurFilter"),
       row("timestamps on / off", "logs.toggleTimestamps"),

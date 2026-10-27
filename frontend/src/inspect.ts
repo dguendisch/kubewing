@@ -34,7 +34,8 @@ export function inspect() {
         return [id, { scrollback: t.options.scrollback, lines: b.length, first: b.getLine(0)?.translateToString(true) }];
       }),
     ),
-    // per log session: lines buffered, streams followed, and the rendered screen text
+    // per log session: lines buffered, streams followed, the rendered screen text and the viewport's
+    // scroll position (viewportY: first row shown; at the bottom when viewportY + rows >= length)
     logs: Object.fromEntries(
       [...openLogViews].map(([id, t]) => {
         const buf = logBuffers.get(id);
@@ -44,7 +45,7 @@ export function inspect() {
           const line = b.getLine(i)?.translateToString(true);
           if (line) screen.push(line);
         }
-        return [id, { lines: buf.lines.length, streams: buf.streams, dropped: buf.dropped, screen: screen.join("\n") }];
+        return [id, { lines: buf.lines.length, streams: buf.streams, dropped: buf.dropped, screen: screen.join("\n"), viewportY: b.viewportY, length: b.length, rows: t.rows }];
       }),
     ),
     panes: Object.fromEntries(

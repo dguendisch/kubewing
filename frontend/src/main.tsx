@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { inspect } from "./inspect";
 import { bridge, connect, loadContexts } from "./store/store";
+import { logBuffers } from "./logs/buffer";
 import { createTransport } from "./transport";
 import "./theme.css";
 
@@ -12,8 +13,8 @@ connect(await createTransport());
 await loadContexts();
 
 if (import.meta.env.MODE !== "production") {
-  // bridge: e2e tests reset what they saved (one backend serves the whole run)
-  (window as unknown as { __kw: { inspect: typeof inspect; bridge: typeof bridge } }).__kw = { inspect, bridge };
+  // bridge: e2e tests reset what they saved (one backend serves the whole run); logBuffers: they fill a log pane
+  (window as unknown as { __kw: { inspect: typeof inspect; bridge: typeof bridge; logBuffers: typeof logBuffers } }).__kw = { inspect, bridge, logBuffers };
 }
 
 createRoot(document.getElementById("root")!).render(

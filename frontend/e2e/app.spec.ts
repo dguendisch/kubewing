@@ -7,7 +7,7 @@ type Inspect = {
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
   panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; exited?: string } }>;
-  logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string }>;
+  logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string; viewportY: number; length: number; rows: number }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -3806,6 +3806,59 @@ test.describe("logs", () => {
     await grep.fill("!warning");
     await expect.poll(() => screen(page)).toContain("ready");
     await expect.poll(() => screen(page)).not.toContain("disk space low");
+  });
+
+  test("arrows, page up/down and home/end scroll the view; ⏎ jumps to the latest line", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    await expect.poll(() => screen(page)).toContain("api-0 app serving request /healthz");
+    // the tape has a handful of lines; push enough to scroll
+    const session = Object.values((await inspect(page)).panes).find((p) => p.logs)!.logs!.session;
+    const push = (from: number, n: number) =>
+      page.evaluate(
+        ([id, from, n]) => {
+          const kw = (window as unknown as { __kw: { logBuffers: { get(id: string): { streams: { id: string }[] }; pushLines(id: string, lines: { stream: string; text: string }[]): void } } }).__kw;
+          const stream = kw.logBuffers.get(id).streams[0]?.id ?? "";
+          kw.logBuffers.pushLines(id, Array.from({ length: n }, (_, i) => ({ stream, text: `filler line ${from + i}` })));
+        },
+        [session, from, n] as const,
+      );
+    await push(0, 500);
+    const view = async () => (await inspect(page)).logs![session]!;
+    const atBottom = async () => {
+      const v = await view();
+      return v.viewportY + v.rows >= v.length;
+    };
+    await expect.poll(() => screen(page)).toContain("filler line 499");
+    await expect.poll(atBottom).toBe(true); // follows the tail
+    await page.keyboard.press("Home");
+    await expect.poll(async () => (await view()).viewportY).toBe(0);
+    await page.keyboard.press("ArrowDown");
+    await expect.poll(async () => (await view()).viewportY).toBe(1);
+    await page.keyboard.press("ArrowUp");
+    await expect.poll(async () => (await view()).viewportY).toBe(0);
+    await page.keyboard.press("PageDown");
+    const rows = (await view()).rows;
+    await expect.poll(async () => (await view()).viewportY).toBe(rows - 1);
+    await page.keyboard.press("PageUp");
+    await expect.poll(async () => (await view()).viewportY).toBe(0);
+    // scrolled up, new lines don't yank the view
+    await push(500, 50);
+    await expect.poll(() => screen(page)).toContain("filler line 549");
+    expect((await view()).viewportY).toBe(0);
+    await page.keyboard.press("End");
+    await expect.poll(atBottom).toBe(true);
+    await page.keyboard.press("Home");
+    await expect.poll(async () => (await view()).viewportY).toBe(0);
+    // ⏎ is End: back to the latest line, and following again
+    await page.keyboard.press("Enter");
+    await expect.poll(atBottom).toBe(true);
+    await push(550, 50);
+    await expect.poll(() => screen(page)).toContain("filler line 599");
+    await expect.poll(atBottom).toBe(true);
+    expect((await inspect(page)).focus).toBe("logs");
   });
 
   test("closing the pane ends the session", async ({ page }) => {

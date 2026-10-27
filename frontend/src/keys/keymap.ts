@@ -83,6 +83,12 @@ export type CommandId =
   | "logs.findNext"
   | "logs.findPrev"
   | "logs.findClose"
+  | "logs.lineDown"
+  | "logs.lineUp"
+  | "logs.pageDown"
+  | "logs.pageUp"
+  | "logs.top"
+  | "logs.bottom"
   | "portforward.list"
   | "portforward.stop"
   | "confirm.accept"
@@ -118,6 +124,7 @@ export const commandIds: readonly CommandId[] = [
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
+  "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "history.toggleRecording",
@@ -274,6 +281,16 @@ export const defaultBindings: Binding[] = [
   { key: "Enter", command: "logs.findNext", when: ["logsfind"] },
   { key: "Shift+Enter", command: "logs.findPrev", when: ["logsfind"] },
   { key: "Escape", command: "logs.findClose", when: ["logsfind"] },
+  // scrolling the log view: the usual keys; ⏎ jumps back to the latest line (and keeps following)
+  { key: "ArrowDown", command: "logs.lineDown", when: ["logs"] },
+  { key: "ArrowUp", command: "logs.lineUp", when: ["logs"] },
+  { key: "PageDown", command: "logs.pageDown", when: ["logs"] },
+  { key: "PageUp", command: "logs.pageUp", when: ["logs"] },
+  { key: "Home", command: "logs.top", when: ["logs"] },
+  { key: "Alt+ArrowUp", command: "logs.top", when: ["logs"] },
+  { key: "End", command: "logs.bottom", when: ["logs"] },
+  { key: "Alt+ArrowDown", command: "logs.bottom", when: ["logs"] },
+  { key: "Enter", command: "logs.bottom", when: ["logs"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
   // the same keys as the running forwards in the f dialog: ↑/↓ pick, x or ⌫ stops
   { key: "X", command: "portforward.stop", when: ["forwards"] },

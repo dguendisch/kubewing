@@ -213,6 +213,14 @@ export function dispatch(cmd: CommandId) {
       if (!pane.logs || !f?.query) return setUI(S.openLogFind);
       return finders.get(pane.logs.session)?.(cmd === "logs.findNext" ? "next" : "prev");
     }
+    case "logs.lineDown":
+    case "logs.lineUp":
+    case "logs.pageDown":
+    case "logs.pageUp":
+    case "logs.top":
+    case "logs.bottom":
+      if (pane.logs) scrollers.get(pane.logs.session)?.(cmd.slice(5) as LogScroll);
+      return;
     case "view.columns":
       return void openColumns(pane.id);
     case "history.toggleRecording":
@@ -300,6 +308,10 @@ export function dispatch(cmd: CommandId) {
 
 /** Per terminal/log session: steps to the next/previous find match (registered by the open xterm). */
 export const finders = new Map<string, (dir: "next" | "prev") => void>();
+
+export type LogScroll = "lineDown" | "lineUp" | "pageDown" | "pageUp" | "top" | "bottom";
+/** Per log session: scrolls its view (registered by the open xterm). */
+export const scrollers = new Map<string, (to: LogScroll) => void>();
 
 /**
  * ⌘L / ⌥⌘L: tails a row's pods (whole = every pod the pods pane shows), in a

@@ -75,6 +75,14 @@ describe("resolve", () => {
     expect(resolve("Ctrl+D", "terminal")).toBeUndefined(); // the shell's EOF
     expect(resolve("Ctrl+D", "ended")).toBe("pane.close"); // …until the shell has ended
     expect(resolve("Ctrl+D", "logs")).toBe("pane.close"); // a log pane has no shell to take ⌃D
+    // the log view scrolls with the usual keys; ⏎ jumps to the latest line
+    expect(resolve("ArrowDown", "logs")).toBe("logs.lineDown");
+    expect(resolve("PageUp", "logs")).toBe("logs.pageUp");
+    expect(resolve("Home", "logs")).toBe("logs.top");
+    expect(resolve("End", "logs")).toBe("logs.bottom");
+    expect(resolve("Enter", "logs")).toBe("logs.bottom");
+    expect(resolve("Enter", "logsfind")).toBe("logs.findNext"); // not while finding
+    expect(resolve("Home", "logsfilter")).toBeUndefined(); // caret movement in the grep field
     expect(resolve("Meta+W", "ended")).toBe("tab.close");
     expect(resolve("J", "ended")).toBeUndefined(); // no table to move in
     expect(resolve("Meta+Shift+]", "table")).toBe("tab.next");

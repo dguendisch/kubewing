@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Terminal as XTerm, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon, type ISearchOptions } from "@xterm/addon-search";
-import { finders } from "../commands";
+import { finders, scrollers, type LogScroll } from "../commands";
 import { toHex } from "../grid/cells";
 import type { TermFind } from "../store/state";
 import "@xterm/xterm/css/xterm.css";
@@ -101,6 +101,15 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
       else sa.findPrevious(f.query, of(f));
     };
     finders.set(session, finder);
+    const scroller = (to: LogScroll) => {
+      if (to === "lineDown") t.scrollLines(1);
+      else if (to === "lineUp") t.scrollLines(-1);
+      else if (to === "pageDown") t.scrollPages(1);
+      else if (to === "pageUp") t.scrollPages(-1);
+      else if (to === "top") t.scrollToTop();
+      else t.scrollToBottom();
+    };
+    scrollers.set(session, scroller);
     sa.onDidChangeResults((r) => cb.current.onFindResult?.({ index: r.resultIndex, count: r.resultCount }));
     t.open(host.current!);
     term.current = t;
@@ -113,15 +122,31 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
     ro.observe(host.current!);
     fit.fit();
 
+    // one redraw at a time: clear() is immediate but write() is parsed later, so
+    // a redraw while one is in flight is queued (and coalesced) until it's done
+    let drawing = false;
+    let dirty = false;
     const draw = () => {
+      if (drawing) return void (dirty = true);
+      drawing = true;
       const b = logBuffers.get(session);
       const o = opts.current;
-      const atBottom = t.buffer.active.viewportY + t.rows >= t.buffer.active.length - 1;
+      // at the bottom the view follows new lines; scrolled up it stays put (clear() resets it to the top)
+      const top = t.buffer.active.viewportY;
+      const atBottom = top + t.rows >= t.buffer.active.length - 1;
       t.clear(); // keeps the current line; reset() flickers the viewport
       t.write("\x1b[2J\x1b[H");
       const lines = renderLines(b.lines, { prefix: o.prefix, timestamps: o.timestamps, terms: filterTerms(o.filter), streams: b.streams });
-      t.write(lines.join(""));
-      if (atBottom) t.scrollToBottom();
+      t.write(lines.join(""), () => {
+        if (term.current !== t) return;
+        if (atBottom) t.scrollToBottom();
+        else t.scrollToLine(top);
+        drawing = false;
+        if (dirty) {
+          dirty = false;
+          draw();
+        }
+      });
     };
     redraw.current = draw;
     draw();
@@ -135,6 +160,7 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
       ro.disconnect();
       if (openLogViews.get(session) === t) openLogViews.delete(session);
       if (finders.get(session) === finder) finders.delete(session);
+      if (scrollers.get(session) === scroller) scrollers.delete(session);
       search.current = undefined;
       t.dispose();
       term.current = undefined;
