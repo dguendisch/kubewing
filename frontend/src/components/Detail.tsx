@@ -41,8 +41,8 @@ const followEvery = 2000;
  * (⇧D) kubectl describe output.
  */
 export function Detail() {
-  // the field history (⇧H) opens over the detail view: it stays, with its editor and cursor
-  const overlay = useUI((s) => (s.overlay?.kind === "field" ? s.overlay.back : s.overlay));
+  // the field history (⇧H) and a decode (⏎) open over the detail view: it stays, with its editor and cursor
+  const overlay = useUI((s) => (s.overlay?.kind === "field" || s.overlay?.kind === "decode" ? s.overlay.back : s.overlay));
   const serverId = useUI((s) => (s.overlay ? s.panes[s.overlay.pane]?.serverId : undefined));
   const [data, setData] = useState<DetailData | { error: string }>();
   const [described, setDescribed] = useState<DescribeResult | { error: string }>();
@@ -97,11 +97,15 @@ export function Detail() {
 
   const st = usePaneStatus(serverId);
   const fieldKey = useKey("travel.field");
+  const decodeKey = useKey("detail.decode");
+  // its own message only while it's on top (a decode over it has its own)
+  const flashed = useUI((s) => (s.overlay?.kind === "detail" ? s.overlay.flash : undefined));
   if (!overlay || overlay.kind !== "detail") return null;
   const diff = !!overlay.diff;
   // the field at the cursor: its values over time (needs recorded history)
   const field = !describe && st?.recording;
   const hints = [
+    !describe && decodeKey ? `${prettyKey(decodeKey)}: ${diff ? "decode both sides" : "decode"}` : "",
     diff ? "j/k: changes" : "",
     diff && !describe && info ? "[/]: versions" : "",
     field && fieldKey ? `${prettyKey(fieldKey)}: field at cursor over time` : "",
@@ -114,9 +118,10 @@ export function Detail() {
   ]
     .filter(Boolean)
     .join(" · ");
-  const fieldActions: ContextAction[] | undefined = field
-    ? [{ id: "kubewing.fieldHistory", label: "history of this field", key: fieldKey && prettyKey(fieldKey), run: () => dispatch("travel.field") }]
-    : undefined;
+  const decodeAction: ContextAction = { id: "kubewing.decode", label: diff ? "decode value (both versions)" : "decode value", key: decodeKey && prettyKey(decodeKey), run: () => dispatch("detail.decode") };
+  const fieldActions: ContextAction[] = field
+    ? [{ id: "kubewing.fieldHistory", label: "history of this field", key: fieldKey && prettyKey(fieldKey), run: () => dispatch("travel.field") }, decodeAction]
+    : [decodeAction];
   return (
     <div role="dialog" aria-label="object detail" className="absolute inset-6 z-20 flex flex-col border border-accent bg-bg-elev shadow-2xl">
       {/* one line: the parts don't wrap inside; the key hints give way first (truncated, full text on hover) */}
@@ -175,7 +180,20 @@ export function Detail() {
           <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={fieldActions} />
         )}
       </div>
+      <OverlayStatus flash={flashed} />
     </div>
+  );
+}
+
+/** A detail view's or decode's status line, while it has a message (the pane's status line is covered). */
+export function OverlayStatus({ flash }: { flash?: { text: string; error: boolean } }) {
+  if (!flash) return null;
+  return (
+    <footer role="status" aria-label="overlay status" className="border-t border-border px-3 py-0.5">
+      <span aria-label="message" className={`block truncate ${flash.error ? "text-deleted" : "text-fg"}`} title={flash.text}>
+        {flash.text}
+      </span>
+    </footer>
   );
 }
 

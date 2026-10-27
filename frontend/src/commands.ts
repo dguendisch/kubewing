@@ -5,7 +5,7 @@ import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
-import { cursor, useDiffNav, useDiffRange } from "./editor/Viewer";
+import { cursor, decodeCursor, useDiffNav, useDiffRange } from "./editor/Viewer";
 import * as S from "./store/state";
 import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
@@ -22,6 +22,8 @@ import { logBuffers } from "./logs/buffer";
 export function dispatch(cmd: CommandId) {
   if (cmd.startsWith("tab.goto")) return setUI((x) => S.gotoTab(x, Number(cmd.slice(8))));
   const s = useUI.getState();
+  // a decode is over the detail view, which these act on (or on the table behind it)
+  if (s.overlay?.kind === "decode" && decodeBlocked.has(cmd)) return;
   const pane = S.focusedPane(s);
   const total = pane.serverId ? paneData.get(pane.serverId).total : 0;
   const page = 20;
@@ -256,10 +258,14 @@ export function dispatch(cmd: CommandId) {
         const back = s.overlay.back;
         return setUI((x) => ({ ...x, overlay: back, focus: "detail" }));
       }
+      // a decode goes up a level, from the first one back to the detail view
+      if (s.overlay?.kind === "decode") return setUI(S.decodeUp);
       return setUI(S.closeOverlay);
+    case "detail.decode":
+      return openDecode();
     case "detail.toggleDiff":
       // in describe: diff against the previous describe; elsewhere the object diff (from the newest version)
-      return setUI((x) => (x.overlay ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, version: undefined } } : x));
+      return setUI((x) => (x.overlay && x.overlay.kind !== "decode" ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, version: undefined } } : x));
     case "diff.next":
     case "diff.prev":
       return useDiffNav.getState().go?.(cmd === "diff.next" ? "next" : "previous");
@@ -305,6 +311,9 @@ export function dispatch(cmd: CommandId) {
     }
   }
 }
+
+/** Commands of the detail view that don't apply to a decoded value (its keys are the detail view's). */
+const decodeBlocked = new Set<CommandId>(["object.describe", "object.edit", "object.jump", "object.events", "detail.showYaml", "detail.toggleDiff", "detail.refresh", "filter.fromDetail", "filter.fromDetailNot", "travel.field"]);
 
 /** Per terminal/log session: steps to the next/previous find match (registered by the open xterm). */
 export const finders = new Map<string, (dir: "next" | "prev") => void>();
@@ -354,7 +363,7 @@ function filterFromDetail(op: "==" | "!=") {
   if (!pane || cursor.text === undefined) return;
   const leaf = yamlLeaf(cursor.text.split("\n"), cursor.line);
   const expr = leaf && celFromLeaf(leaf, op);
-  if (!expr) return flash(pane.id, "no value on this line to filter by", true);
+  if (!expr) return flashHere(pane.id, "no value on this line to filter by", true);
   setUI(S.closeOverlay);
   void applySpec(pane.id, { ...pane.spec, filter: expr });
 }
@@ -448,6 +457,18 @@ export function openLaunch(l: Launch) {
 }
 
 /** Shows a short message in a pane's status line. */
+/**
+ * A message where it can be read: in the open detail view's or decode's
+ * status line, else the pane's. Gone after 5 s, or when that overlay goes.
+ */
+export function flashHere(paneId: string, text: string, error = false) {
+  const o = useUI.getState().overlay;
+  if (o?.pane !== paneId || (o.kind !== "detail" && o.kind !== "decode")) return flash(paneId, text, error);
+  const f = { text, error };
+  setUI((x) => S.flashOverlay(x, f));
+  setTimeout(() => setUI((x) => (x.overlay?.flash === f ? S.flashOverlay(x, undefined) : x)), 5000);
+}
+
 export function flash(paneId: string, text: string, error = false) {
   const f = { text, error };
   setUI((x) => S.updatePane(x, paneId, (p) => ({ ...p, flash: f })));
@@ -1001,24 +1022,42 @@ async function travelOnce(paneId: string, id: string, move: TravelMove) {
   }
 }
 
+/**
+ * ⏎ in the detail view: the field under the cursor decoded, over the YAML
+ * (or the object diff: the field decoded in both versions, diffed). ⏎ in a
+ * decoded YAML decodes the field under its cursor, a level deeper.
+ */
+function openDecode() {
+  const o = useUI.getState().overlay;
+  if (o?.kind === "decode" && o.decode) {
+    if (o.decode.diff) return; // a diff has two values under the cursor: deeper from the YAML view
+    return setUI((x) => S.decodeDeeper(x, decodeCursor.line));
+  }
+  if (o?.kind !== "detail" || o.view === "describe" || !o.key) return;
+  if (cursor.text === undefined) return;
+  // the line is one of the YAML view (the object) or of the diff's right side (normalized)
+  const decode: S.DecodeState = { levels: [{ line: cursor.line, steps: null }], diff: !!o.diff, which: o.diff ? "norm" : "yaml", version: o.diff ? o.version : undefined, gen: 0 };
+  setUI((x) => ({ ...x, overlay: { kind: "decode", pane: o.pane, key: o.key, decode, back: o, restore: o.restore }, focus: "detail" }));
+}
+
 /** ⇧H in the YAML: how the field under the cursor went over time (needs recording). */
 async function openFieldHistory() {
   const o = useUI.getState().overlay;
   if (o?.kind !== "detail" || o.view === "describe" || !o.key) return;
   const pane = useUI.getState().panes[o.pane];
   if (!pane?.serverId || cursor.text === undefined) return;
-  if (!paneData.get(pane.serverId).status?.recording) return flash(pane.id, "field history needs record history (⇧R in the table)", true);
+  if (!paneData.get(pane.serverId).status?.recording) return flashHere(pane.id, "field history needs record history (⇧R in the table)", true);
   try {
     // the line is one of the YAML view (the object) or of the diff's right side (normalized)
     const fh = await bridge().fieldHistory(pane.serverId, o.key, o.diff ? (o.version ?? 0) : 0, cursor.line, o.diff ? "norm" : "yaml");
-    if (!fh.changes.length) return flash(pane.id, `no history of ${fh.path}`, true);
+    if (!fh.changes.length) return flashHere(pane.id, `no history of ${fh.path}`, true);
     setUI((x) => ({
       ...x,
       overlay: { kind: "field", pane: pane.id, key: o.key, field: fh, index: fh.changes.length - 1, back: o, restore: o.restore },
       focus: "menu",
     }));
   } catch (e) {
-    flash(pane.id, `field history: ${(e as Error).message}`, true);
+    flashHere(pane.id, `field history: ${(e as Error).message}`, true);
   }
 }
 

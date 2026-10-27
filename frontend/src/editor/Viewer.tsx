@@ -57,11 +57,28 @@ export const common: Monaco.editor.IEditorOptions = {
  */
 export const cursor: { text?: string; line: number } = { line: 0 };
 
+/** The decode view's cursor (over the detail view, which keeps its own): ⏎ there decodes deeper. */
+export const decodeCursor: { text?: string; line: number } = { line: 0 };
+
 /**
  * The diff editor currently shown: which change the cursor is at (1-based,
  * 0 before the first) of how many, and how to move (j/k, header buttons).
  */
 export const useDiffNav = create<{ index: number; total: number; go?: (target: "next" | "previous") => void }>(() => ({ index: 0, total: 0 }));
+
+/**
+ * Open diff viewers, the newest last: a decoded diff over the object diff
+ * owns j/k while it's there, and hands them back (with the position) when
+ * it closes.
+ */
+type DiffNav = { sync: () => void; go: (target: "next" | "previous") => void };
+const diffNavs: DiffNav[] = [];
+function topNav() {
+  const top = diffNavs[diffNavs.length - 1];
+  if (!top) return useDiffNav.setState({ index: 0, total: 0, go: undefined });
+  useDiffNav.setState({ go: top.go });
+  top.sync();
+}
 
 /** The open object diff's place in the object's history, for [ / ] (set by the detail view). */
 export const useDiffRange = create<{ range?: { to: number; first: number; last: number } }>(() => ({}));
@@ -83,7 +100,18 @@ interface Props {
   label: string;
   /** Extra right-click entries (the diff: on its right side). */
   contextActions?: ContextAction[];
+  /** Where the cursor line goes (YAML only; default: the detail view's `cursor`). */
+  cursorOf?: { text?: string; line: number };
+  /**
+   * The single viewer's cursor and scroll position, kept across remounts:
+   * restored from `state` when it opens, saved into it when it closes (a
+   * decode's level, back from a deeper one).
+   */
+  viewState?: ViewState;
 }
+
+/** A viewer's cursor and scroll position (see Props.viewState). */
+export type ViewState = { state?: Monaco.editor.ICodeEditorViewState | null };
 
 function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAction[] | undefined) {
   return (actions ?? []).map((a, i) =>
@@ -92,7 +120,7 @@ function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAct
 }
 
 /** Read-only Monaco viewer (YAML/text) or diff viewer; focuses itself on mount. */
-export function Viewer({ value, original, language = "yaml", label, contextActions }: Props) {
+export function Viewer({ value, original, language = "yaml", label, contextActions, cursorOf = cursor, viewState }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
@@ -112,15 +140,17 @@ export function Viewer({ value, original, language = "yaml", label, contextActio
         const model = m.editor.createModel(value, language);
         const ed = m.editor.create(host.current, { ...common, ...wordWrap(useUI.getState().wrap), model, ariaLabel: label });
         editor.current = ed;
+        if (viewState?.state) ed.restoreViewState(viewState.state);
         ed.focus();
         if (language === "yaml") {
-          cursor.text = value;
-          cursor.line = 0;
-          ed.onDidChangeCursorPosition((e) => (cursor.line = e.position.lineNumber - 1));
+          cursorOf.text = value;
+          cursorOf.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
+          ed.onDidChangeCursorPosition((e) => (cursorOf.line = e.position.lineNumber - 1));
         }
         const acts = addActions(ed, contextActions);
         dispose = () => {
-          if (cursor.text === value) cursor.text = undefined;
+          if (viewState) viewState.state = ed.saveViewState();
+          if (cursorOf.text === value) cursorOf.text = undefined;
           acts.forEach((a) => a.dispose());
           ed.dispose();
           model.dispose();
@@ -136,16 +166,21 @@ export function Viewer({ value, original, language = "yaml", label, contextActio
         mod.focus();
         // the right side's cursor line, for "the field at the cursor" (⇧H) in the diff
         if (language === "yaml") {
-          cursor.text = value;
-          cursor.line = 0;
+          cursorOf.text = value;
+          cursorOf.line = 0;
         }
         const acts = addActions(mod, contextActions);
         // first line of each change on the modified side (a pure deletion: the line after it)
         const starts = () => (ed.getLineChanges() ?? []).map((c) => c.modifiedStartLineNumber || c.modifiedEndLineNumber + 1);
-        const sync = () => {
-          const s = starts();
-          useDiffNav.setState({ total: s.length, index: changeIndex(s, mod.getPosition()?.lineNumber ?? 1) });
+        const nav: DiffNav = {
+          sync: () => {
+            if (diffNavs[diffNavs.length - 1] !== nav) return; // another one is over this one
+            const s = starts();
+            useDiffNav.setState({ total: s.length, index: changeIndex(s, mod.getPosition()?.lineNumber ?? 1) });
+          },
+          go: (t) => ed.goToDiff(t),
         };
+        const sync = nav.sync;
         let first = true;
         const subs = [
           ed.onDidUpdateDiff(() => {
@@ -155,16 +190,18 @@ export function Viewer({ value, original, language = "yaml", label, contextActio
             sync();
           }),
           mod.onDidChangeCursorPosition((e) => {
-            if (language === "yaml") cursor.line = e.position.lineNumber - 1;
+            if (language === "yaml") cursorOf.line = e.position.lineNumber - 1;
             sync();
           }),
         ];
-        useDiffNav.setState({ index: 0, total: 0, go: (t) => ed.goToDiff(t) });
+        diffNavs.push(nav);
+        useDiffNav.setState({ index: 0, total: 0, go: nav.go });
         dispose = () => {
-          if (cursor.text === value) cursor.text = undefined;
+          if (cursorOf.text === value) cursorOf.text = undefined;
           acts.forEach((a) => a.dispose());
           subs.forEach((d) => d.dispose());
-          useDiffNav.setState({ index: 0, total: 0, go: undefined });
+          diffNavs.splice(diffNavs.indexOf(nav), 1);
+          topNav();
           ed.dispose();
           a.dispose();
           b.dispose();

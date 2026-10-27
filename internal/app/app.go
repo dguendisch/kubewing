@@ -64,6 +64,9 @@ func (a *App) Timeline(pane string) (view.Timeline, error) { return a.svc.Timeli
 func (a *App) FieldHistory(pane, key string, to, line int, which string) (view.FieldHistory, error) {
 	return a.svc.FieldHistory(pane, key, to, line, which)
 }
+func (a *App) Decode(pane string, req view.DecodeRequest) (view.Decoded, error) {
+	return a.svc.Decode(pane, req)
+}
 func (a *App) Close(pane string) error                             { return a.svc.Close(pane) }
 func (a *App) Contexts(cluster string) (bridge.ContextList, error) { return a.ContextsFn(cluster) }
 func (a *App) Catalog(context string) catalog.Snapshot             { return a.svc.Catalog(context) }

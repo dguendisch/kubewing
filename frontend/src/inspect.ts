@@ -1,6 +1,8 @@
 import { rowAt } from "./grid/rowcache";
 import { useTextSel } from "./grid/textsel";
 import { shownDescribe } from "./components/Detail";
+import { shownDecode } from "./components/Decode";
+import { cursor, decodeCursor } from "./editor/Viewer";
 import { openTerminals } from "./term/Terminal";
 import { openLogViews } from "./logs/LogView";
 import { logBuffers } from "./logs/buffer";
@@ -27,6 +29,9 @@ export function inspect() {
     switcher: s.switcher,
     overlay: s.overlay,
     describe: s.overlay?.kind === "detail" && s.overlay.view === "describe" ? shownDescribe : undefined,
+    decoded: s.overlay?.kind === "decode" ? shownDecode : undefined,
+    // the cursor lines (0-based) of the detail view and of a decode over it
+    cursors: { detail: cursor.line, decode: decodeCursor.line },
     // per session: scrollback setting, lines held (screen + scrollback) and the oldest line's text
     terminals: Object.fromEntries(
       [...openTerminals].map(([id, t]) => {

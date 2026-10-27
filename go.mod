@@ -4,6 +4,7 @@ go 1.27
 
 require (
 	cel.dev/cel-go v0.32.0
+	github.com/andybalholm/brotli v1.2.6
 	github.com/coder/websocket v1.8.15
 	github.com/google/go-cmp v0.7.0
 	github.com/wailsapp/wails/v3 v3.0.0-beta.28

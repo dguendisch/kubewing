@@ -13,6 +13,7 @@ import { OpsPodDialog } from "./components/OpsPod";
 import { LogsDialog } from "./logs/LogsDialog";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
+import { Decode } from "./components/Decode";
 import { Edit } from "./components/Edit";
 import { Dock } from "./components/Dock";
 import { DragPreview } from "./components/PaneDrag";
@@ -114,6 +115,7 @@ export function App() {
       </main>
       <Detail />
       <FieldList />
+      <Decode />
       <Edit />
       <OpenSource />
       <Confirm />

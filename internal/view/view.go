@@ -1016,29 +1016,36 @@ func (v *View) ObjectAt(key string, to int) (Detail, bool) {
 	}
 	d := Detail{Key: key, Name: e.item.Object.GetName(), Deleted: !e.deletedAt.IsZero()}
 	d.YAML = toYAML(e.item.Object)
-	d.CurNorm = toYAML(e.norm)
+	cur, prev, info := v.versions(e, to)
+	d.CurNorm = toYAML(cur)
+	if prev != nil {
+		d.PrevNorm = toYAML(prev)
+	}
+	d.Diff = info
+	return d, true
+}
+
+// versions returns the normalized version to of a row and the one before
+// it (nil: none), as the detail diff shows them (see ObjectAt); info is nil
+// without recorded history for the row.
+func (v *View) versions(e *entry, to int) (cur, prev *unstructured.Unstructured, info *DiffInfo) {
 	if to <= 0 && !v.at.IsZero() && v.opts.History != nil {
 		// in the past: the version then (diffed against the one before)
-		to = v.opts.History.VersionAt(key, v.at)
+		to = v.opts.History.VersionAt(e.key, v.at)
 	}
 	p, ok := v.pair(e, to)
 	if !ok {
-		if e.prev != nil {
-			d.PrevNorm = toYAML(e.prev)
-		}
-		return d, true
+		return e.norm, e.prev, nil
 	}
-	d.CurNorm = toYAML(p.Cur.Object)
-	info := &DiffInfo{To: p.Cur.N, ToAt: p.Cur.At.UTC().Format(time.RFC3339), First: p.First, Last: p.Last}
+	info = &DiffInfo{To: p.Cur.N, ToAt: p.Cur.At.UTC().Format(time.RFC3339), First: p.First, Last: p.Last}
 	if p.Prev != nil {
 		info.From, info.FromAt = p.Prev.N, p.Prev.At.UTC().Format(time.RFC3339)
-		d.PrevNorm = toYAML(p.Prev.Object)
+		prev = p.Prev.Object
 		for _, c := range p.Cur.Changes {
 			info.Changes = append(info.Changes, c.String())
 		}
 	}
-	d.Diff = info
-	return d, true
+	return p.Cur.Object, prev, info
 }
 
 // pair reads a row's versions from the history, if it recorded the row.

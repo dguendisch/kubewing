@@ -48,6 +48,7 @@ export type CommandId =
   | "detail.showYaml"
   | "detail.refresh"
   | "detail.toggleWrap"
+  | "detail.decode"
   | "diff.next"
   | "diff.prev"
   | "diff.older"
@@ -120,7 +121,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev", "diff.older", "diff.newer",
+  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "config.reload",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
@@ -222,6 +223,8 @@ export const defaultBindings: Binding[] = [
   // older/newer version of the object in its diff (the shared watch's history)
   { key: "[", command: "diff.older", when: ["detail"] },
   { key: "]", command: "diff.newer", when: ["detail"] },
+  // the value under the cursor decoded (base64, brotli, JWT, certificates …); again inside it: deeper
+  { key: "Enter", command: "detail.decode", when: ["detail"] },
   // the YAML line under the cursor becomes the pane's CEL filter
   { key: "=", command: "filter.fromDetail", when: ["detail"] },
   { key: "!", command: "filter.fromDetailNot", when: ["detail"] },

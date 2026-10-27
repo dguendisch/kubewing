@@ -129,6 +129,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("older / newer version (diff)", "diff.older", "diff.newer"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
+      row("decode the value under the cursor (base64, brotli, gzip, JWT, certificate…); in it: deeper", "detail.decode"),
       row("close", "detail.close"),
     ],
   },

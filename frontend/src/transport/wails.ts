@@ -24,6 +24,7 @@ export function wailsTransport(): Transport {
     step: (p, d) => call("Step", p, d),
     timeline: (p) => call("Timeline", p),
     fieldHistory: (p, k, to, line, which) => call("FieldHistory", p, k, to, line, which),
+    decode: (p, r) => call("Decode", p, r),
     close: (p) => call("Close", p),
     contexts: (c) => call("Contexts", c),
     catalog: (c) => call("Catalog", c),

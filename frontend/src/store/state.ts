@@ -1,5 +1,5 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { ColumnChoices, ContextList, DebugOptions, EditPreview, FieldHistory, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
@@ -182,8 +182,9 @@ export interface Overlay {
    *  columns: the pane's columns (its resource type's), -o wide and custom ones;
    *  cells: which of the selected row's cells to copy;
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
-   *  logs: containers, history and follow of a log tail, before it starts. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
+   *  logs: containers, history and follow of a log tail, before it starts;
+   *  decode: the field under the detail view's cursor decoded (⏎), over it (back). */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "decode";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -230,10 +231,30 @@ export interface Overlay {
   field?: FieldHistory;
   /** logs: tail every pod the pane shows (⌥⌘L), not the row's (key). */
   whole?: boolean;
-  /** field: the detail view it was opened from, back on Esc. */
+  /** decode: what's decoded, level by level (⏎ again goes deeper, Esc back up). */
+  decode?: DecodeState;
+  /** field, decode: the detail view it was opened from, back on Esc. */
   back?: Overlay;
+  /** detail, decode: a message in its own status line (the pane's is covered by it). */
+  flash?: { text: string; error: boolean };
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
+}
+
+/**
+ * An open decode: the levels down to the field shown (Go resolves each
+ * level's line to a path on the first request; later ones send the paths),
+ * whether it's the decoded diff, and the diff's version (unset = the newest).
+ */
+export interface DecodeState {
+  levels: DecodeLevel[];
+  diff: boolean;
+  which: "yaml" | "norm";
+  version?: number;
+  /** Bumped when the request changes, so the view reloads (a toggled step, another level). */
+  gen: number;
+  /** The shown level's chain was changed by hand (a click on a step): ↺ goes back to the detected one. */
+  toggled?: boolean;
 }
 
 /** An open edit (see bridge/edit.go): Go holds the original, the UI the text being edited. */
@@ -767,6 +788,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a menu too: j/k, ⏎, Esc
   cells: "menu",
   field: "menu",
+  // the detail view's keys: ⏎ deeper, Esc back, j/k, [ / ], w
+  decode: "detail",
   // a text field: every plain key is typing
   renameTab: "dialog",
   renamePane: "dialog",
@@ -797,11 +820,82 @@ export function setEdit(s: UIState, f: (e: EditState) => EditState): UIState {
  */
 export function stepVersion(s: UIState, dir: -1 | 1, range: { to: number; first: number; last: number } | undefined): UIState {
   const o = s.overlay;
+  if (o?.kind === "decode" && o.decode?.diff && range) {
+    const d = o.decode;
+    const from = d.version ?? range.to;
+    const to = Math.max(range.first, Math.min(from + dir, range.last));
+    if (to === from) return s;
+    return { ...s, overlay: { ...o, decode: { ...d, version: to >= range.last ? undefined : to, gen: d.gen + 1 } } };
+  }
   if (o?.kind !== "detail" || !o.diff || o.view === "describe" || !range) return s;
   const from = o.version ?? range.to;
   const to = Math.max(range.first, Math.min(from + dir, range.last));
   if (to === from) return s;
   return { ...s, overlay: { ...o, version: to >= range.last ? undefined : to } };
+}
+
+/** ⏎ in a decoded YAML: the field on its line (0-based), a level deeper. */
+export function decodeDeeper(s: UIState, line: number): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "decode" || !o.decode) return s;
+  const d = o.decode;
+  return { ...s, overlay: { ...o, decode: { ...d, levels: [...d.levels, { line, steps: null }], gen: d.gen + 1, toggled: false } } };
+}
+
+/** The levels as Go resolved them (paths and chains), kept without reloading: [ / ] and toggles go by them. */
+export function decodeResolved(s: UIState, levels: DecodeLevel[]): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "decode" || !o.decode || levels.length !== o.decode.levels.length) return s;
+  if (o.decode.levels.every((l) => l.path)) return s;
+  return { ...s, overlay: { ...o, decode: { ...o.decode, levels } } };
+}
+
+/** ↺: the shown level's chain detected again. */
+export function decodeAuto(s: UIState): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "decode" || !o.decode) return s;
+  const d = o.decode;
+  const last = d.levels[d.levels.length - 1]!;
+  return { ...s, overlay: { ...o, decode: { ...d, levels: [...d.levels.slice(0, -1), { ...last, steps: null, raw: false }], gen: d.gen + 1, toggled: false } } };
+}
+
+/**
+ * A message in the open detail view's or decode's status line: the pane's
+ * own is covered by them. Kept by the overlay that's open when it comes, so
+ * Esc to the one below doesn't take it along.
+ */
+export function flashOverlay(s: UIState, f: { text: string; error: boolean } | undefined): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "detail" && o?.kind !== "decode") return s;
+  return { ...s, overlay: { ...o, flash: f } };
+}
+
+/** Esc in a decode: a level up; from the first, back to the detail view it was opened from. */
+export function decodeUp(s: UIState): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "decode" || !o.decode) return s;
+  const d = o.decode;
+  // a level never loaded (refused: nothing to decode on its line) goes without reloading the one shown
+  const pending = d.levels[d.levels.length - 1]!.path === undefined;
+  if (d.levels.length > 1) return { ...s, overlay: { ...o, decode: { ...d, levels: d.levels.slice(0, -1), gen: pending ? d.gen : d.gen + 1, toggled: pending ? d.toggled : false } } };
+  return o.back ? { ...s, overlay: o.back, focus: "detail" } : closeOverlay(s);
+}
+
+/**
+ * A click on a step of the shown level's chain: the chain up to it, without
+ * it (base64 → brotli → yaml, click brotli: base64 only). The rendering
+ * (yaml, jwt, pem …) as the last "step" toggles raw: the bytes as text.
+ * `levels` are the loaded ones (paths resolved); a chain cut short is kept
+ * as it is until the level is left.
+ */
+export function decodeToggle(s: UIState, levels: DecodeLevel[], step: number | "render"): UIState {
+  const o = s.overlay;
+  if (o?.kind !== "decode" || !o.decode || !levels.length) return s;
+  const d = o.decode;
+  const last = levels[levels.length - 1]!;
+  const steps = last.steps ?? [];
+  const next: DecodeLevel = step === "render" ? { ...last, raw: !last.raw } : { ...last, steps: steps.slice(0, step), raw: false };
+  return { ...s, overlay: { ...o, decode: { ...d, levels: [...levels.slice(0, -1), next], gen: d.gen + 1, toggled: true } } };
 }
 
 export function closeOverlay(s: UIState): UIState {

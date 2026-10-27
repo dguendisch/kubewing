@@ -974,3 +974,61 @@ describe("clusters", () => {
     expect(next.panes.v1!.spec.resource).toBe("deployments");
   });
 });
+
+describe("decode (⏎ in the detail view)", () => {
+  const detail = (diff = false): S.UIState => S.openOverlay(S.initialState(), { kind: "detail", pane: "v1", key: "u1", view: "yaml", diff });
+  const decoding = (levels: S.DecodeState["levels"], diff = false): S.UIState => {
+    const s = detail(diff);
+    const back = s.overlay!;
+    return { ...s, overlay: { kind: "decode", pane: "v1", key: "u1", decode: { levels, diff, which: diff ? "norm" : "yaml", gen: 0 }, back, restore: back.restore } };
+  };
+  const resolved = [{ line: 3, path: [{ key: "data" }, { key: "yaml.br" }], steps: ["base64", "brotli"] }];
+
+  it("deeper adds a level from the decoded view's line; up removes it, then goes back to the detail view", () => {
+    let s = S.decodeDeeper(decoding(resolved), 7);
+    expect(s.overlay?.decode?.levels).toEqual([...resolved, { line: 7, steps: null }]);
+    expect(s.overlay?.decode?.gen).toBe(1);
+    s = S.decodeUp(s);
+    expect(s.overlay?.decode?.levels).toEqual(resolved);
+    s = S.decodeUp(s);
+    expect(s.overlay).toEqual(detail().overlay);
+    expect(s.focus).toBe("detail");
+  });
+
+  it("a refused deeper level goes without reloading the level shown", () => {
+    const s = S.decodeDeeper(decoding(resolved), 7); // gen 1, the new level not resolved
+    const back = S.decodeUp(s);
+    expect(back.overlay?.decode?.levels).toEqual(resolved);
+    expect(back.overlay?.decode?.gen).toBe(1);
+  });
+
+  it("keeps the resolved levels (paths), once, without reloading", () => {
+    const s = S.decodeResolved(decoding([{ line: 3, steps: null }]), resolved);
+    expect(s.overlay?.decode?.levels).toEqual(resolved);
+    expect(s.overlay?.decode?.gen).toBe(0);
+    expect(S.decodeResolved(s, resolved)).toBe(s);
+  });
+
+  it("a click on a step leaves it and what follows out; on the rendering, raw; ↺ detects again", () => {
+    let s = S.decodeToggle(decoding(resolved), resolved, 1);
+    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: ["base64"], raw: false });
+    expect(s.overlay?.decode?.toggled).toBe(true);
+    s = S.decodeToggle(s, s.overlay!.decode!.levels, "render");
+    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: ["base64"], raw: true });
+    s = S.decodeAuto(s);
+    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: null, raw: false, path: resolved[0]!.path });
+    expect(s.overlay?.decode?.toggled).toBe(false);
+  });
+
+  it("[ / ] step the decoded diff's versions as the object diff's", () => {
+    const range = { to: 5, first: 3, last: 5 };
+    let s = S.stepVersion(decoding(resolved, true), -1, range);
+    expect(s.overlay?.decode?.version).toBe(4);
+    expect(s.overlay?.decode?.gen).toBe(1);
+    s = S.stepVersion(s, 1, { ...range, to: 4 });
+    expect(s.overlay?.decode?.version).toBeUndefined();
+    // not in a decoded value (no diff)
+    const single = decoding(resolved);
+    expect(S.stepVersion(single, -1, range)).toBe(single);
+  });
+});

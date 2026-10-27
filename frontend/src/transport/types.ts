@@ -51,6 +51,51 @@ export interface FieldHistory {
   changes: { at: string; value?: string; absent?: boolean; version: number }[];
 }
 
+/** A field path step (mirrors fieldpath.Step); opaque to the UI, sent back as received. */
+export interface PathStep {
+  key?: string;
+  by?: string;
+  val?: string;
+  index?: number;
+  list?: boolean;
+}
+
+/** Mirrors view.DecodeLevel: a field and the chain applied to its value (see view/decode.go). */
+export interface DecodeLevel {
+  /** The field's line (0-based) while path is unset: of the object's YAML, or of the level above's decoded text. */
+  line: number;
+  path?: PathStep[];
+  doc?: number;
+  /** null: detect the chain (the answer has it). */
+  steps: string[] | null;
+  raw?: boolean;
+}
+
+/** Mirrors view.DecodeRequest. */
+export interface DecodeRequest {
+  key: string;
+  which: "yaml" | "norm";
+  to: number;
+  diff?: boolean;
+  levels: DecodeLevel[];
+}
+
+/** Mirrors view.Decoded: the last level's field decoded (and, for a diff, the version before's). */
+export interface Decoded {
+  levels: DecodeLevel[];
+  path: string;
+  steps: string[] | null;
+  kind: "jwt" | "pem" | "json" | "yaml" | "text" | "binary" | "";
+  text: string;
+  language: "yaml" | "plaintext" | "";
+  size: number;
+  absent?: boolean;
+  /** Why the field can't be decoded (a map, plain text …): an answer, not an error; the rest is unset. */
+  refused?: string;
+  prev?: { text: string; absent?: boolean; error?: string };
+  diff?: DiffInfo;
+}
+
 export interface Frame {
   seq: number;
   columns?: ColumnInfo[];
@@ -612,6 +657,8 @@ export interface Transport {
   /** How the field on a line (0-based) of the row's normalized YAML went (version `to`, 0 = the one shown). */
   /** which: the text the line is of, the YAML view's ("yaml") or the diff's normalized one ("norm"). */
   fieldHistory(pane: string, key: string, to: number, line: number, which: "yaml" | "norm"): Promise<FieldHistory>;
+  /** A row's field decoded (⏎ in the YAML): base64, brotli, gzip, then JWT, PEM, JSON/YAML; decoded again on every call. */
+  decode(pane: string, req: DecodeRequest): Promise<Decoded>;
   close(pane: string): Promise<void>;
   /** The contexts of a cluster's kubeconfig ("" = kubewing's own; "@1/…" a terminal's). */
   contexts(cluster: string): Promise<ContextList>;

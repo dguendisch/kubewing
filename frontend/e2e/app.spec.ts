@@ -1613,6 +1613,168 @@ test("diff versions: record history (⇧R), then [ / ] step through it, the chan
   await expect(versions).toHaveCount(0);
 });
 
+// e2e-secrets: a managed resource's brotli manifests (scaled 1 → 2 at 1s), a TLS pair and a token.
+// Each test opens its own namespace (its own watch, so the tape starts over), sorted by name.
+test.describe("decode (⏎ in the YAML)", () => {
+  async function openSecrets(page: Page, record = false) {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-secrets");
+    await page.getByRole("combobox", { name: "namespace" }).fill(`dec-${test.info().testId.slice(0, 8)}`);
+    await page.getByRole("combobox", { name: "resource" }).press("Enter");
+    if (record) {
+      await expect.poll(async () => (await focused(page)).spec.resource === "e2e-secrets" && !!(await focused(page)).serverId).toBe(true);
+      await page.keyboard.press("Shift+R");
+    }
+    await expect
+      .poll(async () => {
+        const p = await focused(page);
+        return p.spec.resource === "e2e-secrets" && !!p.serverId && p.status?.synced ? p.total : -1;
+      })
+      .toBe(3);
+  }
+  /** Selects a row by name and opens its YAML. */
+  async function yamlOf(page: Page, name: string) {
+    const rows = (await focused(page)).rows;
+    const i = rows.findIndex((r) => r.cells.includes(name));
+    expect(i).toBeGreaterThanOrEqual(0);
+    for (let n = 0; n < i; n++) await page.keyboard.press("j");
+    await page.keyboard.press("Enter");
+    const dialog = page.getByRole("dialog", { name: "object detail" });
+    await expect(dialog.locator(".view-lines")).toContainText(name);
+    return dialog;
+  }
+  const decoded = (page: Page) => page.getByRole("dialog", { name: "decoded value" });
+  const cursors = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): { cursors: { detail: number; decode: number } } } }).__kw.inspect().cursors);
+  const steps = (page: Page) => decoded(page).getByRole("group", { name: "decode steps" });
+
+  test("a managed resource's brotli manifests, a kubeconfig in them (deeper), esc back up level by level", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "managedresource-vpn");
+    await expect(dialog).toContainText("⏎: decode");
+    await dialog.locator(".view-line", { hasText: "data.yaml.br:" }).click();
+    await page.keyboard.press("Enter");
+    const dec = decoded(page);
+    await expect(dec).toContainText('data["data.yaml.br"]');
+    await expect(steps(page)).toHaveText(/base64→brotli→yaml· \d+(\.\d)? (B|KiB)/);
+    await expect(dec.locator(".view-lines")).toContainText("name: vpn-shoot");
+    expect((await inspect(page)).focus).toBe("detail");
+    // deeper: the kubeconfig in the second document
+    await dec.locator(".view-line", { hasText: "kubeconfig:" }).click();
+    const kubeconfigLine = (await cursors(page)).decode;
+    await page.keyboard.press("Enter");
+    await expect(dec).toContainText('data["data.yaml.br"] → doc 2: data.kubeconfig');
+    await expect(dec.locator(".view-lines")).toContainText("server: https://api.shoot.example.com");
+    await expect(dec).toContainText("esc: up");
+    // a plain value has nothing to decode: it says so in the decode's own status line, and stays (the cursor too)
+    await dec.locator(".view-line", { hasText: "server:" }).click();
+    const server = (await cursors(page)).decode;
+    expect(server).toBeGreaterThan(0);
+    await page.keyboard.press("Enter");
+    await expect(dec.getByRole("status", { name: "overlay status" })).toContainText("is plain text: nothing to decode");
+    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("message")).toHaveCount(0);
+    await expect(dec).toContainText("doc 2: data.kubeconfig");
+    expect((await cursors(page)).decode).toBe(server);
+    // esc: a level up (the cursor back on kubeconfig:), then back to the YAML, then closed
+    await page.keyboard.press("Escape");
+    await expect(dec.locator(".view-lines")).toContainText("name: vpn-shoot");
+    await expect(dec).not.toContainText("data.kubeconfig");
+    expect((await cursors(page)).decode).toBe(kubeconfigLine);
+    await page.keyboard.press("Escape");
+    await expect(dec).toHaveCount(0);
+    expect((await inspect(page)).overlays).toEqual(["detail"]);
+    // the detail view's keys work again, on its cursor (still on data.yaml.br)
+    await page.keyboard.press("Enter");
+    await expect(steps(page)).toContainText("brotli");
+    await page.keyboard.press("Escape");
+    // nothing to decode on the first level: the YAML view says so, in its status line (the cursor stays)
+    await dialog.locator(".view-line", { hasText: "kind: Secret" }).click();
+    const kind = (await cursors(page)).detail;
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("status", { name: "overlay status" })).toContainText("kind is plain text: nothing to decode");
+    expect((await cursors(page)).detail).toBe(kind);
+    expect((await inspect(page)).overlays).toEqual(["detail"]);
+    await page.keyboard.press("Escape");
+    expect((await inspect(page)).overlays).toEqual([]);
+  });
+
+  test("a click on a step leaves it out (the raw brotli bytes as a hex dump); ↺ detects again", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "managedresource-vpn");
+    await dialog.locator(".view-line", { hasText: "data.yaml.br:" }).click();
+    await page.keyboard.press("Enter");
+    await expect(steps(page)).toContainText("brotli");
+    await steps(page).getByRole("button", { name: "brotli" }).click();
+    await expect(steps(page)).toHaveText(/^base64→binary/);
+    await expect(decoded(page).locator(".view-lines")).toContainText("# binary,");
+    await steps(page).getByRole("button", { name: "↺ auto" }).click();
+    await expect(steps(page)).toHaveText(/^base64→brotli→yaml/);
+    // the rendering: off shows the decoded text as it is
+    await steps(page).getByRole("button", { name: "yaml" }).click();
+    await expect(steps(page)).toHaveText(/^base64→brotli→text/);
+  });
+
+  test("a TLS key: matches its certificate; the certificate's details", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "api-tls");
+    await dialog.locator(".view-line", { hasText: "tls.key:" }).click();
+    await page.keyboard.press("Enter");
+    const view = decoded(page).locator(".view-lines");
+    await expect(view).toContainText("type: private key");
+    await expect(view).toContainText("key: ECDSA P-256");
+    await expect(view).toContainText('- "tls.crt (api.e2e.example.com)"');
+    await page.keyboard.press("Escape");
+    await dialog.locator(".view-line", { hasText: "tls.crt:" }).click();
+    await page.keyboard.press("Enter");
+    await expect(view).toContainText('subject: "CN=api.e2e.example.com"');
+    await expect(view).toContainText("notAfter: 2036-01-01T00:00:00Z");
+    await expect(steps(page)).toHaveText(/^base64→pem/);
+    // the PEM text itself: the rendering off
+    await steps(page).getByRole("button", { name: "pem" }).click();
+    await expect(view).toContainText("-----BEGIN CERTIFICATE-----");
+  });
+
+  test("a token: the JWT's claims, its times annotated", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "e2e-token");
+    await dialog.locator(".view-line", { hasText: "token:" }).click();
+    await page.keyboard.press("Enter");
+    const view = decoded(page).locator(".view-lines");
+    await expect(view).toContainText("# JWT, signature not verified");
+    await expect(view).toContainText("sub: system:serviceaccount:kube-system:e2e");
+    await expect(view).toContainText("exp: 2082758400  # 2036-01-01T00:00:00Z, in");
+  });
+
+  test("the decoded diff: ⏎ in the object diff decodes both versions, [ / ] step them", async ({ page }) => {
+    await openSecrets(page, true);
+    // the scale-up (1s) is in: two versions
+    await expect.poll(async () => (await inspect(page)).panes[(await inspect(page)).focusedPane]!.status?.recording).toBe(true);
+    const dialog = await yamlOf(page, "managedresource-vpn");
+    await page.keyboard.press("d");
+    const versions = dialog.getByRole("status", { name: "diff versions" });
+    await expect(versions).toContainText("v2", tapeSteps);
+    await expect(dialog).toContainText("⏎: decode both sides");
+    await dialog.locator(".editor.modified .view-line", { hasText: "data.yaml.br:" }).click();
+    await page.keyboard.press("Enter");
+    const dec = decoded(page);
+    const diff = dec.locator('[data-viewer="diff"]');
+    await expect(diff.locator(".editor.original .view-lines")).toContainText("replicas: 1");
+    await expect(diff.locator(".editor.modified .view-lines")).toContainText("replicas: 2");
+    await expect(dec.getByRole("status", { name: "change position" })).toHaveText("1 / 1");
+    await expect(dec.getByRole("status", { name: "diff versions" })).toContainText("newest");
+    // [: the first version, nothing before it
+    await page.keyboard.press("[");
+    await expect(dec).toContainText("no version before this one");
+    await page.keyboard.press("]");
+    await expect(diff.locator(".editor.modified .view-lines")).toContainText("replicas: 2");
+    // back to the object diff, its own versions and j/k
+    await page.keyboard.press("Escape");
+    await expect(dec).toHaveCount(0);
+    await expect(versions).toContainText("newest");
+    await expect(dialog.getByRole("status", { name: "change position" })).toHaveText("1 / 1");
+  });
+});
+
 // e2e-travel: READY 1/1 → 2/2 (5s) → 3/3 (5.5s), then the image changes (6s), on the
 // clock of the watch. Each test opens its own namespace: its own watch (the backend is
 // shared), so the tape and the history start fresh. record: ⇧R as soon as the pane is
@@ -3574,7 +3736,7 @@ test.describe("jump to (⌘J)", () => {
     // tape resource names; the pods are already listed above (same kind), so not repeated
     await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
     await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
-    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 8 types");
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 9 types");
     await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
     await expect.poll(async () => {
       const p = await focused(page);

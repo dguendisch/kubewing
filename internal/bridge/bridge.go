@@ -553,6 +553,17 @@ func (s *Service) FieldHistory(paneID, key string, to, line int, which string) (
 	return pn.view.FieldAt(key, to, line, which)
 }
 
+// Decode decodes a row's field (⏎ in the YAML; see view.Decode).
+func (s *Service) Decode(paneID string, req view.DecodeRequest) (view.Decoded, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return view.Decoded{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	return pn.view.Decode(req)
+}
+
 // Close stops a pane.
 func (s *Service) Close(paneID string) error {
 	s.mu.Lock()

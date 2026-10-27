@@ -26,6 +26,9 @@ export function useKeys() {
       if (c === "Escape" && e.target instanceof Element && e.target.getAttribute("aria-expanded") === "true") return;
       // typing in Monaco's find field is text, not the detail view's d/j/k/y … keys
       if (e.target instanceof Element && e.target.closest(".find-widget") && fieldReserved(c)) return;
+      // so is its right-click menu: ⏎ runs the entry, Esc closes the menu (not the detail view)
+      // (it may live in a shadow root: the path, not the target, has it)
+      if (fieldReserved(c) && e.composedPath().some((n) => n instanceof Element && n.classList.contains("monaco-menu"))) return;
       // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
       if (c === "Meta+F" && e.target instanceof Element && e.target.closest(".monaco-editor")) return;
       const s = useUI.getState();
