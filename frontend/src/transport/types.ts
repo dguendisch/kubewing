@@ -77,6 +77,8 @@ export interface OpenResult {
   type: string;
   /** resource exists in several groups: only type tells them apart. */
   ambiguous?: boolean;
+  /** The type's default sort, applied because the pipeline had none (events: "LAST SEEN"). */
+  sort?: string;
 }
 
 /** Mirrors pipeline.Column: a custom column (path or expr), else a server column by name. */

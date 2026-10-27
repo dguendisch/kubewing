@@ -98,3 +98,30 @@ func TestTypeColumns(t *testing.T) {
 		t.Fatalf("reset = %v", got)
 	}
 }
+
+// An events pane without a sort of its own starts by Last Seen, the latest
+// first, and says so (the frontend takes it into the pane's spec); one with a
+// sort keeps it, other kinds get none.
+func TestDefaultSort(t *testing.T) {
+	svc, _ := relSetup(t)
+	stages := func(id string) []pipeline.Stage {
+		pn, _ := svc.pane(id)
+		pn.mu.Lock()
+		defer pn.mu.Unlock()
+		return pn.p.Stages
+	}
+	ev := openSynced(t, svc, "source: {resource: rel-events}\nstages: [{grep: web}]", 6)
+	if ev.Sort != "LAST SEEN" {
+		t.Fatalf("events sort = %q", ev.Sort)
+	}
+	if got := stages(ev.Pane); len(got) != 2 || got[0].Grep != "web" || !slices.Equal(got[1].Sort, []string{"LAST SEEN"}) {
+		t.Fatalf("events stages = %+v", got)
+	}
+	own := openSynced(t, svc, "source: {resource: rel-events}\nstages: [{sort: [-REASON]}]", 6)
+	if own.Sort != "" || len(stages(own.Pane)) != 1 {
+		t.Fatalf("own sort: result %q, stages %+v", own.Sort, stages(own.Pane))
+	}
+	if pods := openSynced(t, svc, "source: {resource: rel-pods}", 6); pods.Sort != "" || len(stages(pods.Pane)) != 0 {
+		t.Fatalf("pods: result %q, stages %+v", pods.Sort, stages(pods.Pane))
+	}
+}

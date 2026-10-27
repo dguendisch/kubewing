@@ -131,6 +131,7 @@ func (s *Service) setConfig(cfg config.Effective) {
 func (s *Service) viewOptions(sub *source.Subscription, namespaced bool) view.Options {
 	vo := s.opts.View
 	vo.Namespaced = namespaced
+	vo.Kind = sub.Resolved.Kind
 	vo.History = sub.History
 	if vo.Normalizer == nil {
 		vo.Normalizer = s.normalizer()
@@ -201,6 +202,18 @@ type OpenResult struct {
 	Type string `json:"type"`
 	// Ambiguous: Resource exists in several groups, so only Type tells them apart.
 	Ambiguous bool `json:"ambiguous,omitempty"`
+	// Sort is the type's default sort (see defaultSorts) if the pipeline had
+	// none and the pane uses it: the frontend takes it into the pane's spec.
+	Sort string `json:"sort,omitempty"`
+}
+
+// defaultSorts are the sort a pane of a kind starts with when its pipeline
+// has none (a column name, "-" = descending). Events: the latest first (an
+// age column ascending is the youngest first).
+var defaultSorts = map[string]string{"Event": "LAST SEEN"}
+
+func hasSort(stages []pipeline.Stage) bool {
+	return slices.ContainsFunc(stages, func(s pipeline.Stage) bool { return len(s.Sort) > 0 })
 }
 
 // Open starts a pane for a pipeline given as YAML.
@@ -233,6 +246,11 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	if !explicit {
 		p.Render.Columns = s.opts.Columns.Get(typ).Columns
 	}
+	sortBy := ""
+	if def := defaultSorts[sub.Resolved.Kind]; def != "" && !hasSort(p.Stages) {
+		sortBy = def
+		p.Stages = append(slices.Clip(p.Stages), pipeline.Stage{Sort: []string{def}})
+	}
 	v, err := view.New(p, s.viewOptions(sub, sub.Resolved.Namespaced && p.Source.AllNamespaces()))
 	if err != nil {
 		sub.Close()
@@ -247,7 +265,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
-	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ, Ambiguous: sub.Resolved.Ambiguous}, nil
+	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ, Ambiguous: sub.Resolved.Ambiguous, Sort: sortBy}, nil
 }
 
 // Update replaces a pane's stages and columns (e.g. filter bar edits) in

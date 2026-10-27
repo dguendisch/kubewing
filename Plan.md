@@ -63,9 +63,9 @@ Done: multi-pod log tail (stern-like), `⌘L` on a row (its pods: a pod by name,
 
 Done: launched from a terminal, kubewing detaches by default (re-runs itself in a session of its own, stdin `/dev/null`, output appended to `kubewing.log` in the state directory, rotated to `.1` at 10 MiB), so the prompt comes back and closing the terminal doesn't end it. `-wait` or `launch.wait: true` keeps it in the foreground (`make run` passes `-wait`); piped/redirected output and `-headless` never detach. A launch that hands over to a running kubewing (Wails' lock in `NSTemporaryDirectory()` held, checked before `application.New` exits silently) says so on stderr, `-wait` too.
 
+Done: an event's LAST SEEN and FIRST SEEN (`-o wide`) are timestamps from the object, as kubectl picks them (`series.lastObservedTime`, `lastTimestamp`, else first seen; `firstTimestamp`, else `eventTime`; the `deprecated*` names of `events.k8s.io` too), shown as ages: they tick like AGE, sort by the exact time (the server's "2m" for several tied before) and aren't changes (only the count is, a hidden one). By kind (`stampColumns` in `internal/view/stamps.go`), so another kind's Last Seen printer column stays the server's text. An events pane without a sort of its own starts by LAST SEEN, the latest first (`defaultSorts` in `internal/bridge`): it's the pane's own sort then (`OpenResult.Sort` into its spec), so the header shows it and a click cycles from it.
+
 Next up:
-- occasionally update the events last-seen column?
-- hard-code some default sorting: e.g. events by last seen (newest first)
 - Decoders — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - user facing documentation

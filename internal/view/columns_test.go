@@ -6,6 +6,8 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/source"
@@ -193,6 +195,101 @@ func TestServerAgeAndDurationColumns(t *testing.T) {
 		if got := names(v); !slices.Equal(got, c.want) {
 			t.Errorf("sort %s = %v, want %v", c.sort, got, c.want)
 		}
+	}
+}
+
+// kubectl get events' table (First Seen is -o wide)
+var eventDefs = []metav1.TableColumnDefinition{
+	{Name: "Last Seen", Type: "string"},
+	{Name: "Type", Type: "string"},
+	{Name: "Reason", Type: "string"},
+	{Name: "First Seen", Type: "string", Priority: 1},
+}
+
+func event(uid, name string, count int64, fields map[string]any) source.Item {
+	obj := map[string]any{
+		"apiVersion": "v1", "kind": "Event",
+		"metadata": map[string]any{"name": name, "namespace": "ns", "uid": uid, "creationTimestamp": "2026-01-01T09:00:00Z"},
+		"type":     "Normal", "reason": "Pulled", "count": count,
+	}
+	for k, v := range fields {
+		obj[k] = v
+	}
+	u := &unstructured.Unstructured{Object: obj}
+	u.SetUID(k8stypes.UID(uid))
+	return source.Item{Object: u, Cells: []any{"5m", "Normal", "Pulled", "1h"}}
+}
+
+// An event's Last Seen and First Seen are timestamps from the object (as
+// kubectl picks them), shown as ages: they tick, sort exactly, aren't changes.
+func TestEventSeenColumns(t *testing.T) {
+	v, err := New(pipeline.Pipeline{
+		Source: pipeline.Source{Resource: "events"},
+		Render: pipeline.Render{Columns: []pipeline.Column{{Name: "LAST SEEN"}, {Name: "FIRST SEEN"}, {Name: "REASON"}}},
+	}, Options{Kind: "Event"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: eventDefs, Items: []source.Item{
+		event("a", "legacy", 3, map[string]any{"firstTimestamp": "2026-01-01T10:00:00Z", "lastTimestamp": "2026-01-01T11:58:10Z"}),
+		event("b", "series", 9, map[string]any{"eventTime": "2026-01-01T10:30:00.123456Z", "series": map[string]any{"count": int64(9), "lastObservedTime": "2026-01-01T11:58:20.5Z"}}),
+		event("c", "once", 1, map[string]any{"eventTime": "2026-01-01T11:00:00.000000Z"}),
+		event("d", "v1beta", 2, map[string]any{"deprecatedFirstTimestamp": "2026-01-01T10:00:00Z", "deprecatedLastTimestamp": "2026-01-01T11:58:00Z"}),
+		event("e", "none", 1, nil),
+	}}, t0)
+	for _, i := range []int{0, 1} {
+		if c := v.cols[i]; c.info.Type != string(pipeline.TypeAge) || !c.timeDerived {
+			t.Fatalf("%s: type %q, time-derived %v", c.info.Name, c.info.Type, c.timeDerived)
+		}
+	}
+	for name, want := range map[string][]string{
+		"a": {"2026-01-01T11:58:10Z", "2026-01-01T10:00:00Z", "Pulled"},
+		"b": {"2026-01-01T11:58:20Z", "2026-01-01T10:30:00Z", "Pulled"},
+		"c": {"2026-01-01T11:00:00Z", "2026-01-01T11:00:00Z", "Pulled"},
+		"d": {"2026-01-01T11:58:00Z", "2026-01-01T10:00:00Z", "Pulled"},
+		"e": {"", "", "Pulled"},
+	} {
+		if got := v.entries[name].cells; !slices.Equal(got, want) {
+			t.Errorf("%s cells = %v, want %v", name, got, want)
+		}
+	}
+	for sort, want := range map[string][]string{
+		// the server's "2m" for all of a, b, d: their order is the exact time; none last either way
+		"LAST SEEN":  {"series", "legacy", "v1beta", "once", "none"},
+		"-LAST SEEN": {"once", "v1beta", "legacy", "series", "none"},
+	} {
+		if err := v.SetStages([]pipeline.Stage{{Sort: []string{sort}}}); err != nil {
+			t.Fatal(err)
+		}
+		if got := names(v); !slices.Equal(got, want) {
+			t.Errorf("sort %s = %v, want %v", sort, got, want)
+		}
+	}
+
+	// seen again: Last Seen moves, but only the count is a change
+	_, _ = v.Frame(t0)
+	v.Apply(source.Event{Type: source.Modified, Item: event("a", "legacy", 4, map[string]any{"firstTimestamp": "2026-01-01T10:00:00Z", "lastTimestamp": "2026-01-01T11:59:00Z"})}, t0.Add(time.Second))
+	e := v.entries["a"]
+	if e.cells[0] != "2026-01-01T11:59:00Z" {
+		t.Fatalf("last seen = %q", e.cells[0])
+	}
+	if !e.changedAt[0].IsZero() || !e.changedAt[1].IsZero() {
+		t.Fatalf("seen columns marked changed: %v", e.changedAt)
+	}
+	if e.hiddenAt.IsZero() {
+		t.Fatal("the count change isn't marked as a hidden change")
+	}
+}
+
+// Another kind's Last Seen (a CRD printer column) stays the server's text.
+func TestSeenColumnsOnlyForEvents(t *testing.T) {
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "widgets"}}, Options{Kind: "Widget"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: eventDefs, Items: []source.Item{event("a", "w", 1, nil)}}, t0)
+	if c := v.cols[0]; c.info.Type != "" || c.stamp != nil || v.entries["a"].cells[0] != "5m" {
+		t.Fatalf("LAST SEEN: type %q, cell %q", c.info.Type, v.entries["a"].cells[0])
 	}
 }
 

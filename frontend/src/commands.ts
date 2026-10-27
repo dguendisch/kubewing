@@ -916,7 +916,9 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
       bridge().close(res.pane).catch(() => {}); // superseded or pane closed meanwhile
       return;
     }
-    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, ambiguous: res.ambiguous, opening: false })));
+    // the type's default sort (events: latest first) becomes the pane's own, so the header shows it and a click cycles from it
+    const sort = spec.sort ?? res.sort;
+    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, spec: sort === spec.sort ? q.spec : { ...q.spec, sort }, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, ambiguous: res.ambiguous, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
   }

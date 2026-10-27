@@ -45,6 +45,9 @@ type Options struct {
 	History Versions
 	// Namespaced controls default columns when the server provides none.
 	Namespaced bool
+	// Kind is the resource's kind ("Event"): some server columns of a kind
+	// are re-derived from the object (see stampColumns).
+	Kind string
 }
 
 // Versions reads an object's recorded versions (source.History).
@@ -84,7 +87,8 @@ type colSpec struct {
 	path      *expr.Path
 	program   *expr.Program
 	cellIndex int // index into server-side table cells; -1 if unused
-	creation  bool
+	// stamp: the cell is a timestamp read from the object, shown as an age
+	stamp func(obj *unstructured.Unstructured) string
 }
 
 type entry struct {
@@ -329,7 +333,7 @@ func (v *View) availableColumns(defs []metav1.TableColumnDefinition) []colSpec {
 	if defs == nil {
 		return defaultColumns(v.opts.Namespaced)
 	}
-	return serverColumns(defs, v.opts.Namespaced)
+	return serverColumns(defs, v.opts.Namespaced, v.opts.Kind)
 }
 
 // ColumnOption is a column the column configurator offers: a server column
@@ -403,8 +407,9 @@ func (v *View) columnOptions() []ColumnOption {
 
 // serverColumns maps all server-side table columns, -o wide ones (priority >
 // 0) too. Date columns are time-derived; "Age" is re-derived from
-// creationTimestamp so the frontend can render it against its own clock.
-func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool) []colSpec {
+// creationTimestamp, and a kind's stampColumns from their timestamps, so the
+// frontend can render them against its own clock.
+func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool, kind string) []colSpec {
 	var out []colSpec
 	if namespaced {
 		ns, _ := expr.CompilePath("metadata.namespace")
@@ -421,9 +426,13 @@ func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool) []colSp
 		}
 		// apiservers send Age as text ("5m", type string), CRD printer columns as a date: either
 		// way it's re-derived from the creation timestamp, so it ticks and sorts by time
+		stamp := stampColumns[kind][cs.info.Name]
 		if strings.EqualFold(d.Name, "age") {
+			stamp = creationStamp
+		}
+		if stamp != nil {
 			cs.timeDerived = true
-			cs.creation = true
+			cs.stamp = stamp
 			cs.cellIndex = -1
 			cs.numeric = false
 			cs.info.Type = string(pipeline.TypeAge)
@@ -594,8 +603,8 @@ func (v *View) render(e *entry) {
 	for i, c := range v.cols {
 		var val any
 		switch {
-		case c.creation:
-			val = e.item.Object.GetCreationTimestamp().UTC().Format(time.RFC3339)
+		case c.stamp != nil:
+			val = c.stamp(e.item.Object)
 		case c.cellIndex >= 0:
 			if c.cellIndex < len(e.item.Cells) {
 				val = e.item.Cells[c.cellIndex]

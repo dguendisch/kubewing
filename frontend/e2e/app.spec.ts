@@ -3294,6 +3294,8 @@ test.describe("jump to (⌘J)", () => {
     };
     await expect.poll(shown).toBe("rel-events shop re-1,re-2");
     await expect(page.getByLabel("field selector")).toHaveText("involvedObject.kind=Pod,involvedObject.name=web-7d9f-b");
+    // events start by Last Seen, the latest first: the pane's own sort
+    expect((await focused(page)).spec.sort).toBe("LAST SEEN");
     await leads(page, "back", "rel-pods");
     // an event has no events of its own
     await page.keyboard.press("v");
