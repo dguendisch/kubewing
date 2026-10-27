@@ -806,6 +806,88 @@ test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) =
   `);
 });
 
+test("naming: double-click or cmd+shift+i names a tab, cmd+i or a double-click on the header a pane; esc undoes, empty clears", async ({ page }) => {
+  await openTape(page);
+  const tab = page.getByRole("tab", { selected: true });
+  await tab.dblclick();
+  const tabField = page.getByRole("textbox", { name: "tab name" });
+  await expect(tabField).toBeFocused();
+  await page.keyboard.type("incident");
+  await page.keyboard.press("Enter");
+  await expect(tab).toHaveAccessibleName("incident");
+  expect((await inspect(page)).focus).toBe("table");
+  // esc puts the old name back
+  await page.keyboard.press("ControlOrMeta+Shift+I");
+  await page.keyboard.type("other");
+  await expect(tabField).toHaveValue("other");
+  await page.keyboard.press("Escape");
+  await expect(tab).toHaveAccessibleName("incident");
+
+  // the pane: its name shows in the header; the tab has its own name, so it stays
+  await page.keyboard.press("ControlOrMeta+I");
+  await page.keyboard.type("web pods");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("[data-pane=v1] header").getByLabel("pane name")).toHaveText("web pods");
+  await expect(tab).toHaveAccessibleName("incident");
+  // an empty tab name clears it: the tab shows the focused pane's name
+  await tab.dblclick();
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Enter");
+  await expect(tab).toHaveAccessibleName("web pods");
+
+  // a double-click on the header's empty stretch renames the pane; typing goes to the field, not the table's keys
+  const header = (await page.locator("[data-pane=v1] header").boundingBox())!;
+  const filter = (await page.locator("[data-pane=v1]").getByRole("textbox", { name: "filter" }).boundingBox())!;
+  await page.mouse.dblclick(filter.x - 20, header.y + header.height / 2);
+  await expect(page.getByRole("textbox", { name: "pane name" })).toBeFocused();
+  await page.keyboard.type("dj");
+  await page.keyboard.press("Enter");
+  expect((await inspect(page)).panes.v1!.selected).toBe(0);
+  await expect(page.locator("[data-pane=v1] header").getByLabel("pane name")).toHaveText("dj");
+  // a split doesn't take the name along
+  await page.keyboard.press("ControlOrMeta+D");
+  await expect(page.locator("[data-pane=v2]")).toBeVisible();
+  await expect(page.locator("[data-pane=v2] header").getByLabel("pane name")).toHaveCount(0);
+});
+
+test("dragging a tab reorders the tabs (the active one stays active); esc puts them back; a click still just selects", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("ControlOrMeta+T");
+  await page.keyboard.press("ControlOrMeta+T");
+  const order = async () => (await inspect(page)).tabs.map((t) => t.id);
+  const [a, b, c] = await order();
+  const at = async (id: string) => {
+    const r = (await page.locator(`[role=tablist] [data-tab=${id}]`).boundingBox())!;
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  };
+  const drag = async (id: string, to: { x: number; y: number }, finish: () => Promise<void>) => {
+    const from = await at(id);
+    await page.mouse.move(from.x, from.y);
+    await page.mouse.down();
+    await page.mouse.move(from.x + 10, from.y, { steps: 2 });
+    await page.mouse.move(to.x, to.y, { steps: 8 });
+    await finish();
+  };
+  // the first tab onto the last one's right half: it goes last
+  const last = await at(c!);
+  await drag(a!, { x: last.x + 20, y: last.y }, () => page.mouse.up());
+  expect(await order()).toEqual([b, c, a]);
+  expect((await inspect(page)).tabs[(await inspect(page)).activeTab]!.id).toBe(a); // released on it: it's the one shown
+  // the shortcuts follow the order
+  await expect(page.locator(`[role=tablist] [data-tab=${a}]`)).toHaveAttribute("aria-keyshortcuts", "Meta+3");
+
+  // esc while dragging: back as it was
+  await drag(c!, await at(b!), () => page.keyboard.press("Escape"));
+  expect(await order()).toEqual([b, c, a]);
+  await page.mouse.up();
+  expect(await order()).toEqual([b, c, a]);
+
+  // a press without moving is a click: the tab is shown, nothing moves
+  await page.locator(`[role=tablist] [data-tab=${b}]`).click();
+  expect(await order()).toEqual([b, c, a]);
+  expect((await inspect(page)).activeTab).toBe(0);
+});
+
 test("switching tabs keeps each tab's live table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");

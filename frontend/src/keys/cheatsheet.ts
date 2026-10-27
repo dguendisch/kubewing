@@ -46,6 +46,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("split right", "pane.splitRight"),
       row("close pane", "pane.close"),
       row("maximize pane / show all again", "pane.toggleMaximize"),
+      row("name the pane (also double-click its header; empty = none)", "pane.rename"),
       row("next / previous pane", "pane.focusNext", "pane.focusPrev"),
       row("pane left / right", "pane.focusLeft", "pane.focusRight"),
       row("pane above / below", "pane.focusUp", "pane.focusDown"),
@@ -56,6 +57,7 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("new tab", "tab.new"),
       row("close tab", "tab.close"),
+      row("name the tab (also double-click it; empty = none)", "tab.rename"),
       row("next / previous tab", "tab.next", "tab.prev"),
       { label: "go to tab 1–9 (9 = last)", commands: tabJumps, range: true },
       row("switch tabs in MRU order", "tab.mruNext", "tab.mruPrev"),

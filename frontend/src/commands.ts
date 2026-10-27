@@ -45,6 +45,10 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.focusDirection(x, "down"));
     case "pane.toggleMaximize":
       return setUI(S.toggleMaximize);
+    case "pane.rename":
+      return setUI((x) => S.renamePane(x));
+    case "tab.rename":
+      return setUI((x) => S.renameTab(x));
     case "tab.new":
       return setUI(S.newTab);
     case "tab.close": {

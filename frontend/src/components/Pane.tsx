@@ -19,6 +19,7 @@ import { Grip } from "./PaneDrag";
 import { StatusError } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
+import { PaneName } from "./NameField";
 
 /** One split pane: header (source + filter bar), live table, status line. */
 export function Pane({ id }: { id: string }) {
@@ -134,6 +135,7 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
   return (
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
+      <PaneName pane={pane} />
       <span className="text-fg-muted">{pane.context}</span>
       <span className="font-semibold text-accent">{term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
       {term.ops ? (
@@ -155,14 +157,20 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
           {term.debug.target ? ` · target ${term.debug.target}` : ""}
         </span>
       ) : null}
+      <NameGap paneId={pane.id} />
       {term.exited !== undefined ? (
         // only a session that failed on its own gets here: one the user ended took its pane with it
-        <span aria-label="session ended" className="ml-auto text-deleted">
+        <span aria-label="session ended" className="text-deleted">
           {/^\d+$/.test(term.exited) ? `exited ${term.exited}` : term.exited} · ⌃D closes
         </span>
       ) : null}
     </header>
   );
+}
+
+/** The header's empty stretch: a double-click there names the pane (⌘I). */
+function NameGap({ paneId }: { paneId: string }) {
+  return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
 }
 
 function Badges({ rule }: { rule?: SafetyRule }) {
@@ -297,6 +305,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       <HistoryButtons pane={pane} />
       <Badges rule={rule} />
       {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
+      <PaneName pane={pane} />
       <span className="shrink-0 text-fg-muted" title={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}>
         {S.splitCluster(context).context || pane.context || "(current)"}
       </span>
@@ -307,7 +316,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
           {fieldSelector}
         </span>
       ) : null}
-      <span className="flex-1" />
+      <NameGap paneId={pane.id} />
       <div className="relative">
         <input
           ref={input}

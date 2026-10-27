@@ -18,7 +18,9 @@ export type CommandId =
   | "pane.focusUp"
   | "pane.focusDown"
   | "pane.toggleMaximize"
+  | "pane.rename"
   | "tab.new"
+  | "tab.rename"
   | "tab.close"
   | "tab.next"
   | "tab.prev"
@@ -96,8 +98,8 @@ export type CommandId =
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
   "pane.splitRight", "pane.splitDown", "pane.close", "pane.focusNext", "pane.focusPrev",
-  "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown", "pane.toggleMaximize",
-  "tab.new", "tab.close", "tab.next", "tab.prev",
+  "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown", "pane.toggleMaximize", "pane.rename",
+  "tab.new", "tab.rename", "tab.close", "tab.next", "tab.prev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
@@ -135,6 +137,10 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+Meta+ArrowDown", command: "pane.focusDown" },
   // iTerm's "maximize active pane"; global, so it works from a shell too (in the YAML editor it's Monaco's insert line above)
   { key: "Meta+Shift+Enter", command: "pane.toggleMaximize" },
+  // iTerm's "Edit Tab Title" (⌘⇧I) and "Edit Session" (⌘I) name tabs and panes; a double-click does too.
+  // Global, so a shell's pane can be named as well
+  { key: "Meta+I", command: "pane.rename" },
+  { key: "Meta+Shift+I", command: "tab.rename" },
   { key: "Meta+T", command: "tab.new" },
   // more than one pane in the tab: the dispatcher asks first
   { key: "Meta+W", command: "tab.close" },

@@ -38,7 +38,7 @@ export function TabSwitcher() {
             aria-selected={i === sw.index}
             className={`flex justify-between gap-6 px-3 py-1 ${i === sw.index ? "bg-bg-hover text-fg" : "text-fg-muted"}`}
           >
-            <span>{tabTitle(panes[tab.focused])}</span>
+            <span>{tabTitle(tab, panes[tab.focused])}</span>
             <span>{shortcut(tabs.indexOf(tab), tabs.length)}</span>
           </div>
         );

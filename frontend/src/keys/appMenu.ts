@@ -80,6 +80,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Split Down", "pane.splitDown"],
       ["Split Right", "pane.splitRight"],
       ["Maximize Pane", "pane.toggleMaximize"],
+      ["Name Pane…", "pane.rename"],
       null,
       ["Next Pane", "pane.focusNext"],
       ["Previous Pane", "pane.focusPrev"],
@@ -94,7 +95,7 @@ const layout: { title: string; entries: Entry[] }[] = [
   },
   {
     title: "Tab",
-    entries: [["Next Tab", "tab.next"], ["Previous Tab", "tab.prev"], null, ...tabJumps],
+    entries: [["Name Tab…", "tab.rename"], null, ["Next Tab", "tab.next"], ["Previous Tab", "tab.prev"], null, ...tabJumps],
   },
   { title: "Help", entries: [["Keyboard Shortcuts", "help.toggle"]] },
 ];

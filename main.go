@@ -118,7 +118,8 @@ func main() {
 		Width:  1400,
 		Height: 860,
 		Mac: application.MacWindow{
-			InvisibleTitleBarHeight: 28,
+			// no InvisibleTitleBarHeight: AppKit would drag the window from anywhere in that strip, tabs included,
+			// before the page sees the click; the tab bar's empty part drags it instead (--wails-draggable)
 			// no toolbar: keeps the traffic lights inside the 28px tab strip (Inset adds one and makes the bar taller)
 			TitleBar: application.MacTitleBarHidden,
 		},

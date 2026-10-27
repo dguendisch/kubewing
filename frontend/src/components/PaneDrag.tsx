@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { edgeShare, nearestSide, paneIds, sidePart, type Rect, type Side } from "../store/layout";
 import { setUI, useUI } from "../store/store";
 import * as S from "../store/state";
-import { tabTitle } from "./tabTitle";
+import { paneTitle } from "./tabTitle";
 
 /**
  * Moving a pane by drag and drop (ghostty): a grip shows at the top of a pane
@@ -217,7 +217,7 @@ export function DragPreview() {
         className="absolute border border-accent bg-bg-elev px-2 py-0.5 text-fg shadow-lg"
         style={{ left: drag.x + 12, top: drag.y + 12 }}
       >
-        {pane?.term ? `${pane.term.pod}/${pane.term.container}` : tabTitle(pane)}
+        {pane?.name ?? (pane?.term ? `${pane.term.pod}/${pane.term.container}` : paneTitle(pane))}
       </div>
     </div>
   );

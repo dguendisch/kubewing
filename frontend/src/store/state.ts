@@ -67,6 +67,8 @@ export interface PaneState {
   reselect?: string;
   /** Resource type the server pane resolved to (pods, deployments.apps): its column settings apply. */
   type?: string;
+  /** A name given to the pane (⌘I), shown in its header; it names the tab too while the tab has none. */
+  name?: string;
 }
 
 /** A view in a pane's jump history: its spec and the row selected there. */
@@ -138,6 +140,8 @@ export interface Tab {
   focused: string;
   /** ⌘⇧⏎: this pane fills the tab, the others are hidden (not closed); always the focused one. */
   maximized?: string;
+  /** A name given to the tab (⌘⇧I), instead of the focused pane's resource and namespace. */
+  name?: string;
 }
 
 export interface Overlay {
@@ -152,8 +156,9 @@ export interface Overlay {
    *  history: a pane's back or forward history (holding its ← / → button);
    *  error: the full text of an error in the status line (a click on it);
    *  columns: the pane's columns (its resource type's), -o wide and custom ones;
-   *  cells: which of the selected row's cells to copy. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field";
+   *  cells: which of the selected row's cells to copy;
+   *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -174,7 +179,7 @@ export interface Overlay {
   cells?: CellChoice[];
   pane: string;
   key?: string;
-  /** closeTab: the tab to close (not the index: tabs move while the dialog is open). */
+  /** closeTab: the tab to close (not the index: tabs move while the dialog is open). renameTab: the tab named. */
   tabId?: string;
   diff?: boolean;
   /** detail diff: the version shown (diffed against the one before); unset = follow the newest. */
@@ -426,6 +431,8 @@ export function closePane(s: UIState, id = activeTab(s).focused): UIState {
   const layout = remove(t.layout, id);
   const panes = { ...s.panes };
   delete panes[id];
+  // its name field goes with it
+  if (s.overlay?.kind === "renamePane" && s.overlay.pane === id) s = closeOverlay(s);
   if (!layout) return closeTab({ ...s, panes }, index, false);
   const idx = ids.indexOf(id);
   const rest = paneIds(layout);
@@ -474,6 +481,8 @@ export function newTab(s: UIState): UIState {
 
 /** Closes a tab; the last tab is replaced by a fresh one so the app always has a pane. */
 export function closeTab(s: UIState, index = s.activeTab, dropPanes = true): UIState {
+  // its name field goes with it
+  if (s.overlay?.kind === "renameTab" && s.overlay.tabId === s.tabs[index]?.id) s = closeOverlay(s);
   const panes = { ...s.panes };
   if (dropPanes) for (const id of paneIds(s.tabs[index]!.layout)) delete panes[id];
   const tabs = s.tabs.filter((_, i) => i !== index);
@@ -499,6 +508,17 @@ export function closeTab(s: UIState, index = s.activeTab, dropPanes = true): UIS
 export function cycleTab(s: UIState, delta: number): UIState {
   const n = s.tabs.length;
   return { ...s, activeTab: (s.activeTab + delta + n) % n, overlay: undefined, focus: "table" };
+}
+
+/** Dragging a tab in the tab bar: it goes to index `to`, the others close up; the same tab stays active. */
+export function moveTab(s: UIState, tabId: string, to: number): UIState {
+  const from = s.tabs.findIndex((t) => t.id === tabId);
+  const i = Math.max(0, Math.min(to, s.tabs.length - 1));
+  if (from < 0 || from === i) return s;
+  const active = activeTab(s).id;
+  const tabs = [...s.tabs];
+  tabs.splice(i, 0, ...tabs.splice(from, 1));
+  return { ...s, tabs, activeTab: tabs.findIndex((t) => t.id === active) };
 }
 
 /** ⌘1–⌘8: that tab; ⌘9: the last tab. Out of range: unchanged. */
@@ -576,6 +596,33 @@ export function movePane(s: UIState, id: string, to: MoveTarget): UIState {
   return { ...s, tabs, activeTab, nextId, focus: "table", overlay: undefined, switcher: undefined };
 }
 
+/** ⌘⇧I, a double-click on the tab: the tab's name field, in place. */
+export function renameTab(s: UIState, tabId = activeTab(s).id): UIState {
+  if (!s.tabs.some((t) => t.id === tabId)) return s;
+  return openOverlay(closeOverlay(s), { kind: "renameTab", pane: activeTab(s).focused, tabId });
+}
+
+/** ⌘I, a double-click on the pane's header: the pane's name field there; the pane gets the focus. */
+export function renamePane(s: UIState, paneId = activeTab(s).focused): UIState {
+  if (!s.panes[paneId]) return s;
+  return openOverlay(closeOverlay(focusPane(s, paneId)), { kind: "renamePane", pane: paneId });
+}
+
+/** A typed name, trimmed; an empty one removes it (back to the title from the pane's source). */
+function named<T extends { name?: string }>(x: T, name: string): T {
+  const { name: _, ...rest } = x;
+  const n = name.trim();
+  return n ? { ...x, name: n } : (rest as T);
+}
+
+export function nameTab(s: UIState, tabId: string, name: string): UIState {
+  return { ...s, tabs: s.tabs.map((t) => (t.id === tabId ? named(t, name) : t)) };
+}
+
+export function namePane(s: UIState, paneId: string, name: string): UIState {
+  return updatePane(s, paneId, (p) => named(p, name));
+}
+
 export function cyclePane(s: UIState, delta: number): UIState {
   const ids = paneIds(activeTab(s).layout);
   const i = ids.indexOf(activeTab(s).focused);
@@ -631,6 +678,9 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a menu too: j/k, ⏎, Esc
   cells: "menu",
   field: "menu",
+  // a text field: every plain key is typing
+  renameTab: "dialog",
+  renamePane: "dialog",
 };
 
 /** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */

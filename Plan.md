@@ -57,10 +57,12 @@ Done: `↓` opens the completion list in the label and CEL fields at the caret, 
 
 Done: the YAML editor (`e`, and the node shell's) is modal: only its own keys reach the app (`Esc`, `⌘S`, `⌘⏎`; in the preview `j`/`k`, `⏎`, `w`), global ones and native menu commands wait until it's closed. Before, `⌘D` split the pane behind the open editor, the focus went to the new pane, and `⌘S`/`⏎` resolved as table keys (the "failed" apply). Monaco's line operations are in: `⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent.
 
+Done: naming tabs (`⌘⇧I`, double-click the tab) and panes (`⌘I`, double-click the header's empty part; a label in the pane's header, and the tab's title while the tab has none). Applied as typed, `Esc` restores, empty clears; not persisted (no layout persistence yet).
+
 Next up:
 - user facing documentation
-- allow to rename tabs and allow to give a pane a name (maybe rendered as a label in the top bar)
-- smooth horizontal scrolling (currently it jumps column by column)
+- Multi-pod log tail — stern-like, live filter.
+- Decoders — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 
 Still open in P0.1:
 - Completion and regular UI for a context picked in `⌘O` (instead of system UI's drop down)
@@ -122,8 +124,6 @@ Still open in P0.1:
    - **The detail view then:** the version current at the moment, diffed against the one before.
    - **When did this flip:** `⇧H` on a YAML line (or the diff's right side) lists the values of the field at the cursor over time (list items matched by key, as the diff); `⏎` takes the pane to that moment. Discoverable: a header hint while recording, and "history of this field" in the editor's right-click menu. The detail view shows the timeline too while the pane is in the past.
    - **Follow-ups:** pinning objects or views against eviction; linking the moment of splits (pods and nodes at the same time).
-1. **Multi-pod log tail** — stern-like, live filter.
-1. **Decoders** — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 
 ### P2— "Polishing"
 1. **github actions build pipelines**
@@ -145,9 +145,11 @@ Still open in P0.1:
 1. **Multi-cluster operations** — replaces nested `for ns … for shoot …` loops. Builds on Gardener shoot-kubeconfig access + safety model (dry-run across targets first, then confirm).
 
 ### P4 - "Nice to have" (v2.0)
-1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
+1. Native tooltips into a copy-able/colored pop over
+1. Open an xterm pane with the current kubeconfig injected
 1. **Focus follows mouse**
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
+1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
 1. **Keybinding & theme UI** — editors on top of the P0 config files.
 1. **WKWebView smoke suite** — a few tests against the real app for what Chromium/Playwright can't reach: native menu accelerators (⌘W closes a tab, not the window; ⌘R doesn't reload; ⌘P opens no print dialog), menu clicks reaching the dispatcher, IME input in the filter fields. Needs a native harness (XCUITest or an in-app test hook sending real key events); Playwright has no WKWebView driver.
 1. Generated TS bindings check; golden-guard hook on `testdata/`.

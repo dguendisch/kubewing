@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
+import { paneTitle, tabTitle } from "../components/tabTitle";
 
 const ids = (s: S.UIState) => paneIds(S.activeTab(s).layout);
 
@@ -327,6 +328,85 @@ describe("overlays", () => {
     s = S.closeOverlay(s);
     expect(s.focus).toBe("filter");
     expect(s.overlay).toBeUndefined();
+  });
+});
+
+describe("naming tabs and panes", () => {
+  const spec = (resource: string, namespace = "") => ({ ...S.initialSpec(), resource, namespace });
+  const pane = (p: Partial<S.PaneState> = {}): S.PaneState => ({ id: "v1", spec: spec("pods", "shop"), selected: 0, ...p });
+
+  it("names are trimmed; an empty one removes it", () => {
+    let s = S.nameTab(S.initialState(), "t1", "  prod issue ");
+    expect(S.activeTab(s).name).toBe("prod issue");
+    s = S.nameTab(s, "t1", "  ");
+    expect("name" in S.activeTab(s)).toBe(false);
+    s = S.namePane(s, "v1", "web");
+    expect(s.panes.v1!.name).toBe("web");
+    s = S.namePane(s, "v1", "");
+    expect("name" in s.panes.v1!).toBe(false);
+  });
+
+  it("the field is an overlay in dialog focus; Esc's focus comes back; a pane's moves the focus to it", () => {
+    let s = apply(S.initialState(), (x) => S.splitPane(x, "row"));
+    s = apply(s, S.renameTab);
+    expect(s.overlay).toMatchObject({ kind: "renameTab", tabId: "t1" });
+    expect(s.focus).toBe("dialog");
+    s = apply(s, S.closeOverlay);
+    expect(s.focus).toBe("table");
+    s = apply(s, (x) => S.renamePane(x, "v1"));
+    expect(s.overlay).toMatchObject({ kind: "renamePane", pane: "v1" });
+    expect(S.activeTab(s).focused).toBe("v1");
+    invariants(s);
+  });
+
+  it("closing the pane or tab being named closes its field", () => {
+    let s = apply(S.initialState(), (x) => S.splitPane(x, "row"));
+    s = apply(s, (x) => S.renamePane(x, "v2"));
+    s = apply(s, (x) => S.closePane(x, "v2"));
+    expect(s.overlay).toBeUndefined();
+    s = apply(s, S.newTab);
+    s = apply(s, (x) => S.renameTab(x, "t1"));
+    s = apply(s, (x) => S.closeTab(x, 0));
+    expect(s.overlay).toBeUndefined();
+    invariants(s);
+  });
+
+  it("splits and new tabs don't take the name along", () => {
+    let s = S.namePane(S.nameTab(S.initialState(), "t1", "mine"), "v1", "web");
+    s = apply(s, (x) => S.splitPane(x, "row"));
+    expect(s.panes.v2!.name).toBeUndefined();
+    s = apply(s, S.newTab);
+    expect(S.activeTab(s).name).toBeUndefined();
+  });
+
+  it("titles: the tab's name, else the focused pane's, else its source; the context label leads", () => {
+    const rule = { label: "PROD" } as Parameters<typeof tabTitle>[2];
+    expect(tabTitle({ id: "t1", layout: leaf("v1"), focused: "v1" }, pane())).toBe("pods · shop");
+    expect(tabTitle({ id: "t1", layout: leaf("v1"), focused: "v1" }, pane({ name: "web" }), rule)).toBe("PROD · web");
+    expect(tabTitle({ id: "t1", layout: leaf("v1"), focused: "v1", name: "incident" }, pane({ name: "web" }), rule)).toBe("PROD · incident");
+    expect(paneTitle(pane({ name: "web" }))).toBe("web");
+  });
+});
+
+describe("moving tabs", () => {
+  it("a tab moves to an index, the others close up; the active tab stays active", () => {
+    let s = S.initialState();
+    s = apply(s, S.newTab);
+    s = apply(s, S.newTab); // t1 v1, t2, t3 (active)
+    const order = (x: S.UIState) => x.tabs.map((t) => t.id);
+    const [a, b, c] = order(s);
+    s = apply(s, (x) => S.moveTab(x, c!, 0));
+    expect(order(s)).toEqual([c, a, b]);
+    expect(S.activeTab(s).id).toBe(c);
+    s = apply(s, (x) => S.moveTab(x, a!, 2));
+    expect(order(s)).toEqual([c, b, a]);
+    expect(S.activeTab(s).id).toBe(c);
+    // out of range clamps; unknown or the same place: unchanged
+    s = apply(s, (x) => S.moveTab(x, c!, 99));
+    expect(order(s)).toEqual([b, a, c]);
+    expect(S.moveTab(s, "nope", 0)).toBe(s);
+    expect(S.moveTab(s, c!, 2)).toBe(s);
+    invariants(s);
   });
 });
 

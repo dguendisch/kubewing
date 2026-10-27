@@ -19,6 +19,8 @@ import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
+import { NameField } from "./components/NameField";
+import { startTabDrag, useTabDrag } from "./components/TabDrag";
 import { dispatch } from "./commands";
 import { prettyKey } from "./keys/keymap";
 import { useKeys } from "./keys/useKeys";
@@ -26,6 +28,8 @@ import { useConfig } from "./store/config";
 import { useRules } from "./store/rules";
 import { setUI, usePortForwards, useUI } from "./store/store";
 import * as S from "./store/state";
+
+const noDrag = { ["--wails-draggable" as string]: "no-drag" };
 
 export function App() {
   useKeys();
@@ -38,12 +42,29 @@ export function App() {
   const listKey = useConfig((c) => c.bindings.find((b) => b.command === "portforward.list"));
   const listKeyText = listKey && prettyKey(listKey.key);
   const tab = tabs[active]!;
+  const dragged = useTabDrag((d) => d.tab);
+  const renaming = useUI((s) => (s.overlay?.kind === "renameTab" ? s.overlay.tabId : undefined));
   return (
     <div className="relative flex h-full flex-col">
       <nav role="tablist" className="flex h-7 shrink-0 items-end gap-px bg-bg pl-20" style={{ ["--wails-draggable" as string]: "drag" }}>
         {tabs.map((t, i) => {
           const p = panes[t.focused];
           const n = S.tabShortcut(i, tabs.length);
+          const title = tabTitle(t, p, p?.context ? rules[p.context] : undefined);
+          const shortcut = n && (
+            <span aria-hidden className="text-[11px] text-fg-muted">
+              ⌘{n}
+            </span>
+          );
+          const className = `flex items-baseline gap-2 px-3 py-1 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"} ${t.id === dragged ? "opacity-70" : ""}`;
+          // a field can't sit in a button: while named, the tab is a plain element around it
+          if (renaming === t.id)
+            return (
+              <div key={t.id} role="tab" data-tab={t.id} aria-selected={i === active} className={className} style={noDrag}>
+                <NameField label="tab name" initial={t.name ?? ""} onName={(name) => (s) => S.nameTab(s, t.id, name)} />
+                {shortcut}
+              </div>
+            );
           return (
             <button
               key={t.id}
@@ -51,15 +72,18 @@ export function App() {
               data-tab={t.id}
               aria-selected={i === active}
               aria-keyshortcuts={n ? `Meta+${n}` : undefined}
+              title={t.name ? undefined : "double-click to name the tab (⌘⇧I)"}
               onClick={() => setUI((s) => ({ ...s, activeTab: i }))}
-              className={`flex items-baseline gap-2 px-3 py-1 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"}`}
+              onPointerDown={(e) => {
+                if (e.button === 0) startTabDrag(t.id, e.nativeEvent);
+              }}
+              onDoubleClick={() => setUI((s) => S.renameTab({ ...s, activeTab: i }, t.id))}
+              className={className}
+              // not a window drag handle: dragging reorders the tabs, and Wails would take a double-click to zoom the window
+              style={noDrag}
             >
-              {tabTitle(p, p?.context ? rules[p.context] : undefined)}
-              {n && (
-                <span aria-hidden className="text-[11px] text-fg-muted">
-                  ⌘{n}
-                </span>
-              )}
+              {title}
+              {shortcut}
             </button>
           );
         })}
