@@ -431,6 +431,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
       onColumnResize={(c, _, __, withGrow) => onColumnResize(c.id!, withGrow)}
       minColumnWidth={40}
       maxColumnWidth={2000}
+      smoothScrollX
       smoothScrollY
       rowSelect="single"
       // rows only: a header click or a moved column selects no column (resizing would then size all selected ones)
