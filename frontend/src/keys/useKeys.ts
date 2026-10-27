@@ -3,7 +3,7 @@ import { dispatch, openLaunch } from "../commands";
 import { useConfig } from "../store/config";
 import { bridge, paneData, useUI } from "../store/store";
 import * as S from "../store/state";
-import { chord, commandIds, fieldReserved, keyContexts, resolveIn, suppressedDefaults, type CommandId } from "./keymap";
+import { chord, commandIds, editorModal, fieldReserved, keyContexts, resolveIn, suppressedDefaults, type CommandId } from "./keymap";
 
 /** The focused pane shows the past (its frames say so). */
 function traveling(s: S.UIState): boolean {
@@ -29,7 +29,9 @@ export function useKeys() {
       // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
       if (c === "Meta+F" && e.target instanceof Element && e.target.closest(".monaco-editor")) return;
       const s = useUI.getState();
-      const cmd = resolveIn(c, keyContexts(s.focus, traveling(s)), useConfig.getState().bindings);
+      // the YAML editor in a dialog (the node shell's) is modal too, without keys of its own: Esc is the dialog's
+      const dialogEditor = s.focus === "dialog" && e.target instanceof Element && e.target.closest("[data-editor]");
+      const cmd = dialogEditor ? undefined : resolveIn(c, keyContexts(s.focus, traveling(s)), useConfig.getState().bindings);
       if (cmd) {
         e.preventDefault();
         e.stopPropagation();
@@ -46,8 +48,11 @@ export function useKeys() {
       if (useUI.getState().switcher) dispatch("tab.switcherCancel");
     };
     const known = new Set<string>(commandIds);
+    // a ⌘ chord an editor leaves to Monaco but Monaco doesn't use (⌘T, ⌘1 …) would fire as the native
+    // menu's key equivalent: menu commands wait until the editor is closed or left
+    const editing = () => editorModal(useUI.getState().focus) || !!document.activeElement?.closest("[data-editor]");
     const offMenu = bridge().onCommand((c) => {
-      if (known.has(c)) dispatch(c as CommandId);
+      if (known.has(c) && !editing()) dispatch(c as CommandId);
     });
     const offLaunch = bridge().onLaunch(openLaunch);
     window.addEventListener("keydown", onKey, { capture: true });

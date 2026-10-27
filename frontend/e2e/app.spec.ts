@@ -2752,6 +2752,46 @@ test.describe("object actions", () => {
       expect((await inspect(page)).overlays).toEqual([]);
     });
 
+    test("the editor is modal: ⌥↓ moves a line, ⌘D deletes it (no split behind it), ⌘S still previews", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      await page.keyboard.press("e");
+      const lines = dialog(page).locator("[data-editor=yaml] .view-lines");
+      await expect(lines).toContainText('replicas: "3"');
+      const panes = Object.keys((await inspect(page)).panes).length;
+      // the find leaves the cursor on the line of the match
+      await dialog(page).getByRole("textbox", { name: "edit YAML" }).focus();
+      await page.keyboard.press("ControlOrMeta+F");
+      await page.keyboard.insertText('replicas: "3"');
+      await page.keyboard.press("Escape");
+      // ⌥↓/⌥↑: the line swaps with the next one and back (Monaco's line elements aren't in document order: by position)
+      const order = () =>
+        lines.locator(".view-line").evaluateAll((els) =>
+          els
+            .map((el) => ({ top: parseFloat((el as HTMLElement).style.top), text: (el.textContent ?? "").replace(/\s+/g, " ").trim() }))
+            .sort((a, b) => a.top - b.top)
+            .map((l) => l.text),
+        );
+      const at = (await order()).indexOf('replicas: "3"');
+      expect(at).toBeGreaterThan(-1);
+      await page.keyboard.press("Alt+ArrowDown");
+      await expect.poll(async () => (await order()).indexOf('replicas: "3"')).toBe(at + 1);
+      await page.keyboard.press("Alt+ArrowUp");
+      await expect.poll(async () => (await order()).indexOf('replicas: "3"')).toBe(at);
+      await page.keyboard.press("Meta+D");
+      await expect(lines).not.toContainText("replicas");
+      expect(Object.keys((await inspect(page)).panes)).toHaveLength(panes);
+      expect((await inspect(page)).focus).toBe("edit");
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page)).toContainText("preview (server dry run");
+      await expect(dialog(page).locator('[data-viewer="diff"]')).toContainText('replicas: "3"');
+      expect((await inspect(page)).focus).toBe("editpreview");
+      // the preview too: no split behind it
+      await page.keyboard.press("Meta+D");
+      expect(Object.keys((await inspect(page)).panes)).toHaveLength(panes);
+      expect((await inspect(page)).focus).toBe("editpreview");
+    });
+
     test("changes ask before esc discards them; nothing changed is refused in the editor", async ({ page }) => {
       await openStatic(page);
       await select(page, "s-settings");

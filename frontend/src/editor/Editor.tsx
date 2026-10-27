@@ -15,7 +15,8 @@ interface Props {
 /**
  * Editable YAML in Monaco (the ops pod dialog's "show YAML"), themed like
  * the read-only Viewer. Esc reaches the dialog (closes the YAML), unless
- * Monaco's find widget is open.
+ * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
+ * ⌥↑/⌥↓ move it.
  */
 export function Editor({ initial, onChange, onSubmit, label }: Props) {
   const host = useRef<HTMLDivElement>(null);
@@ -34,6 +35,7 @@ export function Editor({ initial, onChange, onSubmit, label }: Props) {
       ed.focus();
       const sub = model.onDidChangeContent(() => cb.current.onChange(model.getValue()));
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => cb.current.onSubmit?.());
+      ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
       dispose = () => {
         sub.dispose();
         ed.dispose();

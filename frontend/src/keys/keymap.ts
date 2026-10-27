@@ -133,7 +133,7 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+Meta+ArrowRight", command: "pane.focusRight" },
   { key: "Alt+Meta+ArrowUp", command: "pane.focusUp" },
   { key: "Alt+Meta+ArrowDown", command: "pane.focusDown" },
-  // iTerm's "maximize active pane"; global, so it works from a shell too (the YAML editor keeps it: insert line above)
+  // iTerm's "maximize active pane"; global, so it works from a shell too (in the YAML editor it's Monaco's insert line above)
   { key: "Meta+Shift+Enter", command: "pane.toggleMaximize" },
   { key: "Meta+T", command: "tab.new" },
   // more than one pane in the tab: the dispatcher asks first
@@ -321,7 +321,7 @@ export function terminalReserved(key: string): boolean {
 }
 
 /**
- * In Monaco's find field and the YAML editor the keys are text being typed (d, j, =, ⌃D …);
+ * In Monaco's find field the keys are text being typed (d, j, =, ⌃D …);
  * only ⌘ chords and ⌃⇥ MRU switching reach the app, except ⌘←/⌘→, which
  * jump to the start/end of the field.
  */
@@ -355,6 +355,14 @@ function resolveOwn(key: string, focus: FocusContext, bindings: Binding[]): Comm
   return undefined;
 }
 
+/**
+ * The YAML editor and its preview are modal: only their own keys (Esc, ⌘S,
+ * ⌘⏎ …) reach the app, every other key is Monaco's (⌘D deletes a line there).
+ * A global one would act behind the editor: a split or a tab switch moves the
+ * focus away while the editor stays open, so ⌘S or ⏎ no longer reach it.
+ */
+export const editorModal = (focus: FocusContext) => focus === "edit" || focus === "editpreview";
+
 export function resolve(key: string, focus: FocusContext, bindings: Binding[] = defaultBindings): CommandId | undefined {
   if (focus === "terminal" && terminalReserved(key)) return undefined;
   // the editor is a text field: keys are text (Esc leaves it)
@@ -365,7 +373,7 @@ export function resolve(key: string, focus: FocusContext, bindings: Binding[] = 
     if (b.when?.includes(focus)) return b.command;
     if (!b.when?.length && global === undefined) global = b.command;
   }
-  return global;
+  return editorModal(focus) ? undefined : global;
 }
 
 /** A keybindings.yaml entry as loaded by Go; command "none" unbinds. */

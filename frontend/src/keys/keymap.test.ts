@@ -126,7 +126,12 @@ describe("edit", () => {
     expect(resolve("Escape", "edit")).toBe("edit.back");
     expect(resolve("Meta+S", "edit")).toBe("edit.submit");
     expect(resolve("Meta+Enter", "edit")).toBe("edit.submit");
-    expect(resolve("Meta+W", "edit")).toBe("tab.close");
+  });
+  it("the editor and its preview are modal: no global keys behind them", () => {
+    for (const ctx of ["edit", "editpreview"] as const)
+      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+1", "Meta+]", "Meta+Shift+Enter", "Ctrl+Tab", "Meta+O"]) expect(resolve(k, ctx)).toBeUndefined();
+    expect(resolve("Meta+D", "table")).toBe("pane.splitDown");
+    expect(resolve("Meta+D", "detail")).toBe("pane.splitDown");
   });
   it("the preview steps through changes and applies with ⏎", () => {
     expect(resolve("J", "editpreview")).toBe("diff.next");

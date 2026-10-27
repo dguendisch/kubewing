@@ -55,10 +55,10 @@ Done: launching kubewing while one runs on the same config directory opens a new
 
 Done: `↓` opens the completion list in the label and CEL fields at the caret, also where typing alone doesn't (empty field, after an operator); the label selector completes keys, operators and a key's values (`FieldValues`, next to `FieldKeys`). `Esc` with a list open only closes the list.
 
+Done: the YAML editor (`e`, and the node shell's) is modal: only its own keys reach the app (`Esc`, `⌘S`, `⌘⏎`; in the preview `j`/`k`, `⏎`, `w`), global ones and native menu commands wait until it's closed. Before, `⌘D` split the pane behind the open editor, the focus went to the new pane, and `⌘S`/`⏎` resolved as table keys (the "failed" apply). Monaco's line operations are in: `⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent.
+
 Next up:
 - user facing documentation
-- bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails) and then splits panes, such kubewing commands should not apply while in monace editor
-- monaco editor: add cmd+d (to delete a line) and opt+up/down to move a line up/down
 - allow to rename tabs and allow to give a pane a name (maybe rendered as a label in the top bar)
 - smooth horizontal scrolling (currently it jumps column by column)
 
