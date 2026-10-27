@@ -1,6 +1,6 @@
-import { useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import { logBuffers } from "./buffer";
-import { filterTerms, lineMatches } from "./render";
+import { filterTerms, lineMatches, streamName } from "./render";
 
 export interface LogStatus {
   /** Lines in the buffer (before the filter). */
@@ -21,13 +21,28 @@ export interface LogStatus {
   ended: number;
 }
 
-/** Subscribes a log pane's header to its buffer's counts. */
+/**
+ * Subscribes a log pane's header to its buffer's counts. The status is the
+ * store snapshot itself (cached per seq and filter): the buffer is mutated in
+ * place, so a value computed beside the hook would be memoized stale by the
+ * React Compiler.
+ */
 export function useLogStatus(session: string, filter: string): LogStatus {
-  const snap = useSyncExternalStore(
+  const cache = useRef<{ session: string; seq: number; filter: string; status: LogStatus }>(undefined);
+  return useSyncExternalStore(
     (cb) => logBuffers.subscribe(session, cb),
-    () => logBuffers.get(session).seq,
+    () => {
+      const seq = logBuffers.get(session).seq;
+      const c = cache.current;
+      if (c && c.session === session && c.seq === seq && c.filter === filter) return c.status;
+      const status = logStatus(session, filter);
+      cache.current = { session, seq, filter, status };
+      return status;
+    },
   );
-  void snap; // the seq only triggers recompute; the values come from the buffer
+}
+
+function logStatus(session: string, filter: string): LogStatus {
   const b = logBuffers.get(session);
   const terms = filterTerms(filter);
   const byId = new Map(b.streams.map((s) => [s.id, s]));
@@ -38,8 +53,7 @@ export function useLogStatus(session: string, filter: string): LogStatus {
       continue;
     }
     const s = byId.get(l.stream);
-    const label = s ? (s.pod === s.container ? s.pod : `${s.pod}/${s.container}`) : l.stream;
-    if (lineMatches(`${label} ${l.text}`, terms)) shown++;
+    if (lineMatches(`${s ? streamName(s) : l.stream} ${l.text}`, terms)) shown++;
   }
   const pods = new Set<string>();
   let following = 0, limited = 0, ended = 0;

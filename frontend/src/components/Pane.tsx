@@ -203,7 +203,8 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
           onFocus={() => setUI((s) => S.focusPane(s, id))}
         />
       </div>
-      <footer className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-[11px] text-fg-muted">
+      <footer role="status" aria-label="logs status" className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-[11px] text-fg-muted">
+        <LogFollowing follow={logs.follow} live={logs.exited === undefined && st.following > 0} />
         <span>{logs.filter ? `${st.shown.toLocaleString()} / ${st.total.toLocaleString()} lines` : `${st.total.toLocaleString()} lines`}</span>
         <span>
           {st.following} container{st.following === 1 ? "" : "s"} in {st.pods} pod{st.pods === 1 ? "" : "s"}
@@ -214,6 +215,22 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
         {logs.timestamps ? <span>timestamps</span> : null}
       </footer>
     </>
+  );
+}
+
+/** As the table's "connected": a green dot while new lines stream in; grey once
+ *  nothing is followed (read once without follow, every container ended, or the session over). */
+function LogFollowing({ follow, live }: { follow: boolean; live: boolean }) {
+  if (follow && live)
+    return (
+      <span>
+        <span className="text-connected">●</span> following
+      </span>
+    );
+  return (
+    <span title={follow ? "every followed container ended" : "started without follow: the logs were read once"}>
+      <span>●</span> not following
+    </span>
   );
 }
 

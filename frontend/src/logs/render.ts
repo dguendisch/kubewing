@@ -66,8 +66,43 @@ export interface RenderOptions {
   streams: LogStream[];
 }
 
-/** Width the prefix column is padded to, so texts line up. */
-const PREFIX_WIDTH = 24;
+/** Widest the prefix column gets; longer labels are cut in the middle. */
+export const MAX_PREFIX_WIDTH = 40;
+
+/** A stream's full name, what the live filter matches ("pod container"). */
+export function streamName(s: LogStream): string {
+  return s.pod === s.container ? s.pod : `${s.pod} ${s.container}`;
+}
+
+/**
+ * The prefix per stream: only what tells the streams apart. One pod: its
+ * containers; one container name: the pods; one of each: no prefix at all.
+ * width fits the longest (at most MAX_PREFIX_WIDTH), 0 = no prefix column.
+ */
+export function streamLabels(streams: LogStream[]): { labels: Map<string, string>; width: number } {
+  const pods = new Set(streams.map((s) => `${s.namespace}/${s.pod}`));
+  const containers = new Set(streams.map((s) => s.container));
+  const labels = new Map<string, string>();
+  let width = 0;
+  for (const s of streams) {
+    const label =
+      pods.size <= 1 && containers.size <= 1 ? "" : pods.size <= 1 ? s.container : containers.size <= 1 || s.pod === s.container ? s.pod : `${s.pod}/${s.container}`;
+    labels.set(s.id, label);
+    width = Math.max(width, label.length);
+  }
+  return { labels, width: Math.min(width, MAX_PREFIX_WIDTH) };
+}
+
+/**
+ * Fits a label to width: padded, or cut in the middle with "…" when longer.
+ * The end keeps the larger part: names of one pod's or workload's streams
+ * share their start and differ at the end (etcd-main-0 … etcd-main-backup-restore).
+ */
+export function fitLabel(label: string, width: number): string {
+  if (label.length <= width) return label.padEnd(width);
+  const head = Math.floor((width - 1) / 3);
+  return label.slice(0, head) + "…" + label.slice(label.length - (width - 1 - head));
+}
 
 /**
  * Renders the matching lines to xterm CRLF-terminated strings. A marker line
@@ -76,18 +111,18 @@ const PREFIX_WIDTH = 24;
  */
 export function renderLines(lines: LogLine[], o: RenderOptions): string[] {
   const byId = new Map(o.streams.map((s) => [s.id, s]));
+  const { labels, width } = streamLabels(o.streams);
   const out: string[] = [];
   for (const l of lines) {
     const s = byId.get(l.stream);
-    const label = s ? (s.pod === s.container ? s.pod : `${s.pod}/${s.container}`) : l.stream;
     const marker = l.text.startsWith("—");
-    const haystack = `${label} ${l.text}`;
+    // the filter matches the full pod and container, also where the prefix leaves them out
+    const haystack = `${s ? streamName(s) : l.stream} ${l.text}`;
     if (!marker && !lineMatches(haystack, o.terms)) continue;
     let line = "";
-    if (o.prefix && !marker) {
+    if (o.prefix && !marker && width > 0) {
       const color = s ? POD_COLORS[s.color % POD_COLORS.length]! : 7;
-      const padded = label.length >= PREFIX_WIDTH ? label.slice(0, PREFIX_WIDTH - 1) + "…" : label.padEnd(PREFIX_WIDTH);
-      line += fg(color) + padded + RESET + " ";
+      line += fg(color) + fitLabel(s ? (labels.get(s.id) ?? "") : l.stream, width) + RESET + " ";
     }
     if (o.timestamps && l.ts) line += DIM + l.ts + RESET + " ";
     line += marker ? DIM + l.text + RESET : highlight(l.text, o.terms);

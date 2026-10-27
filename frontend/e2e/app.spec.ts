@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; exited?: string } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
   logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string; viewportY: number; length: number; rows: number }>;
 };
 
@@ -3760,6 +3760,14 @@ test.describe("logs", () => {
     await page.keyboard.press("g");
     for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
   }
+  // ⌘L / ⌥⌘L open the log dialog; ⏎ starts with its defaults once it has listed the pods
+  async function tail(page: Page, key = "ControlOrMeta+l") {
+    await page.keyboard.press(key);
+    const dialog = page.getByRole("dialog", { name: "logs" });
+    await expect(dialog.getByRole("textbox", { name: "history" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+  }
   // the log pane's rendered screen, by its session id
   async function screen(page: Page) {
     const s = await inspect(page);
@@ -3771,18 +3779,20 @@ test.describe("logs", () => {
   test("⌘L on a pod row tails just that pod", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
-    await page.keyboard.press("ControlOrMeta+l");
+    await tail(page);
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
     const pane = async () => Object.values((await inspect(page)).panes).find((p) => p.logs);
     await expect.poll(async () => (await pane())?.logs?.title).toBe("api-0");
     await expect.poll(() => screen(page)).toContain("api-0 app serving request /healthz");
     // only api-0's lines, not api-1's
     expect(await screen(page)).not.toContain("api-1");
+    // one pod, one container: no pod/container prefix, the lines start with their text
+    expect((await screen(page)).split("\n")[0]).toBe("api-0 app starting");
   });
 
   test("⌥⌘L tails every pod the pane shows; a label selector narrows it", async ({ page }) => {
     await openLogs(page, "app=api");
-    await page.keyboard.press("Alt+ControlOrMeta+l");
+    await tail(page, "Alt+ControlOrMeta+l");
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
     // api pods are followed, worker is not (filtered out by app=api)
     await expect.poll(() => screen(page)).toContain("api-0 app ready");
@@ -3793,7 +3803,7 @@ test.describe("logs", () => {
   test("the live filter hides non-matching lines and ! excludes", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-1");
-    await page.keyboard.press("ControlOrMeta+l");
+    await tail(page);
     await expect.poll(() => screen(page)).toContain("api-1 app warning disk space low");
     // focus the grep field (the log pane's, now focused) and type a term
     await page.keyboard.press("/");
@@ -3811,7 +3821,7 @@ test.describe("logs", () => {
   test("arrows, page up/down and home/end scroll the view; ⏎ jumps to the latest line", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
-    await page.keyboard.press("ControlOrMeta+l");
+    await tail(page);
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
     await expect.poll(() => screen(page)).toContain("api-0 app serving request /healthz");
     // the tape has a handful of lines; push enough to scroll
@@ -3861,10 +3871,64 @@ test.describe("logs", () => {
     expect((await inspect(page)).focus).toBe("logs");
   });
 
-  test("closing the pane ends the session", async ({ page }) => {
+  test("⌘L asks first: containers, history, follow and timestamps; esc cancels", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
     await page.keyboard.press("ControlOrMeta+l");
+    const dialog = page.getByRole("dialog", { name: "logs" });
+    await expect(dialog).toContainText("logs of api-0");
+    // the defaults: every container, the configured tail, following, no timestamps
+    await expect(dialog.getByRole("checkbox", { name: "app" })).toBeChecked();
+    await expect(dialog.getByRole("textbox", { name: "history" })).toHaveValue("100");
+    await expect(dialog.getByRole("checkbox", { name: "follow" })).toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "timestamps" })).not.toBeChecked();
+    expect((await inspect(page)).focus).toBe("dialog");
+    // esc: nothing starts, back to the table
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("table");
+    expect(Object.values((await inspect(page)).panes).some((p) => p.logs)).toBe(false);
+    // a bad history is refused in the dialog
+    await page.keyboard.press("ControlOrMeta+l");
+    const history = dialog.getByRole("textbox", { name: "history" });
+    await expect(history).toBeFocused();
+    await history.fill("ten minutes");
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText("a duration");
+    // the last line only, timestamps on, not following: read once, the footer says so
+    await history.fill("1");
+    await dialog.getByRole("checkbox", { name: "follow" }).uncheck();
+    await dialog.getByRole("checkbox", { name: "timestamps" }).check();
+    await history.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    await expect.poll(() => screen(page)).toContain("api-0 app serving request /healthz");
+    expect(await screen(page)).not.toContain("api-0 app ready");
+    const pane = Object.values((await inspect(page)).panes).find((p) => p.logs)!;
+    expect(pane.logs).toMatchObject({ timestamps: true, follow: false });
+    const status = page.getByRole("status", { name: "logs status" });
+    await expect(status).toContainText("not following");
+    // the read is over: the session ends on its own
+    await expect.poll(async () => Object.values((await inspect(page)).panes).find((p) => p.logs)?.logs?.exited).toBe("ended");
+  });
+
+  test("a followed tail shows following in its footer", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await tail(page);
+    await expect.poll(() => screen(page)).toContain("api-0 app ready");
+    const status = page.getByRole("status", { name: "logs status" });
+    await expect(status).toContainText("following");
+    await expect(status).not.toContainText("not following");
+    // the footer counts the followed stream (it once kept the count from before the stream set arrived)
+    await expect(status).toContainText("1 container in 1 pod");
+  });
+
+  test("closing the pane ends the session", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await tail(page);
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
     const sessionId = async () => Object.values((await inspect(page)).panes).find((p) => p.logs)?.logs?.session;
     const id = await sessionId();

@@ -110,6 +110,8 @@ export interface Logs {
   filter: string;
   /** Show the RFC 3339 timestamp per line. */
   timestamps: boolean;
+  /** Started following (new lines stream in); false = the logs were read once. */
+  follow: boolean;
   /** Prefix lines with their pod/container (off for a single-pod tail is still on; kept for the toggle). */
   prefix: boolean;
   /** Exit text once the session ended; the pane stays until closed. */
@@ -177,8 +179,9 @@ export interface Overlay {
    *  error: the full text of an error in the status line (a click on it);
    *  columns: the pane's columns (its resource type's), -o wide and custom ones;
    *  cells: which of the selected row's cells to copy;
-   *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place. */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane";
+   *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
+   *  logs: containers, history and follow of a log tail, before it starts. */
+  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
   /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
@@ -223,6 +226,8 @@ export interface Overlay {
   columns?: ColumnChoices;
   /** field: a field's values over time (⇧H in the YAML); ⏎ takes the pane there. */
   field?: FieldHistory;
+  /** logs: tail every pod the pane shows (⌥⌘L), not the row's (key). */
+  whole?: boolean;
   /** field: the detail view it was opened from, back on Esc. */
   back?: Overlay;
   /** Focus restored when the overlay closes. */
@@ -763,6 +768,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a text field: every plain key is typing
   renameTab: "dialog",
   renamePane: "dialog",
+  logs: "dialog",
 };
 
 /** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */

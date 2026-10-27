@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, Launch, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
@@ -191,9 +191,9 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.openOverlay(x, { kind: "portforward", pane: pane.id, key }));
     }
     case "object.logs":
-      return void startLogs(pane, false);
+      return openLogsDialog(pane, false);
     case "view.logs":
-      return void startLogs(pane, true);
+      return openLogsDialog(pane, true);
     case "logs.focusFilter":
       return setUI((x) => (x.focus === "logs" ? { ...x, focus: "logsfilter" } : x));
     case "logs.blurFilter":
@@ -314,20 +314,31 @@ export type LogScroll = "lineDown" | "lineUp" | "pageDown" | "pageUp" | "top" | 
 export const scrollers = new Map<string, (to: LogScroll) => void>();
 
 /**
- * ⌘L / ⌥⌘L: tails a row's pods (whole = every pod the pods pane shows), in a
- * new pane below. Read-only, so no safety prepare — like describe and
- * port-forward. A pane that can't produce logs (no pods) is refused by Go.
+ * ⌘L / ⌥⌘L: the log dialog for a row's pods (whole = every pod the pods pane
+ * shows); it starts the tail (startLogs).
  */
-async function startLogs(pane: S.PaneState, whole: boolean) {
+function openLogsDialog(pane: S.PaneState, whole: boolean) {
   if (!pane.serverId || pane.term || pane.logs) return;
-  const key = whole ? "" : selectedKey(pane);
+  const key = whole ? undefined : selectedKey(pane);
   if (!whole && !key) return;
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "logs", pane: pane.id, key, whole }));
+}
+
+/**
+ * The log dialog's submit: tails the pods with its options, in a new pane
+ * below. Read-only, so no safety prepare — like describe and port-forward. A
+ * pane that can't produce logs (no pods) is refused by Go. Returns the error
+ * to show in the dialog, if any.
+ */
+export async function startLogs(paneId: string, key: string | undefined, whole: boolean, opts: LogsOptions, timestamps: boolean): Promise<string | undefined> {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane?.serverId) return "the pane is gone";
   try {
-    const r = await bridge().logsStart(pane.serverId, key ?? "", whole);
-    const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps: false, prefix: true };
+    const r = await bridge().logsStart(pane.serverId, key ?? "", whole, opts);
+    const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps, follow: opts.follow, prefix: true };
     setUI((x) => S.openLogs(x, logs, pane.id));
   } catch (e) {
-    flash(pane.id, errorText(e), true);
+    return errorText(e);
   }
 }
 

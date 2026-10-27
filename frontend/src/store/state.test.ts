@@ -696,7 +696,7 @@ describe("terminal panes", () => {
 });
 
 describe("log panes", () => {
-  const logs = (id: string): S.Logs => ({ session: id, title: "api-0", context: "kind", filter: "", timestamps: false, prefix: true });
+  const logs = (id: string): S.Logs => ({ session: id, title: "api-0", context: "kind", filter: "", timestamps: false, follow: true, prefix: true });
 
   it("open below the source pane with logs focus", () => {
     let s = apply(S.initialState(), (x) => S.openLogs(x, logs("s1")));

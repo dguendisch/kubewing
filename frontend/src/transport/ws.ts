@@ -108,7 +108,8 @@ export function wsTransport(url: string): Transport {
     portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
     portForwards: () => call("PortForwards"),
     portForwardStop: (id) => call("PortForwardStop", id),
-    logsStart: (p, k, whole) => call("LogsStart", p, k, whole),
+    logsTargets: (p, k, whole) => call("LogsTargets", p, k, whole),
+    logsStart: (p, k, whole, o) => call("LogsStart", p, k, whole, o),
     // browser/test build: the page's clipboard
     copyText: (t) => navigator.clipboard.writeText(t),
     config: () => call("Config"),

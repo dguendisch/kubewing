@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LogLine, LogStream } from "../transport/types";
-import { filterTerms, highlight, lineMatches, renderLines } from "./render";
+import { filterTerms, fitLabel, highlight, lineMatches, MAX_PREFIX_WIDTH, renderLines, streamLabels } from "./render";
 
 const streams: LogStream[] = [
   { id: "p1/app", pod: "api-0", namespace: "shop", container: "app", color: 0, state: "following" },
@@ -41,7 +41,7 @@ describe("renderLines", () => {
     const out = renderLines(lines, { prefix: true, timestamps: true, terms: filterTerms("ready"), streams });
     expect(out).toHaveLength(1);
     const text = plain(out[0]!);
-    expect(text).toContain("api-0/app");
+    expect(text).toMatch(/^api-0 /); // one container name: the pods tell the lines apart
     expect(text).toContain("2026-01-01T00:00:00Z");
     expect(text).toContain("ready");
   });
@@ -56,5 +56,51 @@ describe("renderLines", () => {
   it("omits the prefix when asked (single-pod view)", () => {
     const out = renderLines([line("p1/app", "hello")], { prefix: false, timestamps: false, terms: [], streams });
     expect(plain(out[0]!)).toBe("hello");
+  });
+});
+
+const st = (id: string, pod: string, container: string): LogStream => ({ id, pod, namespace: "shop", container, color: 0, state: "following" });
+
+describe("streamLabels", () => {
+  it("shows only what tells the streams apart", () => {
+    // one pod, one container: no prefix at all
+    expect(streamLabels([st("a", "api-0", "app")]).width).toBe(0);
+    // one pod: its containers
+    const one = streamLabels([st("a", "etcd-0", "etcd"), st("b", "etcd-0", "backup-restore")]);
+    expect([...one.labels.values()]).toEqual(["etcd", "backup-restore"]);
+    expect(one.width).toBe("backup-restore".length);
+    // one container name: the pods
+    expect([...streamLabels([st("a", "api-0", "app"), st("b", "api-1", "app")]).labels.values()]).toEqual(["api-0", "api-1"]);
+    // both vary: pod/container
+    expect([...streamLabels([st("a", "api-0", "app"), st("b", "api-1", "side")]).labels.values()]).toEqual(["api-0/app", "api-1/side"]);
+  });
+  it("caps the column width", () => {
+    const long = "x".repeat(60);
+    expect(streamLabels([st("a", "p", long), st("b", "p", "app")]).width).toBe(MAX_PREFIX_WIDTH);
+  });
+});
+
+describe("fitLabel", () => {
+  it("pads short labels and cuts long ones in the middle, keeping the end", () => {
+    expect(fitLabel("app", 6)).toBe("app   ");
+    const a = fitLabel("etcd-main-0/backup-restore-sidecar-one", 20);
+    const b = fitLabel("etcd-main-0/backup-restore-sidecar-two", 20);
+    expect(a).toHaveLength(20);
+    expect(a).toMatch(/^etcd-m…/);
+    expect(a.endsWith("sidecar-one")).toBe(true);
+    expect(a).not.toBe(b);
+  });
+});
+
+describe("renderLines prefix", () => {
+  it("leaves the prefix out for a single stream, but still filters on its names", () => {
+    const one = [st("a", "api-0", "app")];
+    expect(plain(renderLines([line("a", "hello")], { prefix: true, timestamps: false, terms: [], streams: one })[0]!)).toBe("hello");
+    expect(renderLines([line("a", "hello")], { prefix: true, timestamps: false, terms: filterTerms("api-0"), streams: one })).toHaveLength(1);
+  });
+  it("lines up the text after a prefix fitted to the longest label", () => {
+    const two = [st("a", "etcd-0", "etcd"), st("b", "etcd-0", "backup-restore")];
+    const out = renderLines([line("a", "x"), line("b", "y")], { prefix: true, timestamps: false, terms: [], streams: two }).map((l) => plain(l));
+    expect(out).toEqual(["etcd           x", "backup-restore y"]);
   });
 });

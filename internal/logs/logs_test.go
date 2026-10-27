@@ -262,3 +262,50 @@ func TestResumeAfterRestart(t *testing.T) {
 		t.Error("reconnect must not refetch the tail")
 	}
 }
+
+// Containers restricts following to those names; a NoFollow tailer reads each
+// stream once (no reconnect), and Wait returns when they're all read.
+func TestContainersAndNoFollow(t *testing.T) {
+	fa := newFakeActor()
+	fa.streams["u1/app"] = []string{"a"}
+	fa.streams["u1/side"] = []string{"s"}
+	sink := &recordSink{}
+	tl := New(context.Background(), fa, Options{Containers: []string{"app"}, NoFollow: true}, sink)
+	defer tl.Close()
+	tl.Apply(source.Event{Type: source.Added, Item: item(pod("u1", "ns", "u1", map[string]bool{"app": true, "side": true}, ""))})
+	tl.Wait()
+	if got := sink.texts(); len(got) != 1 || got[0] != "a" {
+		t.Errorf("lines = %v, want just app's", got)
+	}
+	if fa.callCount() != 1 || !fa.calls[0].opts.NoFollow {
+		t.Errorf("calls = %+v, want one NoFollow read", fa.calls)
+	}
+	if st := tl.Streams(); len(st) != 1 || st[0].State != Ended {
+		t.Errorf("streams = %+v, want app ended", st)
+	}
+}
+
+// Since starts streams that long ago (rounded up to seconds); Whole reads
+// them from the start: neither passes a tail.
+func TestSinceAndWhole(t *testing.T) {
+	for _, tc := range []struct {
+		o     Options
+		since int64
+	}{{Options{Since: 1500 * time.Millisecond}, 2}, {Options{Whole: true}, 0}} {
+		fa := newFakeActor()
+		fa.follow = true
+		tl := New(context.Background(), fa, tc.o, &recordSink{})
+		tl.Apply(source.Event{Type: source.Added, Item: item(pod("u1", "ns", "u1", map[string]bool{"app": true}, ""))})
+		eventually(t, func() bool { return fa.callCount() == 1 }, "one stream")
+		fa.mu.Lock()
+		o := fa.calls[0].opts
+		fa.mu.Unlock()
+		tl.Close()
+		if o.TailLines != nil {
+			t.Errorf("%+v: tail = %d, want none", tc.o, *o.TailLines)
+		}
+		if tc.since == 0 && o.SinceSeconds != nil || tc.since != 0 && (o.SinceSeconds == nil || *o.SinceSeconds != tc.since) {
+			t.Errorf("%+v: sinceSeconds = %v, want %d", tc.o, o.SinceSeconds, tc.since)
+		}
+	}
+}

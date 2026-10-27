@@ -49,10 +49,10 @@ const (
 
 // Stream is one followed container, reported whenever the set changes.
 type Stream struct {
-	ID        string      `json:"id"`
-	Pod       string      `json:"pod"`
-	Namespace string      `json:"namespace"`
-	Container string      `json:"container"`
+	ID        string `json:"id"`
+	Pod       string `json:"pod"`
+	Namespace string `json:"namespace"`
+	Container string `json:"container"`
 	// Color is a stable per-pod index into the UI's palette (0…palette-1).
 	Color int         `json:"color"`
 	State StreamState `json:"state"`
@@ -68,6 +68,15 @@ type Options struct {
 	// Tail is how many lines to fetch before following; <=0 = DefaultTail.
 	// Pods that appear later are read from their start (0 tail), as stern does.
 	Tail int64
+	// Since, if set, starts each stream that long ago instead of Tail lines back.
+	Since time.Duration
+	// Whole reads each stream from its start (neither Tail nor Since).
+	Whole bool
+	// NoFollow reads what each stream holds once and ends it (kubectl logs
+	// without -f): no reconnects. The bridge feeds it a single pod list.
+	NoFollow bool
+	// Containers, if set, restricts following to containers of these names.
+	Containers []string
 	// MaxStreams caps concurrent followers; <=0 = DefaultMaxStreams.
 	MaxStreams int
 	// LineCap caps a single line's length in bytes; <=0 = DefaultLineCap.
@@ -107,6 +116,8 @@ type Tailer struct {
 	nextColor int
 	limited   int // containers not followed because of the cap
 	closed    bool
+	// running counts follower goroutines, for Wait
+	running sync.WaitGroup
 }
 
 type follower struct {
@@ -140,6 +151,10 @@ func New(ctx context.Context, actor LogStreamer, o Options, sink Sink) *Tailer {
 		followers: map[string]*follower{}, colors: map[string]int{},
 	}
 }
+
+// Wait blocks until every follower started so far has returned: for a
+// NoFollow tailer, until each stream is read. Don't call Apply concurrently.
+func (t *Tailer) Wait() { t.running.Wait() }
 
 // Close stops every follower.
 func (t *Tailer) Close() {
@@ -196,7 +211,7 @@ func (t *Tailer) reconcilePod(obj *unstructured.Unstructured) {
 		return
 	}
 	for _, c := range cs {
-		if !c.loggable() {
+		if !c.loggable() || len(t.opts.Containers) > 0 && !slices.Contains(t.opts.Containers, c.name) {
 			continue
 		}
 		id := uid + "/" + c.name
@@ -247,7 +262,11 @@ func (t *Tailer) startFollower(id, uid, ns, pod, container string, running bool)
 		stream: Stream{ID: id, Pod: pod, Namespace: ns, Container: container, Color: color, State: Following},
 		cancel: cancel, running: running,
 	}
-	go t.run(fctx, f)
+	t.running.Add(1)
+	go func() {
+		defer t.running.Done()
+		t.run(fctx, f)
+	}()
 	return f
 }
 
@@ -258,16 +277,27 @@ func (t *Tailer) run(ctx context.Context, f *follower) {
 		lo := source.LogOptions{}
 		if since := t.lastTS(f); since != nil {
 			lo.SinceTime = since
-		} else if first {
+		} else if first && t.opts.Since > 0 {
+			secs := int64((t.opts.Since + time.Second - 1) / time.Second)
+			lo.SinceSeconds = &secs
+		} else if first && !t.opts.Whole {
 			tail := t.opts.Tail
 			lo.TailLines = &tail
 		}
 		first = false
+		lo.NoFollow = t.opts.NoFollow
 		w := &lineWriter{tailer: t, f: f, cap: t.opts.LineCap}
 		err := t.actor.Logs(ctx, t.opts.Cluster, f.stream.Namespace, f.stream.Pod, f.stream.Container, lo, w)
 		w.flush()
 		if ctx.Err() != nil {
 			return // stopped
+		}
+		if t.opts.NoFollow {
+			if err != nil {
+				t.emitMarker(f, fmt.Sprintf("— log stream error: %v —", err))
+			}
+			t.markEnded(f)
+			return
 		}
 		if !t.keepGoing(f) {
 			t.markEnded(f)

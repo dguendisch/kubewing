@@ -66,6 +66,9 @@ func waitLogs(t *testing.T, log *eventLog, id string, ok func(texts []string, st
 	return nil, nil
 }
 
+// follow is the dialog's default: every container, the configured tail, following.
+var follow = LogsOptions{Follow: true}
+
 func contains(texts []string, sub string) bool {
 	for _, s := range texts {
 		if strings.Contains(s, sub) {
@@ -79,7 +82,7 @@ func contains(texts []string, sub string) bool {
 func TestLogsStartPodRow(t *testing.T) {
 	svc, log, res := logsSetup(t)
 	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
-	r, err := svc.LogsStart(res.Pane, "lg-api-0", false)
+	r, err := svc.LogsStart(res.Pane, "lg-api-0", false, follow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +109,7 @@ func TestLogsStartPodRow(t *testing.T) {
 func TestLogsStartWholePane(t *testing.T) {
 	svc, log, res := logsSetup(t)
 	waitRow(t, log, res.Pane, "lg-api-2", func(view.RowData) bool { return true })
-	r, err := svc.LogsStart(res.Pane, "", true)
+	r, err := svc.LogsStart(res.Pane, "", true, follow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +140,7 @@ func TestLogsStartWholePaneFiltered(t *testing.T) {
 	t.Cleanup(func() { svc.Close(api.Pane) })
 	svc.SetViewport(api.Pane, 0, 10)
 	waitRow(t, log, api.Pane, "lg-api-0", func(view.RowData) bool { return true })
-	r, err := svc.LogsStart(api.Pane, "", true)
+	r, err := svc.LogsStart(api.Pane, "", true, follow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +160,7 @@ func TestLogsStartWholePaneFiltered(t *testing.T) {
 func TestLogsShutdownEndsSession(t *testing.T) {
 	svc, log, res := logsSetup(t)
 	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
-	r, err := svc.LogsStart(res.Pane, "lg-api-0", false)
+	r, err := svc.LogsStart(res.Pane, "lg-api-0", false, follow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +183,95 @@ func TestLogsStartNoPods(t *testing.T) {
 	waitRow(t, log, res.Pane, "lg-worker-0", func(view.RowData) bool { return true })
 	// worker-0 is a pod, so it works; a whole-pane tail on a non-pods pane
 	// is the case we check elsewhere. Here: an unknown key fails cleanly.
-	if _, err := svc.LogsStart(res.Pane, "nope", false); err == nil {
+	if _, err := svc.LogsStart(res.Pane, "nope", false, follow); err == nil {
 		t.Error("unknown row must fail")
+	}
+}
+
+// The dialog lists the containers of the pods a tail would follow; the
+// whole pane's are those of every pod it shows.
+func TestLogsTargets(t *testing.T) {
+	svc, log, res := logsSetup(t)
+	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
+	g, err := svc.LogsTargets(res.Pane, "lg-api-0", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Title != "api-0" || len(g.Containers) != 1 || g.Containers[0] != "app" || g.Tail != config.DefaultLogTail {
+		t.Errorf("targets = %+v, want api-0 with [app] and the configured tail", g)
+	}
+	if g, err = svc.LogsTargets(res.Pane, "", true); err != nil || len(g.Containers) != 1 {
+		t.Errorf("whole pane targets = %+v, %v", g, err)
+	}
+	if _, err := svc.LogsTargets(res.Pane, "nope", false); err == nil {
+		t.Error("unknown row must fail")
+	}
+}
+
+// Not following reads what each container has once, then the session ends
+// on its own (no exit code: "0").
+func TestLogsStartNoFollow(t *testing.T) {
+	svc, log, res := logsSetup(t)
+	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
+	r, err := svc.LogsStart(res.Pane, "lg-api-0", false, LogsOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if texts, streams, exit := logLines(log, r.Session); exit != "" {
+			if exit != "0" || !contains(texts, "api-0 app serving request /healthz") {
+				t.Errorf("exit = %q, texts = %v", exit, texts)
+			}
+			if len(streams) != 1 || streams[0].State != logs.Ended {
+				t.Errorf("streams = %+v, want one ended", streams)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("a log read without follow never ended")
+}
+
+// The dialog's history choice: the last lines, or since a duration ago.
+func TestLogsStartHistory(t *testing.T) {
+	svc, log, res := logsSetup(t)
+	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
+	// the last line only
+	r, err := svc.LogsStart(res.Pane, "lg-api-0", false, LogsOptions{Tail: 1, Follow: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts, _ := waitLogs(t, log, r.Session, func(texts []string, _ []logs.Stream) bool { return contains(texts, "serving request") })
+	if contains(texts, "starting") || contains(texts, "ready") {
+		t.Errorf("tail 1 must show only the last line: %v", texts)
+	}
+	svc.SessionClose(r.Session)
+	// the tape's lines are a second apart, ending just before "now": 2s back covers the last two
+	r, err = svc.LogsStart(res.Pane, "lg-api-0", false, LogsOptions{Since: "2s", Follow: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts, _ = waitLogs(t, log, r.Session, func(texts []string, _ []logs.Stream) bool { return contains(texts, "serving request") })
+	if contains(texts, "starting") || !contains(texts, "ready") {
+		t.Errorf("since 2s must show the last two lines: %v", texts)
+	}
+	svc.SessionClose(r.Session)
+}
+
+// The dialog's choices are checked before anything starts.
+func TestLogsStartBadOptions(t *testing.T) {
+	svc, log, res := logsSetup(t)
+	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
+	for _, o := range []LogsOptions{
+		{Since: "ten minutes"},
+		{Since: "-1m"},
+		{Since: "1m", All: true},
+		{Tail: -1},
+		{Containers: []string{" "}},
+	} {
+		if _, err := svc.LogsStart(res.Pane, "lg-api-0", false, o); err == nil {
+			t.Errorf("%+v must be refused", o)
+		}
 	}
 }

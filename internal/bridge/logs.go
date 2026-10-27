@@ -49,12 +49,132 @@ type LogsResult struct {
 	Title string `json:"title"`
 }
 
+// LogsOptions are the log dialog's choices (⌘L). Containers empty = all.
+// History picks where each stream starts: Tail lines back (0 = the configured
+// logs.tail), Since ago (a Go duration, "10m"), or All of it; at most one of
+// Since and All. Follow keeps streaming (and picks up pods that appear later);
+// without it each container's log is read once and the session ends.
+type LogsOptions struct {
+	Containers []string `json:"containers,omitempty"`
+	Tail       int      `json:"tail,omitempty"`
+	Since      string   `json:"since,omitempty"`
+	All        bool     `json:"all,omitempty"`
+	Follow     bool     `json:"follow"`
+}
+
+// LogsTargets describes what a log tail of a row (or the whole pane) would
+// follow, for the dialog: its title and the container names its pods have.
+type LogsTargets struct {
+	Title      string   `json:"title"`
+	Containers []string `json:"containers"`
+	// Tail is the configured logs.tail, the dialog's default.
+	Tail int `json:"tail"`
+}
+
+// logsTarget is a resolved tail target: the pods watch to subscribe to, and
+// what picks the pods from it.
+type logsTarget struct {
+	src source.Key
+	// stages are applied to the watch to pick pods (whole pane); nil for a row
+	stages   []pipeline.Stage
+	ownerUID string
+	title    string
+}
+
+func (s *Service) logsTarget(pn *pane, key string, whole bool) (logsTarget, error) {
+	var (
+		g   logsTarget
+		err error
+	)
+	if whole {
+		g.src, g.stages, g.title, err = s.wholePaneSource(pn)
+	} else {
+		g.src, g.ownerUID, g.title, err = s.rowSource(pn, key)
+	}
+	return g, err
+}
+
+// apply feeds ev through the target's filters (v, nil for a row tail) and
+// returns the event the tailer applies.
+func (g logsTarget) apply(v *view.View, ev source.Event) source.Event {
+	if v != nil {
+		return matchedEvent(v, ev)
+	}
+	return ev
+}
+
+// logsView is a private view applying a whole-pane target's filters; nil for a row.
+func (s *Service) logsView(g logsTarget, sub *source.Subscription) *view.View {
+	if len(g.stages) == 0 {
+		return nil
+	}
+	v, _ := view.New(pipeline.Pipeline{Source: pipeline.Source{
+		Cluster: g.src.Cluster, Resource: g.src.Resource, Namespace: g.src.Namespace,
+		LabelSelector: g.src.LabelSelector, FieldSelector: g.src.FieldSelector,
+	}, Stages: g.stages}, s.viewOptions(sub, true))
+	return v
+}
+
+// logsTargetsWait bounds how long LogsTargets waits for the pods watch's
+// first list (a shared watch already synced answers at once).
+const logsTargetsWait = 5 * time.Second
+
+// LogsTargets lists the containers a tail of the row (or whole pane) would
+// follow, from the pods it would pick right now, for the log dialog.
+func (s *Service) LogsTargets(paneID, key string, whole bool) (LogsTargets, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return LogsTargets{}, err
+	}
+	g, err := s.logsTarget(pn, key, whole)
+	if err != nil {
+		return LogsTargets{}, err
+	}
+	out := LogsTargets{Title: g.title, Containers: []string{}, Tail: s.Config().Config.Logs.Tail}
+	pods, err := s.logsPods(g)
+	if err != nil {
+		return LogsTargets{}, err
+	}
+	if names := logs.ContainerNames(pods, g.ownerUID); names != nil {
+		out.Containers = names
+	}
+	return out, nil
+}
+
+// logsPods is the target's current pods: the first list of its watch, through
+// the whole-pane filters.
+func (s *Service) logsPods(g logsTarget) ([]source.Item, error) {
+	sub, err := s.reg.SubscribeWith(g.src, s.normalizer())
+	if err != nil {
+		return nil, err
+	}
+	defer sub.Close()
+	v := s.logsView(g, sub)
+	timeout := time.After(logsTargetsWait)
+	for {
+		select {
+		case ev, ok := <-sub.Events:
+			if !ok {
+				return nil, fmt.Errorf("the pods watch closed")
+			}
+			if ev.Type == source.Error {
+				return nil, fmt.Errorf("%s", ev.Err)
+			}
+			if ev.Type == source.Relist {
+				return g.apply(v, ev).Items, nil
+			}
+		case <-timeout:
+			return nil, fmt.Errorf("timed out listing the pods")
+		}
+	}
+}
+
 // LogsStart tails the logs of a row's pods (stern-like). It needs no safety
 // token: reading logs doesn't change the cluster, so it works on read-only
 // contexts, like Describe and PortForwardStart. whole tails every pod the
 // pane currently shows (its filters applied), for a pods pane; otherwise the
 // selected row: a pod, or the pods of a workload/node/namespace.
-func (s *Service) LogsStart(paneID, key string, whole bool) (LogsResult, error) {
+func (s *Service) LogsStart(paneID, key string, whole bool, o LogsOptions) (LogsResult, error) {
 	if s.opts.Actor == nil {
 		return LogsResult{}, fmt.Errorf("logs are not available")
 	}
@@ -68,27 +188,20 @@ func (s *Service) LogsStart(paneID, key string, whole bool) (LogsResult, error) 
 		return LogsResult{}, err
 	}
 	cfg := s.Config().Config.Logs
-
-	var (
-		src   source.Key   // the pods watch to subscribe to
-		stages []pipeline.Stage // applied to the watch to pick pods (whole pane)
-		opts  logs.Options
-		title string
-	)
-	opts.Cluster = cluster
-	opts.Tail = int64(cfg.Tail)
-	opts.MaxStreams = cfg.MaxStreams
-
-	if whole {
-		src, stages, title, err = s.wholePaneSource(pn)
-	} else {
-		src, opts.OwnerUID, title, err = s.rowSource(pn, key)
-	}
+	opts, err := tailOptions(o, cfg.Tail)
 	if err != nil {
 		return LogsResult{}, err
 	}
+	opts.Cluster = cluster
+	opts.MaxStreams = cfg.MaxStreams
 
-	sub, err := s.reg.SubscribeWith(src, s.normalizer())
+	g, err := s.logsTarget(pn, key, whole)
+	if err != nil {
+		return LogsResult{}, err
+	}
+	opts.OwnerUID = g.ownerUID
+
+	sub, err := s.reg.SubscribeWith(g.src, s.normalizer())
 	if err != nil {
 		return LogsResult{}, err
 	}
@@ -97,14 +210,7 @@ func (s *Service) LogsStart(paneID, key string, whole bool) (LogsResult, error) 
 		defer sub.Close()
 		t := logs.New(ctx, s.opts.Actor, opts, sink)
 		defer t.Close()
-		// a private view applies the whole-pane filters; nil for a row tail
-		var v *view.View
-		if len(stages) > 0 {
-			v, _ = view.New(pipeline.Pipeline{Source: pipeline.Source{
-				Cluster: src.Cluster, Resource: src.Resource, Namespace: src.Namespace,
-				LabelSelector: src.LabelSelector, FieldSelector: src.FieldSelector,
-			}, Stages: stages}, s.viewOptions(sub, true))
-		}
+		v := s.logsView(g, sub)
 		for {
 			select {
 			case <-ctx.Done():
@@ -113,15 +219,52 @@ func (s *Service) LogsStart(paneID, key string, whole bool) (LogsResult, error) 
 				if !ok {
 					return
 				}
-				if v != nil {
-					t.Apply(matchedEvent(v, ev))
-				} else {
-					t.Apply(ev)
+				if opts.NoFollow {
+					// not following: the pods of the first list, each read once
+					if ev.Type != source.Relist {
+						continue
+					}
+					sub.Close()
+					t.Apply(g.apply(v, ev))
+					t.Wait()
+					return
 				}
+				t.Apply(g.apply(v, ev))
 			}
 		}
 	})
-	return LogsResult{Session: id, Context: ctxName, Title: title}, nil
+	return LogsResult{Session: id, Context: ctxName, Title: g.title}, nil
+}
+
+// tailOptions turns the dialog's choices into tailer options; tail is the
+// configured logs.tail (the default when the dialog leaves it 0).
+func tailOptions(o LogsOptions, tail int) (logs.Options, error) {
+	opts := logs.Options{Tail: int64(tail), NoFollow: !o.Follow, Whole: o.All}
+	for _, c := range o.Containers {
+		if c = strings.TrimSpace(c); c != "" {
+			opts.Containers = append(opts.Containers, c)
+		}
+	}
+	if o.Containers != nil && len(opts.Containers) == 0 {
+		return logs.Options{}, fmt.Errorf("no container selected")
+	}
+	if o.Tail < 0 {
+		return logs.Options{}, fmt.Errorf("tail must not be negative")
+	}
+	if o.Tail > 0 {
+		opts.Tail = int64(o.Tail)
+	}
+	if o.Since != "" {
+		if o.All {
+			return logs.Options{}, fmt.Errorf("since and all exclude each other")
+		}
+		d, err := time.ParseDuration(o.Since)
+		if err != nil || d <= 0 {
+			return logs.Options{}, fmt.Errorf("since %q is not a duration like 10m or 1h30m", o.Since)
+		}
+		opts.Since = d
+	}
+	return opts, nil
 }
 
 // rowSource builds the pods watch for a non-whole tail: a pod row follows

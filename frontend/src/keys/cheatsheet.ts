@@ -91,7 +91,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("edit YAML…", "object.edit"),
-      row("logs of the row's pods (⌥ for the whole pane)", "object.logs", "view.logs"),
+      row("logs of the row's pods… (⌥ for the whole pane)", "object.logs", "view.logs"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
       row("node shell… (the row's node, or any)", "object.opsPod"),

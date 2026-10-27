@@ -3,9 +3,12 @@ package logs
 import (
 	"bytes"
 	"io"
+	"slices"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/dguendisch/kubewing/internal/source"
 )
 
 // containerInfo is one of a pod's containers, with whether it is currently
@@ -57,6 +60,24 @@ func containers(obj *unstructured.Unstructured) []containerInfo {
 				continue
 			}
 			out = append(out, containerInfo{name: name, running: states[name].running, hasState: states[name].hasState})
+		}
+	}
+	return out
+}
+
+// ContainerNames lists the distinct container names of pods (regular, init,
+// sidecar and ephemeral) in first-seen order, skipping pods not owned by
+// ownerUID when it is set: the containers a tailer of them could follow.
+func ContainerNames(pods []source.Item, ownerUID string) []string {
+	var out []string
+	for _, it := range pods {
+		if it.Object == nil || ownerUID != "" && !ownedBy(it.Object, ownerUID) {
+			continue
+		}
+		for _, c := range containers(it.Object) {
+			if !slices.Contains(out, c.name) {
+				out = append(out, c.name)
+			}
 		}
 	}
 	return out

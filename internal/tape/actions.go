@@ -221,6 +221,8 @@ func (o *Opener) OpsPods() map[string]*corev1.Pod {
 // If "kubewing.test/logs-follow" is set it then emits "<container> tick N" on
 // a ticker scaled by Speed until ctx ends; otherwise it blocks until ctx ends
 // (a real follow of a still-running container never returns on its own).
+// NoFollow returns once the annotation's lines are written. SinceSeconds
+// counts back from the last line's timestamp (the tape's "now").
 func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, lo source.LogOptions, w io.Writer) error {
 	var ann map[string]string
 	for _, t := range o.Tapes {
@@ -229,23 +231,33 @@ func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, 
 			break
 		}
 	}
+	// line i is stamped base+i seconds, whatever the tail; "now" is just after the last
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var lines []string
 	if raw := ann["kubewing.test/logs"]; raw != "" {
 		lines = strings.Split(strings.TrimRight(raw, "\n"), "\n")
 	}
-	if lo.TailLines != nil && int64(len(lines)) > *lo.TailLines {
-		lines = lines[int64(len(lines))-*lo.TailLines:]
+	n := len(lines)
+	now := base.Add(time.Duration(n) * time.Second)
+	first := 0
+	if lo.TailLines != nil && int64(n) > *lo.TailLines {
+		first = n - int(*lo.TailLines)
 	}
-	for i, l := range lines {
+	for i := first; i < n; i++ {
 		ts := base.Add(time.Duration(i) * time.Second)
 		if lo.SinceTime != nil && !ts.After(*lo.SinceTime) {
 			continue
 		}
-		l = strings.ReplaceAll(l, "%c", container)
+		if lo.SinceSeconds != nil && ts.Before(now.Add(-time.Duration(*lo.SinceSeconds)*time.Second)) {
+			continue
+		}
+		l := strings.ReplaceAll(lines[i], "%c", container)
 		if _, err := fmt.Fprintf(w, "%s %s\n", ts.Format(time.RFC3339Nano), l); err != nil {
 			return err
 		}
+	}
+	if lo.NoFollow {
+		return nil
 	}
 	if ann["kubewing.test/logs-follow"] == "" {
 		<-ctx.Done()
@@ -257,7 +269,6 @@ func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, 
 	}
 	tick := time.NewTicker(time.Duration(float64(time.Second) / speed))
 	defer tick.Stop()
-	n := len(lines)
 	for {
 		select {
 		case <-ctx.Done():

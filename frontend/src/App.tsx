@@ -10,6 +10,7 @@ import { ErrorDetail } from "./components/ErrorDetail";
 import { DebugDialog } from "./components/Debug";
 import { ColumnsDialog } from "./components/Columns";
 import { OpsPodDialog } from "./components/OpsPod";
+import { LogsDialog } from "./logs/LogsDialog";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
 import { Detail } from "./components/Detail";
 import { Edit } from "./components/Edit";
@@ -127,6 +128,7 @@ export function App() {
       <CellPicker />
       <DebugDialog />
       <OpsPodDialog />
+      <LogsDialog />
       <ColumnsDialog />
       <TabSwitcher />
       <Help />

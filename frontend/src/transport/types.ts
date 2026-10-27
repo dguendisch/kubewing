@@ -535,6 +535,27 @@ export interface LogsPayload {
   exit?: string;
 }
 
+/** Mirrors bridge.LogsOptions: the log dialog's choices. */
+export interface LogsOptions {
+  /** Unset = every container. */
+  containers?: string[];
+  /** Lines back per container; 0 = the configured logs.tail. */
+  tail?: number;
+  /** A Go duration ("10m"): start that long ago instead of tail lines back. */
+  since?: string;
+  /** The whole log. */
+  all?: boolean;
+  follow: boolean;
+}
+
+/** Mirrors bridge.LogsTargets: what the dialog offers for a tail. */
+export interface LogsTargets {
+  title: string;
+  containers: string[];
+  /** The configured logs.tail. */
+  tail: number;
+}
+
 /** Mirrors bridge.LogsResult. */
 export interface LogsResult {
   session: string;
@@ -648,8 +669,10 @@ export interface Transport {
   portForwardStart(pane: string, key: string, ports: string[]): Promise<PortForward>;
   portForwards(): Promise<PortForward[]>;
   portForwardStop(id: string): Promise<void>;
+  /** What a log tail of a row (or the whole pods pane) would follow: its containers. */
+  logsTargets(pane: string, key: string, whole: boolean): Promise<LogsTargets>;
   /** Starts a log tail of a row's pods; whole = every pod the (pods) pane shows. */
-  logsStart(pane: string, key: string, whole: boolean): Promise<LogsResult>;
+  logsStart(pane: string, key: string, whole: boolean, opts: LogsOptions): Promise<LogsResult>;
   /** Puts text on the system clipboard. */
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
