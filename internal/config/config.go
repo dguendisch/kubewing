@@ -48,6 +48,16 @@ type Config struct {
 	Terminal Terminal      `json:"terminal"`
 	Logs     Logs          `json:"logs"`
 	History  HistoryLimits `json:"history"`
+	Launch   Launch        `json:"launch"`
+}
+
+// Launch configures a launch from a terminal.
+type Launch struct {
+	// Wait keeps kubewing in the foreground: the shell waits for it and its
+	// log goes to the terminal (-wait overrides it). Default: it detaches, the
+	// terminal gets its prompt back and the log goes to kubewing.log in the
+	// state directory.
+	Wait bool `json:"wait,omitempty"`
 }
 
 // HistoryLimits bound recorded history (per source, while recording): how
@@ -270,6 +280,7 @@ func Load(dir string) Effective {
 			e.Config.History = c.History
 		}
 		e.Config.OpsPod = c.OpsPod
+		e.Config.Launch = c.Launch
 		e.Config.Debug.Image = c.Debug.Image
 		if p := c.Debug.Profile; p != "" && !slices.Contains(DebugProfiles, p) {
 			errf("config.yaml", "debug.profile: unknown profile %q (known: %v)", p, DebugProfiles)

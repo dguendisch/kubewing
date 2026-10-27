@@ -132,6 +132,16 @@ func TestLogsConfig(t *testing.T) {
 	}
 }
 
+// launch.wait: off unless set.
+func TestLaunchConfig(t *testing.T) {
+	if Load(write(t, map[string]string{"config.yaml": "theme: default\n"})).Config.Launch.Wait {
+		t.Error("unset: want detach (wait false)")
+	}
+	if !Load(write(t, map[string]string{"config.yaml": "launch: {wait: true}\n"})).Config.Launch.Wait {
+		t.Error("launch.wait: true not applied")
+	}
+}
+
 func hasError(errs []string, sub string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, sub) {

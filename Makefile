@@ -35,7 +35,7 @@ app: build
 	cp bin/kubewing $(APP)/Contents/MacOS/
 
 run: app
-	./$(APP)/Contents/MacOS/kubewing
+	./$(APP)/Contents/MacOS/kubewing -wait
 
 # Headless backend for browser dev / E2E: replays testdata/tapes (or uses kubeconfig without TAPES=).
 TAPES ?= testdata/tapes

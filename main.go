@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -40,6 +41,7 @@ func main() {
 	configDir := flag.String("config", "", "config directory (default: $KUBEWING_HOME or ~/.kubewing; headless: none)")
 	stateDir := flag.String("state", "", "where history.yaml (recent debug images) is written (default: the config directory; headless: none, kept in memory)")
 	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
+	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
 	flag.Parse()
 
 	var opener interface {
@@ -65,6 +67,20 @@ func main() {
 	}
 	if *stateDir == "" && *headless == "" {
 		*stateDir = opts.ConfigDir
+	}
+	// handing over to the kubewing running on this config directory: in this terminal, nothing to detach for
+	handOver := *headless == "" && !*newProcess && app.Running(opts.ConfigDir)
+	if *headless == "" && !handOver && app.FromTerminal() && !waitFlag(*wait, opts.ConfigDir) {
+		var logFile string
+		if *stateDir != "" {
+			logFile = filepath.Join(*stateDir, app.LogFile)
+		}
+		// a later launch hands over and exits in the detached one just the same
+		if err := app.Detach(logFile); err != nil {
+			log.Printf("staying in the foreground: %v", err)
+		} else {
+			return
+		}
 	}
 	opts.History = config.OpenHistory(*stateDir)
 	opts.Columns = config.OpenColumns(*stateDir)
@@ -95,6 +111,9 @@ func main() {
 		})
 		if err != nil {
 			log.Printf("starting a kubewing of its own: %v", err)
+		} else if handOver {
+			// Wails exits in application.New without a word; -wait included, which looks like it was ignored
+			fmt.Fprintf(os.Stderr, "kubewing already runs on %s: opened a new tab in it (-new-process starts one of its own)\n", opts.ConfigDir)
 		}
 	}
 	a := application.New(application.Options{
@@ -129,6 +148,16 @@ func main() {
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// waitFlag: -wait if given (also -wait=false), else launch.wait in config.yaml.
+func waitFlag(wait bool, configDir string) bool {
+	set := false
+	flag.Visit(func(f *flag.Flag) { set = set || f.Name == "wait" })
+	if set {
+		return wait
+	}
+	return config.Load(configDir).Config.Launch.Wait
 }
 
 func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTapes bool) {

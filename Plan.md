@@ -61,9 +61,10 @@ Done: naming tabs (`⌘⇧I`, double-click the tab) and panes (`⌘I`, double-cl
 
 Done: multi-pod log tail (stern-like), `⌘L` on a row (its pods: a pod by name, a workload/node/namespace's pods, followed as they come and go) or `⌥⌘L` for every pod a pods pane shows (its filters applied, a snapshot). One follower per pod container, shared on the pane's watch for the whole-pane case; the last `logs.tail` lines then follow, `logs.maxStreams` concurrent followers, restart-resume via the RFC 3339 timestamp (`internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` and a tape fake behind it). The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`), the live filter (`/`, fzf-like) hides and highlights lines (past ones too), `t` timestamps, `⌘K` clear, `⌘F` find; a dialog before the tail picks containers, history (lines, since or all), follow and timestamps, and the footer shows following / not following. Open: a whole-pane tail for non-pod panes (the union of their pods), previous-container logs (`--previous`), saving a tail to a file, and wiring an optional timestamp column.
 
+Done: launched from a terminal, kubewing detaches by default (re-runs itself in a session of its own, stdin `/dev/null`, output appended to `kubewing.log` in the state directory, rotated to `.1` at 10 MiB), so the prompt comes back and closing the terminal doesn't end it. `-wait` or `launch.wait: true` keeps it in the foreground (`make run` passes `-wait`); piped/redirected output and `-headless` never detach. A launch that hands over to a running kubewing (Wails' lock in `NSTemporaryDirectory()` held, checked before `application.New` exits silently) says so on stderr, `-wait` too.
+
 Next up:
-- non-blocking invocation of kubewing from terminal as default (configurable, as blocking is nice for viewing logs during development)
-- nit: resource is bold, but better only first segment (before the first dot) bold
+- nit: resource full name is bold in the top bar, but better only first segment (before the first dot) bold
 - nit: pane drag handle should also appear without splitting when there are at least two tabs or windows
 - occasionally update the events last-seen column?
 - hard-code some default sorting: e.g. events by last seen (newest first)

@@ -41,3 +41,9 @@ opsPod:
 #   scrollback: lines kept beyond the screen (default 10000, 100 … 1000000)
 terminal:
   scrollback: 20000
+
+# launching kubewing from a terminal
+#   wait: stay in the foreground, the shell waits and the log goes to the terminal (-wait overrides it);
+#         default false: it detaches, the prompt comes back, the log goes to kubewing.log (state directory)
+launch:
+  wait: false
