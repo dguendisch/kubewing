@@ -1,4 +1,4 @@
-import type { Config, FramePayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
+import type { Config, FramePayload, LogsPayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
 
 /** WebSocket transport to the headless Go backend (tests, browser dev). */
 export function wsTransport(url: string): Transport {
@@ -8,6 +8,7 @@ export function wsTransport(url: string): Transport {
   const configListeners = new Set<(c: Config) => void>();
   const columnsListeners = new Set<(c: Record<string, TypeView>) => void>();
   const sessionListeners = new Set<(p: SessionPayload) => void>();
+  const logsListeners = new Set<(p: LogsPayload) => void>();
   const forwardListeners = new Set<(l: PortForward[]) => void>();
   let ws: WebSocket;
   const ready = new Promise<void>((resolve, reject) => {
@@ -30,6 +31,10 @@ export function wsTransport(url: string): Transport {
       }
       if (msg.event === "kw:session") {
         sessionListeners.forEach((cb) => cb(msg.data));
+        return;
+      }
+      if (msg.event === "kw:logs") {
+        logsListeners.forEach((cb) => cb(msg.data));
         return;
       }
       if (msg.event === "kw:portforwards") {
@@ -103,6 +108,7 @@ export function wsTransport(url: string): Transport {
     portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
     portForwards: () => call("PortForwards"),
     portForwardStop: (id) => call("PortForwardStop", id),
+    logsStart: (p, k, whole) => call("LogsStart", p, k, whole),
     // browser/test build: the page's clipboard
     copyText: (t) => navigator.clipboard.writeText(t),
     config: () => call("Config"),
@@ -123,6 +129,10 @@ export function wsTransport(url: string): Transport {
     onSession: (cb) => {
       sessionListeners.add(cb);
       return () => sessionListeners.delete(cb);
+    },
+    onLogs: (cb) => {
+      logsListeners.add(cb);
+      return () => logsListeners.delete(cb);
     },
     onPortForwards: (cb) => {
       forwardListeners.add(cb);

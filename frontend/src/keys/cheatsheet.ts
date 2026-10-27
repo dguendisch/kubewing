@@ -91,6 +91,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("edit YAML…", "object.edit"),
+      row("logs of the row's pods (⌥ for the whole pane)", "object.logs", "view.logs"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
       row("node shell… (the row's node, or any)", "object.opsPod"),
@@ -144,6 +145,18 @@ const sections: { title: string; rows: Row[] }[] = [
       row("find", "term.find"),
       row("next / previous match", "term.findNext", "term.findPrev"),
       row("close find", "term.findClose"),
+    ],
+  },
+  {
+    title: "logs",
+    rows: [
+      row("filter the lines (fzf-like; !x excludes)", "logs.focusFilter"),
+      row("leave the filter", "logs.blurFilter"),
+      row("timestamps on / off", "logs.toggleTimestamps"),
+      row("clear the buffer", "logs.clear"),
+      row("find", "logs.find"),
+      row("next / previous match", "logs.findNext", "logs.findPrev"),
+      row("close find", "logs.findClose"),
     ],
   },
   {

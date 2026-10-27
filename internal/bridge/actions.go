@@ -116,7 +116,10 @@ type RowInfo struct {
 	// (the diff steps through them); 0 = only the last one, without history.
 	Changes int `json:"changes,omitempty"`
 	// Pod is true for v1 Pods (exec, port-forward).
-	Pod        bool     `json:"pod,omitempty"`
+	Pod bool `json:"pod,omitempty"`
+	// Logs is true when the row can produce logs: a pod, or a workload, node
+	// or namespace whose pods can be tailed.
+	Logs       bool     `json:"logs,omitempty"`
 	Containers []string `json:"containers,omitempty"`
 	// ContainerInfo lists every container exec can enter, for the picker.
 	ContainerInfo []ContainerInfo `json:"containerInfo,omitempty"`
@@ -163,6 +166,7 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 		return RowInfo{}, fmt.Errorf("object %s not found", key)
 	}
 	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod()}
+	info.Logs = info.Pod || podChild(r.item.Object) != nil
 	if info.Pod {
 		info.Containers = containers(r)
 		info.ContainerInfo = podContainers(r)
@@ -555,9 +559,16 @@ func (s *Service) endSession(ss *session) {
 	ss.mu.Lock()
 	if !ss.closed {
 		ss.closed = true
-		close(ss.resize)
-		close(ss.input)
-		_ = ss.stdin.Close()
+		// a log session has no TTY streams (only cancel); guard the nils
+		if ss.resize != nil {
+			close(ss.resize)
+		}
+		if ss.input != nil {
+			close(ss.input)
+		}
+		if ss.stdin != nil {
+			_ = ss.stdin.Close()
+		}
 	}
 	ss.mu.Unlock()
 	s.mu.Lock()

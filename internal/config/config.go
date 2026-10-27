@@ -46,6 +46,7 @@ type Config struct {
 	Debug    Debug         `json:"debug"`
 	OpsPod   OpsPod        `json:"opsPod"`
 	Terminal Terminal      `json:"terminal"`
+	Logs     Logs          `json:"logs"`
 	History  HistoryLimits `json:"history"`
 }
 
@@ -126,6 +127,28 @@ const (
 	MaxScrollback     = 1_000_000
 )
 
+// Logs configures the multi-pod log tail (stern-like).
+type Logs struct {
+	// Tail is how many lines to fetch per container before following.
+	Tail int `json:"tail,omitempty"`
+	// MaxStreams caps concurrently followed containers (stern's --max-log-requests).
+	MaxStreams int `json:"maxStreams,omitempty"`
+	// Buffer is how many lines the frontend keeps per log pane (the live
+	// filter and timestamp toggle re-render from it).
+	Buffer int `json:"buffer,omitempty"`
+}
+
+// Log tail bounds and defaults.
+const (
+	DefaultLogTail    = 100
+	MaxLogTail        = 10000
+	DefaultLogStreams = 50
+	MaxLogStreams     = 500
+	DefaultLogBuffer  = 50000
+	MinLogBuffer      = 1000
+	MaxLogBuffer      = 5_000_000
+)
+
 // Debug configures debug containers (kubectl debug).
 type Debug struct {
 	// Image prefills the debug dialog, e.g. "nicolaka/netshoot".
@@ -182,7 +205,7 @@ type Effective struct {
 func Defaults(dir string) Effective {
 	return Effective{
 		Dir:         dir,
-		Config:      Config{Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}, Terminal: Terminal{Scrollback: DefaultScrollback}},
+		Config:      Config{Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}, Terminal: Terminal{Scrollback: DefaultScrollback}, Logs: Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer}},
 		Keybindings: []Binding{},
 		Theme:       map[string]string{},
 		Errors:      []string{},
@@ -222,6 +245,24 @@ func Load(dir string) Effective {
 			errf("config.yaml", "terminal.scrollback: %d is not between %d and %d lines", n, MinScrollback, MaxScrollback)
 		default:
 			e.Config.Terminal.Scrollback = n
+		}
+		for _, f := range []struct {
+			name     string
+			val      int
+			min, max int
+			to       *int
+		}{
+			{"logs.tail", c.Logs.Tail, 1, MaxLogTail, &e.Config.Logs.Tail},
+			{"logs.maxStreams", c.Logs.MaxStreams, 1, MaxLogStreams, &e.Config.Logs.MaxStreams},
+			{"logs.buffer", c.Logs.Buffer, MinLogBuffer, MaxLogBuffer, &e.Config.Logs.Buffer},
+		} {
+			switch {
+			case f.val == 0: // unset: the default stays
+			case f.val < f.min || f.val > f.max:
+				errf("config.yaml", "%s: %d is not between %d and %d", f.name, f.val, f.min, f.max)
+			default:
+				*f.to = f.val
+			}
 		}
 		if _, err := c.History.Parse(); err != nil {
 			errf("config.yaml", "%v", err)

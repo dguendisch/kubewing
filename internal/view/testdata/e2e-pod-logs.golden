@@ -1,0 +1,46 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "lg-api-0",
+    "lg-api-1",
+    "lg-worker-0"
+  ],
+  "rows": [
+    {
+      "key": "lg-api-0",
+      "cells": [
+        "api-0",
+        "Running"
+      ]
+    },
+    {
+      "key": "lg-api-1",
+      "cells": [
+        "api-1",
+        "Running"
+      ]
+    },
+    {
+      "key": "lg-worker-0",
+      "cells": [
+        "worker-0",
+        "Running"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

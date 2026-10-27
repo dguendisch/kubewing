@@ -140,6 +140,9 @@ func (a *App) PortForwardStart(pane, key string, ports []string) (bridge.PortFor
 }
 func (a *App) PortForwards() []bridge.PortForwardInfo { return a.svc.PortForwards() }
 func (a *App) PortForwardStop(id string) error        { return a.svc.PortForwardStop(id) }
+func (a *App) LogsStart(pane, key string, whole bool) (bridge.LogsResult, error) {
+	return a.svc.LogsStart(pane, key, whole)
+}
 
 // SetMenu replaces the native menu's command menus; the frontend builds them
 // from its merged keymap (keys/appMenu.ts) and resends them on config changes.

@@ -88,6 +88,7 @@ accent: "rgb(203, 75, 22)"
 			Debug:    Debug{Image: "nicolaka/netshoot", Profile: "netadmin"},
 			OpsPod:   OpsPod{Image: "ops-toolbelt:latest", Namespace: "kube-system", Chroot: &yes, HostNetwork: &no},
 			Terminal: Terminal{Scrollback: 50000},
+			Logs:     Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer},
 		},
 		Keybindings: []Binding{
 			{Key: "Meta+K", Command: "row.up", When: []string{"table"}},
@@ -99,6 +100,45 @@ accent: "rgb(203, 75, 22)"
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Error(diff)
 	}
+}
+
+// Log tail defaults apply when unset, valid values override, and
+// out-of-range ones are reported and fall back to the default.
+func TestLogsConfig(t *testing.T) {
+	// unset: the defaults
+	def := Load(write(t, map[string]string{"config.yaml": "theme: default\n"}))
+	if got, want := def.Config.Logs, (Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer}); got != want {
+		t.Errorf("defaults: %+v, want %+v", got, want)
+	}
+	// valid overrides
+	ok := Load(write(t, map[string]string{"config.yaml": "logs: {tail: 500, maxStreams: 10, buffer: 2000}\n"}))
+	if got, want := ok.Config.Logs, (Logs{Tail: 500, MaxStreams: 10, Buffer: 2000}); got != want {
+		t.Errorf("overrides: %+v, want %+v", got, want)
+	}
+	// out of range: reported, defaults kept
+	bad := Load(write(t, map[string]string{"config.yaml": "logs: {tail: 999999, maxStreams: 0, buffer: 5}\n"}))
+	if got, want := bad.Config.Logs, (Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer}); got != want {
+		t.Errorf("out-of-range: %+v, want %+v", got, want)
+	}
+	// maxStreams 0 means unset (the default), so only tail and buffer are flagged
+	wantErrs := []string{
+		"logs.tail: 999999 is not between 1 and 10000",
+		"logs.buffer: 5 is not between 1000 and 5000000",
+	}
+	for _, w := range wantErrs {
+		if !hasError(bad.Errors, w) {
+			t.Errorf("missing error %q in %v", w, bad.Errors)
+		}
+	}
+}
+
+func hasError(errs []string, sub string) bool {
+	for _, e := range errs {
+		if strings.Contains(e, sub) {
+			return true
+		}
+	}
+	return false
 }
 
 // Broken parts are reported and dropped; everything else still applies.

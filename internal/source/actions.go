@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -107,6 +108,43 @@ func (q sizeQueue) Next() *remotecommand.TerminalSize {
 		return nil
 	}
 	return &remotecommand.TerminalSize{Width: s.Cols, Height: s.Rows}
+}
+
+// Logs implements Actor.
+func (o *ClusterOpener) Logs(ctx context.Context, cluster, namespace, pod, container string, lo LogOptions, w io.Writer) error {
+	c, err := o.cluster(cluster)
+	if err != nil {
+		return err
+	}
+	return c.Logs(ctx, namespace, pod, container, lo, w)
+}
+
+// Logs follows a container's logs, like `kubectl logs -f --timestamps`, and
+// copies them to w until the stream ends or ctx is cancelled.
+func (c *Cluster) Logs(ctx context.Context, namespace, pod, container string, lo LogOptions, w io.Writer) error {
+	cs, err := kubernetes.NewForConfigAndClient(c.Config, c.http)
+	if err != nil {
+		return err
+	}
+	opts := &corev1.PodLogOptions{
+		Container:  container,
+		Follow:     true,
+		Timestamps: true,
+		TailLines:  lo.TailLines,
+	}
+	if lo.SinceTime != nil {
+		opts.SinceTime = &metav1.Time{Time: *lo.SinceTime}
+	}
+	stream, err := cs.CoreV1().Pods(namespace).GetLogs(pod, opts).Stream(ctx)
+	if err != nil {
+		return err
+	}
+	defer stream.Close()
+	_, err = io.Copy(w, stream)
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	return err
 }
 
 // PortForward implements Actor.

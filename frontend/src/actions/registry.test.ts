@@ -5,7 +5,7 @@ import { menuFor, rowActions } from "./registry";
 // the dispatcher's source, to check every menu command is handled
 import commandsSrc from "../commands.ts?raw";
 
-const pod: RowInfo = { key: "u1", kind: "Pod", name: "web-0", namespace: "shop", pod: true, hasPrev: true, containers: ["app"], ports: [8080] };
+const pod: RowInfo = { key: "u1", kind: "Pod", name: "web-0", namespace: "shop", pod: true, logs: true, hasPrev: true, containers: ["app"], ports: [8080] };
 const cm: RowInfo = { key: "u2", kind: "ConfigMap", name: "cfg", namespace: "shop" };
 const ro: SafetyRule = { context: "prod", label: "PROD", readOnly: true, confirm: ["delete"] };
 
@@ -26,6 +26,7 @@ describe("row actions menu", () => {
   it("explains why entries are unavailable", () => {
     const m = byCmd(menuFor(cm, undefined));
     expect(m["object.exec"]!.disabled).toBe("needs a pod, not configmap");
+    expect(m["object.logs"]!.disabled).toBe("no pods to tail");
     expect(m["object.portForward"]!.disabled).toBe("needs a pod, not configmap");
     expect(m["object.opsPod"]!.disabled).toBe("needs a node or pod, not configmap");
     // a node row: everything pod-only is off, the ops pod is on

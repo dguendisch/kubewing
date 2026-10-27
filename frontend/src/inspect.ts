@@ -2,6 +2,8 @@ import { rowAt } from "./grid/rowcache";
 import { useTextSel } from "./grid/textsel";
 import { shownDescribe } from "./components/Detail";
 import { openTerminals } from "./term/Terminal";
+import { openLogViews } from "./logs/LogView";
+import { logBuffers } from "./logs/buffer";
 import { useConfig } from "./store/config";
 import { paneData, useColumns, useUI } from "./store/store";
 import * as S from "./store/state";
@@ -32,6 +34,19 @@ export function inspect() {
         return [id, { scrollback: t.options.scrollback, lines: b.length, first: b.getLine(0)?.translateToString(true) }];
       }),
     ),
+    // per log session: lines buffered, streams followed, and the rendered screen text
+    logs: Object.fromEntries(
+      [...openLogViews].map(([id, t]) => {
+        const buf = logBuffers.get(id);
+        const b = t.buffer.active;
+        const screen: string[] = [];
+        for (let i = 0; i < b.length; i++) {
+          const line = b.getLine(i)?.translateToString(true);
+          if (line) screen.push(line);
+        }
+        return [id, { lines: buf.lines.length, streams: buf.streams, dropped: buf.dropped, screen: screen.join("\n") }];
+      }),
+    ),
     panes: Object.fromEntries(
       Object.values(s.panes).map((p) => {
         const d = p.serverId ? paneData.get(p.serverId) : undefined;
@@ -40,6 +55,7 @@ export function inspect() {
           {
             spec: p.spec,
             term: p.term,
+            logs: p.logs,
             pipeline: S.pipelineYAML(p.spec),
             serverId: p.serverId,
             error: p.error,

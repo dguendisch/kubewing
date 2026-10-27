@@ -54,6 +54,8 @@ export interface PaneState {
   flash?: { text: string; error?: boolean };
   /** Set for terminal panes (exec session) instead of a table. */
   term?: Term;
+  /** Set for log panes (multi-pod tail) instead of a table. */
+  logs?: Logs;
   /** Server-side pane id once opened. */
   serverId?: string;
   /** An Open call is in flight. */
@@ -95,6 +97,24 @@ export interface Term {
   /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
   typed?: boolean;
   /** The find bar (⌘F); kept while closed, so ⌘F reopens with the last query. */
+  find?: TermFind;
+}
+
+/** A multi-pod log tail pane (stern-like). Its lines live in logs/buffer.ts. */
+export interface Logs {
+  session: string;
+  /** What is tailed, for the header ("api-0", "deploy/etcd", "pods · ns app=x"). */
+  title: string;
+  context: string;
+  /** The live filter (fzf-like grep terms); hides non-matching lines. */
+  filter: string;
+  /** Show the RFC 3339 timestamp per line. */
+  timestamps: boolean;
+  /** Prefix lines with their pod/container (off for a single-pod tail is still on; kept for the toggle). */
+  prefix: boolean;
+  /** Exit text once the session ended; the pane stays until closed. */
+  exited?: string;
+  /** The find bar (⌘F), as a terminal's. */
   find?: TermFind;
 }
 
@@ -290,11 +310,13 @@ export function initialState(context = "", namespace = ""): UIState {
  * Applied after every state update, like touchTab.
  */
 export function paneFocus(s: UIState): UIState {
-  // the find field belongs to the focused terminal pane's open bar; otherwise it's the pane's own context
+  // the find field belongs to the focused terminal/log pane's open bar; otherwise it's the pane's own context
   if (s.focus === "termfind" && focusedPane(s)?.term?.find?.open) return s;
-  if (s.focus !== "table" && s.focus !== "terminal" && s.focus !== "ended" && s.focus !== "termfind") return s;
-  const term = focusedPane(s)?.term;
-  const want = !term ? "table" : term.exited === undefined ? "terminal" : "ended";
+  if (s.focus === "logsfind" && focusedPane(s)?.logs?.find?.open) return s;
+  const paneContexts = ["table", "terminal", "ended", "termfind", "logs", "logsfind"];
+  if (!paneContexts.includes(s.focus)) return s;
+  const p = focusedPane(s);
+  const want = p?.logs ? "logs" : !p?.term ? "table" : p.term.exited === undefined ? "terminal" : "ended";
   return s.focus === want ? s : { ...s, focus: want };
 }
 
@@ -312,11 +334,58 @@ export function openTerminal(s: UIState, term: Term, from = activeTab(s).focused
   };
 }
 
-/** Exec sessions no pane references any more (closed panes, closed tabs). */
+/** Opens a log pane below the focused pane and focuses it. */
+export function openLogs(s: UIState, logs: Logs, from = activeTab(s).focused): UIState {
+  const src = s.panes[from] ?? focusedPane(s);
+  const id = `v${s.nextId}`;
+  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, from, "column", id), focused: id }));
+  return {
+    ...next,
+    nextId: s.nextId + 1,
+    panes: { ...s.panes, [id]: { id, spec: { ...src.spec }, selected: 0, logs, context: logs.context } },
+    focus: "logs",
+    overlay: undefined,
+  };
+}
+
+/** Updates the focused log pane's filter. */
+export function setLogFilter(s: UIState, paneId: string, filter: string): UIState {
+  return updatePane(s, paneId, (p) => (p.logs ? { ...p, logs: { ...p.logs, filter } } : p));
+}
+
+/** Toggles a log pane's timestamps. */
+export function toggleLogTimestamps(s: UIState, paneId: string): UIState {
+  return updatePane(s, paneId, (p) => (p.logs ? { ...p, logs: { ...p.logs, timestamps: !p.logs.timestamps } } : p));
+}
+
+/** ⌘F in a log pane: opens its find bar and focuses the field. */
+export function openLogFind(s: UIState): UIState {
+  const p = focusedPane(s);
+  if (!p?.logs) return s;
+  const find = { ...(p.logs.find ?? noFind), open: true };
+  return { ...updatePane(s, p.id, (q) => ({ ...q, logs: { ...q.logs!, find } })), focus: "logsfind" };
+}
+
+export function closeLogFind(s: UIState): UIState {
+  const p = focusedPane(s);
+  if (!p?.logs?.find?.open) return s.focus === "logsfind" ? { ...s, focus: "logs" } : s;
+  const next = updatePane(s, p.id, (q) => ({ ...q, logs: { ...q.logs!, find: { ...q.logs!.find!, open: false } } }));
+  return { ...next, focus: "logs" };
+}
+
+export function updateLogFind(s: UIState, paneId: string, f: (x: TermFind) => TermFind): UIState {
+  return updatePane(s, paneId, (q) => (q.logs ? { ...q, logs: { ...q.logs, find: f(q.logs.find ?? noFind) } } : q));
+}
+
+/** Exec and log sessions no pane references any more (closed panes/tabs). */
 export function orphanedSessions(prev: UIState, next: UIState): string[] {
   if (prev.panes === next.panes) return [];
-  const live = new Set(Object.values(next.panes).map((p) => p.term?.session));
-  return Object.values(prev.panes).flatMap((p) => (p.term && !live.has(p.term.session) ? [p.term.session] : []));
+  const sess = (p: PaneState) => p.term?.session ?? p.logs?.session;
+  const live = new Set(Object.values(next.panes).map(sess));
+  return Object.values(prev.panes).flatMap((p) => {
+    const id = sess(p);
+    return id && !live.has(id) ? [id] : [];
+  });
 }
 
 /**
@@ -328,9 +397,22 @@ export function orphanedSessions(prev: UIState, next: UIState): string[] {
  */
 export function sessionEnded(s: UIState, session: string, exit: string): UIState {
   const pane = Object.values(s.panes).find((p) => p.term?.session === session);
-  if (!pane) return s;
+  if (!pane) return logsEnded(s, session, exit);
   if (exit === "0" || (/^\d+$/.test(exit) && pane.term!.typed)) return closePane(s, pane.id);
   return updatePane(s, pane.id, (p) => ({ ...p, term: { ...p.term!, exited: exit } }));
+}
+
+/**
+ * A log session ended (every follower stopped, or the watch closed). The
+ * pane stays so its backlog and the reason remain readable; the header shows
+ * it ended. A log tail never "succeeds", so there is no 0-exit auto-close.
+ */
+export function logsEnded(s: UIState, session: string, exit: string): UIState {
+  const pane = Object.values(s.panes).find((p) => p.logs?.session === session);
+  if (!pane) return s;
+  // a log tail has no meaningful exit code; "0" (every follower stopped) reads as "ended"
+  const text = exit === "0" || exit === "" ? "ended" : exit;
+  return updatePane(s, pane.id, (p) => ({ ...p, logs: { ...p.logs!, exited: text } }));
 }
 
 /** The user typed into a terminal pane (see Term.typed). */

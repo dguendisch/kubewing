@@ -13,6 +13,8 @@ import * as S from "../store/state";
 import { Terminal } from "../term/Terminal";
 import { FindBar } from "../term/FindBar";
 import { b64encode } from "../term/sessions";
+import { LogView } from "../logs/LogView";
+import { useLogStatus } from "../logs/useLogStatus";
 import { DraftField } from "./DraftField";
 import { HistoryButtons } from "./HistoryNav";
 import { Grip } from "./PaneDrag";
@@ -81,7 +83,9 @@ export function Pane({ id }: { id: string }) {
     >
       <Grip id={id} />
       {hidden ? <Maximized hidden={hidden} /> : null}
-      {pane.term ? (
+      {pane.logs ? (
+        <LogPane pane={pane} id={id} logs={pane.logs} rule={rule} />
+      ) : pane.term ? (
         <>
           <TermHeader pane={pane} term={pane.term} rule={rule} />
           <div className="relative min-h-0 flex-1 bg-bg">
@@ -165,6 +169,80 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
         </span>
       ) : null}
     </header>
+  );
+}
+
+/** A multi-pod log tail pane: header with a live filter, the log view, a status line. */
+function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs: S.Logs; rule?: SafetyRule }) {
+  const focused = useUI((s) => S.activeTab(s).focused === id && !s.overlay);
+  const viewFocused = useUI((s) => focused && (s.focus === "logs" || s.focus === "logsfind"));
+  const filterFocused = useUI((s) => focused && s.focus === "logsfilter");
+  const [findResult, setFindResult] = useState<{ index: number; count: number }>();
+  const st = useLogStatus(logs.session, logs.filter);
+  return (
+    <>
+      <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
+        <Badges rule={rule} />
+        <PaneName pane={pane} />
+        <span className="text-fg-muted">{pane.context}</span>
+        <span className="font-semibold text-accent">logs</span>
+        <span>{logs.title}</span>
+        <LogFilter paneId={id} value={logs.filter} focused={filterFocused} shown={st.shown} total={st.total} />
+        {logs.exited !== undefined ? <span className="text-deleted">ended · ⌘W closes</span> : null}
+      </header>
+      <div className="relative min-h-0 flex-1 bg-bg">
+        <FindBar paneId={id} result={findResult} kind="logs" />
+        <LogView
+          session={logs.session}
+          focused={viewFocused}
+          filter={logs.filter}
+          timestamps={logs.timestamps}
+          prefix={logs.prefix}
+          find={logs.find}
+          onFindResult={setFindResult}
+          onFocus={() => setUI((s) => S.focusPane(s, id))}
+        />
+      </div>
+      <footer className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-[11px] text-fg-muted">
+        <span>{logs.filter ? `${st.shown.toLocaleString()} / ${st.total.toLocaleString()} lines` : `${st.total.toLocaleString()} lines`}</span>
+        <span>
+          {st.following} container{st.following === 1 ? "" : "s"} in {st.pods} pod{st.pods === 1 ? "" : "s"}
+        </span>
+        {st.ended ? <span>{st.ended} ended</span> : null}
+        {st.limited ? <span className="text-changed">{st.limited} not followed (limit)</span> : null}
+        {st.dropped ? <span className="text-deleted">{st.dropped.toLocaleString()} dropped</span> : null}
+        {logs.timestamps ? <span>timestamps</span> : null}
+      </footer>
+    </>
+  );
+}
+
+/** The log pane's live grep field (fzf-like, as the table's; `/` focuses it). */
+function LogFilter({ paneId, value, focused, shown, total }: { paneId: string; value: string; focused: boolean; shown: number; total: number }) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.focus();
+    else ref.current?.blur();
+  }, [focused]);
+  return (
+    <span className="ml-auto flex items-center gap-1">
+      <input
+        ref={ref}
+        aria-label="grep"
+        placeholder="/ grep"
+        title={'terms must all match · !x excludes · "a b" is one term'}
+        value={value}
+        spellCheck={false}
+        onFocus={() => setUI((s) => (s.focus === "logsfilter" ? s : { ...S.focusPane(s, paneId), focus: "logsfilter" }))}
+        onChange={(e) => setUI((s) => S.setLogFilter(s, paneId, e.target.value))}
+        className="w-48 rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent"
+      />
+      {value ? (
+        <span className="text-fg-muted">
+          {shown}/{total}
+        </span>
+      ) : null}
+    </span>
   );
 }
 

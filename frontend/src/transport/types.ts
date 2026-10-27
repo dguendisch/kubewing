@@ -227,7 +227,7 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number } };
+  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number }; logs?: { tail: number; maxStreams: number; buffer: number } };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;
@@ -364,6 +364,8 @@ export interface RowInfo {
   /** With recorded history: how many changes of the row are kept (the diff steps through them). */
   changes?: number;
   pod?: boolean;
+  /** The row can produce logs: a pod, or a workload/node/namespace with pods. */
+  logs?: boolean;
   containers?: string[];
   /** Every container exec can enter, for the picker. */
   containerInfo?: ContainerInfo[];
@@ -504,6 +506,43 @@ export interface SessionPayload {
   exit?: string;
 }
 
+/** Mirrors logs.Line: one log line of a stream (its id), timestamp split off. */
+export interface LogLine {
+  stream: string;
+  ts?: string;
+  text: string;
+}
+
+/** Mirrors logs.Stream: one followed container. */
+export interface LogStream {
+  id: string;
+  pod: string;
+  namespace: string;
+  container: string;
+  /** Stable per-pod color index (0…5). */
+  color: number;
+  state: "following" | "ended" | "limited";
+}
+
+/** Mirrors bridge.LogsPayload: a log session's stream set and/or line batch. */
+export interface LogsPayload {
+  id: string;
+  streams?: LogStream[];
+  lines?: LogLine[];
+  /** Lines dropped since the last event (batch overflow). */
+  dropped?: number;
+  /** Set on the last event. */
+  exit?: string;
+}
+
+/** Mirrors bridge.LogsResult. */
+export interface LogsResult {
+  session: string;
+  context: string;
+  /** What is tailed, for the pane header ("api-0", "deploy/etcd", "pods · ns"). */
+  title: string;
+}
+
 /** Mirrors bridge.PortForwardInfo. */
 export interface PortForward {
   id: string;
@@ -609,6 +648,8 @@ export interface Transport {
   portForwardStart(pane: string, key: string, ports: string[]): Promise<PortForward>;
   portForwards(): Promise<PortForward[]>;
   portForwardStop(id: string): Promise<void>;
+  /** Starts a log tail of a row's pods; whole = every pod the (pods) pane shows. */
+  logsStart(pane: string, key: string, whole: boolean): Promise<LogsResult>;
   /** Puts text on the system clipboard. */
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
@@ -620,6 +661,7 @@ export interface Transport {
   /** A type's column settings changed (any client): all types' settings. */
   onColumns(cb: (c: Record<string, TypeView>) => void): () => void;
   onSession(cb: (p: SessionPayload) => void): () => void;
+  onLogs(cb: (p: LogsPayload) => void): () => void;
   onPortForwards(cb: (l: PortForward[]) => void): () => void;
   /** A native menu item was chosen: its command id. */
   onCommand(cb: (command: string) => void): () => void;

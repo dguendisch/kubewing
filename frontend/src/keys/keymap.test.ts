@@ -74,6 +74,7 @@ describe("resolve", () => {
     expect(resolve("Meta+W", "terminal")).toBe("tab.close"); // the same in every pane kind
     expect(resolve("Ctrl+D", "terminal")).toBeUndefined(); // the shell's EOF
     expect(resolve("Ctrl+D", "ended")).toBe("pane.close"); // …until the shell has ended
+    expect(resolve("Ctrl+D", "logs")).toBe("pane.close"); // a log pane has no shell to take ⌃D
     expect(resolve("Meta+W", "ended")).toBe("tab.close");
     expect(resolve("J", "ended")).toBeUndefined(); // no table to move in
     expect(resolve("Meta+Shift+]", "table")).toBe("tab.next");

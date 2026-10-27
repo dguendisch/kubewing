@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/yaml"
@@ -210,6 +212,64 @@ func (o *Opener) OpsPods() map[string]*corev1.Pod {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	return maps.Clone(o.opsPods)
+}
+
+// Logs implements source.Actor: it emits the pod's "kubewing.test/logs"
+// annotation, one line per newline, each with a synthetic RFC 3339 timestamp
+// (one second apart) like `kubectl logs --timestamps`. The container name is
+// substituted for "%c", so a multi-container pod's lines are distinguishable.
+// If "kubewing.test/logs-follow" is set it then emits "<container> tick N" on
+// a ticker scaled by Speed until ctx ends; otherwise it blocks until ctx ends
+// (a real follow of a still-running container never returns on its own).
+func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, lo source.LogOptions, w io.Writer) error {
+	var ann map[string]string
+	for _, t := range o.Tapes {
+		if obj := t.find(namespace, pod, ""); obj != nil {
+			ann = obj.Item().Object.GetAnnotations()
+			break
+		}
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	var lines []string
+	if raw := ann["kubewing.test/logs"]; raw != "" {
+		lines = strings.Split(strings.TrimRight(raw, "\n"), "\n")
+	}
+	if lo.TailLines != nil && int64(len(lines)) > *lo.TailLines {
+		lines = lines[int64(len(lines))-*lo.TailLines:]
+	}
+	for i, l := range lines {
+		ts := base.Add(time.Duration(i) * time.Second)
+		if lo.SinceTime != nil && !ts.After(*lo.SinceTime) {
+			continue
+		}
+		l = strings.ReplaceAll(l, "%c", container)
+		if _, err := fmt.Fprintf(w, "%s %s\n", ts.Format(time.RFC3339Nano), l); err != nil {
+			return err
+		}
+	}
+	if ann["kubewing.test/logs-follow"] == "" {
+		<-ctx.Done()
+		return nil
+	}
+	speed := o.Speed
+	if speed <= 0 {
+		speed = 1
+	}
+	tick := time.NewTicker(time.Duration(float64(time.Second) / speed))
+	defer tick.Stop()
+	n := len(lines)
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-tick.C:
+			ts := base.Add(time.Duration(n) * time.Second)
+			if _, err := fmt.Fprintf(w, "%s %s tick %d\n", ts.Format(time.RFC3339Nano), container, n); err != nil {
+				return err
+			}
+			n++
+		}
+	}
 }
 
 // ExitError is a non-zero exit of the tape shell (mirrors exec's CodeExitError).

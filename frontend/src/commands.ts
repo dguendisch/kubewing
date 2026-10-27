@@ -13,6 +13,7 @@ import { moveShown } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
 import { rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
+import { logBuffers } from "./logs/buffer";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -189,6 +190,29 @@ export function dispatch(cmd: CommandId) {
       if (!key) return;
       return setUI((x) => S.openOverlay(x, { kind: "portforward", pane: pane.id, key }));
     }
+    case "object.logs":
+      return void startLogs(pane, false);
+    case "view.logs":
+      return void startLogs(pane, true);
+    case "logs.focusFilter":
+      return setUI((x) => (x.focus === "logs" ? { ...x, focus: "logsfilter" } : x));
+    case "logs.blurFilter":
+      return setUI((x) => (x.focus === "logsfilter" ? { ...x, focus: "logs" } : x));
+    case "logs.toggleTimestamps":
+      return setUI((x) => S.toggleLogTimestamps(x, pane.id));
+    case "logs.clear":
+      if (pane.logs) logBuffers.clear(pane.logs.session);
+      return;
+    case "logs.find":
+      return setUI(S.openLogFind);
+    case "logs.findClose":
+      return setUI(S.closeLogFind);
+    case "logs.findNext":
+    case "logs.findPrev": {
+      const f = pane.logs?.find;
+      if (!pane.logs || !f?.query) return setUI(S.openLogFind);
+      return finders.get(pane.logs.session)?.(cmd === "logs.findNext" ? "next" : "prev");
+    }
     case "view.columns":
       return void openColumns(pane.id);
     case "history.toggleRecording":
@@ -274,8 +298,26 @@ export function dispatch(cmd: CommandId) {
   }
 }
 
-/** Per terminal session: steps to the next/previous match (registered by the open terminal). */
+/** Per terminal/log session: steps to the next/previous find match (registered by the open xterm). */
 export const finders = new Map<string, (dir: "next" | "prev") => void>();
+
+/**
+ * ⌘L / ⌥⌘L: tails a row's pods (whole = every pod the pods pane shows), in a
+ * new pane below. Read-only, so no safety prepare — like describe and
+ * port-forward. A pane that can't produce logs (no pods) is refused by Go.
+ */
+async function startLogs(pane: S.PaneState, whole: boolean) {
+  if (!pane.serverId || pane.term || pane.logs) return;
+  const key = whole ? "" : selectedKey(pane);
+  if (!whole && !key) return;
+  try {
+    const r = await bridge().logsStart(pane.serverId, key ?? "", whole);
+    const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps: false, prefix: true };
+    setUI((x) => S.openLogs(x, logs, pane.id));
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+}
 
 /**
  * = / ! in the YAML view: the field under the cursor, compared with its
@@ -649,7 +691,7 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
 }
 
 function selectedKey(pane: S.PaneState): string | undefined {
-  if (!pane.serverId || pane.term) return undefined;
+  if (!pane.serverId || pane.term || pane.logs) return undefined;
   const d = paneData.get(pane.serverId);
   return d.order[pane.selected - d.offset];
 }

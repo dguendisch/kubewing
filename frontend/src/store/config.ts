@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { defaultBindings, mergeBindings, type Binding } from "../keys/keymap";
 import type { Config } from "../transport/types";
 import { DEFAULT_SCROLLBACK, sessions } from "../term/sessions";
+import { DEFAULT_LOG_BUFFER, logBuffers } from "../logs/buffer";
 
 /** Theme tokens defined in theme.css (without "--color-"); theme files may override these. */
 export const themeTokens = [
@@ -54,5 +55,6 @@ export function applyConfig(c: Config) {
     else style.removeProperty(`--color-${t}`);
   }
   sessions.setScrollback(c.config.terminal?.scrollback ?? DEFAULT_SCROLLBACK);
+  logBuffers.setMax(c.config.logs?.buffer ?? DEFAULT_LOG_BUFFER);
   useConfig.setState((s) => ({ config: c, bindings: r.bindings, errors: r.errors, dismissed: false, themeGen: s.themeGen + 1 }));
 }

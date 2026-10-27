@@ -1366,6 +1366,19 @@ func (v *View) Index(key string) int {
 	return -1
 }
 
+// MatchedItems returns the live (non-tombstone) items the view currently
+// shows: its filter, grep and hide-healthy stages applied, order ignored.
+// It lets a consumer (the log tail) track exactly the objects a pane shows.
+func (v *View) MatchedItems() []source.Item {
+	var out []source.Item
+	for _, e := range v.rows() {
+		if e.deletedAt.IsZero() {
+			out = append(out, e.item)
+		}
+	}
+	return out
+}
+
 // Item returns the source item for a row key (for actions).
 func (v *View) Item(key string) (source.Item, bool) {
 	e, ok := v.entries[key]

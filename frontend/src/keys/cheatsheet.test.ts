@@ -27,7 +27,7 @@ describe("cheat sheet", () => {
     expect(e["describe"]!.keys).toEqual(["d", "⇧D"]);
     expect(e["describe"]!.when).toEqual(["table", "detail"]);
     expect(e["close pane"]!.keys).toEqual(["⌃D", "⌃⇧D"]);
-    expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "ended", "terminal"]); // terminal: ⌃⇧D only
+    expect(e["close pane"]!.when).toEqual(["table", "detail", "menu", "help", "ended", "logs", "terminal"]); // terminal: ⌃⇧D only (its ⌃D is the shell's EOF)
   });
 
   it("repeats a command in a section scoped to one context", () => {

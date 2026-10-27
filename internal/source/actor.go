@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -41,6 +42,18 @@ type Actor interface {
 	// PortForward forwards local ports on 127.0.0.1 to a pod ("8080:80",
 	// ":80" for a random local port) until Stop.
 	PortForward(ctx context.Context, cluster, namespace, pod string, ports []string) (*Forward, error)
+	// Logs streams a pod container's logs to w (one write per log line,
+	// trailing newline kept) with RFC 3339 timestamps, following until the
+	// stream ends (container gone) or ctx ends.
+	Logs(ctx context.Context, cluster, namespace, pod, container string, o LogOptions, w io.Writer) error
+}
+
+// LogOptions bounds a log stream. TailLines starts that many lines back
+// ("" = from the start); SinceTime starts just after a timestamp (to resume
+// after a restart or a dropped stream). Both nil = the whole log.
+type LogOptions struct {
+	TailLines *int64
+	SinceTime *time.Time
 }
 
 // ExecStreams are the TTY streams of an exec session.

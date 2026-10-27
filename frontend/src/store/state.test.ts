@@ -695,6 +695,46 @@ describe("terminal panes", () => {
   });
 });
 
+describe("log panes", () => {
+  const logs = (id: string): S.Logs => ({ session: id, title: "api-0", context: "kind", filter: "", timestamps: false, prefix: true });
+
+  it("open below the source pane with logs focus", () => {
+    let s = apply(S.initialState(), (x) => S.openLogs(x, logs("s1")));
+    const t = S.activeTab(s);
+    expect(t.focused).toBe("v2");
+    expect(s.focus).toBe("logs");
+    expect(s.panes.v2!.logs?.session).toBe("s1");
+    // the filter field and back
+    s = apply(s, (x) => ({ ...x, focus: "logsfilter" as const }));
+    expect(S.setLogFilter(s, "v2", "oom").panes.v2!.logs?.filter).toBe("oom");
+    expect(S.toggleLogTimestamps(s, "v2").panes.v2!.logs?.timestamps).toBe(true);
+  });
+
+  it("a log session ending keeps its pane, marked ended (logs never auto-close)", () => {
+    const a = apply(S.initialState(), (x) => S.openLogs(x, logs("s1")));
+    const b = apply(a, (x) => S.sessionEnded(x, "s1", "0"));
+    expect(ids(b)).toEqual(["v1", "v2"]); // pane kept
+    expect(b.panes.v2!.logs?.exited).toBe("ended");
+    expect(S.orphanedSessions(a, b)).toEqual([]);
+  });
+
+  it("releases the log session when no pane references it", () => {
+    const a = apply(S.initialState(), (x) => S.openLogs(x, logs("s1")));
+    const b = apply(a, (x) => S.closePane(x));
+    expect(S.orphanedSessions(a, b)).toEqual(["s1"]);
+  });
+
+  it("the log find bar focus follows the pane", () => {
+    let s = apply(S.initialState(), (x) => S.openLogs(x, logs("s1")));
+    s = apply(s, (x) => S.updateLogFind(S.openLogFind(x), "v2", (f) => ({ ...f, query: "err" })));
+    expect(s.focus).toBe("logsfind");
+    expect(s.panes.v2!.logs?.find).toMatchObject({ open: true, query: "err" });
+    s = apply(s, S.closeLogFind);
+    expect(s.focus).toBe("logs");
+    expect(s.panes.v2!.logs?.find?.open).toBe(false);
+  });
+});
+
 describe("contextNamespace", () => {
   const list = { contexts: ["a", "b"], current: "a", namespaces: { a: "shoot--x" } };
   it("uses the namespace the kubeconfig context sets, else all", () => {

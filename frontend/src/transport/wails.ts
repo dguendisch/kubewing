@@ -1,5 +1,5 @@
 import { Call, Clipboard, Events } from "@wailsio/runtime";
-import type { Config, FramePayload, Launch, PortForward, SessionPayload, Transport, TypeView } from "./types";
+import type { Config, FramePayload, Launch, LogsPayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
 const call = <T>(method: string, ...args: unknown[]) =>
@@ -58,6 +58,7 @@ export function wailsTransport(): Transport {
     portForwardStart: (p, k, ports) => call("PortForwardStart", p, k, ports),
     portForwards: () => call("PortForwards"),
     portForwardStop: (id) => call("PortForwardStop", id),
+    logsStart: (p, k, whole) => call("LogsStart", p, k, whole),
     copyText: async (t) => void (await Clipboard.SetText(t)),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
@@ -66,6 +67,7 @@ export function wailsTransport(): Transport {
     onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),
     onColumns: (cb) => Events.On("kw:columns", (ev) => cb(ev.data as Record<string, TypeView>)),
     onSession: (cb) => Events.On("kw:session", (ev) => cb(ev.data as SessionPayload)),
+    onLogs: (cb) => Events.On("kw:logs", (ev) => cb(ev.data as LogsPayload)),
     onPortForwards: (cb) => Events.On("kw:portforwards", (ev) => cb(ev.data as PortForward[])),
     onCommand: (cb) => Events.On("kw:command", (ev) => cb(ev.data as string)),
     onLaunch: (cb) => Events.On("kw:launch", (ev) => cb(ev.data as Launch)),

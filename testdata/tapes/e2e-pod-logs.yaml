@@ -1,0 +1,78 @@
+# Log tail tape (⌘L): a pods list whose pods carry canned log lines in the
+# kubewing.test/logs annotation (one line per "\n"; "%c" is replaced with the
+# container name). filter: true so a by-name or by-selector pods watch honors
+# the namespace and selectors like an API server would. A step adds a third
+# pod and deletes one, so the tail picks up a pod that appears later and ends
+# a follower whose pod is gone. logs-follow keeps a stream open emitting ticks.
+filter: true
+pipeline:
+  source: {resource: e2e-pod-logs, namespace: shop}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: api-0
+        namespace: shop
+        uid: lg-api-0
+        labels: {app: api}
+        creationTimestamp: "2026-01-01T10:00:00Z"
+        annotations:
+          kubewing.test/logs: "api-0 %c starting\napi-0 %c ready\napi-0 %c serving request /healthz"
+      spec: {containers: [{name: app}]}
+      status: {phase: Running, containerStatuses: [{name: app, ready: true, state: {running: {}}}]}
+    cells: [api-0, Running]
+  - object:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: api-1
+        namespace: shop
+        uid: lg-api-1
+        labels: {app: api}
+        creationTimestamp: "2026-01-01T10:00:00Z"
+        annotations:
+          kubewing.test/logs: "api-1 %c starting\napi-1 %c warning disk space low\napi-1 %c ready"
+      spec: {containers: [{name: app}]}
+      status: {phase: Running, containerStatuses: [{name: app, ready: true, state: {running: {}}}]}
+    cells: [api-1, Running]
+  # a different app label: excluded by a label selector on "app=api"
+  - object:
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: worker-0
+        namespace: shop
+        uid: lg-worker-0
+        labels: {app: worker}
+        creationTimestamp: "2026-01-01T10:00:00Z"
+        annotations:
+          kubewing.test/logs: "worker-0 %c processing job 1"
+      spec: {containers: [{name: app}]}
+      status: {phase: Running, containerStatuses: [{name: app, ready: true, state: {running: {}}}]}
+    cells: [worker-0, Running]
+steps:
+  # a pod that appears after the tail started: its logs join
+  - at: 1s
+    add:
+      object:
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: api-2
+          namespace: shop
+          uid: lg-api-2
+          labels: {app: api}
+          creationTimestamp: "2026-01-01T10:00:05Z"
+          annotations:
+            kubewing.test/logs: "api-2 %c starting\napi-2 %c ready"
+        spec: {containers: [{name: app}]}
+        status: {phase: Running, containerStatuses: [{name: app, ready: true, state: {running: {}}}]}
+      cells: [api-2, Running]
+  # a pod deleted: its follower ends
+  - at: 2s
+    delete:
+      object: {apiVersion: v1, kind: Pod, metadata: {name: api-1, namespace: shop, uid: lg-api-1}}

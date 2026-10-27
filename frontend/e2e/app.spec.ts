@@ -6,7 +6,8 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; exited?: string } }>;
+  logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -3723,5 +3724,103 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toHaveCount(0);
     expect((await inspect(page)).focus).toBe("table");
+  });
+});
+
+// Multi-pod log tail (⌘L): the e2e-pod-logs tape has pods api-0, api-1, worker-0
+// (worker excluded by app=api), a later api-2 and a deleted api-1. Each pod's
+// lines carry its name; a selector pane filters pods, the live filter filters
+// lines.
+test.describe("logs", () => {
+  async function openLogs(page: Page, labelSelector = "") {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-pod-logs");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "e2e-pod-logs" && !!p.serverId && !!p.status?.synced;
+    }).toBe(true);
+    if (labelSelector) {
+      await page.keyboard.press("l");
+      await page.keyboard.type(labelSelector);
+      await page.keyboard.press("Enter");
+      await expect.poll(async () => (await focused(page)).spec.labelSelector).toBe(labelSelector);
+      // Enter applies but keeps the filter bar focused; return to the table so table keys (⌥⌘L) resolve
+      // (a first Esc may only close an open completion list, so press until the table has focus)
+      await expect.poll(async () => {
+        if ((await inspect(page)).focus === "table") return true;
+        await page.keyboard.press("Escape");
+        return false;
+      }).toBe(true);
+    }
+  }
+  async function select(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+  }
+  // the log pane's rendered screen, by its session id
+  async function screen(page: Page) {
+    const s = await inspect(page);
+    const pane = Object.values(s.panes).find((p) => p.logs);
+    const session = pane?.logs?.session;
+    return session ? (s.logs?.[session]?.screen ?? "") : "";
+  }
+
+  test("⌘L on a pod row tails just that pod", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    const pane = async () => Object.values((await inspect(page)).panes).find((p) => p.logs);
+    await expect.poll(async () => (await pane())?.logs?.title).toBe("api-0");
+    await expect.poll(() => screen(page)).toContain("api-0 app serving request /healthz");
+    // only api-0's lines, not api-1's
+    expect(await screen(page)).not.toContain("api-1");
+  });
+
+  test("⌥⌘L tails every pod the pane shows; a label selector narrows it", async ({ page }) => {
+    await openLogs(page, "app=api");
+    await page.keyboard.press("Alt+ControlOrMeta+l");
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    // api pods are followed, worker is not (filtered out by app=api)
+    await expect.poll(() => screen(page)).toContain("api-0 app ready");
+    await expect.poll(() => screen(page)).toContain("api-2 app ready");
+    expect(await screen(page)).not.toContain("worker-0");
+  });
+
+  test("the live filter hides non-matching lines and ! excludes", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-1");
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect.poll(() => screen(page)).toContain("api-1 app warning disk space low");
+    // focus the grep field (the log pane's, now focused) and type a term
+    await page.keyboard.press("/");
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logsfilter");
+    const grep = page.locator("input:focus");
+    await grep.fill("warning");
+    await expect.poll(() => screen(page)).toContain("warning disk space low");
+    await expect.poll(() => screen(page)).not.toContain("api-1 app ready");
+    // exclude instead
+    await grep.fill("!warning");
+    await expect.poll(() => screen(page)).toContain("ready");
+    await expect.poll(() => screen(page)).not.toContain("disk space low");
+  });
+
+  test("closing the pane ends the session", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    const sessionId = async () => Object.values((await inspect(page)).panes).find((p) => p.logs)?.logs?.session;
+    const id = await sessionId();
+    expect(id).toBeTruthy();
+    // ⌃⇧D closes the focused (log) pane; its session is dropped
+    await page.keyboard.press("Control+Shift+D");
+    await expect.poll(async () => {
+      const s = await inspect(page);
+      return !Object.values(s.panes).some((p) => p.logs?.session === id);
+    }).toBe(true);
   });
 });

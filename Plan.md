@@ -59,10 +59,21 @@ Done: the YAML editor (`e`, and the node shell's) is modal: only its own keys re
 
 Done: naming tabs (`⌘⇧I`, double-click the tab) and panes (`⌘I`, double-click the header's empty part; a label in the pane's header, and the tab's title while the tab has none). Applied as typed, `Esc` restores, empty clears; not persisted (no layout persistence yet).
 
+Done: multi-pod log tail (stern-like), `⌘L` on a row (its pods: a pod by name, a workload/node/namespace's pods, followed as they come and go) or `⌥⌘L` for every pod a pods pane shows (its filters applied, a snapshot). One follower per pod container, shared on the pane's watch for the whole-pane case; the last `logs.tail` lines then follow, `logs.maxStreams` concurrent followers, restart-resume via the RFC 3339 timestamp (`internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` and a tape fake behind it). The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`), the live filter (`/`, fzf-like) hides and highlights lines (past ones too), `t` timestamps, `⌘K` clear, `⌘F` find. Open: a whole-pane tail for non-pod panes (the union of their pods), previous-container logs (`--previous`), saving a tail to a file, and wiring an optional timestamp column.
+
 Next up:
-- user facing documentation
-- Multi-pod log tail — stern-like, live filter.
+- non-blocking invocation of kubewing from terminal as default (configurable, as blocking is nice for viewing logs during development)
+- nit: resource is bold, but better only first segment (before the first dot) bold
+- nit: pane drag handle should also appear without splitting when there are at least two tabs or windows
+- occasionally update the events last-seen column?
+- hard-code some default sorting: e.g. events by last seen (newest first)
 - Decoders — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
+- multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
+- user facing documentation
+- dedicated annotate/label/scale commands
+- hide-healthy with special support for e.g. managedresources?
+- grep filter with regex support
+- nit: what to do with last pane/tab closing? currently it reloads the pane with which it started, but that's weird
 
 Still open in P0.1:
 - Completion and regular UI for a context picked in `⌘O` (instead of system UI's drop down)

@@ -7,7 +7,8 @@ import { menuSpec } from "../keys/appMenu";
 import type { Binding } from "../keys/keymap";
 import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
-import { contextNamespace, initialState, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
+import { contextNamespace, initialState, logsEnded, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
+import { logBuffers } from "../logs/buffer";
 
 /**
  * UI state (layout, focus, overlays) lives in a React-subscribed store.
@@ -71,6 +72,11 @@ export function connect(t: Transport) {
       setUI((x) => sessionEnded(x, p.id, p.exit!));
     }
   });
+  t.onLogs((p) => {
+    if (p.streams) logBuffers.setStreams(p.id, p.streams);
+    if (p.lines?.length || p.dropped) logBuffers.pushLines(p.id, p.lines ?? [], p.dropped);
+    if (p.exit !== undefined && p.exit !== "") setUI((x) => logsEnded(x, p.id, p.exit!));
+  });
   t.onPortForwards((l) => usePortForwards.setState({ list: l }, true));
   t.portForwards().then((l) => usePortForwards.setState({ list: l }, true), () => {});
   t.onColumns((c) => useColumns.setState({ types: c ?? {} }, true));
@@ -96,6 +102,7 @@ export function connect(t: Transport) {
     for (const id of orphanedSessions(prev, next)) {
       t.sessionClose(id).catch(() => {});
       sessions.drop(id);
+      logBuffers.drop(id);
     }
   });
 }

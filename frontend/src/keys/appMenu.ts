@@ -45,6 +45,8 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Copy Name", "object.copyName"],
       ["Copy Cell…", "object.copyCell"],
       null,
+      ["Logs", "object.logs"],
+      ["Logs of Pane", "view.logs"],
       ["Exec Shell", "object.exec"],
       ["Debug Container…", "object.debug"],
       ["Node Shell…", "object.opsPod"],

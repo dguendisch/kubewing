@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "forwards", "menu", "help", "edit", "editpreview", "travel"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "logs", "logsfilter", "logsfind", "forwards", "menu", "help", "edit", "editpreview", "travel"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -73,6 +73,16 @@ export type CommandId =
   | "object.debug"
   | "object.opsPod"
   | "object.portForward"
+  | "object.logs"
+  | "view.logs"
+  | "logs.focusFilter"
+  | "logs.blurFilter"
+  | "logs.toggleTimestamps"
+  | "logs.clear"
+  | "logs.find"
+  | "logs.findNext"
+  | "logs.findPrev"
+  | "logs.findClose"
   | "portforward.list"
   | "portforward.stop"
   | "confirm.accept"
@@ -106,7 +116,8 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
+  "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "history.toggleRecording",
@@ -126,9 +137,9 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Shift+D", command: "pane.splitRight" },
   // not global: ⌃D is forward-delete in text fields, and the shell's EOF in a terminal
   // (once the shell has ended, "ended", there is no shell left to want it)
-  { key: "Ctrl+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended"] },
+  { key: "Ctrl+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended", "logs"] },
   // the same in every pane kind, and the escape hatch from a shell that ignores ⌃D
-  { key: "Ctrl+Shift+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended", "terminal"] },
+  { key: "Ctrl+Shift+D", command: "pane.close", when: ["table", "detail", "menu", "help", "ended", "terminal", "logs"] },
   { key: "Meta+]", command: "pane.focusNext" },
   { key: "Meta+[", command: "pane.focusPrev" },
   { key: "Alt+Meta+ArrowLeft", command: "pane.focusLeft" },
@@ -249,6 +260,20 @@ export const defaultBindings: Binding[] = [
   // from anywhere (also a terminal pane): the node is prefilled from the selected row, if any
   { key: "Alt+Meta+O", command: "object.opsPod" },
   { key: "F", command: "object.portForward", when: ["table"] },
+  // logs (stern-like): ⌘L tails the selected row's pods, ⌥⌘L every pod the pods pane shows
+  { key: "Meta+L", command: "object.logs", when: ["table"] },
+  { key: "Alt+Meta+L", command: "view.logs", when: ["table"] },
+  // in a log pane: / focuses the filter, t toggles timestamps, ⌘K clears, ⌘F finds
+  { key: "/", command: "logs.focusFilter", when: ["logs"] },
+  { key: "Escape", command: "logs.blurFilter", when: ["logsfilter"] },
+  { key: "T", command: "logs.toggleTimestamps", when: ["logs"] },
+  { key: "Meta+K", command: "logs.clear", when: ["logs"] },
+  { key: "Meta+F", command: "logs.find", when: ["logs", "logsfind"] },
+  { key: "Meta+G", command: "logs.findNext", when: ["logs", "logsfind"] },
+  { key: "Meta+Shift+G", command: "logs.findPrev", when: ["logs", "logsfind"] },
+  { key: "Enter", command: "logs.findNext", when: ["logsfind"] },
+  { key: "Shift+Enter", command: "logs.findPrev", when: ["logsfind"] },
+  { key: "Escape", command: "logs.findClose", when: ["logsfind"] },
   { key: "Alt+Meta+P", command: "portforward.list" },
   // the same keys as the running forwards in the f dialog: ↑/↓ pick, x or ⌫ stops
   { key: "X", command: "portforward.stop", when: ["forwards"] },
