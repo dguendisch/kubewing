@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
 )
@@ -147,5 +148,23 @@ func TestWatchErrorKeepsTheServersAnswer(t *testing.T) {
 func TestErrTextPlainErrors(t *testing.T) {
 	if got := errText(fmt.Errorf("dial tcp: refused")); got != "dial tcp: refused" {
 		t.Fatalf("plain error = %q", got)
+	}
+}
+
+func TestAmbiguousPluralAcrossGroups(t *testing.T) {
+	m := meta.NewDefaultRESTMapper(nil)
+	add := func(group, version, kind string) {
+		m.Add(schema.GroupVersionKind{Group: group, Version: version, Kind: kind}, meta.RESTScopeNamespace)
+	}
+	add("machine.sapcloud.io", "v1alpha1", "Machine")
+	add("cluster.x-k8s.io", "v1beta1", "Machine")
+	add("druid.gardener.cloud", "v1alpha1", "Etcd")
+	// several versions of one group are still one type
+	add("apps", "v1", "Deployment")
+	add("apps", "v1beta1", "Deployment")
+	for plural, want := range map[string]bool{"machines": true, "etcds": false, "deployments": false, "unknowns": false} {
+		if got := ambiguous(m, plural); got != want {
+			t.Errorf("ambiguous(%s) = %v, want %v", plural, got, want)
+		}
 	}
 }

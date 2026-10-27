@@ -75,6 +75,8 @@ export interface OpenResult {
   namespaced: boolean;
   /** Resource type column settings are kept by (pods, deployments.apps). */
   type: string;
+  /** resource exists in several groups: only type tells them apart. */
+  ambiguous?: boolean;
 }
 
 /** Mirrors pipeline.Column: a custom column (path or expr), else a server column by name. */

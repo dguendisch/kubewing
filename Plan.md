@@ -64,15 +64,13 @@ Done: multi-pod log tail (stern-like), `⌘L` on a row (its pods: a pod by name,
 Done: launched from a terminal, kubewing detaches by default (re-runs itself in a session of its own, stdin `/dev/null`, output appended to `kubewing.log` in the state directory, rotated to `.1` at 10 MiB), so the prompt comes back and closing the terminal doesn't end it. `-wait` or `launch.wait: true` keeps it in the foreground (`make run` passes `-wait`); piped/redirected output and `-headless` never detach. A launch that hands over to a running kubewing (Wails' lock in `NSTemporaryDirectory()` held, checked before `application.New` exits silently) says so on stderr, `-wait` too.
 
 Next up:
-- nit: resource full name is bold in the top bar, but better only first segment (before the first dot) bold
-- nit: pane drag handle should also appear without splitting when there are at least two tabs or windows
 - occasionally update the events last-seen column?
 - hard-code some default sorting: e.g. events by last seen (newest first)
 - Decoders — brotli decompression, secret base64 decode, JWT, etcd/auger-style values.
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - user facing documentation
 - dedicated annotate/label/scale commands
-- hide-healthy with special support for e.g. managedresources?
+- hide-healthy filter with special support for e.g. managedresources?
 - grep filter with regex support
 - nit: what to do with last pane/tab closing? currently it reloads the pane with which it started, but that's weird
 

@@ -109,6 +109,9 @@ type Resolved struct {
 	// Metadata asks for PartialObjectMetadata instead of full objects: cheap
 	// watches where names suffice (namespaces, CRDs with megabyte schemas).
 	Metadata bool
+	// Ambiguous: the plural exists in several groups (machines), so only
+	// the qualified name tells them apart.
+	Ambiguous bool
 }
 
 // Resolve maps "po", "pods", "deploy.apps", "Deployment" etc. to a GVR.
@@ -128,7 +131,21 @@ func (c *Cluster) Resolve(resource string) (Resolved, error) {
 	if err != nil {
 		return Resolved{}, err
 	}
-	return Resolved{GVR: gvr, Kind: gvk.Kind, Namespaced: m.Scope.Name() == meta.RESTScopeNameNamespace}, nil
+	return Resolved{GVR: gvr, Kind: gvk.Kind, Namespaced: m.Scope.Name() == meta.RESTScopeNameNamespace, Ambiguous: ambiguous(c.mapper, gvr.Resource)}, nil
+}
+
+// ambiguous reports whether a plural is served by more than one group.
+func ambiguous(mapper meta.RESTMapper, plural string) bool {
+	all, err := mapper.ResourcesFor(schema.GroupVersionResource{Resource: plural})
+	if err != nil {
+		return false
+	}
+	for _, r := range all {
+		if r.Group != all[0].Group {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Cluster) resolve(resource string) (schema.GroupVersionResource, error) {

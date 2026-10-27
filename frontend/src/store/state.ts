@@ -69,6 +69,8 @@ export interface PaneState {
   reselect?: string;
   /** Resource type the server pane resolved to (pods, deployments.apps): its column settings apply. */
   type?: string;
+  /** The type's plural exists in several groups: only the qualified name tells them apart. */
+  ambiguous?: boolean;
   /** A name given to the pane (⌘I), shown in its header; it names the tab too while the tab has none. */
   name?: string;
 }

@@ -22,6 +22,7 @@ import { StatusError } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 import { PaneName } from "./NameField";
+import { resourceLabel } from "./tabTitle";
 
 /** One split pane: header (source + filter bar), live table, status line. */
 export function Pane({ id }: { id: string }) {
@@ -263,6 +264,17 @@ function LogFilter({ paneId, value, focused, shown, total }: { paneId: string; v
   );
 }
 
+/** The resource type: its plural in bold, the group only where the plural is ambiguous; the qualified name on hover. */
+function ResourceName({ pane }: { pane: S.PaneState }) {
+  const r = resourceLabel(pane);
+  return (
+    <span aria-label="resource" title={r.full} className="shrink-0 text-accent">
+      <span className="font-semibold">{r.name}</span>
+      {r.group}
+    </span>
+  );
+}
+
 /** The header's empty stretch: a double-click there names the pane (⌘I). */
 function NameGap({ paneId }: { paneId: string }) {
   return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
@@ -393,7 +405,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   };
 
   const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
-  const { context, resource, namespace, fieldSelector } = pane.spec;
+  const { context, namespace, fieldSelector } = pane.spec;
   const st = usePaneStatus(pane.serverId);
   return (
     <header className={`flex items-center gap-2 border-b bg-bg-elev px-2 py-1 ${st?.at ? "border-accent" : "border-border"}`}>
@@ -404,7 +416,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       <span className="shrink-0 text-fg-muted" title={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}>
         {S.splitCluster(context).context || pane.context || "(current)"}
       </span>
-      <span className="shrink-0 font-semibold text-accent">{resource}</span>
+      <ResourceName pane={pane} />
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
       {fieldSelector ? (
         <span aria-label="field selector" title="field selector (from a jump)" className="truncate border border-border px-1 text-fg-muted">

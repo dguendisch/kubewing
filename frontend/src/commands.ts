@@ -901,6 +901,8 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
       serverId: keep ? q.serverId : undefined,
       context: keep ? q.context : undefined,
       kind: keep ? q.kind : undefined,
+      type: keep ? q.type : undefined,
+      ambiguous: keep ? q.ambiguous : undefined,
       opening: !keep,
     })),
   );
@@ -914,7 +916,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
       bridge().close(res.pane).catch(() => {}); // superseded or pane closed meanwhile
       return;
     }
-    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, opening: false })));
+    setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, ambiguous: res.ambiguous, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
   }

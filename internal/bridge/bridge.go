@@ -199,6 +199,8 @@ type OpenResult struct {
 	Namespaced bool   `json:"namespaced"`
 	// Type is the resource type column settings are kept by (pods, deployments.apps).
 	Type string `json:"type"`
+	// Ambiguous: Resource exists in several groups, so only Type tells them apart.
+	Ambiguous bool `json:"ambiguous,omitempty"`
 }
 
 // Open starts a pane for a pipeline given as YAML.
@@ -245,7 +247,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
-	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ}, nil
+	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ, Ambiguous: sub.Resolved.Ambiguous}, nil
 }
 
 // Update replaces a pane's stages and columns (e.g. filter bar edits) in

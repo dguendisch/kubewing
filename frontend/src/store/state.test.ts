@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
-import { paneTitle, tabTitle } from "../components/tabTitle";
+import { paneTitle, resourceLabel, tabTitle } from "../components/tabTitle";
 
 const ids = (s: S.UIState) => paneIds(S.activeTab(s).layout);
 
@@ -385,6 +385,19 @@ describe("naming tabs and panes", () => {
     expect(tabTitle({ id: "t1", layout: leaf("v1"), focused: "v1" }, pane({ name: "web" }), rule)).toBe("PROD · web");
     expect(tabTitle({ id: "t1", layout: leaf("v1"), focused: "v1", name: "incident" }, pane({ name: "web" }), rule)).toBe("PROD · incident");
     expect(paneTitle(pane({ name: "web" }))).toBe("web");
+  });
+
+  it("the resource shows as its plural, qualified only where the plural is ambiguous; the full name for hover", () => {
+    // ⌘O's "etcds" and a jump's "etcds.druid.gardener.cloud" look the same once resolved
+    expect(resourceLabel(pane({ spec: spec("etcds", "shop"), type: "etcds.druid.gardener.cloud" }))).toEqual({ name: "etcds", group: "", full: "etcds.druid.gardener.cloud" });
+    expect(resourceLabel(pane({ spec: spec("etcds.druid.gardener.cloud", "shop"), type: "etcds.druid.gardener.cloud" })).name).toBe("etcds");
+    // an alias resolves to the plural
+    expect(resourceLabel(pane({ spec: spec("po", "shop"), type: "pods" }))).toEqual({ name: "pods", group: "", full: "pods" });
+    expect(resourceLabel(pane({ spec: spec("machines", "shop"), type: "machines.machine.sapcloud.io", ambiguous: true }))).toEqual({ name: "machines", group: ".machine.sapcloud.io", full: "machines.machine.sapcloud.io" });
+    expect(paneTitle(pane({ type: "machines.machine.sapcloud.io", ambiguous: true }))).toBe("machines.machine.sapcloud.io · shop");
+    expect(paneTitle(pane({ spec: spec("deploy.apps", "shop"), type: "deployments.apps" }))).toBe("deployments · shop");
+    // until resolved: as given
+    expect(resourceLabel(pane({ spec: spec("deploy.apps", "shop") }))).toEqual({ name: "deploy.apps", group: "", full: "deploy.apps" });
   });
 });
 
