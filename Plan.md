@@ -53,12 +53,13 @@ Done: time-travel (P1, see below): `t` shows the pane as it was, with a timeline
 
 Done: launching kubewing while one runs on the same config directory opens a new tab in it on the launching terminal's kubeconfig and current context, and brings it to the front (Wails' single-instance lock, keyed by the config directory; the `$KUBECONFIG` path is handed over encrypted with `instance.key`); `-new-process` starts a separate one. A cluster is `@n/<context>` for such a kubeconfig (`internal/source/kubeconfig.go`), a plain context name for kubewing's own; the references live as long as the process.
 
+Done: `↓` opens the completion list in the label and CEL fields at the caret, also where typing alone doesn't (empty field, after an operator); the label selector completes keys, operators and a key's values (`FieldValues`, next to `FieldKeys`). `Esc` with a list open only closes the list.
+
 Next up:
 - add tooltip to cells not fitting their text (or if significantly easier, add it always)
 - user facing documentation
 - bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails) and then splits panes, such kubewing commands should not apply while in monace editor
 - monaco editor: add cmd+d (to delete a line) and opt+up/down to move a line up/down
-- label/CEL completion should show completion on arrow down
 - allow to rename tabs and allow to give a pane a name (maybe rendered as a label in the top bar)
 - smooth horizontal scrolling (currently it jumps column by column)
 

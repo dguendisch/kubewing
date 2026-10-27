@@ -6,7 +6,7 @@ type Inspect = {
   overlays: string[];
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean } }>;
 };
 
 const inspect = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): Inspect } }).__kw.inspect());
@@ -443,6 +443,40 @@ test("label selector: click or l focuses it and keeps focus while typing; tab mo
   await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
 });
 
+test("label selector completes keys and values from the live objects; ↓ opens the list", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("l");
+  const labels = page.getByLabel("label selector");
+  const list = page.getByRole("listbox", { name: "label suggestions" });
+  // ↓ in the empty field lists every key, the first one highlighted
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option", { selected: true })).toContainText("app");
+  await expect(list.getByRole("option").first()).toContainText("3/3");
+  await page.keyboard.press("Tab");
+  await expect(labels).toHaveValue("app");
+  // values open right after the operator, most common first
+  await page.keyboard.type("=");
+  await expect(list.getByRole("option")).toHaveText(["api2/3", "etcd1/3"]);
+  await page.keyboard.type("et");
+  await page.keyboard.press("Tab");
+  await expect(labels).toHaveValue("app=etcd");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).spec.labelSelector).toBe("app=etcd");
+  // after a key and a space: the operators; in (…) lists the values
+  await labels.fill("app ");
+  await expect(list.getByRole("option").first()).toContainText("=");
+  await page.keyboard.type("in");
+  await page.keyboard.press("Tab");
+  await expect(labels).toHaveValue("app in (");
+  await expect(list.getByRole("option")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(list).toHaveCount(0);
+  await expect(labels).toBeFocused();
+  // ↓ opens it again where typing alone doesn't
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option", { selected: true })).toContainText("api");
+});
+
 test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("c");
@@ -495,6 +529,34 @@ test("cel filter completes field paths from the live objects", async ({ page }) 
   await expect(list.getByRole("option").first()).toContainText("map · 3/3");
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("cel", { exact: true })).toHaveValue("o.metadata.labels");
+});
+
+test("cel filter: ↓ opens the suggestions at the caret, ↑ in an empty field recalls recent filters", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("c");
+  const cel = page.getByLabel("cel", { exact: true });
+  const list = page.getByRole("listbox", { name: "cel suggestions" });
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option", { selected: true })).toContainText("o");
+  await page.keyboard.press("Enter");
+  await expect(cel).toHaveValue("o.");
+  await page.keyboard.type('metadata.labels.app == "api"');
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).total).toBe(2);
+  // where typing opens nothing (a value goes after the operator), ↓ lists what can go there
+  await cel.fill("o.metadata.labels.app == ");
+  await expect(list).toHaveCount(0);
+  await page.keyboard.press("ArrowDown");
+  await expect(list).toContainText("has(o.…)");
+  await page.keyboard.press("Escape");
+  await expect(list).toHaveCount(0);
+  await expect(cel).toBeFocused(); // the first Esc only closes the list
+  // ↑ in the empty field: the filter applied last, ↓ back to empty
+  await cel.fill("");
+  await page.keyboard.press("ArrowUp");
+  await expect(cel).toHaveValue('o.metadata.labels.app == "api"');
+  await page.keyboard.press("ArrowDown");
+  await expect(cel).toHaveValue("");
 });
 
 test("cel filter brackets keys that aren't identifiers, and completes after them", async ({ page }) => {

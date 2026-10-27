@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { CelSuggestions, useCelCompletion } from "../complete/useCelCompletion";
+import { Suggestions, useFieldCompletion } from "../complete/useFieldCompletion";
 import { bridge, paneData } from "../store/store";
 import type { Preview } from "../transport/types";
 
@@ -34,7 +34,8 @@ const remember = (v: string) => {
  * the draft against the pane's objects and the field shows the outcome.
  * ⏎ or leaving the field applies it.
  * The CEL field completes field paths from the live objects, and the
- * operators that fit a field's type after it.
+ * operators that fit a field's type after it; the label field the objects'
+ * label keys and values. ↓ opens the suggestions at the caret.
  */
 export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftField(
   { field, label, placeholder, applied, serverId, focused, onApply, onFocus, onBlur, className },
@@ -74,8 +75,9 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
     };
   }, [draft, serverId, pending, objects]);
 
-  // completion: field keys from Go (per path), plus CEL functions; operators after an operand
-  const { list, accept, onKeyDown: completionKeys, trackCaret, close } = useCelCompletion({ input, value: draft, setValue: setDraft, serverId, enabled: cel && focused });
+  // completion: field keys from Go (per path), plus CEL functions; operators after an operand.
+  // Labels: the objects' label keys, a key's values
+  const { list, accept, onKeyDown: completionKeys, trackCaret, close } = useFieldCompletion({ input, value: draft, setValue: setDraft, serverId, enabled: focused, syntax: cel ? "cel" : "labels" });
 
   const apply = async () => {
     // ⏎ may beat the debounced dry run: check this exact draft first
@@ -90,13 +92,14 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (completionKeys(e)) return;
+    // ↑ in an empty CEL field without suggestions: recent filters, then ↑/↓ through them (↓ otherwise opens the suggestions)
+    const recall = cel && !list && recent.length && (e.key === "ArrowUp" ? history >= 0 || !draft : e.key === "ArrowDown" && history >= 0);
+    if (!recall && completionKeys(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
       return void apply();
     }
-    // ↑/↓ in a CEL field without suggestions: recent filters
-    if (cel && !list && (e.key === "ArrowUp" || e.key === "ArrowDown") && recent.length && (history >= 0 || !draft)) {
+    if (recall) {
       e.preventDefault();
       const h = Math.max(-1, Math.min(recent.length - 1, history + (e.key === "ArrowUp" ? 1 : -1)));
       setHistory(h);
@@ -112,8 +115,8 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
         ref={input}
         aria-label={label}
         aria-invalid={!!preview?.invalid && pending}
-        aria-autocomplete={cel ? "list" : undefined}
-        aria-expanded={cel ? !!list : undefined}
+        aria-autocomplete="list"
+        aria-expanded={!!list}
         title={!focused && draft ? (status ? `${draft}\n${status}` : draft) : undefined}
         placeholder={placeholder}
         autoComplete="off"
@@ -148,7 +151,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
           {status}
         </div>
       ) : null}
-      {list ? <CelSuggestions list={list} accept={accept} /> : null}
+      {list ? <Suggestions list={list} accept={accept} label={cel ? "cel suggestions" : "label suggestions"} /> : null}
     </div>
   );
 });

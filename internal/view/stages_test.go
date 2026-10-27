@@ -163,6 +163,22 @@ func TestFieldKeys(t *testing.T) {
 	}
 }
 
+func TestFieldValues(t *testing.T) {
+	v := stageView(t)
+	vals, n := v.FieldValues([]string{"metadata", "labels", "app"}, 0)
+	if n != 3 || !slices.Equal(vals, []ValueCount{{Value: "api", Count: 2}, {Value: "etcd", Count: 1}}) {
+		t.Fatalf("values = %+v (%d)", vals, n)
+	}
+	// through a list, numbers formatted
+	if vals, _ := v.FieldValues([]string{"status", "containerStatuses", "restartCount"}, 2); !slices.Equal(vals, []ValueCount{{Value: "0", Count: 1}, {Value: "2", Count: 1}}) {
+		t.Fatalf("values = %+v", vals)
+	}
+	// a map has no value
+	if vals, _ := v.FieldValues([]string{"metadata", "labels"}, 0); len(vals) != 0 {
+		t.Fatalf("values = %+v", vals)
+	}
+}
+
 func TestGrepTerms(t *testing.T) {
 	cases := map[string][]string{
 		"api":             {"api-0", "api-1"},

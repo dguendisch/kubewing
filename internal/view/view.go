@@ -1521,33 +1521,24 @@ func (v *View) FieldKeys(segs []string, limit int) (keys []FieldKey, objects int
 		}
 		objects++
 		seen := map[string]bool{}
-		var walk func(cur any, segs []string)
-		walk = func(cur any, segs []string) {
-			switch x := cur.(type) {
-			case []any:
-				for _, el := range x {
-					walk(el, segs)
+		visit(e.item.Object.Object, segs, func(cur any) {
+			x, ok := cur.(map[string]any)
+			if !ok {
+				return
+			}
+			for k, val := range x {
+				st := stats[k]
+				if st == nil {
+					st = &stat{types: map[string]int{}}
+					stats[k] = st
 				}
-			case map[string]any:
-				if len(segs) > 0 {
-					walk(x[segs[0]], segs[1:])
-					return
-				}
-				for k, val := range x {
-					st := stats[k]
-					if st == nil {
-						st = &stat{types: map[string]int{}}
-						stats[k] = st
-					}
-					st.types[jsonType(val)]++
-					if !seen[k] {
-						seen[k] = true
-						st.n++
-					}
+				st.types[jsonType(val)]++
+				if !seen[k] {
+					seen[k] = true
+					st.n++
 				}
 			}
-		}
-		walk(e.item.Object.Object, segs)
+		})
 	}
 	for k, st := range stats {
 		best := ""
@@ -1568,6 +1559,79 @@ func (v *View) FieldKeys(segs []string, limit int) (keys []FieldKey, objects int
 		keys = keys[:limit]
 	}
 	return keys, objects
+}
+
+// ValueCount is a completion candidate for a field's value.
+type ValueCount struct {
+	Value string `json:"value"`
+	// Count of the view's live objects that have the value.
+	Count int `json:"count"`
+}
+
+// FieldValues lists the scalar values found at a path (as for FieldKeys,
+// e.g. [metadata labels app]) across the view's live objects, most common
+// first. Lists on the way and at the end are looked into element-wise.
+// Strings are taken as they are, numbers and bools formatted; maps, lists
+// and null are skipped. At most limit values.
+func (v *View) FieldValues(segs []string, limit int) (values []ValueCount, objects int) {
+	counts := map[string]int{}
+	for _, e := range v.entries {
+		if !e.deletedAt.IsZero() {
+			continue
+		}
+		objects++
+		seen := map[string]bool{}
+		visit(e.item.Object.Object, segs, func(cur any) {
+			var s string
+			switch x := cur.(type) {
+			case map[string]any:
+				return
+			case string:
+				s = x
+			default:
+				s = fmt.Sprint(x)
+			}
+			if !seen[s] {
+				seen[s] = true
+				counts[s]++
+			}
+		})
+	}
+	for s, n := range counts {
+		values = append(values, ValueCount{Value: s, Count: n})
+	}
+	sort.Slice(values, func(i, j int) bool {
+		if values[i].Count != values[j].Count {
+			return values[i].Count > values[j].Count
+		}
+		return values[i].Value < values[j].Value
+	})
+	if limit > 0 && len(values) > limit {
+		values = values[:limit]
+	}
+	return values, objects
+}
+
+// visit calls fn with what is at the path below cur (nothing if it's
+// missing); a list on the way or at the end is looked into element-wise.
+func visit(cur any, segs []string, fn func(any)) {
+	switch x := cur.(type) {
+	case []any:
+		for _, el := range x {
+			visit(el, segs, fn)
+		}
+	case map[string]any:
+		if len(segs) > 0 {
+			visit(x[segs[0]], segs[1:], fn)
+			return
+		}
+		fn(x)
+	case nil:
+	default:
+		if len(segs) == 0 {
+			fn(x)
+		}
+	}
 }
 
 func jsonType(v any) string {

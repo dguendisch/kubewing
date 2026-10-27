@@ -179,6 +179,12 @@ export interface FieldKeys {
   objects: number;
 }
 
+/** Mirrors bridge.FieldValues / view.ValueCount: values at a path across a pane's objects. */
+export interface FieldValues {
+  values: { value: string; count: number }[];
+  objects: number;
+}
+
 /** Mirrors source.ResourceType. */
 export interface ResourceType {
   name: string;
@@ -518,6 +524,8 @@ export interface Transport {
   /** Keys at a dot path ("" = top level) across the pane's objects, for CEL completion. */
   /** Keys at a path: one step per key, as in the object ([] = top level). */
   fieldKeys(pane: string, path: string[]): Promise<FieldKeys>;
+  /** Scalar values at a path (as for fieldKeys), most common first: label selector completion. */
+  fieldValues(pane: string, path: string[]): Promise<FieldValues>;
   /** The pane's columns for the column dialog: shown ones in order, then the other server columns. */
   columnChoices(pane: string): Promise<ColumnChoices>;
   /** Every resource type's column settings, by type. */

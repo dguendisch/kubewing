@@ -11,6 +11,7 @@ export function wailsTransport(): Transport {
     update: (p, y) => call("Update", p, y),
     preview: (p, d) => call("Preview", p, d),
     fieldKeys: (p, path) => call("FieldKeys", p, path),
+    fieldValues: (p, path) => call("FieldValues", p, path),
     columnChoices: (p) => call("ColumnChoices", p),
     columnConfigs: () => call("ColumnConfigs"),
     setTypeColumns: (t, c) => call("SetTypeColumns", t, c),

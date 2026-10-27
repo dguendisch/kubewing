@@ -337,6 +337,28 @@ func (s *Service) FieldKeys(paneID string, path []string) (FieldKeys, error) {
 	return FieldKeys{Keys: keys, Objects: n}, nil
 }
 
+// FieldValues lists the values at a path across a pane's live objects
+// (label selector value completion), most common first.
+type FieldValues struct {
+	Values  []view.ValueCount `json:"values"`
+	Objects int               `json:"objects"`
+}
+
+// FieldValues returns completion candidates for a field's value.
+func (s *Service) FieldValues(paneID string, path []string) (FieldValues, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return FieldValues{}, err
+	}
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	values, n := pn.view.FieldValues(path, 200)
+	if values == nil {
+		values = []view.ValueCount{}
+	}
+	return FieldValues{Values: values, Objects: n}, nil
+}
+
 // SetViewport sets the visible row window of a pane.
 func (s *Service) SetViewport(paneID string, offset, limit int) error {
 	pn, err := s.pane(paneID)

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/dguendisch/kubewing/internal/source"
+	"github.com/dguendisch/kubewing/internal/view"
 )
 
 // A stage-only Update keeps the view: no new subscription, diff state intact.
@@ -90,5 +91,9 @@ func TestPreviewAndFieldKeys(t *testing.T) {
 	fk, err := svc.FieldKeys(res.Pane, []string{"spec"})
 	if err != nil || fk.Objects != 3 || len(fk.Keys) != 1 || fk.Keys[0].Key != "gen" {
 		t.Fatalf("field keys = %+v, %v", fk, err)
+	}
+	fv, err := svc.FieldValues(res.Pane, []string{"metadata", "namespace"})
+	if err != nil || fv.Objects != 3 || len(fv.Values) != 1 || fv.Values[0] != (view.ValueCount{Value: "ns", Count: 3}) {
+		t.Fatalf("field values = %+v, %v", fv, err)
 	}
 }

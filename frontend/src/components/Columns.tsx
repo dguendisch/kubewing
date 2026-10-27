@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { submitColumns } from "../commands";
 import { Combobox } from "../complete/Combobox";
-import { CelSuggestions, useCelCompletion } from "../complete/useCelCompletion";
+import { Suggestions, useFieldCompletion } from "../complete/useFieldCompletion";
 import { bridge, setUI, useColumns, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { ColumnChoices, ColumnType, FieldKeys } from "../transport/types";
@@ -49,7 +49,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
   // CEL completion, as in the filter bar's CEL field
   const celInput = useRef<HTMLInputElement>(null);
   const [celFocused, setCelFocused] = useState(false);
-  const cel = useCelCompletion({ input: celInput, value: add.value, setValue: (value) => setAdd((a) => ({ ...a, value })), serverId, enabled: add.mode === "expr" && celFocused });
+  const cel = useFieldCompletion({ input: celInput, value: add.value, setValue: (value) => setAdd((a) => ({ ...a, value })), serverId, enabled: add.mode === "expr" && celFocused });
 
   // field path completion, one segment at a time from the pane's live objects
   const keys = useRef(new Map<string, Promise<FieldKeys>>());
@@ -232,7 +232,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
                   cel.close();
                 }}
               />
-              {cel.list ? <CelSuggestions list={cel.list} accept={cel.accept} /> : null}
+              {cel.list ? <Suggestions list={cel.list} accept={cel.accept} label="cel suggestions" /> : null}
             </div>
           )}
           <select aria-label="column type" className={field} value={add.type} onChange={(e) => setAdd({ ...add, type: e.target.value as ColumnType })}>

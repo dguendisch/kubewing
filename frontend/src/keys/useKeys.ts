@@ -22,6 +22,8 @@ export function useKeys() {
       const c = chord(e);
       // an open Monaco find widget closes on Esc before the detail view does
       if (c === "Escape" && e.target instanceof Element && e.target.closest(".find-widget.visible")) return;
+      // so does a field's open suggestion list (the filter bar's label and CEL fields) before the field
+      if (c === "Escape" && e.target instanceof Element && e.target.getAttribute("aria-expanded") === "true") return;
       // typing in Monaco's find field is text, not the detail view's d/j/k/y … keys
       if (e.target instanceof Element && e.target.closest(".find-widget") && fieldReserved(c)) return;
       // ⌘F in the detail view opens Monaco's find (suppressedDefaults would block it)
