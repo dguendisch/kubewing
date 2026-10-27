@@ -45,7 +45,7 @@ Expression languages: CEL (cel-go) for filters/columns, gojq as optional escape 
 
 ### Status
 
-Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works). Also done: column resizing and the column configurator per resource type (`o`: `-o wide`, custom path/CEL columns; `columns.yaml`), on `render.columns` with server columns by name. Copying any cell of a row (`⌘⇧C`, right-click a cell → copy cell…), and text selection inside a cell (double/triple-click, drag; `⌘C`). The diff headers show `j/k: changes`; the pane status line says "● connected" once synced, the dot green-grey.
+Done: P0 and P0.1 except for the items below (see the [README](README.md) for what works). Also done: column resizing and the column configurator per resource type (`o`: `-o wide`, custom path/CEL columns; `columns.yaml`), on `render.columns` with server columns by name. Copying any cell of a row (`⌘⇧C`, right-click a cell → copy cell…), and text selection inside a cell (double/triple-click, drag; `⌘C`). A cell whose text doesn't fit shows it whole as a tooltip. The diff headers show `j/k: changes`; the pane status line says "● connected" once synced, the dot green-grey.
 
 Done: history store per shared source (`internal/fieldpath` diff, `internal/history`), `[`/`]` step through versions in the detail diff with the changed field paths above it. Opt-in per source ("record history" in the status line, `⇧R`), since it costs: a recording watch handles ~200k events/s (normalize + hash + diff, ~5 µs/event) vs. ~1M/s without. Off, everything is as before (each view keeps the previous version).
 
@@ -56,7 +56,6 @@ Done: launching kubewing while one runs on the same config directory opens a new
 Done: `↓` opens the completion list in the label and CEL fields at the caret, also where typing alone doesn't (empty field, after an operator); the label selector completes keys, operators and a key's values (`FieldValues`, next to `FieldKeys`). `Esc` with a list open only closes the list.
 
 Next up:
-- add tooltip to cells not fitting their text (or if significantly easier, add it always)
 - user facing documentation
 - bug: e.g. cmd+d is applied while editing in the monaco editor (and then apply somehow fails) and then splits panes, such kubewing commands should not apply while in monace editor
 - monaco editor: add cmd+d (to delete a line) and opt+up/down to move a line up/down

@@ -7,6 +7,7 @@ import {
   type DrawHeaderCallback,
   type GridCell,
   type GridColumn,
+  type GridMouseEventArgs,
   type GridSelection,
   type Item,
   type Rectangle,
@@ -197,6 +198,12 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   const measureCtx = useRef<CanvasRenderingContext2D | null>(null);
   // a text drag stays in its cell's row: Glide's own drag selection would select the rows it crosses
   const dragging = useRef(false);
+  const measurer = () => {
+    measureCtx.current ??= document.createElement("canvas").getContext("2d");
+    const ctx = measureCtx.current!;
+    ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
+    return (s: string) => ctx.measureText(s).width;
+  };
   const hit = (clientX: number, clientY: number) => {
     const d = data.current;
     for (let i = 0; i < d.order.length; i++) {
@@ -209,15 +216,29 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
         const r = rowAt(d, row);
         if (!r) return undefined;
         const l = layout(r, col, d.columns[col], Date.now());
-        measureCtx.current ??= document.createElement("canvas").getContext("2d");
-        const ctx = measureCtx.current!;
-        ctx.font = `${theme.baseFontStyle} ${theme.fontFamily}`;
-        const measure = (s: string) => ctx.measureText(s).width;
+        const measure = measurer();
         const x = clientX - textStart(b, measure(l.text), l.align, theme.cellHorizontalPadding ?? 8);
         return { row, col, r, text: l.text, x, measure };
       }
     }
     return undefined;
+  };
+
+  // a cell whose text is cut off shows it whole as a tooltip: the wrapper's title, set
+  // directly (a hover re-renders nothing); the title follows the hovered cell
+  const wrapper = useRef<HTMLDivElement>(null);
+  const onItemHovered = (args: GridMouseEventArgs) => {
+    const el = wrapper.current;
+    if (!el) return;
+    let tip = "";
+    if (args.kind === "cell") {
+      const [col, row] = args.location;
+      const d = data.current;
+      const text = layout(rowAt(d, row), col, d.columns[col], Date.now()).text;
+      if (text && measurer()(text) > args.bounds.width - 2 * (theme.cellHorizontalPadding ?? 8)) tip = text;
+    }
+    if (tip) el.title = tip;
+    else el.removeAttribute("title");
   };
 
   // mousedown on a cell: 2 clicks select a word, 3 the cell; a drag from a single click a range
@@ -384,7 +405,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   };
 
   return (
-    <div className="contents" onMouseDown={onMouseDown}>
+    <div ref={wrapper} className="contents" onMouseDown={onMouseDown} onMouseLeave={() => wrapper.current?.removeAttribute("title")}>
     <DataEditor
       ref={ref}
       width="100%"
@@ -403,6 +424,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
       }}
       theme={theme}
       onVisibleRegionChanged={onVisible}
+      onItemHovered={onItemHovered}
       // drag a header to move the column (it's saved for the type, as the column dialog does);
       // drag a header edge to resize, double-click it to fit the visible cells
       onColumnMoved={onColumnMoved}
