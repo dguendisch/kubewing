@@ -111,7 +111,7 @@ export interface ObjectView {
   decode?: DecodeState;
   /** The object in the editor (e), then the server's dry-run diff. */
   edit?: EditState;
-  /** Opened by e in the table: the editor closing goes back to the table. */
+  /** Opened by the editor (e in the table, ⇧E): the editor closing goes back to the table, or closes the split. */
   viaEdit?: boolean;
 }
 
@@ -1066,6 +1066,20 @@ function back(s: UIState, paneId: string): UIState {
   // nothing to go back to (an old history): the table under it
   const { object: _, ...rest } = p;
   return updatePane(s, paneId, () => rest);
+}
+
+/**
+ * A menu's highlight moved by delta (±1), skipping entries that can't be
+ * picked and wrapping around (↑ on the first goes to the last, ↓ on the last
+ * to the first). undefined: nothing to pick.
+ */
+export function wrapIndex<T>(items: T[], index: number, delta: number, ok: (item: T) => boolean): number | undefined {
+  const n = items.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (((index + delta * k) % n) + n) % n;
+    if (ok(items[i]!)) return i;
+  }
+  return undefined;
 }
 
 export function closeOverlay(s: UIState): UIState {

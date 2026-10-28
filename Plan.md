@@ -69,7 +69,10 @@ Done: decoders (`internal/decode`, pure; `view.Decode`). `⏎` on a line of the 
 
 The decode opens over the detail view (`Esc` back to it, the cursor where it was): the header shows the field path through the levels (`data["data.yaml.br"] → doc 2: data.kubeconfig`), the chain (`base64 → brotli → yaml · 14.2 KiB`; a click on a step leaves it and what follows out, on the rendering shows the bytes as they are, the PEM text; `↺ auto` detects again); `⌘A` `⌘C` copies it. `⏎` in decoded YAML goes a level deeper (multi-document YAML too: secret → manifests → kubeconfig → `certificate-authority-data` → certificate), `Esc` a level up. Nothing to decode on a line (a map, a number, plain text) says why in the status line of the view it was asked in (the YAML, or the decoded level), not the pane's (covered by them), and stays; so do `=`/`!` without a value and `⇧H` errors in the YAML. In the object diff, `⏎` is the decoded diff: the field decoded in both versions with the same chain (a managed resource's change as YAML, not one blob for another), `j`/`k` its changes, `[`/`]` other versions; a version without the field shows it added or removed. Each request sends the levels (paths resolved by Go on the first, chains), and Go decodes from the object again: nothing decoded is kept. The detail view's keys that don't apply there (`=`, `!`, `⇧H`, `d`, `y`, `⇧D`, `e`, `⌘J`, `v`) wait until the decode is closed. Open: a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
 
+Done: the row menu's view entries are consistent: view YAML, edit YAML and describe are one entry each (the in-place variant), without "…" (nothing to configure), each with its split key as a hint (`· ⇧E split`; `RowAction.split` in `actions/registry.ts`), and `⇧⏎` on the entry runs the split variant (diff too, as before). `⇧D` in the table describes in a split to the right (`object.describeSplit`; in the detail view `⇧D` stays describe, `d` being the diff toggle there). The row menu's and the jump menu's highlight wraps around (`↑` on the first entry goes to the last, `↓` on the last to the first; `S.wrapIndex`). `Esc` in the editor of a `⇧E` split closes the split, as `e`'s editor goes back to the table (it went back to the object's YAML before).
+
 Next up:
+- nit: can label/cel completion be done on the non-filtered (e.g.) pods? Otherwise switching the label/cel mostly requires first emptying them, and only afterwards the completion will offer the other
 - dedicated annotate/label/scale commands
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
 - nit: decoder must not reformat result (e.g. json is json and not yaml)
@@ -78,6 +81,7 @@ Next up:
 - rethink yaml viewer/editor/decoder, maybe completely in the pane to be able to compare? Otherwise also tab switching is awkward
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - user facing documentation
+- nit: remember window position across restarts
 - hide-healthy filter with special support for e.g. managedresources?
 - grep filter with regex support
 - nit: what to do with last pane/tab closing? currently it reloads the pane with which it started, but that's weird

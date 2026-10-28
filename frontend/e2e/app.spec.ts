@@ -2165,6 +2165,42 @@ test.describe("object actions", () => {
     expect((await inspect(page)).overlays).toEqual([]);
   });
 
+  test("⇧D describes in a split to the right; ⇧⏎ on the menu's describe and edit entries does too", async ({ page }) => {
+    await openStatic(page);
+    await select(page, "s-web-1");
+    const table = (await inspect(page)).focusedPane;
+    await page.keyboard.press("Shift+D");
+    let s = await inspect(page);
+    const split = s.focusedPane;
+    expect(split).not.toBe(table);
+    expect(s.objects[split]).toMatchObject({ split: true, from: table, view: "describe" });
+    await expect(page.locator(`section[data-pane="${split}"]`).getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe(table);
+    // the row menu: ⇧⏎ on describe (its entries come in async: wait for the first one)
+    const active = page.getByRole("menu").locator("[data-active]");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(active).toContainText("view YAML");
+    await page.keyboard.press("j");
+    await page.keyboard.press("j");
+    await expect(active).toContainText("describe");
+    await page.keyboard.press("Shift+Enter");
+    s = await inspect(page);
+    expect(s.focusedPane).not.toBe(table);
+    expect(s.objects[s.focusedPane]).toMatchObject({ split: true, view: "describe" });
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe(table);
+    // ⇧⏎ on edit YAML: the editor in a split
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(active).toContainText("view YAML");
+    await page.keyboard.press("j");
+    await expect(active).toContainText("edit YAML");
+    await page.keyboard.press("Shift+Enter");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("edit");
+    s = await inspect(page);
+    expect(s.objects[s.focusedPane]).toMatchObject({ split: true, editing: true, from: table });
+  });
+
   test("describe diff: d compares with the previous look (times ignored), r takes a new look", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
@@ -3177,7 +3213,7 @@ test.describe("object actions", () => {
       expect((await inspect(page)).objects).toEqual({});
     });
 
-    test("⇧E edits in a split to the right; the table stays; esc back to the YAML, esc again closes it", async ({ page }) => {
+    test("⇧E edits in a split to the right; the table stays; esc closes it", async ({ page }) => {
       await openStatic(page);
       await select(page, "s-settings");
       const table = (await inspect(page)).focusedPane;
@@ -3188,9 +3224,7 @@ test.describe("object actions", () => {
       expect(s.focus).toBe("edit");
       expect(s.objects[s.focusedPane]).toMatchObject({ split: true, editing: true, from: table });
       expect(s.objects[table]).toBeUndefined();
-      await page.keyboard.press("Escape");
-      await expect(dialog(page)).toHaveCount(0);
-      await expect(page.locator(`section[data-pane="${s.focusedPane}"]`).getByRole("region", { name: "object detail" })).toContainText("name: settings");
+      // nothing changed: esc closes the split at once (as e's editor goes back to the table), not to its YAML
       await page.keyboard.press("Escape");
       await expect.poll(async () => (await inspect(page)).focusedPane).toBe(table);
       expect((await inspect(page)).objects).toEqual({});
@@ -3325,7 +3359,7 @@ test.describe("object actions", () => {
       await expect(page.getByLabel("message")).toContainText("read-only context");
       await expect(dialog(page)).toHaveCount(0);
       await page.keyboard.press("ControlOrMeta+Enter");
-      await expect(page.getByRole("menu").getByRole("menuitem", { name: /edit YAML…/ })).toContainText("read-only context");
+      await expect(page.getByRole("menu").getByRole("menuitem", { name: /edit YAML/ })).toContainText("read-only context");
       await page.keyboard.press("Escape");
     });
   });
@@ -3382,10 +3416,9 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await expect(menu(page)).toMatchAriaSnapshot(`
       - menu "actions for web-1":
         - text: web-1 · pod · shop
-        - menuitem "view YAML ⏎"
-        - menuitem "edit YAML… e"
-        - menuitem "edit YAML in a split… ⇧E"
-        - menuitem "describe d"
+        - menuitem "view YAML ⏎ · ⇧⏎ split"
+        - menuitem "edit YAML e · ⇧E split"
+        - menuitem "describe d · ⇧D split"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name"
         - menuitem "copy cell… ⌘⇧C"
@@ -3399,16 +3432,23 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j/k skip the disabled diff entry: edit YAML → in a split → describe → copy name → describe
+    // j/k skip the disabled diff entry: edit YAML → describe → copy name → describe
     await page.keyboard.press("j");
-    await expect(menu(page).locator("[data-active]")).toContainText("edit YAML…");
-    await page.keyboard.press("j");
-    await expect(menu(page).locator("[data-active]")).toContainText("edit YAML in a split…");
+    await expect(menu(page).locator("[data-active]")).toContainText("edit YAML");
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("copy name");
     await page.keyboard.press("k");
+    await expect(menu(page).locator("[data-active]")).toContainText("describe");
+    // the highlight wraps around: ↑ from the first entry to the last, ↓ from there to the first
+    for (let i = 0; i < 2; i++) await page.keyboard.press("k");
+    await expect(menu(page).locator("[data-active]")).toContainText("view YAML");
+    await page.keyboard.press("ArrowUp");
+    await expect(menu(page).locator("[data-active]")).toContainText("delete…");
+    await page.keyboard.press("ArrowDown");
+    await expect(menu(page).locator("[data-active]")).toContainText("view YAML");
+    for (let i = 0; i < 2; i++) await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("Enter");
     await expect(menu(page)).toHaveCount(0);
@@ -3447,7 +3487,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   test("a menu opening under a resting pointer keeps the first entry; moving the mouse still highlights", async ({ page }) => {
     await openSettled(page);
     const active = () => menu(page).locator("[data-active]").innerText();
-    // find where "edit YAML…" (2nd entry) appears, then park the pointer there
+    // find where "edit YAML" (2nd entry) appears, then park the pointer there
     await page.keyboard.press("ControlOrMeta+Enter");
     const item = (await menu(page).getByRole("menuitem").nth(1).boundingBox())!;
     await page.keyboard.press("Escape");
@@ -3462,7 +3502,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     // real movement inside the open menu highlights what's under the pointer
     await page.keyboard.press("ControlOrMeta+Enter");
     await page.mouse.move(item.x + 60, item.y + item.height / 2, { steps: 4 });
-    await expect.poll(active).toContain("edit YAML…");
+    await expect.poll(active).toContain("edit YAML");
   });
 
   test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {
@@ -3640,6 +3680,15 @@ test.describe("jump to (⌘J)", () => {
     // the highlight starts on the direct owner; j steps up the chain
     await expect(jump(page).locator("[data-active]")).toContainText("replicaset web-7d9f");
     await page.keyboard.press("j");
+    await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
+    // it wraps around: past the last entry to the first, and back up
+    for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowDown");
+    await expect(jump(page).locator("[data-active]")).toContainText("events");
+    await page.keyboard.press("ArrowDown");
+    await expect(jump(page).locator("[data-active]")).toContainText("rel-pods in shop");
+    await page.keyboard.press("ArrowUp");
+    await expect(jump(page).locator("[data-active]")).toContainText("events");
+    for (let i = 0; i < 2; i++) await page.keyboard.press("k");
     await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
     await page.keyboard.press("Enter");
     await expect(jump(page)).toHaveCount(0);

@@ -140,11 +140,12 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "menu.runSplit": {
       const o = s.overlay;
       if (o?.kind === "jump") return void runJump(o.index ?? 0, true);
-      // the row menu: a view entry (YAML, diff, describe) opens in a split instead of in place
+      // the row menu: a view entry (YAML, diff, describe) opens in a split instead of in place, edit YAML its editor
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
-      if (!item || item.disabled || !splitViews.has(item.command)) return;
+      if (!item || item.disabled || !(splitViews.has(item.command) || item.split)) return;
       setUI(S.closeOverlay);
+      if (!splitViews.has(item.command)) return dispatch(item.split!);
       return openObjectView(S.focusedPane(useUI.getState()), splitViews.get(item.command)!, true);
     }
     case "history.back":
@@ -170,6 +171,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       // from the table, or switching an object view to describe
       if (pane.object) return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, view: "describe", diff: false, describeGen: (o.describeGen ?? 0) + 1 })));
       return openObjectView(pane, { view: "describe" }, false);
+    case "object.describeSplit":
+      return openObjectView(pane, { view: "describe" }, true);
     case "object.exec":
       return void prepareAction("exec");
     case "object.edit":
@@ -568,8 +571,8 @@ async function openEdit(inSplit = false) {
     const moved = before ? now?.object?.key !== key || !!now.object.edit || (!!now.object.decode && !inSplit) : !!now?.object || (now && selectedKey(now)) !== key;
     if (!now || moved) return void bridge().editClose(es.session).catch(() => {});
     const edit: S.EditState = { session: es.session, key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml };
-    // ⇧E: a split of its own, opened in the editor (Esc there goes back to the object's YAML, again Esc closes it)
-    if (inSplit) return setUI((x) => S.withEdit(S.openObjectSplit(S.closeOverlay(x), { key, view: "yaml", title: info.name }, pane.id), edit));
+    // ⇧E: a split of its own, opened in the editor (closing the editor closes the split, as e's goes back to the table)
+    if (inSplit) return setUI((x) => S.withEdit(S.openObjectSplit(S.closeOverlay(x), { key, view: "yaml", title: info.name, viaEdit: true }, pane.id), edit));
     if (before) return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, edit, title: o.title ?? info.name })));
     setUI((x) => S.openObject(S.closeOverlay(x), pane.id, { key, view: "yaml", title: info.name, edit, viaEdit: true }));
   } catch (e) {
@@ -920,30 +923,14 @@ function moveInHistory(s: S.UIState, delta: number): S.UIState {
 
 /** Moves the jump menu highlight, skipping entries that go nowhere. */
 function moveJump(s: S.UIState, delta: number): S.UIState {
-  const items = useJump.getState().items;
-  if (!s.overlay || items.length === 0) return s;
-  let i = s.overlay.index ?? 0;
-  for (let n = 0; n < items.length; n++) {
-    const j = i + delta;
-    if (j < 0 || j >= items.length) break;
-    i = j;
-    if (jumpable(items[i]!)) return { ...s, overlay: { ...s.overlay, index: i } };
-  }
-  return s;
+  const i = S.wrapIndex(useJump.getState().items, s.overlay?.index ?? 0, delta, jumpable);
+  return s.overlay && i !== undefined ? { ...s, overlay: { ...s.overlay, index: i } } : s;
 }
 
 /** Moves the menu highlight, skipping disabled entries. */
 function moveMenu(s: S.UIState, delta: number): S.UIState {
-  const items = useMenu.getState().items;
-  if (!s.overlay || items.length === 0) return s;
-  let i = s.overlay.index ?? 0;
-  for (let n = 0; n < items.length; n++) {
-    const j = i + delta;
-    if (j < 0 || j >= items.length) break;
-    i = j;
-    if (!items[i]!.disabled) return { ...s, overlay: { ...s.overlay, index: i } };
-  }
-  return s;
+  const i = S.wrapIndex(useMenu.getState().items, s.overlay?.index ?? 0, delta, (it) => !it.disabled);
+  return s.overlay && i !== undefined ? { ...s, overlay: { ...s.overlay, index: i } } : s;
 }
 
 function moveContainer(s: S.UIState, delta: number): S.UIState {

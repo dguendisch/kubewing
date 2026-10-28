@@ -321,6 +321,17 @@ describe("jumps and their history", () => {
 });
 
 describe("overlays", () => {
+  it("a menu's highlight wraps around, skipping what can't be picked", () => {
+    const items = [{ ok: true }, { ok: false }, { ok: true }, { ok: false }];
+    const ok = (i: { ok: boolean }) => i.ok;
+    expect(S.wrapIndex(items, 0, 1, ok)).toBe(2);
+    expect(S.wrapIndex(items, 2, 1, ok)).toBe(0); // ↓ on the last pickable: the first
+    expect(S.wrapIndex(items, 0, -1, ok)).toBe(2); // ↑ on the first: the last pickable
+    expect(S.wrapIndex([{ ok: true }], 0, 1, ok)).toBe(0);
+    expect(S.wrapIndex([{ ok: false }], 0, 1, ok)).toBeUndefined();
+    expect(S.wrapIndex([], 0, 1, ok)).toBeUndefined();
+  });
+
   it("restores previous focus on close", () => {
     let s: S.UIState = { ...S.initialState(), focus: "filter" };
     s = S.openOverlay(s, { kind: "help", pane: "v1" });

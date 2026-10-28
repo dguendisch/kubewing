@@ -9,8 +9,9 @@ import * as S from "../store/state";
 
 /**
  * ⌘⏎ / right-click: every operation on the selected row, generated from
- * actions/registry.ts with shortcuts from the live keymap. Disabled entries
- * say why. ⏎ runs, j/k or arrows move, Esc closes.
+ * actions/registry.ts with shortcuts from the live keymap (and, as a hint,
+ * the key of the split variant). Disabled entries say why. ⏎ runs, ⇧⏎ runs
+ * in a split, j/k or arrows move, Esc closes.
  */
 export function ContextMenu() {
   const overlay = useUI((s) => s.overlay);
@@ -122,6 +123,11 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
             <span>{it.label}</span>
             {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}
             <span className="ml-auto text-fg-muted">{it.shortcut}</span>
+            {it.splitShortcut ? (
+              <span className="text-[11px] text-fg-muted" title={`${it.splitShortcut}: in a split to the right`}>
+                · {it.splitShortcut} split
+              </span>
+            ) : null}
           </button>
         </div>
       ))}

@@ -21,6 +21,8 @@ export interface RowAction {
   available: (row: RowInfo, rule: SafetyRule | undefined) => true | string;
   /** Mutations: refused on read-only contexts. */
   mutates?: boolean;
+  /** The same in a split to the right: not an entry of its own, its shortcut is a hint on this one (and ⇧⏎ in the menu runs it). */
+  split?: CommandId;
 }
 
 const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
@@ -28,10 +30,9 @@ const onNode = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.kind === "Nod
 const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod, not ${r.kind.toLowerCase()}`);
 
 export const rowActions: RowAction[] = [
-  { command: "detail.open", label: "view YAML", group: "view", available: () => true },
-  { command: "object.edit", label: "edit YAML…", group: "view", available: live, mutates: true },
-  { command: "object.editSplit", label: "edit YAML in a split…", group: "view", available: live, mutates: true },
-  { command: "object.describe", label: "describe", group: "view", available: live },
+  { command: "detail.open", label: "view YAML", group: "view", available: () => true, split: "detail.openSplit" },
+  { command: "object.edit", label: "edit YAML", group: "view", available: live, mutates: true, split: "object.editSplit" },
+  { command: "object.describe", label: "describe", group: "view", available: live, split: "object.describeSplit" },
   {
     command: "object.diff",
     // with recorded history the diff steps through every kept change ([ / ])
@@ -57,6 +58,9 @@ export interface MenuItem {
   group: RowAction["group"];
   /** Shortcut in the table, for display (e.g. "⇧D"); undefined if unbound. */
   shortcut?: string;
+  /** The split variant (RowAction.split) and its shortcut in the table, for the hint. */
+  split?: CommandId;
+  splitShortcut?: string;
   /** Why it's disabled; undefined = enabled. */
   disabled?: string;
 }
@@ -69,8 +73,11 @@ export function menuFor(row: RowInfo, rule: SafetyRule | undefined, bindings: Bi
   return rowActions.map((a) => {
     let ok = a.available(row, rule);
     if (ok === true && a.mutates && rule?.readOnly) ok = "read-only context";
-    const b = bindings.find((x) => x.command === a.command && (!x.when?.length || x.when.includes("table")));
+    const key = (c: CommandId) => {
+      const b = bindings.find((x) => x.command === c && (!x.when?.length || x.when.includes("table")));
+      return b && prettyKey(b.key);
+    };
     const label = typeof a.label === "function" ? a.label(row) : a.label;
-    return { command: a.command, label, group: a.group, shortcut: b && prettyKey(b.key), disabled: ok === true ? undefined : ok };
+    return { command: a.command, label, group: a.group, shortcut: key(a.command), split: a.split, splitShortcut: a.split && key(a.split), disabled: ok === true ? undefined : ok };
   });
 }

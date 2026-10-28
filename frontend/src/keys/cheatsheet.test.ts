@@ -32,7 +32,7 @@ describe("cheat sheet", () => {
 
   it("repeats a command in a section scoped to one context", () => {
     const detail = cheatsheet().find((s) => s.title === "detail view")!;
-    const edit = detail.entries.find((e) => e.label === "edit YAML…")!;
+    const edit = detail.entries.find((e) => e.label === "edit YAML")!;
     expect(edit.keys).toEqual(["e"]);
     expect(edit.when).toEqual(["detail"]);
   });

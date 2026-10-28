@@ -70,6 +70,7 @@ export type CommandId =
   | "history.back"
   | "history.forward"
   | "object.describe"
+  | "object.describeSplit"
   | "object.exec"
   | "object.edit"
   | "object.editSplit"
@@ -125,7 +126,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
@@ -260,7 +261,8 @@ export const defaultBindings: Binding[] = [
   // the row's events: a jump to the events about it (⌘← back to the row)
   { key: "V", command: "object.events", when: ["table", "detail"] },
   { key: "D", command: "object.describe", when: ["table"] },
-  // in the detail view d is the diff toggle, so describe keeps ⇧D there
+  // describe in a split to the right, like ⇧⏎ / ⇧E; in the detail view d is the diff toggle, so ⇧D is describe there
+  { key: "Shift+D", command: "object.describeSplit", when: ["table"] },
   { key: "Shift+D", command: "object.describe", when: ["detail"] },
   // e edits (as kubectl edit, also from the YAML view); exec is x (k9s' "s" is the shell there, x for eXec)
   { key: "E", command: "object.edit", when: ["table", "detail"] },

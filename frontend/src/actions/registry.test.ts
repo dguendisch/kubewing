@@ -61,8 +61,18 @@ describe("row actions menu", () => {
     expect(m["object.describe"]!.shortcut).toBeUndefined(); // unbound: still in the menu, without a hint
   });
 
+  it("split variants are a hint on their entry, not entries of their own", () => {
+    const m = byCmd(menuFor(pod, undefined));
+    expect(m["object.editSplit"]).toBeUndefined();
+    expect(m["object.edit"]).toMatchObject({ label: "edit YAML", shortcut: "e", split: "object.editSplit", splitShortcut: "⇧E" });
+    expect(m["object.describe"]).toMatchObject({ label: "describe", shortcut: "d", splitShortcut: "⇧D" });
+    expect(m["detail.open"]).toMatchObject({ label: "view YAML", shortcut: "⏎", splitShortcut: "⇧⏎" });
+    expect(m["object.diff"]!.splitShortcut).toBeUndefined();
+  });
+
   it("every object.* command is in the menu (new row actions must be added to the registry)", () => {
-    const inMenu = new Set(rowActions.map((a) => a.command));
+    // split variants are a hint on their entry (⇧⏎ in the menu)
+    const inMenu = new Set(rowActions.flatMap((a) => (a.split ? [a.command, a.split] : [a.command])));
     // object.events is an entry of the jump menu (jump to…), like the other places a pane can switch to
     const objectCmds = commandIds.filter((c) => c.startsWith("object.") && c !== "object.menu" && c !== "object.events");
     expect(objectCmds.filter((c) => !inMenu.has(c))).toEqual([]);
