@@ -15,14 +15,21 @@ const plain = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "").replace(/\r\n$/, "
 describe("lineMatches", () => {
   it("requires every positive term and excludes negated ones", () => {
     const t = filterTerms("ready !warning");
-    expect(lineMatches("api-0 app ready", t)).toBe(true);
-    expect(lineMatches("api-0 app warning ready", t)).toBe(false); // negated term present
-    expect(lineMatches("api-0 app starting", t)).toBe(false); // missing "ready"
+    expect(lineMatches(["api-0", "app", "ready"], t)).toBe(true);
+    expect(lineMatches(["api-0", "app", "warning ready"], t)).toBe(false); // negated term present
+    expect(lineMatches(["api-0", "app", "starting"], t)).toBe(false); // missing "ready"
   });
   it("matches the pod and container too, so typing a pod narrows", () => {
     const t = filterTerms("api-1");
-    expect(lineMatches("api-1 app whatever", t)).toBe(true);
-    expect(lineMatches("api-0 app whatever", t)).toBe(false);
+    expect(lineMatches(["api-1", "app", "whatever"], t)).toBe(true);
+    expect(lineMatches(["api-0", "app", "whatever"], t)).toBe(false);
+  });
+  it("anchors to the pod, the container or the text; | for either", () => {
+    expect(lineMatches(["api-1", "app", "GET /healthz"], filterTerms("^get"))).toBe(true);
+    expect(lineMatches(["api-1", "app", "GET /healthz"], filterTerms("^healthz"))).toBe(false);
+    expect(lineMatches(["api-1", "app", "GET /healthz"], filterTerms("^app$ healthz$"))).toBe(true);
+    expect(lineMatches(["api-1", "app", "level=info"], filterTerms("error | warn"))).toBe(false);
+    expect(lineMatches(["api-1", "app", "level=warn"], filterTerms("error | warn"))).toBe(true);
   });
 });
 
@@ -32,6 +39,10 @@ describe("highlight", () => {
     // the match is wrapped in inverse video, then reset
     expect(out).toContain("\x1b[7mspace\x1b[0m");
     expect(out).not.toContain("\x1b[7mlow");
+  });
+  it("highlights an anchored term only where it's anchored", () => {
+    const out = highlight("err: err", filterTerms("^err"));
+    expect(out).toBe("\x1b[7merr\x1b[0m: err");
   });
 });
 

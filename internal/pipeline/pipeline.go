@@ -36,7 +36,8 @@ type Stage struct {
 	// Filter is a CEL expression over the object `o`; objects evaluating to false are dropped.
 	Filter string `json:"filter,omitempty"`
 	// Grep matches the rendered row, case-insensitively: space-separated
-	// terms that must all occur, "!x" for must not (see ParseGrep).
+	// terms that must all occur, "!x" for must not, "^x"/"x$" anchored to a
+	// cell, "a | b" for either (see ParseGrep).
 	Grep string `json:"grep,omitempty"`
 	// Sort lists column names; a leading "-" sorts descending.
 	Sort []string `json:"sort,omitempty"`

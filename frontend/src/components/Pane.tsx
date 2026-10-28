@@ -279,7 +279,7 @@ function LogFilter({ paneId, value, focused, shown, total }: { paneId: string; v
         ref={ref}
         aria-label="grep"
         placeholder="/ grep"
-        title={'terms must all match · !x excludes · "a b" is one term'}
+        title={'terms must all match · !x excludes · ^x starts, x$ ends a cell · a | b either · "a b" is one term'}
         value={value}
         spellCheck={false}
         onFocus={() => setUI((s) => (s.focus === "logsfilter" ? s : { ...S.focusPane(s, paneId), focus: "logsfilter" }))}
@@ -435,8 +435,11 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
     const t = setTimeout(() => apply({ grep: grepNow }), 150);
     return () => clearTimeout(t);
   }, [grepNow]);
-  // a jump or going back replaces the spec: the field follows
-  useEffect(() => setGrep(pane.spec.grep), [pane.spec.grep]);
+  // a jump or going back replaces the spec: the field follows; not when the
+  // spec is what the field applied (all of it, or without a held-back term)
+  useEffect(() => {
+    if (pane.spec.grep !== grep && pane.spec.grep !== grepNow) setGrep(pane.spec.grep);
+  }, [pane.spec.grep]);
   // the latest spec, for applies that land after other edits
   const apply = (patch: Partial<S.PaneSpec>) => {
     const cur = useUI.getState().panes[pane.id];
@@ -468,7 +471,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
           ref={input}
           aria-label="filter"
           placeholder="/ grep"
-          title={'terms must all match · !x excludes · "a b" is one term'}
+          title={'terms must all match · !x excludes · ^x starts, x$ ends a cell · a | b either · "a b" is one term'}
           value={grep}
           onChange={(e) => {
             setGrep(e.target.value);

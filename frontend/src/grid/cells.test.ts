@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellChoices, formatAge, grepRanges, initialCell, layout, toHex, withAlpha } from "./cells";
+import { cellChoices, formatAge, initialCell, layout, toHex, withAlpha } from "./cells";
 
 const now = Date.parse("2026-01-01T12:00:00Z");
 
@@ -30,26 +30,6 @@ describe("layout", () => {
   });
   it("missing rows render empty", () => {
     expect(layout(undefined, 0, cols[0], now).text).toBe("");
-  });
-});
-
-describe("grepRanges", () => {
-  it("finds every occurrence, case-insensitively, per cell", () => {
-    expect(grepRanges(["etcd-main-0", "Running", "etcd"], ["etcd"])).toEqual([[[0, 4]], [], [[0, 4]]]);
-    expect(grepRanges(["ETCD-etcd"], ["etcd"])).toEqual([[[0, 4], [5, 9]]]);
-  });
-  it("merges overlapping occurrences and terms", () => {
-    expect(grepRanges(["aaaa"], ["aa"])).toEqual([[[0, 4]]]);
-    expect(grepRanges(["etcd-main"], ["etcd-m", "main"])).toEqual([[[0, 9]]]);
-  });
-  it("splits a phrase across cells like the joined row Go matches", () => {
-    expect(grepRanges(["etcd-0", "Running"], ["0 run"])).toEqual([[[5, 6]], [[0, 3]]]);
-  });
-  it("no terms, no ranges", () => {
-    expect(grepRanges(["a", "b"], [])).toEqual([[], []]);
-  });
-  it("skips a cell whose length lower-casing changes, keeping later offsets right", () => {
-    expect(grepRanges(["İx", "x"], ["x"])).toEqual([[], [[0, 1]]]);
   });
 });
 

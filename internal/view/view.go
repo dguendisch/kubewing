@@ -657,8 +657,8 @@ func (v *View) matches(e *entry, filters []*expr.Program) (bool, error) {
 	return matches(e.item.Object.Object, e.cells, filters, v.greps)
 }
 
-// matches applies filters (all must be true) and grep terms (each must
-// occur in the rendered row, or for a negated term must not). The error is
+// matches applies filters (all must be true) and grep terms (see
+// pipeline.MatchGrep) to the rendered row. The error is
 // the first evaluation failure, if any.
 func matches(obj map[string]any, cells []string, filters []*expr.Program, greps []pipeline.GrepTerm) (bool, error) {
 	for _, f := range filters {
@@ -667,15 +667,7 @@ func matches(obj map[string]any, cells []string, filters []*expr.Program, greps 
 			return false, err
 		}
 	}
-	if len(greps) > 0 {
-		row := strings.ToLower(strings.Join(cells, " "))
-		for _, g := range greps {
-			if strings.Contains(row, g.Text) == g.Not {
-				return false, nil
-			}
-		}
-	}
-	return true, nil
+	return pipeline.MatchGrep(greps, cells), nil
 }
 
 func format(v any, typ string) string {

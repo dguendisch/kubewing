@@ -409,6 +409,32 @@ test("grep: !x excludes; a negated term applies once finished, so typing it neve
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-1"]);
 });
 
+test("grep: a held-back term after an applied grep keeps the field (regression: it reset to the applied part)", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("/");
+  const field = page.getByLabel("filter", { exact: true });
+  for (const [typed, applied] of [["etcd | ", "etcd | "], ["a", "etcd"], ["pi-1", "etcd"]] as const) {
+    await page.keyboard.type(typed);
+    await expect.poll(async () => (await focused(page)).spec.grep).toBe(applied);
+    await page.waitForTimeout(250); // slower than the debounce
+  }
+  await expect(field).toHaveValue("etcd | api-1");
+  await expect(page.getByRole("status", { name: "grep draft" })).toContainText("| api-1 · ⏎ apply");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1]).sort()).toEqual(["api-1", "etcd-0"]);
+  // the same for a negated term
+  await page.keyboard.press("/");
+  await field.fill("api ");
+  await expect.poll(async () => (await focused(page)).spec.grep).toBe("api ");
+  await page.keyboard.type("!api-1");
+  await page.waitForTimeout(250);
+  await expect(field).toHaveValue("api !api-1");
+  // ^ and $ anchor to a cell
+  await field.fill("^api -0$");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-0"]);
+});
+
 test("grep highlights its matches in the cells, and the highlight goes with the grep", async ({ page }) => {
   await openTape(page);
   const canvas = page.locator("section[data-pane] canvas").first();

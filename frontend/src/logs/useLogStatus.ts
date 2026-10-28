@@ -1,6 +1,6 @@
 import { useRef, useSyncExternalStore } from "react";
 import { logBuffers } from "./buffer";
-import { filterTerms, lineMatches, streamName } from "./render";
+import { filterTerms, lineMatches, lineParts } from "./render";
 
 export interface LogStatus {
   /** Lines in the buffer (before the filter). */
@@ -53,7 +53,7 @@ function logStatus(session: string, filter: string): LogStatus {
       continue;
     }
     const s = byId.get(l.stream);
-    if (lineMatches(`${s ? streamName(s) : l.stream} ${l.text}`, terms)) shown++;
+    if (lineMatches(lineParts(s, l.stream, l.text), terms)) shown++;
   }
   const pods = new Set<string>();
   let following = 0, limited = 0, ended = 0;

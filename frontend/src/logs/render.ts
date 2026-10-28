@@ -4,7 +4,7 @@
  * terms highlighted. Pure, so it is unit-tested without a terminal.
  */
 import type { LogLine, LogStream } from "../transport/types";
-import { parseGrep, type GrepTerm } from "../components/grep";
+import { grepRanges, matchGrep, parseGrep, type GrepTerm } from "../components/grep";
 
 /** xterm's 16-color ANSI palette indices a pod's color cycles through (see logs.palette). */
 const POD_COLORS = [2, 4, 5, 6, 3, 1]; // green, blue, magenta, cyan, yellow, red
@@ -18,37 +18,21 @@ function fg(ansi: number): string {
   return ansi < 8 ? `\x1b[3${ansi}m` : `\x1b[9${ansi - 8}m`;
 }
 
-/** Keeps a line only if every positive term matches and no negated one does;
- * matched against "pod container text" so typing a pod or container narrows. */
-export function lineMatches(haystack: string, terms: GrepTerm[]): boolean {
-  const low = haystack.toLowerCase();
-  for (const t of terms) {
-    if (low.includes(t.text) === t.not) return false;
-  }
-  return true;
+/** Keeps a line only if its parts (pod, container, text: see lineParts) match
+ * the terms, so typing a pod or container narrows to it and `^` anchors to
+ * any of them. */
+export function lineMatches(parts: string[], terms: GrepTerm[]): boolean {
+  return matchGrep(terms, parts);
 }
 
-/** Highlights every positive term in text with inverse video (case-insensitive). */
+/** Highlights the positive terms in text with inverse video (case-insensitive;
+ * an anchored term where it's anchored in the text). */
 export function highlight(text: string, terms: GrepTerm[]): string {
-  const pos = terms.filter((t) => !t.not).map((t) => t.text).filter(Boolean);
-  if (pos.length === 0) return text;
-  const low = text.toLowerCase();
-  // collect match ranges, merge overlaps
-  const ranges: [number, number][] = [];
-  for (const t of pos) {
-    for (let i = low.indexOf(t); i >= 0; i = low.indexOf(t, i + 1)) ranges.push([i, i + t.length]);
-  }
+  const ranges = grepRanges([text], terms)[0]!;
   if (ranges.length === 0) return text;
-  ranges.sort((a, b) => a[0] - b[0]);
-  const merged: [number, number][] = [];
-  for (const r of ranges) {
-    const last = merged[merged.length - 1];
-    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
-    else merged.push([...r]);
-  }
   let out = "";
   let at = 0;
-  for (const [s, e] of merged) {
+  for (const [s, e] of ranges) {
     out += text.slice(at, s) + MATCH + text.slice(s, e) + RESET;
     at = e;
   }
@@ -69,9 +53,11 @@ export interface RenderOptions {
 /** Widest the prefix column gets; longer labels are cut in the middle. */
 export const MAX_PREFIX_WIDTH = 40;
 
-/** A stream's full name, what the live filter matches ("pod container"). */
-export function streamName(s: LogStream): string {
-  return s.pod === s.container ? s.pod : `${s.pod} ${s.container}`;
+/** What the live filter matches of a line: its pod, container (unless the
+ * same as the pod) and text, or the stream id for an unknown stream. */
+export function lineParts(s: LogStream | undefined, stream: string, text: string): string[] {
+  if (!s) return [stream, text];
+  return s.pod === s.container ? [s.pod, text] : [s.pod, s.container, text];
 }
 
 /**
@@ -117,8 +103,7 @@ export function renderLines(lines: LogLine[], o: RenderOptions): string[] {
     const s = byId.get(l.stream);
     const marker = l.text.startsWith("—");
     // the filter matches the full pod and container, also where the prefix leaves them out
-    const haystack = `${s ? streamName(s) : l.stream} ${l.text}`;
-    if (!marker && !lineMatches(haystack, o.terms)) continue;
+    if (!marker && !lineMatches(lineParts(s, l.stream, l.text), o.terms)) continue;
     let line = "";
     if (o.prefix && !marker && width > 0) {
       const color = s ? POD_COLORS[s.color % POD_COLORS.length]! : 7;

@@ -47,45 +47,6 @@ export function layout(row: RowData | undefined, col: number, column: ColumnInfo
   return { ...base, hiddenMarker: col === 0 && !!row.hidden };
 }
 
-/** A [start, end) range of a cell's text. */
-export type Range = [start: number, end: number];
-
-/**
- * Where grep terms occur in a row, per cell: searched like the Go side
- * (internal/view/view.go, matches) in the lower-cased cells joined by a
- * space, so a phrase across two cells highlights in both. Overlapping
- * occurrences are merged. Terms are lower-case (parseGrep); negated ones
- * never occur in a shown row and are left to the caller to drop.
- */
-export function grepRanges(cells: string[], terms: string[]): Range[][] {
-  const lower = cells.map((c) => c.toLowerCase());
-  const joined = lower.join(" ");
-  const found: Range[] = [];
-  for (const t of terms) {
-    for (let i = joined.indexOf(t); i >= 0; i = joined.indexOf(t, i + 1)) found.push([i, i + t.length]);
-  }
-  found.sort((a, b) => a[0] - b[0]);
-  const merged: Range[] = [];
-  for (const r of found) {
-    const last = merged[merged.length - 1];
-    if (last && r[0] <= last[1]) last[1] = Math.max(last[1], r[1]);
-    else merged.push([...r]);
-  }
-  let base = 0;
-  return lower.map((l, i) => {
-    const out: Range[] = [];
-    const end = base + l.length;
-    // lower-casing changed the length (e.g. "İ"): offsets wouldn't map back to the text
-    if (l.length === cells[i]!.length) {
-      for (const [s, e] of merged) {
-        if (e > base && s < end) out.push([Math.max(s, base) - base, Math.min(e, end) - base]);
-      }
-    }
-    base = end + 1;
-    return out;
-  });
-}
-
 /**
  * A theme token with alpha, in the legacy comma syntax with 0–255 channels.
  * Glide's blend() parses getComputedStyle output by keeping only digits,

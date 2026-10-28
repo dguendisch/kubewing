@@ -78,7 +78,6 @@ Done: in time travel, age cells (AGE, an event's LAST SEEN, …) count from the 
 Next up:
 - add user facing documentation/manual & cleanup of plan.md and readme.md(everything done goes into a user documentation/manual, only high-level/interesting/novel features remain in readme, plan.md must only remain with not-yet-done things); the manual should have a structure to present the features/functionality
 - dedicated annotate/label/scale commands
-- grep filter with regex support
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
 - nit: "record history" should be "record changes"
 - nit: decoder must not reformat result (e.g. json is json and not yaml)
@@ -111,8 +110,8 @@ Still open in P0.1:
 1. **Splits & tabs** — `cmd+d` split horizontal, `cmd+shift+d` split vertical.
 1. **Filter bar** — quick grep + label selector + one CEL filter on the focused view (full stage editing comes with the palette).
    - Fields: `/` grep, `l` label selector, `c` CEL (`o` = the object). The CEL field widens to the header while focused; unfocused it's a truncated chip, so a hidden-rows filter is never invisible. Status line: `12 / 340 shown`.
-   - **Grep terms** (fzf-like): space-separated, all must match; `!x` excludes; `"a b"` is one term; `\!` escapes. Still one `grep:` string in the pipeline, so export maps it to `grep -i a | grep -vi x`.
-   - **Grep applies live** (debounced): every extra character of a positive term only narrows the result. A negated term does the opposite (`!c` hides nearly everything, `!co` … brings rows back), so the one being typed is held back until it's finished: a following space, `⏎`, or leaving the field.
+   - **Grep terms** (fzf-like): space-separated, all must match; `!x` excludes; `^x`/`x$` anchor to a cell's start/end; a lone `|` ORs its neighbours (`a b | c` = a ∧ (b ∨ c)); `"a b"` is one term; `\!` `\^` `\$` `\|` escape. Regex was considered and left out: prefix, suffix and OR cover the cases, without a second engine (RE2 vs JS) or backtracking in the log filter. Still one `grep:` string in the pipeline, so export maps it to `grep -i a | grep -vi x`.
+   - **Grep applies live** (debounced): every extra character of a positive term only narrows the result. A negated term does the opposite (`!c` hides nearly everything, `!co` … brings rows back), and so does an alternative after `|` (`a | r` shows nearly everything), so the one being typed is held back (an alternative from its `|`) until it's finished: a following space, `⏎`, or leaving the field.
    - **Labels and CEL are drafts until `⏎`.** A half-typed value (`app=et`, `o.status.phase == "Run"`) is valid but matches nothing, so applying live would blank the table on every keystroke. While typing, Go dry-runs the draft against the pane's objects and the field shows the outcome: `→ 298 / 340`, a type problem (`string, not bool`), or a parse error with a caret. `⏎` or leaving the field applies (an invalid draft is refused and stays, marked red), an empty field + `⏎` clears. Switching apps doesn't count as leaving the field. Label previews are exact when the draft is at least as strict as the applied selector, else a lower bound (`≥ 298`): the wider set isn't loaded yet.
    - **In-place stage updates.** A filter/grep change re-evaluates the match flag of the existing view instead of rebuilding it: the watch, normalized objects and diff state (prev, markers) survive. Only a source change (labels) re-subscribes.
    - **Errors are visible.** Missing fields stay "no match" (heterogeneous lists); other evaluation errors count as no match and are reported in the status line (`3 errors`). CEL cost limit per evaluation.

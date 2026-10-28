@@ -183,6 +183,11 @@ func TestGrepTerms(t *testing.T) {
 		"!api !etcd":      nil,
 		`"api-0 running"`: {"api-0"}, // a phrase across cells
 		"running !":       {"api-0", "etcd-0"},
+		"^api":            {"api-0", "api-1"},
+		"^pi":             nil,
+		"-0$":             {"api-0", "etcd-0"},
+		"pending | ^etcd": {"api-1", "etcd-0"},
+		"!^run":           {"api-1"},
 	}
 	for grep, want := range cases {
 		v := stageView(t, pipeline.Stage{Grep: grep})

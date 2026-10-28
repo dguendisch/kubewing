@@ -18,8 +18,8 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
 import { bridge, paneData, useColumns } from "../store/store";
-import { grepRanges, layout, withAlpha, type ColorToken, type Range } from "./cells";
-import { parseGrep } from "../components/grep";
+import { layout, withAlpha, type ColorToken } from "./cells";
+import { grepRanges, parseGrep, type Range } from "../components/grep";
 import { nowOf, rowAt, type PaneData } from "./rowcache";
 import { boundaryAt, charAt, current, selectIn, setTextSel, shownRange, textStart, useTextSel, wordAt, type TextSel } from "./textsel";
 import type { RowData } from "../transport/types";
@@ -101,7 +101,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   }, [themeGen]);
 
   // grep highlights: ranges per row, cached by RowData (a new frame brings new objects for changed rows)
-  const terms = useMemo(() => parseGrep(grep).flatMap((t) => (t.not ? [] : [t.text])), [grep]);
+  const terms = useMemo(() => parseGrep(grep).filter((t) => !t.not), [grep]);
   const ranges = useMemo(() => new WeakMap<object, Range[][]>(), [terms]);
   const rangesOf = (row: RowData): Range[][] => {
     let r = ranges.get(row);
