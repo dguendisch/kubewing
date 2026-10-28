@@ -5,10 +5,17 @@ import { fromDockview, sameLayout, toDockview, type DockLayout } from "../store/
 import { paneIds } from "../store/layout";
 import { setUI, useUI } from "../store/store";
 import * as S from "../store/state";
+import { Crashed } from "./Crashed";
 import { Pane } from "./Pane";
 import { refocusEditor } from "../editor/focus";
 
-const components = { pane: ({ api }: IDockviewPanelProps) => <Pane id={api.id} /> };
+const components = {
+  pane: ({ api }: IDockviewPanelProps) => (
+    <Crashed what="this pane">
+      <Pane id={api.id} />
+    </Crashed>
+  ),
+};
 
 /**
  * One tab's split layout, rendered by dockview (resizable dividers, drag and

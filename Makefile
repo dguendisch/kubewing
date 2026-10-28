@@ -27,11 +27,14 @@ build: frontend
 
 # macOS shows a bare binary as a generic "exec" in the Dock; a minimal bundle gives it the real icon.
 # Exec'ing the bundled binary (not `open`) keeps stdout/stderr and flags in this terminal.
+# The binary goes in as a fresh file, not an overwrite: the kernel caches a binary's signature
+# per vnode, and a changed binary under the old one is killed at launch (SIGKILL, Code Signature Invalid).
 APP := bin/kubewing.app
 app: build
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp build/darwin/Info.plist $(APP)/Contents/
 	cp build/darwin/icons.icns $(APP)/Contents/Resources/
+	rm -f $(APP)/Contents/MacOS/kubewing
 	cp bin/kubewing $(APP)/Contents/MacOS/
 
 run: app

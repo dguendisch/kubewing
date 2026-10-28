@@ -76,7 +76,7 @@ Done: label selector completion isn't limited by the applied selector (switching
 Done: in time travel, age cells (AGE, an event's LAST SEEN, …) count from the moment shown (`status.at`), not now, and don't tick while there (`nowOf` in `grid/rowcache.ts`; the table, its text selection and ⌘⇧C's cell choices).
 
 Next up:
-- user facing documentation & cleanup of plan and readme (everything done goes into a user documentation/manual, only high-level/interesting/novel features remain in readme, plan.md must only remain with not-yet-done things)
+- add user facing documentation/manual & cleanup of plan.md and readme.md(everything done goes into a user documentation/manual, only high-level/interesting/novel features remain in readme, plan.md must only remain with not-yet-done things); the manual should have a structure to present the features/functionality
 - dedicated annotate/label/scale commands
 - grep filter with regex support
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps

@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { Crashed } from "./components/Crashed";
 import { dispatch } from "./commands";
 import type { CommandId } from "./keys/keymap";
 import { inspect } from "./inspect";
@@ -27,6 +28,8 @@ if (import.meta.env.MODE !== "production") {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App />
+    <Crashed what="kubewing">
+      <App />
+    </Crashed>
   </StrictMode>,
 );
