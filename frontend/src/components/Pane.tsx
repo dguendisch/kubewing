@@ -400,6 +400,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   const labelInput = useRef<HTMLInputElement>(null);
   const celInput = useRef<HTMLInputElement>(null);
   const [grep, setGrep] = useState(pane.spec.grep);
+  // the grep the field had when it got the focus: Esc puts it back (it applies as you type)
+  const grepBefore = useRef(pane.spec.grep);
   const fields = [input, labelInput, celInput];
 
   // "filter" focus covers all fields: `/` lands in grep, `l` in labels, `c` in CEL; a click sets the field it lands in
@@ -410,9 +412,10 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
     else if (!filterField && fields.some((f) => f.current === active)) (active as HTMLElement).blur();
   }, [filterField]);
   // moving between the fields stays in "filter"
+  const toTable = () => setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
   const onBlur = (e: React.FocusEvent) => {
     if (fields.some((f) => f.current === e.relatedTarget)) return;
-    setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
+    toTable();
   };
   const focus = (f: S.FilterField) => () => setUI((s) => ({ ...S.focusPane(s, pane.id), focus: "filter", filterField: f }));
 
@@ -422,6 +425,11 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   const live = liveGrep(grep);
   const held = live.pendingFrom >= 0 && !complete ? grep.slice(live.pendingFrom) : "";
   const grepNow = held ? live.apply : grep;
+  // ⏎ or leaving the field: the whole grep, at once (not after the debounce)
+  const commit = () => {
+    setComplete(true);
+    if (grep !== useUI.getState().panes[pane.id]?.spec.grep) apply({ grep });
+  };
   useEffect(() => {
     if (grepNow === pane.spec.grep) return;
     const t = setTimeout(() => apply({ grep: grepNow }), 150);
@@ -467,15 +475,26 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
             setComplete(false);
           }}
           onKeyDown={(e) => {
-            // ⏎ applies and goes back to the list, like esc
+            // ⏎ applies and goes back to the list; Esc too, after putting the grep it had back
             if (e.key === "Enter") {
+              commit();
+              toTable();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setGrep(grepBefore.current);
               setComplete(true);
-              setUI((s) => (s.focus === "filter" ? { ...s, focus: "table" } : s));
+              apply({ grep: grepBefore.current });
+              toTable();
             }
           }}
-          onFocus={focus("grep")}
+          data-revert
+          onFocus={(e) => {
+            // moving here from the other filter fields keeps what the grep was before
+            if (!fields.some((f) => f.current === e.relatedTarget)) grepBefore.current = pane.spec.grep;
+            focus("grep")();
+          }}
           onBlur={(e) => {
-            setComplete(true);
+            commit();
             onBlur(e);
           }}
           className={`w-48 ${field} ${held ? "border-dashed" : ""}`}
@@ -496,6 +515,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         serverId={pane.serverId}
         focused={filterField === "labels"}
         onApply={(labelSelector) => apply({ labelSelector })}
+        onDone={toTable}
         onFocus={focus("labels")}
         onBlur={onBlur}
         className={`w-36 ${field}`}
@@ -509,6 +529,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         serverId={pane.serverId}
         focused={filterField === "cel"}
         onApply={(filter) => apply({ filter })}
+        onDone={toTable}
         onFocus={focus("cel")}
         onBlur={onBlur}
         className={`w-36 truncate ${field}`}

@@ -12,6 +12,11 @@ describe("labelContext", () => {
     expect(ctx("env in (a, b),ti|")).toEqual({ from: 14, word: "ti", at: "key", others: "env in (a, b)" });
   });
 
+  it("has nothing to complete at a caret past the end (a value replaced from elsewhere)", () => {
+    expect(labelContext("", 7)).toBeUndefined();
+    expect(labelContext("app=a", 9)).toBeUndefined();
+  });
+
   it("completes a value after =, == and !=", () => {
     expect(ctx("app=|")).toEqual({ from: 4, word: "", at: "value", key: "app", others: "" });
     expect(ctx("tier=x,app == et|")).toEqual({ from: 14, word: "et", at: "value", key: "app", others: "tier=x" });

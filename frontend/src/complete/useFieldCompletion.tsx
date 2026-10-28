@@ -41,7 +41,9 @@ export function useFieldCompletion({
   enabled: boolean;
   syntax?: "cel" | "labels";
 }) {
-  const [caret, setCaret] = useState(0);
+  const [tracked, setCaret] = useState(0);
+  // a value set from elsewhere (Esc putting the applied one back, a jump) may be shorter than where the caret was
+  const caret = Math.min(tracked, value.length);
   const [list, setList] = useState<CompletionList>();
   // ↓ asked for the list at this text and caret (typing on goes back to opening on its own)
   const [asked, setAsked] = useState<{ value: string; caret: number }>();

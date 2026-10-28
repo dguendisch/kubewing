@@ -24,6 +24,8 @@ export function useKeys() {
       if (c === "Escape" && e.target instanceof Element && e.target.closest(".find-widget.visible")) return;
       // so does a field's open suggestion list (the filter bar's label and CEL fields) before the field
       if (c === "Escape" && e.target instanceof Element && e.target.getAttribute("aria-expanded") === "true") return;
+      // a filter bar field takes its own Esc: it puts the previous value back before leaving
+      if (c === "Escape" && e.target instanceof Element && e.target.hasAttribute("data-revert")) return;
       // typing in Monaco's find field is text, not the detail view's d/j/k/y … keys
       if (e.target instanceof Element && e.target.closest(".find-widget") && fieldReserved(c)) return;
       // so is its right-click menu: ⏎ runs the entry, Esc closes the menu (not the detail view)

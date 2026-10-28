@@ -76,17 +76,16 @@ Done: label selector completion isn't limited by the applied selector (switching
 Done: in time travel, age cells (AGE, an event's LAST SEEN, …) count from the moment shown (`status.at`), not now, and don't tick while there (`nowOf` in `grid/rowcache.ts`; the table, its text selection and ⌘⇧C's cell choices).
 
 Next up:
+- user facing documentation & cleanup of plan and readme (everything done goes into a user documentation/manual, only high-level/interesting/novel features remain in readme, plan.md must only remain with not-yet-done things)
 - dedicated annotate/label/scale commands
+- grep filter with regex support
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
+- nit: "record history" should be "record changes"
 - nit: decoder must not reformat result (e.g. json is json and not yaml)
 - force refresh (e.g. after network down), also instead of connected it should then say disconnected
-- nit: "record history" should be "record changes"
-- rethink yaml viewer/editor/decoder, maybe completely in the pane to be able to compare? Otherwise also tab switching is awkward
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
-- user facing documentation
 - nit: remember window position across restarts
 - hide-healthy filter with special support for e.g. managedresources?
-- grep filter with regex support
 - nit: what to do with last pane/tab closing? currently it reloads the pane with which it started, but that's weird
 
 Still open in P0.1:
@@ -157,6 +156,7 @@ Still open in P0.1:
 ### P3 — "Operator power" (v1.0)
 
 1. Resource dependencies: done as the jump menu (`⌘J`: namespace, owners, owned; `⌘←`/`⌘→` back and forward; see the README). Non-owner references: a "references" section from a per-kind table (`relations.References`); done: pod and statefulset → their pvcs, those pvs and volume attachments; pvc → pv and its volume attachments, pv → pvc and volume attachments, volume attachment → pv and node; namespace → pods is an owned entry. Open: more references (pod → node, the configmaps/secrets/service account it uses, svc → pods, ingress → svc); a dependency tree view.
+1. Open an xterm pane with the current kubeconfig injected
 1. RBAC views
 1. Encoders: similar to decoders, so when you edit resources, use return to show e.g. the base64 decoded text -> edit it -> apply it means base64 encode the modified text and put the new base64 encoded thing into the yaml editor, there you are able to apply that modification. Same should work for additional level with e.g. brotli.
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
@@ -173,7 +173,6 @@ Still open in P0.1:
 
 ### P4 - "Nice to have" (v2.0)
 1. Native tooltips into a copy-able/colored pop over
-1. Open an xterm pane with the current kubeconfig injected
 1. **Focus follows mouse**
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **AI chat** — e.g. via Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.

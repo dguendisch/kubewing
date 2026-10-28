@@ -12,6 +12,8 @@ interface Props {
   serverId?: string;
   focused: boolean;
   onApply: (v: string) => void;
+  /** After ⏎ applied the draft (not when it was refused, nor on leaving the field), and after Esc. */
+  onDone: () => void;
   onFocus: () => void;
   onBlur: (e: React.FocusEvent) => void;
   className: string;
@@ -32,13 +34,14 @@ const remember = (v: string) => {
  * filter that is valid but half-typed (`app=et`, `phase == "Run"`) would
  * otherwise blank the table on every keystroke. While typing, Go dry-runs
  * the draft against the pane's objects and the field shows the outcome.
- * ⏎ or leaving the field applies it.
+ * ⏎ or leaving the field applies it; ⏎ also goes back to the list.
+ * Esc drops the draft (the applied value comes back) and goes back to the list.
  * The CEL field completes field paths from the live objects, and the
  * operators that fit a field's type after it; the label field the objects'
  * label keys and values. ↓ opens the suggestions at the caret.
  */
 export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftField(
-  { field, label, placeholder, applied, serverId, focused, onApply, onFocus, onBlur, className },
+  { field, label, placeholder, applied, serverId, focused, onApply, onDone, onFocus, onBlur, className },
   ref,
 ) {
   const input = useRef<HTMLInputElement>(null);
@@ -85,10 +88,11 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
     if (pending && draft.trim() && !p && serverId) p = await bridge().preview(serverId, { field, value: draft }).catch(() => undefined);
     if (p?.invalid && pending && draft.trim()) {
       setResult({ draft, preview: p });
-      return; // refused: the reason is shown
+      return false; // refused: the reason is shown
     }
     if (cel) remember(draft);
     onApply(draft.trim());
+    return true;
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -97,7 +101,14 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
     if (!recall && completionKeys(e)) return;
     if (e.key === "Enter") {
       e.preventDefault();
-      return void apply();
+      return void apply().then((ok) => ok && onDone());
+    }
+    if (e.key === "Escape") {
+      e.preventDefault();
+      setDraft(applied); // nothing pending: leaving the field won't apply it
+      setResult(undefined);
+      setHistory(-1);
+      return onDone();
     }
     if (recall) {
       e.preventDefault();
@@ -117,6 +128,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
         aria-invalid={!!preview?.invalid && pending}
         aria-autocomplete="list"
         aria-expanded={!!list}
+        data-revert
         title={!focused && draft ? (status ? `${draft}\n${status}` : draft) : undefined}
         placeholder={placeholder}
         autoComplete="off"

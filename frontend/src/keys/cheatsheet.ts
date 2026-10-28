@@ -74,7 +74,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("hide / show healthy pods and workloads", "filter.toggleHealthy"),
       row("columns: -o wide, custom ones (also right-click the header)", "view.columns"),
       row("record history on / off (diff steps through versions)", "history.toggleRecording"),
-      row("leave the filter bar", "filter.blur"),
+      row("leave the filter bar (the field's previous value comes back)", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),
       row("page down / up", "row.pageDown", "row.pageUp"),
       row("first / last row", "row.first", "row.last"),

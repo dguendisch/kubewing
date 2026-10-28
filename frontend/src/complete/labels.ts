@@ -33,7 +33,8 @@ const listRe = new RegExp(String.raw`^\s*(${keyChars}+)\s+(?:in|notin)\s*\(([^)]
  */
 export function labelContext(src: string, caret: number): LabelContext | undefined {
   const reqs = requirements(src);
-  const cur = reqs.find((r) => r.start <= caret && caret <= r.end)!;
+  const cur = reqs.find((r) => r.start <= caret && caret <= r.end);
+  if (!cur) return undefined; // a caret past the end
   const others = reqs.filter((r) => r !== cur).map((r) => src.slice(r.start, r.end).trim()).filter(Boolean).join(",");
   const req = src.slice(cur.start, caret);
   if (req.lastIndexOf("(") > req.lastIndexOf(")")) {

@@ -363,7 +363,7 @@ test("cmd+w closes a single-pane tab, but asks when the tab has splits", async (
   expect(Object.keys(s.panes)).toHaveLength(1);
 });
 
-test("filter bar: / focuses, grep narrows rows, esc returns to table", async ({ page }) => {
+test("filter bar: / focuses, grep narrows rows, esc puts the previous grep back and returns to table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("/");
   expect((await inspect(page)).focus).toBe("filter");
@@ -373,6 +373,18 @@ test("filter bar: / focuses, grep narrows rows, esc returns to table", async ({ 
   // typing j in the filter must not move the selection
   expect((await focused(page)).spec.grep).toBe("etcd");
   await page.keyboard.press("Escape");
+  expect((await inspect(page)).focus).toBe("table");
+  await expect(page.getByLabel("filter")).toHaveValue("");
+  await expect.poll(async () => (await focused(page)).total).toBe(3);
+  // ⏎ keeps it; esc goes back to that, not to empty
+  await page.keyboard.press("/");
+  await page.keyboard.type("etcd");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("/");
+  await page.keyboard.type(" !x");
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("filter")).toHaveValue("etcd");
+  expect((await focused(page)).spec.grep).toBe("etcd");
   expect((await inspect(page)).focus).toBe("table");
 });
 
@@ -419,7 +431,7 @@ test("grep highlights its matches in the cells, and the highlight goes with the 
   await expect.poll(highlighted).toBe(0);
 });
 
-test("label selector: click or l focuses it and keeps focus while typing; tab moves between the filter fields", async ({ page }) => {
+test("label selector: click or l focuses it and keeps focus while typing, ⏎ goes back to the table; tab moves between the filter fields", async ({ page }) => {
   await openTape(page);
   const labels = page.getByLabel("label selector");
   await labels.click();
@@ -436,7 +448,10 @@ test("label selector: click or l focuses it and keeps focus while typing; tab mo
     const s = kw.inspect();
     return s.panes[s.focusedPane]?.spec.labelSelector;
   }))).toBe("app=api");
-  await expect(labels).toBeFocused();
+  // ⏎ applies and goes back to the list, like grep's
+  await expect(labels).not.toBeFocused();
+  expect((await inspect(page)).focus).toBe("table");
+  await labels.click();
   await page.keyboard.press("Shift+Tab");
   await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
   await page.keyboard.press("Tab");
@@ -449,7 +464,21 @@ test("label selector: click or l focuses it and keeps focus while typing; tab mo
   await page.keyboard.press("l");
   await expect(labels).toBeFocused();
   await expect(labels).toHaveValue("app=api"); // l is not typed into the field
+  // esc drops a draft: the applied selector comes back, nothing applied
+  await page.keyboard.type(",tier=x");
   await page.keyboard.press("Escape");
+  if ((await inspect(page)).focus !== "table") await page.keyboard.press("Escape"); // the first may only close the suggestions
+  expect((await inspect(page)).focus).toBe("table");
+  await expect(labels).toHaveValue("app=api");
+  expect((await focused(page)).spec.labelSelector).toBe("app=api");
+  // back in the field, the shorter value from esc completes as before (the caret was past its end)
+  await page.keyboard.press("l");
+  await expect(labels).toBeFocused();
+  await page.keyboard.press("End");
+  await page.keyboard.type(",ap");
+  await expect(page.getByRole("listbox", { name: "label suggestions" }).getByRole("option").first()).toContainText("app");
+  await page.keyboard.press("Escape");
+  if ((await inspect(page)).focus !== "table") await page.keyboard.press("Escape");
   await page.keyboard.press("/");
   await expect(page.getByLabel("filter", { exact: true })).toBeFocused();
 });
@@ -510,7 +539,7 @@ test("label completion isn't limited by the applied selector, only by the draft'
   await expect(list.getByRole("option")).toHaveText(["app4/4"]);
 });
 
-test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies", async ({ page }) => {
+test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies and goes back to the table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("c");
   const cel = page.getByLabel("cel", { exact: true });
@@ -530,25 +559,39 @@ test("cel filter: c focuses, a draft previews without touching the table, ⏎ ap
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["etcd-0"]);
   await expect(preview).toHaveCount(0); // applied: nothing pending
-  // a parse error is refused with the reason; the applied filter stays
+  await expect(cel).not.toBeFocused();
+  expect((await inspect(page)).focus).toBe("table");
+  // a parse error is refused with the reason; the applied filter stays, and so does the focus
+  await page.keyboard.press("c");
+  await page.keyboard.press("End");
   await page.keyboard.type(" &&");
   await expect(cel).toHaveAttribute("aria-invalid", "true");
   await page.keyboard.press("Enter");
   expect((await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
+  await expect(cel).toBeFocused();
   // the error only shows while the field has focus; unfocused, the red border and tooltip remain
-  await page.keyboard.press("Escape");
+  const grep = page.getByLabel("filter", { exact: true });
+  await grep.click();
   await expect(preview).toHaveCount(0);
   await expect(cel).toHaveAttribute("aria-invalid", "true");
   await expect(cel).toHaveAttribute("title", /Syntax error/);
+  await page.keyboard.press("Escape");
   await page.keyboard.press("c");
   await expect(preview).toContainText("Syntax error");
+  // esc drops the draft: the applied filter is back in the field, and keys go to the table
+  await page.keyboard.press("Escape");
+  await expect(cel).toHaveValue('o.metadata.labels.app == "etcd"');
+  await expect(cel).not.toHaveAttribute("aria-invalid", "true");
+  await expect(cel).not.toBeFocused();
+  expect((await inspect(page)).focus).toBe("table");
+  expect((await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
   // empty + ⏎ clears
   await cel.fill("");
   await page.keyboard.press("Enter");
   await expect.poll(async () => (await focused(page)).total).toBe(3);
   // leaving the field applies a valid draft, like ⏎
   await cel.fill('o.metadata.labels.app == "api"');
-  await page.keyboard.press("Escape");
+  await grep.click();
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["api-0", "api-1"]);
   await expect(cel).not.toHaveClass(/border-dashed/);
 });
@@ -3861,7 +3904,7 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("/");
     await page.keyboard.type("web");
     await expect.poll(async () => (await focused(page)).spec.grep).toBe("web");
-    await page.keyboard.press("Escape");
+    await page.keyboard.press("Enter");
     await leads(page, "back", "pods");
     await leads(page, "forward", "rel-deployments");
     // only the namespace changes: a step, and as a new navigation it drops the forward history
@@ -4007,8 +4050,7 @@ test.describe("jump to (⌘J)", () => {
     await page.getByLabel("cel").fill('o.metadata.name == "api"');
     await page.keyboard.press("Enter");
     await expect.poll(shown).toBe('o.metadata.name == "api"|rd-api');
-    await page.keyboard.press("Escape");
-    expect((await inspect(page)).focus).toBe("table");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     await reopen();
     await expect.poll(shown).toBe('o.metadata.name == "api"|rd-api');
   });
@@ -4243,13 +4285,8 @@ test.describe("logs", () => {
       await page.keyboard.type(labelSelector);
       await page.keyboard.press("Enter");
       await expect.poll(async () => (await focused(page)).spec.labelSelector).toBe(labelSelector);
-      // Enter applies but keeps the filter bar focused; return to the table so table keys (⌥⌘L) resolve
-      // (a first Esc may only close an open completion list, so press until the table has focus)
-      await expect.poll(async () => {
-        if ((await inspect(page)).focus === "table") return true;
-        await page.keyboard.press("Escape");
-        return false;
-      }).toBe(true);
+      // ⏎ went back to the table, so table keys (⌥⌘L) resolve
+      await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     }
   }
   async function select(page: Page, key: string) {
