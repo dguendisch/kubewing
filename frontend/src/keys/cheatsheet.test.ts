@@ -49,7 +49,7 @@ describe("cheat sheet", () => {
   });
 
   it("deduplicates a chord bound to the same command in several contexts", () => {
-    expect(flat()["close"]!.keys).toEqual(["esc"]); // detail, menu, forwards and help
+    expect(flat()["up a decoded level; at the top back to the table, or close the split"]!.keys).toEqual(["esc"]); // detail, menu, forwards and help
   });
 
   it("follows keybindings.yaml and drops what the user unbound", () => {

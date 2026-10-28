@@ -6,6 +6,7 @@ import { paneIds } from "../store/layout";
 import { setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import { Pane } from "./Pane";
+import { refocusEditor } from "../editor/focus";
 
 const components = { pane: ({ api }: IDockviewPanelProps) => <Pane id={api.id} /> };
 
@@ -95,6 +96,9 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
       return;
     }
     push();
+    // a pane moved in the DOM (its sibling closed) lost the browser focus: back to its viewer or editor
+    const id = requestAnimationFrame(refocusEditor);
+    return () => cancelAnimationFrame(id);
   }, [layout, maximized, active]);
 
   return (

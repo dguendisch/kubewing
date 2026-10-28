@@ -2,6 +2,7 @@ import { useState } from "react";
 import { dispatch } from "../commands";
 import { paneIds } from "../store/layout";
 import { useUI } from "../store/store";
+import * as S from "../store/state";
 import { ruleColor } from "./safetyStyle";
 
 /**
@@ -71,12 +72,16 @@ function ConfirmDialog() {
   );
 }
 
-/** ⌘W on a tab holding more than one pane. ⏎ closes it, Esc keeps it. */
+/** ⌘W on a tab holding more than one pane, or an edit not written yet. ⏎ closes it, Esc keeps it. */
 export function ConfirmCloseTab() {
   const tabId = useUI((s) => (s.overlay?.kind === "closeTab" ? s.overlay.tabId : undefined));
   const panes = useUI((s) => {
     const t = s.tabs.find((x) => x.id === tabId);
     return t ? paneIds(t.layout).length : 0;
+  });
+  const edits = useUI((s) => {
+    const t = s.tabs.find((x) => x.id === tabId);
+    return t ? paneIds(t.layout).filter((id) => S.unsaved(s.panes[id])).length : 0;
   });
   if (!tabId) return null;
   return (
@@ -90,9 +95,36 @@ export function ConfirmCloseTab() {
       }}
     >
       <h2 className="font-semibold text-fg">close tab?</h2>
-      <p className="text-fg">It holds {panes} panes.</p>
+      <p className="text-fg">
+        {panes > 1 ? `It holds ${panes} panes.` : null}
+        {edits ? ` ${edits === 1 ? "An edit" : `${edits} edits`} not applied yet would be lost.` : null}
+      </p>
       <button autoFocus type="submit" className="self-start rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15">
         close tab
+      </button>
+      <div className="text-fg-muted">⏎ close · esc cancel</div>
+    </form>
+  );
+}
+
+/** Closing a pane (⌃D, a split object view's Esc) whose editor has changes not applied. ⏎ closes it, Esc keeps it. */
+export function ConfirmClosePane() {
+  const paneId = useUI((s) => (s.overlay?.kind === "closePane" ? s.overlay.pane : undefined));
+  if (!paneId) return null;
+  return (
+    <form
+      role="alertdialog"
+      aria-label="confirm close pane"
+      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-2xl"
+      onSubmit={(e) => {
+        e.preventDefault();
+        dispatch("confirm.accept");
+      }}
+    >
+      <h2 className="font-semibold text-fg">close pane?</h2>
+      <p className="text-fg">Its edit isn't applied yet and would be lost.</p>
+      <button autoFocus type="submit" className="self-start rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15">
+        close pane
       </button>
       <div className="text-fg-muted">⏎ close · esc cancel</div>
     </form>

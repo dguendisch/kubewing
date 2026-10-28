@@ -43,6 +43,7 @@ export type CommandId =
   | "row.first"
   | "row.last"
   | "detail.open"
+  | "detail.openSplit"
   | "detail.close"
   | "detail.toggleDiff"
   | "detail.showYaml"
@@ -71,6 +72,7 @@ export type CommandId =
   | "object.describe"
   | "object.exec"
   | "object.edit"
+  | "object.editSplit"
   | "object.debug"
   | "object.opsPod"
   | "object.portForward"
@@ -121,9 +123,9 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
-  "detail.open", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
+  "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "config.reload",
-  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
@@ -200,6 +202,7 @@ export const defaultBindings: Binding[] = [
   // in the detail view ⌘F is Monaco's find
   { key: "Meta+F", command: "filter.focus", when: ["table", "filter"] },
   { key: "Escape", command: "filter.blur", when: ["filter"] },
+  // in an object view: a decoded level up; at the top, back to the table (or a split closes)
   { key: "Escape", command: "detail.close", when: ["detail"] },
   { key: "J", command: "row.down", when: ["table"] },
   { key: "ArrowDown", command: "row.down", when: ["table"] },
@@ -211,8 +214,10 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+ArrowUp", command: "row.first", when: ["table"] },
   { key: "Shift+G", command: "row.last", when: ["table"] },
   { key: "Alt+ArrowDown", command: "row.last", when: ["table"] },
+  // the row's YAML in place of the table (Esc or ⌘← back to it); ⇧⏎ in a split to the right, to compare
   { key: "Enter", command: "detail.open", when: ["table"] },
   { key: "Y", command: "detail.open", when: ["table"] },
+  { key: "Shift+Enter", command: "detail.openSplit", when: ["table", "detail"] },
   { key: "D", command: "detail.toggleDiff", when: ["detail"] },
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
@@ -250,8 +255,8 @@ export const defaultBindings: Binding[] = [
   // ⌘J: where this row leads (namespace, owners, owned); jumps in place are a browser-like history:
   // ⌘← back, ⌘→ forward again (table only: in text fields they're start/end of line)
   { key: "Meta+J", command: "object.jump", when: ["table", "detail"] },
-  { key: "Meta+ArrowLeft", command: "history.back", when: ["table"] },
-  { key: "Meta+ArrowRight", command: "history.forward", when: ["table"] },
+  { key: "Meta+ArrowLeft", command: "history.back", when: ["table", "detail"] },
+  { key: "Meta+ArrowRight", command: "history.forward", when: ["table", "detail"] },
   // the row's events: a jump to the events about it (⌘← back to the row)
   { key: "V", command: "object.events", when: ["table", "detail"] },
   { key: "D", command: "object.describe", when: ["table"] },
@@ -259,6 +264,8 @@ export const defaultBindings: Binding[] = [
   { key: "Shift+D", command: "object.describe", when: ["detail"] },
   // e edits (as kubectl edit, also from the YAML view); exec is x (k9s' "s" is the shell there, x for eXec)
   { key: "E", command: "object.edit", when: ["table", "detail"] },
+  // the editor in a split to the right: the table (or the object) stays as it is
+  { key: "Shift+E", command: "object.editSplit", when: ["table", "detail"] },
   { key: "X", command: "object.exec", when: ["table"] },
   // the editor: ⌘S / ⌘⏎ dry-run into the diff preview; there ⏎ (or ⌘S / ⌘⏎ again) writes, esc goes back to the editor
   { key: "Meta+S", command: "edit.submit", when: ["edit", "editpreview"] },
@@ -408,11 +415,23 @@ function resolveOwn(key: string, focus: FocusContext, bindings: Binding[]): Comm
 
 /**
  * The YAML editor and its preview are modal: only their own keys (Esc, ⌘S,
- * ⌘⏎ …) reach the app, every other key is Monaco's (⌘D deletes a line there).
- * A global one would act behind the editor: a split or a tab switch moves the
- * focus away while the editor stays open, so ⌘S or ⏎ no longer reach it.
+ * ⌘⏎ …) reach the app, every other key is Monaco's (⌘D deletes a line
+ * there); a stray ⌘W mustn't take an edit along. Moving the focus elsewhere
+ * is fine: the editor stays in its pane, as typed, and the focus can come
+ * back to it (its pane is marked as holding changes meanwhile).
  */
 export const editorModal = (focus: FocusContext) => focus === "edit" || focus === "editpreview";
+
+/**
+ * Global commands that only move the focus: they reach the app from the
+ * editor too. Not ⌘[ / ⌘] (next/previous pane): they're the editor's indent.
+ */
+const focusMoves = new Set<CommandId>([
+  "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown",
+  "tab.next", "tab.prev", "tab.mruNext", "tab.mruPrev",
+  ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
+]);
+export const editorMoves = (c: CommandId) => focusMoves.has(c);
 
 export function resolve(key: string, focus: FocusContext, bindings: Binding[] = defaultBindings): CommandId | undefined {
   if (focus === "terminal" && terminalReserved(key)) return undefined;
@@ -424,7 +443,7 @@ export function resolve(key: string, focus: FocusContext, bindings: Binding[] = 
     if (b.when?.includes(focus)) return b.command;
     if (!b.when?.length && global === undefined) global = b.command;
   }
-  return editorModal(focus) ? undefined : global;
+  return editorModal(focus) && !(global && focusMoves.has(global)) ? undefined : global;
 }
 
 /** A keybindings.yaml entry as loaded by Go; command "none" unbinds. */

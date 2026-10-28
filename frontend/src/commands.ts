@@ -5,7 +5,7 @@ import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
-import { cursor, decodeCursor, useDiffNav, useDiffRange } from "./editor/Viewer";
+import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
 import * as S from "./store/state";
 import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
@@ -19,12 +19,12 @@ import { logBuffers } from "./logs/buffer";
  * The single command dispatcher. Keyboard shortcuts, native menu
  * accelerators and UI buttons all end up here.
  */
-export function dispatch(cmd: CommandId) {
+export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
   if (cmd.startsWith("tab.goto")) return setUI((x) => S.gotoTab(x, Number(cmd.slice(8))));
   const s = useUI.getState();
-  // a decode is over the detail view, which these act on (or on the table behind it)
-  if (s.overlay?.kind === "decode" && decodeBlocked.has(cmd)) return;
   const pane = S.focusedPane(s);
+  // a decoded value is in the object view's place: these act on the object (or on the table)
+  if (pane.object?.decode && !s.overlay && decodeBlocked.has(cmd)) return;
   const total = pane.serverId ? paneData.get(pane.serverId).total : 0;
   const page = 20;
   switch (cmd) {
@@ -33,7 +33,7 @@ export function dispatch(cmd: CommandId) {
     case "pane.splitDown":
       return setUI((x) => S.splitPane(x, "column"));
     case "pane.close":
-      return setUI((x) => S.closePane(x));
+      return closePaneAsking(pane.id);
     case "pane.focusNext":
       return setUI((x) => S.cyclePane(x, 1));
     case "pane.focusPrev":
@@ -55,9 +55,10 @@ export function dispatch(cmd: CommandId) {
     case "tab.new":
       return setUI(S.newTab);
     case "tab.close": {
-      // a tab with splits is work: losing it to a stray ⌘W would be expensive
+      // a tab with splits is work: losing it to a stray ⌘W would be expensive; so is an edit not written
       const tab = S.activeTab(s);
-      if (paneIds(tab.layout).length < 2) return setUI((x) => S.closeTab(x));
+      const edits = paneIds(tab.layout).some((id) => S.unsaved(s.panes[id]));
+      if (paneIds(tab.layout).length < 2 && !edits) return setUI((x) => S.closeTab(x));
       return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "closeTab", pane: pane.id, tabId: tab.id }));
     }
     case "tab.next":
@@ -111,16 +112,12 @@ export function dispatch(cmd: CommandId) {
       return setUI((x) => S.moveSelection(x, "first", total));
     case "row.last":
       return setUI((x) => S.moveSelection(x, "last", total));
-    case "detail.open": {
-      const key = selectedKey(pane);
-      if (!key) return;
-      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml" }));
-    }
-    case "object.diff": {
-      const key = selectedKey(pane);
-      if (!key) return;
-      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "yaml", diff: true }));
-    }
+    case "detail.open":
+      return openObjectView(pane, { view: "yaml" }, false);
+    case "detail.openSplit":
+      return openSplitView(pane);
+    case "object.diff":
+      return openObjectView(pane, { view: "yaml", diff: true }, false);
     case "object.copyName":
       return void copyName(pane);
     case "table.copy":
@@ -133,15 +130,23 @@ export function dispatch(cmd: CommandId) {
     case "object.menu": {
       const key = selectedKey(pane);
       if (!key) return;
-      return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "menu", pane: pane.id, key, index: 0, rowIndex: pane.selected }));
+      const at = belowHeader(pane);
+      return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "menu", pane: pane.id, key, index: 0, rowIndex: at ? undefined : pane.selected, at }));
     }
     case "object.jump":
       return openJump();
     case "object.events":
       return void openEvents();
-    case "menu.runSplit":
-      if (s.overlay?.kind === "jump") return void runJump(s.overlay.index ?? 0, true);
-      return;
+    case "menu.runSplit": {
+      const o = s.overlay;
+      if (o?.kind === "jump") return void runJump(o.index ?? 0, true);
+      // the row menu: a view entry (YAML, diff, describe) opens in a split instead of in place
+      if (o?.kind !== "menu") return;
+      const item = useMenu.getState().items[o.index ?? 0];
+      if (!item || item.disabled || !splitViews.has(item.command)) return;
+      setUI(S.closeOverlay);
+      return openObjectView(S.focusedPane(useUI.getState()), splitViews.get(item.command)!, true);
+    }
     case "history.back":
     case "history.forward":
       return void moveHistory(cmd === "history.back" ? "back" : "forward");
@@ -160,28 +165,26 @@ export function dispatch(cmd: CommandId) {
       return dispatch(item.command); // runs on the selected row, exactly like its shortcut
     }
     case "detail.showYaml":
-      return setUI((x) => (x.overlay?.kind === "detail" ? { ...x, overlay: { ...x.overlay, view: "yaml", diff: false, version: undefined } } : x));
-    case "object.describe": {
-      // from the table, or switching an open detail view to describe
-      if (s.overlay?.kind === "detail") return setUI((x) => ({ ...x, overlay: { ...x.overlay!, view: "describe", diff: false, describeGen: (x.overlay!.describeGen ?? 0) + 1 } }));
-      const key = selectedKey(pane);
-      if (!key) return;
-      return setUI((x) => S.openOverlay(x, { kind: "detail", pane: pane.id, key, view: "describe" }));
-    }
+      return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, view: "yaml", diff: false, version: undefined })));
+    case "object.describe":
+      // from the table, or switching an object view to describe
+      if (pane.object) return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, view: "describe", diff: false, describeGen: (o.describeGen ?? 0) + 1 })));
+      return openObjectView(pane, { view: "describe" }, false);
     case "object.exec":
       return void prepareAction("exec");
     case "object.edit":
       return void openEdit();
+    case "object.editSplit":
+      return void openEdit(true);
     case "edit.submit":
       return void submitEdit();
     case "edit.back": {
-      const e = s.overlay?.kind === "edit" ? s.overlay.edit : undefined;
+      const e = pane.object?.edit;
       if (!e) return;
-      if (e.preview) return setUI((x) => S.setEdit(x, (d) => ({ ...d, preview: undefined })));
+      if (e.preview) return setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, preview: undefined })));
       // changes are work: the first esc only asks
-      if (e.yaml !== e.opened && !e.discarding) return setUI((x) => S.setEdit(x, (d) => ({ ...d, discarding: true })));
-      void bridge().editClose(e.session).catch(() => {});
-      return setUI(S.closeOverlay);
+      if (e.yaml !== e.opened && !e.discarding) return setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, discarding: true })));
+      return setUI((x) => closeEditor(x, pane.id)); // the session is closed once no pane holds it (store)
     }
     case "object.debug":
       return void prepareAction("debug");
@@ -253,32 +256,28 @@ export function dispatch(cmd: CommandId) {
       return;
     }
     case "detail.close":
-      // the field list goes back to the detail view it came from
-      if (s.overlay?.kind === "field" && s.overlay.back) {
-        const back = s.overlay.back;
-        return setUI((x) => ({ ...x, overlay: back, focus: "detail" }));
-      }
-      // a decode goes up a level, from the first one back to the detail view
-      if (s.overlay?.kind === "decode") return setUI(S.decodeUp);
-      return setUI(S.closeOverlay);
+      // overlays (menus, the cheat sheet …) close; the field list goes back to the object view
+      if (s.overlay) return setUI(S.closeOverlay);
+      // an object view: a decoded level up; at the top, back to the table (in place) or the split closes
+      if (pane.object?.decode) return setUI((x) => S.decodeUp(x, pane.id));
+      if (pane.object) return setUI((x) => S.leaveObject(x, pane.id, opts.repeat));
+      return;
     case "detail.decode":
-      return openDecode();
+      return openDecode(pane);
     case "detail.toggleDiff":
       // in describe: diff against the previous describe; elsewhere the object diff (from the newest version)
-      return setUI((x) => (x.overlay && x.overlay.kind !== "decode" ? { ...x, overlay: { ...x.overlay, diff: !x.overlay.diff, version: undefined } } : x));
+      return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, diff: !o.diff, version: undefined })));
     case "diff.next":
     case "diff.prev":
-      return useDiffNav.getState().go?.(cmd === "diff.next" ? "next" : "previous");
+      return diffNavOf(pane.object?.edit ? `${pane.id}/edit` : viewSlot(pane.id, !!pane.object?.decode)).go?.(cmd === "diff.next" ? "next" : "previous");
     case "diff.older":
     case "diff.newer":
-      return setUI((x) => S.stepVersion(x, cmd === "diff.older" ? -1 : 1, useDiffRange.getState().range));
+      return setUI((x) => S.stepVersion(x, pane.id, cmd === "diff.older" ? -1 : 1, useDiffRange.getState()[viewSlot(pane.id, !!pane.object?.decode)]));
     case "detail.toggleWrap":
       return setUI((x) => ({ ...x, wrap: !x.wrap }));
     case "detail.refresh":
       // re-run describe: the last run becomes the baseline of the diff
-      return setUI((x) =>
-        x.overlay?.kind === "detail" && x.overlay.view === "describe" ? { ...x, overlay: { ...x.overlay, describeGen: (x.overlay.describeGen ?? 0) + 1 } } : x,
-      );
+      return setUI((x) => S.setObject(x, pane.id, (o) => (o.view === "describe" ? { ...o, describeGen: (o.describeGen ?? 0) + 1 } : o)));
     case "source.open":
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
     case "config.reload":
@@ -293,10 +292,13 @@ export function dispatch(cmd: CommandId) {
         const i = s.tabs.findIndex((t) => t.id === s.overlay!.tabId);
         return setUI((x) => (i < 0 ? S.closeOverlay(x) : S.closeTab(S.closeOverlay(x), i)));
       }
+      if (s.overlay?.kind === "closePane") {
+        const id = s.overlay.pane;
+        return setUI((x) => S.closePane(S.closeOverlay(x), id));
+      }
       return void runConfirmed();
     case "confirm.cancel":
-      // a confirmed edit goes back to its preview, not away
-      if (s.overlay?.kind === "confirm" && s.overlay.edit) return reopenEdit(s.overlay.pane, s.overlay.edit);
+      // a confirmed edit goes back to its preview (the pane still has it), not away
       return setUI(S.closeOverlay);
     case "term.find":
       return setUI(S.openFind);
@@ -312,8 +314,51 @@ export function dispatch(cmd: CommandId) {
   }
 }
 
-/** Commands of the detail view that don't apply to a decoded value (its keys are the detail view's). */
+/** Commands of the object view that don't apply to a decoded value (its keys are the object view's). */
 const decodeBlocked = new Set<CommandId>(["object.describe", "object.edit", "object.jump", "object.events", "detail.showYaml", "detail.toggleDiff", "detail.refresh", "filter.fromDetail", "filter.fromDetailNot", "travel.field"]);
+
+/** Row menu entries ⇧⏎ opens in a split: the views of the object. */
+const splitViews = new Map<CommandId, Pick<S.ObjectView, "view" | "diff">>([
+  ["detail.open", { view: "yaml" }],
+  ["object.diff", { view: "yaml", diff: true }],
+  ["object.describe", { view: "describe" }],
+]);
+
+/** The table's selected row as an object view: over the table (⏎), or in a split to the right (⇧⏎). */
+function openObjectView(pane: S.PaneState, v: Pick<S.ObjectView, "view" | "diff">, inSplit: boolean) {
+  const key = selectedKey(pane);
+  if (!key) return;
+  // already in an object view (the native menu's View YAML, Diff): it switches to that view
+  if (pane.object && !inSplit) return setUI((x) => S.setObject(S.closeOverlay(x), pane.id, (o) => ({ ...o, ...v, version: undefined, decode: undefined, describeGen: v.view === "describe" ? (o.describeGen ?? 0) + 1 : o.describeGen })));
+  const object: S.ObjectView = { key, ...v };
+  setUI((x) => (inSplit ? S.openObjectSplit(S.closeOverlay(x), object, pane.id) : S.openObject(S.closeOverlay(x), pane.id, object)));
+}
+
+/**
+ * ⇧⏎: in the table, the selected row's YAML in a split; in an object view,
+ * what it shows (the object, or the decoded level) in a split of its own,
+ * to compare with what comes next here.
+ */
+function openSplitView(pane: S.PaneState) {
+  if (!pane.object) return openObjectView(pane, { view: "yaml" }, true);
+  if (pane.object.edit) return;
+  setUI((x) => S.openObjectSplit(x, pane.object!, pane.id));
+}
+
+/** Closing a pane: one with an edit not written yet asks first. */
+function closePaneAsking(paneId: string) {
+  const p = useUI.getState().panes[paneId];
+  if (!S.unsaved(p)) return setUI((x) => S.closePane(x, paneId));
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "closePane", pane: paneId }));
+}
+
+/** The editor goes: back to the object view it was opened from, or (e in the table) to the table. */
+function closeEditor(s: S.UIState, paneId: string): S.UIState {
+  const o = s.panes[paneId]?.object;
+  if (!o?.edit) return s;
+  if (o.viaEdit) return S.leaveObject(S.setObject(s, paneId, ({ edit: _, viaEdit: __, ...x }) => x), paneId);
+  return S.setObject(s, paneId, ({ edit: _, ...x }) => x);
+}
 
 /** Per terminal/log session: steps to the next/previous find match (registered by the open xterm). */
 export const finders = new Map<string, (dir: "next" | "prev") => void>();
@@ -357,15 +402,21 @@ export async function startLogs(paneId: string, key: string | undefined, whole: 
  * there's nothing to preview). The detail view closes onto the result.
  */
 function filterFromDetail(op: "==" | "!=") {
-  const o = useUI.getState().overlay;
-  if (o?.kind !== "detail" || o.view === "describe" || o.diff) return;
-  const pane = useUI.getState().panes[o.pane];
-  if (!pane || cursor.text === undefined) return;
-  const leaf = yamlLeaf(cursor.text.split("\n"), cursor.line);
+  const pane = S.focusedPane(useUI.getState());
+  const o = pane.object;
+  if (!o || o.view === "describe" || o.diff || o.decode || o.edit) return;
+  const cur = cursorOf(pane.id);
+  if (cur.text === undefined) return;
+  const leaf = yamlLeaf(cur.text.split("\n"), cur.line);
   const expr = leaf && celFromLeaf(leaf, op);
-  if (!expr) return flashHere(pane.id, "no value on this line to filter by", true);
-  setUI(S.closeOverlay);
-  void applySpec(pane.id, { ...pane.spec, filter: expr });
+  if (!expr) return flash(pane.id, "no value on this line to filter by", true);
+  // the table the object came from takes the filter, and shows it
+  const table = o.split ? o.from : pane.id;
+  const t = table ? useUI.getState().panes[table] : undefined;
+  if (!t || t.leased || (o.split && t.serverId !== pane.serverId)) return flash(pane.id, "the table this object came from is gone", true);
+  if (o.split) setUI((x) => S.focusPane(x, t.id));
+  else setUI((x) => S.leaveObject(x, pane.id));
+  void applySpec(t.id, { ...t.spec, filter: expr });
 }
 
 /** h: hides (or shows again) the healthy pods and workloads (see S.healthKinds). */
@@ -456,19 +507,7 @@ export function openLaunch(l: Launch) {
   if (l.error) flash(S.focusedPane(useUI.getState()).id, `kubeconfig: ${l.error}`, true);
 }
 
-/** Shows a short message in a pane's status line. */
-/**
- * A message where it can be read: in the open detail view's or decode's
- * status line, else the pane's. Gone after 5 s, or when that overlay goes.
- */
-export function flashHere(paneId: string, text: string, error = false) {
-  const o = useUI.getState().overlay;
-  if (o?.pane !== paneId || (o.kind !== "detail" && o.kind !== "decode")) return flash(paneId, text, error);
-  const f = { text, error };
-  setUI((x) => S.flashOverlay(x, f));
-  setTimeout(() => setUI((x) => (x.overlay?.flash === f ? S.flashOverlay(x, undefined) : x)), 5000);
-}
-
+/** Shows a short message in a pane's status line (an object view's too); gone after 5 s. */
 export function flash(paneId: string, text: string, error = false) {
   const f = { text, error };
   setUI((x) => S.updatePane(x, paneId, (p) => ({ ...p, flash: f })));
@@ -485,10 +524,9 @@ export function flash(paneId: string, text: string, error = false) {
 async function prepareAction(kind: ActionKind) {
   const s = useUI.getState();
   const pane = S.focusedPane(s);
-  if (!pane.serverId) return;
-  const d = paneData.get(pane.serverId);
-  const key = d.order[pane.selected - d.offset];
-  if (!key) return;
+  // in an object view: its object (the native menu, ⌘⌫ there)
+  const key = selectedKey(pane);
+  if (!pane.serverId || !key) return;
   try {
     const pending = await bridge().prepare(kind, pane.serverId, key);
     if (kind === "debug") return setUI((x) => S.openOverlay(x, { kind: "debug", pane: pane.id, key, pending }));
@@ -511,32 +549,37 @@ async function proceed(paneId: string, key: string | undefined, pending: Pending
 }
 
 /**
- * e, from the table or the detail view: Go reads the object fresh and opens
- * an edit session (refused on read-only contexts, before anyone types).
+ * e, from the table or an object view: Go reads the object fresh and opens
+ * an edit session (refused on read-only contexts, before anyone types). The
+ * editor takes the object view's place; from the table, the object opens
+ * over it for that, and closing the editor goes back to the table.
  */
-async function openEdit() {
+async function openEdit(inSplit = false) {
   const s = useUI.getState();
-  const o = s.overlay;
-  const fromDetail = o?.kind === "detail";
-  const paneId = fromDetail ? o.pane : S.focusedPane(s).id;
-  const pane = s.panes[paneId];
-  const key = fromDetail ? o.key : pane && selectedKey(pane);
-  if (!pane?.serverId || !key) return;
+  const pane = S.focusedPane(s);
+  if (pane.object?.edit || (pane.object?.decode && !inSplit)) return;
+  const key = pane.object?.key ?? selectedKey(pane);
+  const before = pane.object;
+  if (!pane.serverId || !key) return;
   try {
     const [es, info] = await Promise.all([bridge().editOpen(pane.serverId, key), bridge().rowInfo(pane.serverId, key)]);
-    if (useUI.getState().overlay !== o) return void bridge().editClose(es.session).catch(() => {}); // something else meanwhile
+    const now = useUI.getState().panes[pane.id];
+    // something else meanwhile (another row, another view; its title loading in doesn't count)
+    const moved = before ? now?.object?.key !== key || !!now.object.edit || (!!now.object.decode && !inSplit) : !!now?.object || (now && selectedKey(now)) !== key;
+    if (!now || moved) return void bridge().editClose(es.session).catch(() => {});
     const edit: S.EditState = { session: es.session, key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml };
-    setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "edit", pane: paneId, key, edit }));
+    // ⇧E: a split of its own, opened in the editor (Esc there goes back to the object's YAML, again Esc closes it)
+    if (inSplit) return setUI((x) => S.withEdit(S.openObjectSplit(S.closeOverlay(x), { key, view: "yaml", title: info.name }, pane.id), edit));
+    if (before) return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, edit, title: o.title ?? info.name })));
+    setUI((x) => S.openObject(S.closeOverlay(x), pane.id, { key, view: "yaml", title: info.name, edit, viaEdit: true }));
   } catch (e) {
-    // the detail view would cover the pane's status line
-    if (fromDetail && useUI.getState().overlay === o) setUI(S.closeOverlay);
-    flash(paneId, errorText(e), true);
+    flash(pane.id, errorText(e), true);
   }
 }
 
-/** The edit overlay again (back from a confirm, or after a failed write), in the editor or its preview. */
+/** A failed write: back in the pane's editor (not its preview), with why. */
 function reopenEdit(paneId: string, edit: S.EditState) {
-  setUI((x) => S.setEdit(S.openOverlay(S.closeOverlay(x), { kind: "edit", pane: paneId, key: edit.key, edit }), (e) => e));
+  setUI((x) => S.setEdit(x, paneId, () => edit));
 }
 
 /**
@@ -546,18 +589,21 @@ function reopenEdit(paneId: string, edit: S.EditState) {
  * context's rule asks for it.
  */
 async function submitEdit() {
-  const o = useUI.getState().overlay;
-  const e = o?.kind === "edit" ? o.edit : undefined;
-  const pane = o && useUI.getState().panes[o.pane];
-  if (!o || !e || !pane?.serverId) return;
+  const pane = S.focusedPane(useUI.getState());
+  const e = pane.object?.edit;
+  if (!e || !pane.serverId) return;
+  const paneId = pane.id;
   // a result for text that was changed meanwhile is dropped
-  const same = (x: S.UIState) => x.overlay?.kind === "edit" && x.overlay.edit?.session === e.session && x.overlay.edit.yaml === e.yaml && !x.overlay.edit.preview === !e.preview;
-  const fail = (err: unknown) => setUI((x) => (same(x) ? S.setEdit(x, (d) => ({ ...d, preview: undefined, error: errorText(err), discarding: false })) : x));
+  const same = (x: S.UIState) => {
+    const d = x.panes[paneId]?.object?.edit;
+    return d?.session === e.session && d.yaml === e.yaml && !d.preview === !e.preview;
+  };
+  const fail = (err: unknown) => setUI((x) => (same(x) ? S.setEdit(x, paneId, (d) => ({ ...d, preview: undefined, error: errorText(err), discarding: false })) : x));
   if (!e.preview) {
     try {
       const preview = await bridge().editCheck(e.session, e.yaml);
       if (preview.noChange) return fail("the server would store nothing new (status, for one, isn't changed by an edit)");
-      setUI((x) => (same(x) ? S.setEdit(x, (d) => ({ ...d, preview, error: undefined, discarding: false })) : x));
+      setUI((x) => (same(x) ? S.setEdit(x, paneId, (d) => ({ ...d, preview, error: undefined, discarding: false })) : x));
     } catch (err) {
       fail(err);
     }
@@ -570,8 +616,7 @@ async function submitEdit() {
     return fail(err);
   }
   if (!same(useUI.getState())) return;
-  setUI(S.closeOverlay);
-  await proceed(o.pane, e.key, pending, "", undefined, undefined, e);
+  await proceed(paneId, e.key, pending, "", undefined, undefined, e);
 }
 
 /**
@@ -706,6 +751,8 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
         // nothing typed is lost: back in the editor, with why
         return reopenEdit(paneId, { ...edit, preview: undefined, error: errorText(e) });
       }
+      // written: the editor goes (back to the object view, or the table it was opened from)
+      setUI((x) => (x.panes[paneId]?.object?.edit?.session === edit.session ? closeEditor(x, paneId) : x));
       return flash(paneId, `edited ${p.action.resource}/${p.action.name}`);
     }
     case "delete":
@@ -734,39 +781,44 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
   }
 }
 
+/** The row a pane's row commands act on: the table's selected one; in an object view, its object. */
 function selectedKey(pane: S.PaneState): string | undefined {
   if (!pane.serverId || pane.term || pane.logs) return undefined;
+  if (pane.object) return pane.object.key;
   const d = paneData.get(pane.serverId);
   return d.order[pane.selected - d.offset];
 }
 
+/** An object view has no row on screen to anchor a menu to (its table is hidden, or another pane's): below its header. */
+function belowHeader(pane: S.PaneState): { x: number; y: number } | undefined {
+  if (!pane.object) return undefined;
+  const b = document.querySelector(`[data-pane="${pane.id}"] header`)?.getBoundingClientRect();
+  return b && { x: b.left + 8, y: b.bottom };
+}
+
 /**
- * ⌘J, on a row (or from its detail view): the jump menu. Opened from the
+ * ⌘J, on a row (or from its object view): the jump menu. Opened from the
  * ⌘⏎ menu it takes that menu's place, at the same anchor.
  */
 function openJump() {
   const s = useUI.getState();
   const o = s.overlay;
-  const fromDetail = o?.kind === "detail";
-  const pane = fromDetail ? s.panes[o.pane] : S.focusedPane(s);
-  const key = fromDetail ? o.key : pane && selectedKey(pane);
-  if (!pane || !key) return;
-  const at = o?.kind === "menu" ? o.at : undefined;
-  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.selected, at }));
+  const pane = S.focusedPane(s);
+  const key = selectedKey(pane);
+  if (!key) return;
+  const at = o?.kind === "menu" ? o.at : belowHeader(pane);
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.object ? undefined : pane.selected, at }));
 }
 
 /**
- * v, on a row (or from its detail view): the pane jumps to the events about
+ * v, on a row (or from its object view): the pane jumps to the events about
  * it, as a jump menu entry would (⌘← goes back to the row). Go builds the
  * target (field selector on the involved object).
  */
 async function openEvents() {
-  const s = useUI.getState();
-  const o = s.overlay;
-  const fromDetail = o?.kind === "detail";
-  const pane = fromDetail ? s.panes[o.pane] : S.focusedPane(s);
-  const key = fromDetail ? o.key : pane && selectedKey(pane);
-  if (!pane?.serverId || !key) return;
+  const pane = S.focusedPane(useUI.getState());
+  const key = selectedKey(pane);
+  if (!pane.serverId || !key) return;
   try {
     const target = await bridge().eventsTarget(pane.serverId, key);
     setUI(S.closeOverlay);
@@ -794,24 +846,34 @@ export async function runJump(index: number, inSplit: boolean) {
   await jumpTo(pane.id, item.target, inSplit, o.key);
 }
 
-/** Shows a jump target in a pane (pushing its current view) or in a new split below it. */
+/**
+ * Shows a jump target in a pane (pushing its current view, an object view
+ * over the table included: ⌘← returns to it) or in a new split below it.
+ * A split object view has no table of its own: its jumps go to a split.
+ */
 export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolean, fromKey?: string) {
   const pane = useUI.getState().panes[paneId];
   if (!pane) return;
   const spec = S.jumpSpec(pane.spec, target);
-  if (inSplit) {
+  if (inSplit || pane.object?.split) {
     // the new pane opens itself on mount (Pane's effect), like any split
     return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec));
   }
-  setUI((x) => S.pushHistory(x, paneId, fromKey));
+  setUI((x) => S.updatePane(S.pushHistory(x, paneId, fromKey), paneId, ({ object: _, ...p }) => p));
   await applySpec(paneId, spec);
 }
 
-/** ⌘O ⏎: the pane shows spec; a new source pushes its current view (and selected row), as a jump does. */
+/**
+ * ⌘O ⏎: the pane shows spec; a new source pushes its current view (and
+ * selected row), as a jump does. An object view goes: the pane is a table
+ * again (a split one, with a server pane of its own).
+ */
 export async function openSource(paneId: string, spec: S.PaneSpec) {
   const pane = useUI.getState().panes[paneId];
   if (!pane) return;
-  setUI((x) => S.openHistory(x, paneId, spec, selectedKey(pane)));
+  if (pane.object && !pane.object.split) setUI((x) => S.pushHistory(x, paneId, pane.object!.key));
+  else setUI((x) => S.openHistory(x, paneId, spec, selectedKey(pane)));
+  setUI((x) => S.updatePane(x, paneId, ({ object: _, ...p }) => p));
   await applySpec(paneId, spec);
 }
 
@@ -822,10 +884,15 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
  */
 export async function moveHistory(dir: "back" | "forward", paneId = S.focusedPane(useUI.getState()).id, steps = 1) {
   const pane = useUI.getState().panes[paneId];
-  if (!pane || pane.term) return;
+  if (!pane || pane.term || pane.object?.split) return;
+  if (S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
   const { state, entry } = S.moveHistory(useUI.getState(), pane.id, dir, selectedKey(pane), steps);
   if (!entry) return flash(pane.id, dir === "back" ? "nothing to go back to" : "nothing to go forward to");
   setUI(() => state);
+  // into or out of an object view over the same table: that table is already there, as it was (row, scroll)
+  if (S.sameSource(pane.spec, entry.spec) && JSON.stringify(pane.spec) === JSON.stringify(entry.spec) && (pane.object || entry.object)) {
+    return setUI((x) => S.updatePane(x, pane.id, (p) => ({ ...p, reselect: undefined })));
+  }
   await applySpec(pane.id, entry.spec, true);
 }
 
@@ -909,7 +976,8 @@ const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect = false) {
   const p = useUI.getState().panes[paneId];
   if (!p) return;
-  const keep = !!p.serverId && S.sameSource(p.spec, spec);
+  // a borrowed server pane (a split object view's) is the table's: never changed from here
+  const keep = !!p.serverId && !p.leased && S.sameSource(p.spec, spec);
   // a new source detaches the old server pane right away (the store closes it),
   // so nothing ever shows the old data under the new spec
   setUI((x) =>
@@ -920,6 +988,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
       selected: 0,
       reselect: keepReselect ? q.reselect : undefined,
       serverId: keep ? q.serverId : undefined,
+      leased: undefined,
       context: keep ? q.context : undefined,
       kind: keep ? q.kind : undefined,
       type: keep ? q.type : undefined,
@@ -976,7 +1045,9 @@ function merge(a: TravelMove | null, b: TravelMove): TravelMove {
  * Entering starts at the newest change and starts recording if needed.
  */
 export async function travel(paneId: string, move: TravelMove) {
-  const id = useUI.getState().panes[paneId]?.serverId;
+  const p = useUI.getState().panes[paneId];
+  // a split object view's server pane is its table's: the table travels, not the object view
+  const id = p && !p.leased && !p.object ? p.serverId : undefined;
   if (!id) return;
   if (traveling.has(id)) {
     traveling.set(id, merge(traveling.get(id) ?? null, move));
@@ -1023,41 +1094,33 @@ async function travelOnce(paneId: string, id: string, move: TravelMove) {
 }
 
 /**
- * ⏎ in the detail view: the field under the cursor decoded, over the YAML
- * (or the object diff: the field decoded in both versions, diffed). ⏎ in a
- * decoded YAML decodes the field under its cursor, a level deeper.
+ * ⏎ in an object view: the field under the cursor decoded, in its place
+ * (or in the object diff: the field decoded in both versions, diffed). ⏎ in
+ * a decoded YAML decodes the field under its cursor, a level deeper.
  */
-function openDecode() {
-  const o = useUI.getState().overlay;
-  if (o?.kind === "decode" && o.decode) {
-    if (o.decode.diff) return; // a diff has two values under the cursor: deeper from the YAML view
-    return setUI((x) => S.decodeDeeper(x, decodeCursor.line));
-  }
-  if (o?.kind !== "detail" || o.view === "describe" || !o.key) return;
-  if (cursor.text === undefined) return;
-  // the line is one of the YAML view (the object) or of the diff's right side (normalized)
-  const decode: S.DecodeState = { levels: [{ line: cursor.line, steps: null }], diff: !!o.diff, which: o.diff ? "norm" : "yaml", version: o.diff ? o.version : undefined, gen: 0 };
-  setUI((x) => ({ ...x, overlay: { kind: "decode", pane: o.pane, key: o.key, decode, back: o, restore: o.restore }, focus: "detail" }));
+function openDecode(pane: S.PaneState) {
+  const o = pane.object;
+  if (!o || o.edit || o.view === "describe") return;
+  const cur = cursorOf(viewSlot(pane.id, !!o.decode));
+  if (cur.text === undefined) return;
+  setUI((x) => S.decodeDeeper(x, pane.id, cur.line));
 }
 
 /** ⇧H in the YAML: how the field under the cursor went over time (needs recording). */
 async function openFieldHistory() {
-  const o = useUI.getState().overlay;
-  if (o?.kind !== "detail" || o.view === "describe" || !o.key) return;
-  const pane = useUI.getState().panes[o.pane];
-  if (!pane?.serverId || cursor.text === undefined) return;
-  if (!paneData.get(pane.serverId).status?.recording) return flashHere(pane.id, "field history needs record history (⇧R in the table)", true);
+  const pane = S.focusedPane(useUI.getState());
+  const o = pane.object;
+  if (!o || o.view === "describe" || o.decode || o.edit || !pane.serverId) return;
+  const cur = cursorOf(pane.id);
+  if (cur.text === undefined) return;
+  if (!paneData.get(pane.serverId).status?.recording) return flash(pane.id, "field history needs record history (⇧R in the table)", true);
   try {
     // the line is one of the YAML view (the object) or of the diff's right side (normalized)
-    const fh = await bridge().fieldHistory(pane.serverId, o.key, o.diff ? (o.version ?? 0) : 0, cursor.line, o.diff ? "norm" : "yaml");
-    if (!fh.changes.length) return flashHere(pane.id, `no history of ${fh.path}`, true);
-    setUI((x) => ({
-      ...x,
-      overlay: { kind: "field", pane: pane.id, key: o.key, field: fh, index: fh.changes.length - 1, back: o, restore: o.restore },
-      focus: "menu",
-    }));
+    const fh = await bridge().fieldHistory(pane.serverId, o.key, o.diff ? (o.version ?? 0) : 0, cur.line, o.diff ? "norm" : "yaml");
+    if (!fh.changes.length) return flash(pane.id, `no history of ${fh.path}`, true);
+    setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "field", pane: pane.id, key: o.key, field: fh, index: fh.changes.length - 1 }));
   } catch (e) {
-    flashHere(pane.id, `field history: ${(e as Error).message}`, true);
+    flash(pane.id, `field history: ${(e as Error).message}`, true);
   }
 }
 
@@ -1068,9 +1131,17 @@ function moveField(s: S.UIState, d: number): S.UIState {
   return { ...s, overlay: { ...o, index: Math.max(0, Math.min(n - 1, (o.index ?? 0) + d)) } };
 }
 
-/** ⏎ on a field's change: the pane goes to that moment (the detail view closes, the table shows it then). */
+/**
+ * ⏎ on a field's change: the table goes to that moment and shows it then
+ * (the object view over it goes back to it; a split's table gets the focus).
+ */
 function pickField(paneId: string, at: string | undefined) {
   if (!at) return;
-  setUI(S.closeOverlay); // the field list (with the detail view behind it)
-  void travel(paneId, { to: at });
+  setUI(S.closeOverlay);
+  const p = useUI.getState().panes[paneId];
+  const table = p?.object?.split ? p.object.from : paneId;
+  const t = table ? useUI.getState().panes[table] : undefined;
+  if (!t || t.serverId !== p?.serverId) return flash(paneId, "the table this object came from is gone", true);
+  setUI((x) => (p!.object?.split ? S.focusPane(x, t.id) : S.leaveObject(x, paneId)));
+  void travel(t.id, { to: at });
 }

@@ -70,10 +70,12 @@ Done: decoders (`internal/decode`, pure; `view.Decode`). `⏎` on a line of the 
 The decode opens over the detail view (`Esc` back to it, the cursor where it was): the header shows the field path through the levels (`data["data.yaml.br"] → doc 2: data.kubeconfig`), the chain (`base64 → brotli → yaml · 14.2 KiB`; a click on a step leaves it and what follows out, on the rendering shows the bytes as they are, the PEM text; `↺ auto` detects again); `⌘A` `⌘C` copies it. `⏎` in decoded YAML goes a level deeper (multi-document YAML too: secret → manifests → kubeconfig → `certificate-authority-data` → certificate), `Esc` a level up. Nothing to decode on a line (a map, a number, plain text) says why in the status line of the view it was asked in (the YAML, or the decoded level), not the pane's (covered by them), and stays; so do `=`/`!` without a value and `⇧H` errors in the YAML. In the object diff, `⏎` is the decoded diff: the field decoded in both versions with the same chain (a managed resource's change as YAML, not one blob for another), `j`/`k` its changes, `[`/`]` other versions; a version without the field shows it added or removed. Each request sends the levels (paths resolved by Go on the first, chains), and Go decodes from the object again: nothing decoded is kept. The detail view's keys that don't apply there (`=`, `!`, `⇧H`, `d`, `y`, `⇧D`, `e`, `⌘J`, `v`) wait until the decode is closed. Open: a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
 
 Next up:
+- dedicated annotate/label/scale commands
+- special jumps from viewer/editor to e.g. volumes/secrets/configmaps
+- nit: decoder must not reformat result (e.g. json is json and not yaml)
 - force refresh (e.g. after network down), also instead of connected it should then say disconnected
 - nit: "record history" should be "record changes"
 - rethink yaml viewer/editor/decoder, maybe completely in the pane to be able to compare? Otherwise also tab switching is awkward
-- dedicated annotate/label/scale commands
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - user facing documentation
 - hide-healthy filter with special support for e.g. managedresources?
@@ -149,6 +151,7 @@ Still open in P0.1:
 
 1. Resource dependencies: done as the jump menu (`⌘J`: namespace, owners, owned; `⌘←`/`⌘→` back and forward; see the README). Non-owner references: a "references" section from a per-kind table (`relations.References`); done: pod and statefulset → their pvcs, those pvs and volume attachments; pvc → pv and its volume attachments, pv → pvc and volume attachments, volume attachment → pv and node; namespace → pods is an owned entry. Open: more references (pod → node, the configmaps/secrets/service account it uses, svc → pods, ingress → svc); a dependency tree view.
 1. RBAC views
+1. Encoders: similar to decoders, so when you edit resources, use return to show e.g. the base64 decoded text -> edit it -> apply it means base64 encode the modified text and put the new base64 encoded thing into the yaml editor, there you are able to apply that modification. Same should work for additional level with e.g. brotli.
 1. From a node's describe output, understand that contained pods are listed there and allow navigation to those pods and directly allow all pod operations (via the context menu)
 1. **From a `shoot` resource to a new pane/tab pointing to that `shoot`**
 1. **Session recording + saving** - allow to save a session (not every watch diff, but everything else displayed, for later forensics when one doesn't recall what was actually did on a cluster)
@@ -158,6 +161,7 @@ Still open in P0.1:
 1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.
    - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
    - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` (default) / `viewerkubeconfig` subresources; read-only per context comes from the safety model.
+1. cross-cluster compare/diff
 1. **Multi-cluster operations** — replaces nested `for ns … for shoot …` loops. Builds on Gardener shoot-kubeconfig access + safety model (dry-run across targets first, then confirm).
 
 ### P4 - "Nice to have" (v2.0)

@@ -30,6 +30,7 @@ const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod
 export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true },
   { command: "object.edit", label: "edit YAML…", group: "view", available: live, mutates: true },
+  { command: "object.editSplit", label: "edit YAML in a split…", group: "view", available: live, mutates: true },
   { command: "object.describe", label: "describe", group: "view", available: live },
   {
     command: "object.diff",

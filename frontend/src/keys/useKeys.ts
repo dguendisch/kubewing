@@ -3,7 +3,7 @@ import { dispatch, openLaunch } from "../commands";
 import { useConfig } from "../store/config";
 import { bridge, paneData, useUI } from "../store/store";
 import * as S from "../store/state";
-import { chord, commandIds, editorModal, fieldReserved, keyContexts, resolveIn, suppressedDefaults, type CommandId } from "./keymap";
+import { chord, commandIds, editorModal, editorMoves, fieldReserved, keyContexts, resolveIn, suppressedDefaults, type CommandId } from "./keymap";
 
 /** The focused pane shows the past (its frames say so). */
 function traveling(s: S.UIState): boolean {
@@ -38,7 +38,8 @@ export function useKeys() {
       if (cmd) {
         e.preventDefault();
         e.stopPropagation();
-        dispatch(cmd);
+        // a held key (Esc climbing decoded levels) stops short of leaving or closing an object view
+        dispatch(cmd, { repeat: e.repeat });
         return;
       }
       if (suppressed.has(c)) e.preventDefault();
@@ -55,7 +56,7 @@ export function useKeys() {
     // menu's key equivalent: menu commands wait until the editor is closed or left
     const editing = () => editorModal(useUI.getState().focus) || !!document.activeElement?.closest("[data-editor]");
     const offMenu = bridge().onCommand((c) => {
-      if (known.has(c) && !editing()) dispatch(c as CommandId);
+      if (known.has(c) && (!editing() || editorMoves(c as CommandId))) dispatch(c as CommandId);
     });
     const offLaunch = bridge().onLaunch(openLaunch);
     window.addEventListener("keydown", onKey, { capture: true });

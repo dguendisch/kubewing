@@ -22,6 +22,7 @@ import { StatusError } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 import { PaneName } from "./NameField";
+import { ObjectPane } from "./ObjectPane";
 import { resourceLabel } from "./tabTitle";
 
 /** One split pane: header (source + filter bar), live table, status line. */
@@ -36,6 +37,8 @@ export function Pane({ id }: { id: string }) {
   });
   const filterField = useUI((s) => (isFocused && s.focus === "filter" ? s.filterField ?? "grep" : undefined));
   const tableFocused = useUI((s) => isFocused && s.focus === "table" && !s.overlay);
+  // the object view's viewer or editor has the keys (no dialog over it)
+  const objectFocused = useUI((s) => isFocused && !s.overlay && (s.focus === "detail" || s.focus === "edit" || s.focus === "editpreview") && S.activeTab(s).id === tabOf(s, id));
   // ⌘⇧⏎: the other panes of the tab are hidden behind this one
   const hidden = useUI((s) => {
     const t = s.tabs.find((x) => x.maximized === id);
@@ -44,8 +47,26 @@ export function Pane({ id }: { id: string }) {
 
   // open on mount / spec change of a table pane without server pane
   useEffect(() => {
-    if (pane && !pane.term && !pane.serverId && !pane.opening && !pane.error) void applySpec(id, pane.spec);
+    if (pane && !pane.term && !pane.logs && !pane.serverId && !pane.opening && !pane.error) void applySpec(id, pane.spec);
   }, [id, pane?.serverId, pane?.opening, pane?.error]);
+
+  // a split following its table's selection: the row selected there, as it moves
+  const follow = pane?.object?.follow ? pane.object.from : undefined;
+  const followed = useUI((s) => (follow ? s.panes[follow] : undefined));
+  useEffect(() => {
+    if (!follow || !followed?.serverId || followed.object) return;
+    const d = paneData.get(followed.serverId);
+    const look = () => {
+      const p = useUI.getState().panes[follow];
+      if (!p?.serverId) return;
+      const x = paneData.get(p.serverId);
+      const key = x.order[p.selected - x.offset];
+      if (key) setUI((s) => S.followTo(s, id, key));
+    };
+    look();
+    // the rows move too (a sort, a new object above it): the key at the selection, once a frame says so
+    return d ? paneData.subscribe(followed.serverId, look) : undefined;
+  }, [follow, followed?.serverId, followed?.selected, !!followed?.object]);
 
   // back/forward through jumps: select the row that view had once the pane has it (frames only carry the window, so Go knows its index)
   const reselect = pane?.reselect;
@@ -105,12 +126,22 @@ export function Pane({ id }: { id: string }) {
             />
           </div>
         </>
+      ) : pane.object?.split ? (
+        <ObjectPane pane={pane} rule={rule} focused={objectFocused} />
       ) : (
-        <TablePane pane={pane} id={id} rule={rule} filterField={filterField} tableFocused={tableFocused} />
+        <>
+          {/* the table stays mounted under an object opened over it: back, it's scrolled as it was */}
+          <div className={`${pane.object ? "hidden" : "flex"} min-h-0 flex-1 flex-col`}>
+            <TablePane pane={pane} id={id} rule={rule} filterField={filterField} tableFocused={tableFocused && !pane.object} />
+          </div>
+          {pane.object ? <ObjectPane pane={pane} rule={rule} focused={objectFocused} /> : null}
+        </>
       )}
     </section>
   );
 }
+
+const tabOf = (s: S.UIState, paneId: string) => s.tabs.find((t) => paneIds(t.layout).includes(paneId))?.id;
 
 /** Top right of a maximized pane: ⤡ and how many are hidden behind it (narrow, so it covers little of the header); a click shows them again. */
 function Maximized({ hidden }: { hidden: number }) {
@@ -265,7 +296,7 @@ function LogFilter({ paneId, value, focused, shown, total }: { paneId: string; v
 }
 
 /** The resource type: its plural in bold, the group only where the plural is ambiguous; the qualified name on hover. */
-function ResourceName({ pane }: { pane: S.PaneState }) {
+export function ResourceName({ pane }: { pane: S.PaneState }) {
   const r = resourceLabel(pane);
   return (
     <span aria-label="resource" title={r.full} className="shrink-0 text-accent">
@@ -280,7 +311,7 @@ function NameGap({ paneId }: { paneId: string }) {
   return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
 }
 
-function Badges({ rule }: { rule?: SafetyRule }) {
+export function Badges({ rule }: { rule?: SafetyRule }) {
   return (
     <>
       {rule?.label ? (

@@ -7,7 +7,7 @@ import { menuSpec } from "../keys/appMenu";
 import type { Binding } from "../keys/keymap";
 import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
-import { contextNamespace, initialState, logsEnded, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
+import { checkFollow, contextNamespace, initialState, logsEnded, orphanedEdits, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 import { logBuffers } from "../logs/buffer";
 
 /**
@@ -20,8 +20,8 @@ export const useUI = create<UIState>(() => initialState());
 /** Kubeconfig contexts: kubewing's own loaded before the first render; ⌘O re-reads its pane's kubeconfig's. */
 export const useContexts = create<{ list?: ContextList }>(() => ({}));
 
-/** All UI updates go through here; touchTab keeps the MRU tab order in sync. */
-export const setUI = (f: (s: UIState) => UIState) => useUI.setState((s) => paneFocus(touchTab(f(s))), true);
+/** All UI updates go through here; touchTab keeps the MRU tab order in sync, checkFollow the object views following a table. */
+export const setUI = (f: (s: UIState) => UIState) => useUI.setState((s) => paneFocus(touchTab(checkFollow(f(s)))), true);
 
 type Listener = (d: PaneData) => void;
 
@@ -104,6 +104,7 @@ export function connect(t: Transport) {
       sessions.drop(id);
       logBuffers.drop(id);
     }
+    for (const id of orphanedEdits(prev, next)) t.editClose(id).catch(() => {});
   });
 }
 

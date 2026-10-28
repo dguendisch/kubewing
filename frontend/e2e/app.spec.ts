@@ -4,6 +4,10 @@ type Inspect = {
   focus: string;
   focusedPane: string;
   overlays: string[];
+  /** The active tab's object views, by pane. */
+  objects: Record<string, { key: string; view: string; diff: boolean; split: boolean; from?: string; follow: boolean; followOff?: string; decoded: number; editing: boolean; title?: string }>;
+  cursor: number;
+  decodeCursor: number;
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
   panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
@@ -41,6 +45,12 @@ async function openTape(page: Page, resource = "e2e-pods", objects = 3) {
 const focused = async (page: Page) => {
   const s = await inspect(page);
   return s.panes[s.focusedPane]!;
+};
+
+/** What was the detail overlay: the focused pane shows an object (in place or in a split), nothing over it. */
+const viewing = async (page: Page) => {
+  const s = await inspect(page);
+  return s.overlays.length === 0 && !!s.objects[s.focusedPane];
 };
 
 // e2e-pods steps run on wall-clock time from the watch start (restart at 2s, recreate
@@ -598,13 +608,15 @@ test("cel filter completes operators that fit the field's type", async ({ page }
 test("= in the YAML view filters by the field under the cursor", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("Enter"); // YAML of etcd-0
-  const dialog = page.getByRole("dialog", { name: "object detail" });
+  const dialog = page.getByRole("region", { name: "object detail" });
   await expect(dialog).toContainText("app: etcd");
   await dialog.getByText("app: etcd").click();
   await page.keyboard.press("=");
   await expect.poll(async () => (await focused(page)).spec.filter).toBe('o.metadata.labels.app == "etcd"');
   await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells[1])).toEqual(["etcd-0"]);
-  expect((await inspect(page)).overlays).toEqual([]);
+  // back in the table it filtered
+  expect((await inspect(page)).objects).toEqual({});
+  expect((await inspect(page)).focus).toBe("table");
 });
 
 test("an error in the status line: its first line, a click shows all of it above, selectable and copyable", async ({ page, context }) => {
@@ -711,7 +723,7 @@ test.describe("text selection in a cell", () => {
     await expect.poll(() => clipboard(page)).toBe(name);
     // ⏎ still opens the YAML
     await page.keyboard.press("Enter");
-    await expect.poll(async () => (await inspect(page)).overlays).toEqual(["detail"]);
+    await expect.poll(() => viewing(page)).toBe(true);
     await page.keyboard.press("Escape");
   });
 
@@ -743,24 +755,154 @@ test("⌘O: picking a context that sets a namespace in the kubeconfig prefills i
   await expect(ns).toHaveValue("");
 });
 
-test("j/k move selection, enter opens detail, d toggles diff, esc restores focus", async ({ page }) => {
+test("j/k move selection, enter shows the object in place, d toggles diff, esc back to the table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");
   await page.keyboard.press("j");
   await page.keyboard.press("k");
   expect((await focused(page)).selected).toBe(1);
+  const serverId = (await focused(page)).serverId;
   await page.keyboard.press("Enter");
   let s = await inspect(page);
-  expect(s.overlays).toEqual(["detail"]);
+  expect(s.overlays).toEqual([]);
   expect(s.focus).toBe("detail");
-  await expect(page.getByRole("dialog", { name: "object detail" })).toContainText("kind: Pod");
+  // in the pane, not over the tab: the same pane, its table hidden under it
+  expect(Object.keys(s.objects)).toEqual([s.focusedPane]);
+  expect(s.objects[s.focusedPane]).toMatchObject({ split: false, view: "yaml" });
+  const pane = page.locator(`section[data-pane="${s.focusedPane}"]`);
+  await expect(pane.getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
+  // the table's grid and filter bar are hidden under it (not gone: back, it's as it was)
+  const grid = pane.locator("canvas:not(.decorationsOverviewRuler)").first();
+  await expect(grid).toBeHidden();
+  await expect(pane.getByRole("textbox", { name: "filter" })).toBeHidden();
   await page.keyboard.press("d");
-  await expect(page.getByRole("dialog", { name: "object detail" })).toContainText("diff");
+  await expect(page.getByRole("region", { name: "object detail" })).toContainText("diff");
   await page.keyboard.press("Escape");
   s = await inspect(page);
-  expect(s.overlays).toEqual([]);
+  expect(s.objects).toEqual({});
   expect(s.focus).toBe("table");
   expect((await focused(page)).selected).toBe(1);
+  // the same table, not a new watch
+  expect((await focused(page)).serverId).toBe(serverId);
+  await expect(grid).toBeVisible();
+});
+
+test("⏎ in place is a history step: ⌘← back to the table, ⌘→ forward to the object again", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("j");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
+  await expect(page.getByRole("button", { name: "back" })).toBeEnabled();
+  await page.keyboard.press("ControlOrMeta+ArrowLeft");
+  await expect.poll(async () => Object.keys((await inspect(page)).objects)).toEqual([]);
+  expect((await focused(page)).selected).toBe(1);
+  await page.keyboard.press("ControlOrMeta+ArrowRight");
+  await expect.poll(() => viewing(page)).toBe(true);
+  await expect(page.getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
+});
+
+test("⇧⏎ opens the object in a split to the right; esc closes it, focus back on its table", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("j");
+  const table = (await inspect(page)).focusedPane;
+  const serverId = (await focused(page)).serverId;
+  await page.keyboard.press("Shift+Enter");
+  let s = await inspect(page);
+  const split = s.focusedPane;
+  expect(split).not.toBe(table);
+  expect(s.focus).toBe("detail");
+  expect(s.objects[split]).toMatchObject({ split: true, from: table, follow: false, view: "yaml" });
+  // side by side, on the table's watch (no second one)
+  expect(s.tabs[s.activeTab]!.layout).toMatchObject({ type: "split", dir: "row" });
+  expect(s.panes[split]!.serverId).toBe(serverId);
+  const right = page.locator(`section[data-pane="${split}"]`);
+  await expect(right.getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
+  // the table is still there, next to it
+  await expect(page.locator(`section[data-pane="${table}"] canvas`).first()).toBeVisible();
+  // a second one, to compare: back in the table (⌘⌥←), the next row, ⇧⏎ again
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+  await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+  expect((await inspect(page)).focusedPane).toBe(table);
+  await page.keyboard.press("j");
+  await page.keyboard.press("Shift+Enter");
+  await expect.poll(async () => Object.keys((await inspect(page)).objects).length).toBe(2);
+  s = await inspect(page);
+  expect(Object.keys(s.objects).sort()).toEqual([split, s.focusedPane].sort());
+  // esc closes the newest split; the focus goes back to the table
+  await page.keyboard.press("Escape");
+  s = await inspect(page);
+  expect(s.focusedPane).toBe(table);
+  expect(s.focus).toBe("table");
+  expect(Object.keys(s.objects)).toEqual([split]);
+  expect(s.panes[table]!.serverId).toBe(serverId);
+});
+
+test("closing a split next to an object view gives the keys back to its viewer", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("Shift+Enter");
+  const view = (await inspect(page)).focusedPane;
+  await expect(page.locator(`section[data-pane="${view}"]`).getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
+  const inViewer = () => page.evaluate((id) => !!document.activeElement?.closest(`section[data-pane="${id}"] .monaco-editor`), view);
+  await expect.poll(inViewer).toBe(true);
+  // a split of the viewer pane (⌘D), closed again: the viewer has the keys, not just the border
+  await page.keyboard.press("ControlOrMeta+D");
+  await expect.poll(async () => (await inspect(page)).focusedPane).not.toBe(view);
+  await page.keyboard.press("Control+D");
+  await expect.poll(async () => (await inspect(page)).focusedPane).toBe(view);
+  await expect.poll(inViewer).toBe(true);
+  expect((await inspect(page)).focus).toBe("detail");
+});
+
+test("follow: off by default; on, the split shows the table's selected row; off, it stays", async ({ page }) => {
+  await openTape(page);
+  await afterTapeSteps(page);
+  const table = (await inspect(page)).focusedPane;
+  const rows = (await focused(page)).rows;
+  await page.keyboard.press("Shift+Enter");
+  const split = (await inspect(page)).focusedPane;
+  const right = page.locator(`section[data-pane="${split}"]`);
+  const view = right.getByRole("region", { name: "object detail" }).locator(".view-lines");
+  await expect(view).toContainText(`name: ${rows[0]!.cells[1]}`);
+  const follow = right.getByRole("checkbox", { name: "follow selection" });
+  await expect(follow).not.toBeChecked();
+  // the table's selection moves: a pinned split stays
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+  await page.keyboard.press("j");
+  await expect.poll(async () => (await inspect(page)).panes[table]!.selected).toBe(1);
+  await expect(view).toContainText(`name: ${rows[0]!.cells[1]}`);
+  // on: it shows the selected row, and follows it
+  await follow.check();
+  await expect(follow).toBeChecked();
+  await expect(view).toContainText(`name: ${rows[1]!.cells[1]}`);
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+  await page.keyboard.press("j");
+  await expect(view).toContainText(`name: ${rows[2]!.cells[1]}`);
+  expect((await inspect(page)).objects[split]).toMatchObject({ follow: true, key: rows[2]!.key });
+  // off again: it stays on the object it shows
+  await follow.uncheck();
+  await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+  await page.keyboard.press("k");
+  await expect.poll(async () => (await inspect(page)).panes[table]!.selected).toBe(1);
+  await expect(view).toContainText(`name: ${rows[2]!.cells[1]}`);
+  // its table closed: it stays (its own hold on the watch), following can't be turned on
+  await page.keyboard.press("Control+D");
+  await expect.poll(async () => (await inspect(page)).focusedPane).toBe(split);
+  await expect(view).toContainText(`name: ${rows[2]!.cells[1]}`);
+  await expect(follow).toBeDisabled();
+  await expect(follow).not.toBeChecked();
+});
+
+test("a held esc climbs out of a decoded value but stops at the top; a fresh press closes the split", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("Shift+Enter");
+  const split = (await inspect(page)).focusedPane;
+  // a held key: keydown with repeat set
+  const held = () => page.evaluate(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", repeat: true, bubbles: true })));
+  await held();
+  await held();
+  expect((await inspect(page)).objects[split]).toBeDefined();
+  await page.keyboard.press("Escape");
+  await expect.poll(async () => (await inspect(page)).objects[split]).toBeUndefined();
 });
 
 test("? shows the cheat sheet with the live keymap, esc closes it", async ({ page }) => {
@@ -1477,7 +1619,7 @@ test.describe("detail view (Monaco)", () => {
 
   test("yaml in a read-only editor; d shows the Monaco diff of prev → current", async ({ page }) => {
     await openApi1(page);
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await expect(dialog.locator(".view-lines")).toContainText("name: api-1");
     await page.keyboard.press("d");
     await expect(dialog.locator('[data-viewer="diff"] .monaco-diff-editor')).toBeVisible();
@@ -1489,7 +1631,7 @@ test.describe("detail view (Monaco)", () => {
 
   test("diff: ↑/↓ buttons and j/k step through the changes; the cursor starts on the first", async ({ page }) => {
     await openApi1(page);
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await page.keyboard.press("d");
     const pos = dialog.getByRole("status", { name: "change position" });
     // two changes: the annotation (top) and the restart's containerStatuses (bottom)
@@ -1520,13 +1662,13 @@ test.describe("detail view (Monaco)", () => {
     // typed text stays in the field: d/y/w/j/k/r/= are not the detail view's keys there
     await page.keyboard.type("dywjkr=");
     await expect(page.locator(".find-widget.visible textarea").first()).toHaveValue("dywjkr=");
-    expect((await inspect(page)).overlays).toEqual(["detail"]); // still the yaml (d: diff), wrap untouched (w)
+    expect(await viewing(page)).toBe(true); // still the yaml (d: diff), wrap untouched (w)
     await expect(page.locator('[data-viewer="single"]')).toHaveAttribute("data-wrap", "true");
     await page.keyboard.press("Escape");
     await expect(page.locator(".find-widget.visible")).toHaveCount(0);
-    expect((await inspect(page)).overlays).toEqual(["detail"]);
+    expect(await viewing(page)).toBe(true);
     await page.keyboard.press("Escape");
-    expect((await inspect(page)).overlays).toEqual([]);
+    expect((await inspect(page)).objects).toEqual({});
     expect((await inspect(page)).focus).toBe("table");
   });
 });
@@ -1540,12 +1682,12 @@ test("diff without recorded history: previous → current, no versions; record h
   await expect.poll(async () => (await focused(page)).rows[0]?.cells, tapeSteps).toContain("3/3");
   await page.keyboard.press("Enter");
   await page.keyboard.press("d");
-  const dialog = page.getByRole("dialog", { name: "object detail" });
+  const dialog = page.getByRole("region", { name: "object detail" });
   await expect(dialog.locator('[data-viewer="diff"] .monaco-diff-editor')).toBeVisible();
   await expect(dialog).toContainText("previous → current");
   await expect(dialog.getByRole("status", { name: "diff versions" })).toHaveCount(0);
   await page.keyboard.press("["); // nothing to step to
-  expect((await inspect(page)).overlays).toEqual(["detail"]);
+  expect(await viewing(page)).toBe(true);
 });
 
 test("diff versions: record history (⇧R), then [ / ] step through it, the changed fields above the diff", async ({ page }) => {
@@ -1557,7 +1699,7 @@ test("diff versions: record history (⇧R), then [ / ] step through it, the chan
   await expect(record).toHaveText(/recording/);
   await page.keyboard.press("Enter");
   await expect(page.locator('[data-viewer="single"] .monaco-editor')).toBeVisible();
-  const dialog = page.getByRole("dialog", { name: "object detail" });
+  const dialog = page.getByRole("region", { name: "object detail" });
   const versions = dialog.getByRole("status", { name: "diff versions" });
   const changed = dialog.getByRole("list", { name: "changed fields" });
   await page.keyboard.press("d");
@@ -1587,7 +1729,7 @@ test("diff versions: record history (⇧R), then [ / ] step through it, the chan
   await expect(dialog).toContainText("version 1 is the oldest seen since watch start");
   await expect(dialog.getByRole("button", { name: "older version" })).toBeDisabled();
   await page.keyboard.press("[");
-  expect((await inspect(page)).overlays).toEqual(["detail"]);
+  expect(await viewing(page)).toBe(true);
   await expect(versions).toHaveText(/^v1 /);
   // the buttons don't take the focus; ] back to the newest
   await dialog.getByRole("button", { name: "newer version" }).click();
@@ -1640,13 +1782,20 @@ test.describe("decode (⏎ in the YAML)", () => {
     expect(i).toBeGreaterThanOrEqual(0);
     for (let n = 0; n < i; n++) await page.keyboard.press("j");
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await expect(dialog.locator(".view-lines")).toContainText(name);
     return dialog;
   }
-  const decoded = (page: Page) => page.getByRole("dialog", { name: "decoded value" });
-  const cursors = (page: Page) => page.evaluate(() => (window as unknown as { __kw: { inspect(): { cursors: { detail: number; decode: number } } } }).__kw.inspect().cursors);
+  const decoded = (page: Page) => page.getByRole("region", { name: "decoded value" });
+  // the object view's and the decoded value's cursor lines (0-based)
+  const cursors = async (page: Page) => {
+    const s = await inspect(page);
+    return { detail: s.cursor, decode: s.decodeCursor };
+  };
   const steps = (page: Page) => decoded(page).getByRole("group", { name: "decode steps" });
+  // the pane's header: the object, then each decoded level's own path
+  const crumbs = (page: Page) => page.getByRole("navigation", { name: "object path" });
+  const status = (page: Page) => page.getByRole("status", { name: "object status" });
 
   test("a managed resource's brotli manifests, a kubeconfig in them (deeper), esc back up level by level", async ({ page }) => {
     await openSecrets(page);
@@ -1655,7 +1804,9 @@ test.describe("decode (⏎ in the YAML)", () => {
     await dialog.locator(".view-line", { hasText: "data.yaml.br:" }).click();
     await page.keyboard.press("Enter");
     const dec = decoded(page);
-    await expect(dec).toContainText('data["data.yaml.br"]');
+    // in the object view's place, the field in its header's path
+    await expect(crumbs(page)).toContainText('managedresource-vpn›data["data.yaml.br"]');
+    await expect(dialog).toBeHidden();
     await expect(steps(page)).toHaveText(/base64→brotli→yaml· \d+(\.\d)? (B|KiB)/);
     await expect(dec.locator(".view-lines")).toContainText("name: vpn-shoot");
     expect((await inspect(page)).focus).toBe("detail");
@@ -1663,27 +1814,28 @@ test.describe("decode (⏎ in the YAML)", () => {
     await dec.locator(".view-line", { hasText: "kubeconfig:" }).click();
     const kubeconfigLine = (await cursors(page)).decode;
     await page.keyboard.press("Enter");
-    await expect(dec).toContainText('data["data.yaml.br"] → doc 2: data.kubeconfig');
+    await expect(crumbs(page)).toContainText('managedresource-vpn›data["data.yaml.br"]›doc 2: data.kubeconfig');
+    await expect(crumbs(page).getByRole("button", { name: "doc 2: data.kubeconfig" })).toHaveAttribute("title", 'data["data.yaml.br"] → doc 2: data.kubeconfig');
     await expect(dec.locator(".view-lines")).toContainText("server: https://api.shoot.example.com");
     await expect(dec).toContainText("esc: up");
-    // a plain value has nothing to decode: it says so in the decode's own status line, and stays (the cursor too)
+    // a plain value has nothing to decode: it says so in the pane's status line, and stays (the cursor too)
     await dec.locator(".view-line", { hasText: "server:" }).click();
     const server = (await cursors(page)).decode;
     expect(server).toBeGreaterThan(0);
     await page.keyboard.press("Enter");
-    await expect(dec.getByRole("status", { name: "overlay status" })).toContainText("is plain text: nothing to decode");
-    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("message")).toHaveCount(0);
-    await expect(dec).toContainText("doc 2: data.kubeconfig");
+    await expect(status(page)).toContainText("is plain text: nothing to decode");
+    await expect(crumbs(page)).toContainText("doc 2: data.kubeconfig");
     expect((await cursors(page)).decode).toBe(server);
-    // esc: a level up (the cursor back on kubeconfig:), then back to the YAML, then closed
+    // esc: a level up (the cursor back on kubeconfig:), then back to the YAML, then to the table
     await page.keyboard.press("Escape");
     await expect(dec.locator(".view-lines")).toContainText("name: vpn-shoot");
-    await expect(dec).not.toContainText("data.kubeconfig");
+    await expect(crumbs(page)).not.toContainText("data.kubeconfig");
     expect((await cursors(page)).decode).toBe(kubeconfigLine);
     await page.keyboard.press("Escape");
     await expect(dec).toHaveCount(0);
-    expect((await inspect(page)).overlays).toEqual(["detail"]);
-    // the detail view's keys work again, on its cursor (still on data.yaml.br)
+    await expect(dialog).toBeVisible();
+    expect(await viewing(page)).toBe(true);
+    // the object's keys work again, on its cursor (still on data.yaml.br: it stayed under the decoded value)
     await page.keyboard.press("Enter");
     await expect(steps(page)).toContainText("brotli");
     await page.keyboard.press("Escape");
@@ -1691,11 +1843,34 @@ test.describe("decode (⏎ in the YAML)", () => {
     await dialog.locator(".view-line", { hasText: "kind: Secret" }).click();
     const kind = (await cursors(page)).detail;
     await page.keyboard.press("Enter");
-    await expect(dialog.getByRole("status", { name: "overlay status" })).toContainText("kind is plain text: nothing to decode");
+    await expect(status(page)).toContainText("kind is plain text: nothing to decode");
     expect((await cursors(page)).detail).toBe(kind);
-    expect((await inspect(page)).overlays).toEqual(["detail"]);
+    expect(await viewing(page)).toBe(true);
     await page.keyboard.press("Escape");
-    expect((await inspect(page)).overlays).toEqual([]);
+    expect((await inspect(page)).objects).toEqual({});
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test("a click on the object in the header goes back up from any level; ⇧⏎ puts the decoded value in a split", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "managedresource-vpn");
+    await dialog.locator(".view-line", { hasText: "data.yaml.br:" }).click();
+    await page.keyboard.press("Enter");
+    await decoded(page).locator(".view-line", { hasText: "kubeconfig:" }).click();
+    await page.keyboard.press("Enter");
+    await expect(crumbs(page)).toContainText("doc 2: data.kubeconfig");
+    // ⇧⏎: this level in a pane of its own, to compare; the one here stays
+    const here = (await inspect(page)).focusedPane;
+    await page.keyboard.press("Shift+Enter");
+    const s = await inspect(page);
+    expect(s.objects[s.focusedPane]).toMatchObject({ split: true, decoded: 2 });
+    expect(s.objects[here]).toMatchObject({ split: false, decoded: 2 });
+    await expect(page.locator(`section[data-pane="${s.focusedPane}"]`).getByRole("region", { name: "decoded value" }).locator(".view-lines")).toContainText("server: https://api.shoot.example.com");
+    // back in the first: the object in its header, a click goes back to it from two levels down
+    await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+    await page.locator(`section[data-pane="${here}"]`).getByRole("navigation", { name: "object path" }).getByRole("button", { name: "managedresource-vpn" }).click();
+    await expect.poll(async () => (await inspect(page)).objects[here]?.decoded).toBe(0);
+    await expect(page.locator(`section[data-pane="${here}"]`).getByRole("region", { name: "object detail" })).toBeVisible();
   });
 
   test("a click on a step leaves it out (the raw brotli bytes as a hex dump); ↺ detects again", async ({ page }) => {
@@ -1808,7 +1983,7 @@ test.describe("time-travel", () => {
     await expect.poll(async () => (await focused(page)).rows[0]?.cells.join(" "), tapeSteps).toContain("3/3");
     // the image change (4s) comes after the scale to 3: in the YAML once it's there
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("web:2", tapeSteps);
+    await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("web:2", tapeSteps);
     await page.keyboard.press("Escape");
   }
 
@@ -1838,7 +2013,7 @@ test.describe("time-travel", () => {
     await expect.poll(async () => (await focused(page)).rows[0]?.changed?.length ?? 0).toBeGreaterThan(0);
     // the table keys still work in the past: the YAML is the version then (no timeline in there)
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await expect(dialog.locator(".view-lines")).toContainText("replicas: 2");
     await expect(dialog.getByRole("status", { name: "timeline" })).toHaveCount(0);
     await page.keyboard.press("Escape");
@@ -1879,7 +2054,7 @@ test.describe("time-travel", () => {
   test("⇧H in the YAML: the field's values over time, ⏎ takes the table there", async ({ page }) => {
     await recorded(page);
     await page.keyboard.press("Enter");
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await expect(dialog.locator(".view-lines")).toContainText("replicas: 3");
     // the cursor onto the replicas line
     await dialog.locator(".view-line", { hasText: "replicas: 3" }).click();
@@ -1980,7 +2155,7 @@ test.describe("object actions", () => {
     await openStatic(page);
     await select(page, "s-web-1");
     await page.keyboard.press("d");
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     await expect(dialog).toContainText("describe");
     await expect(dialog.locator(".view-lines")).toContainText("Name:         web-1");
     await expect(dialog.locator(".view-lines")).toContainText("app=web");
@@ -1993,7 +2168,7 @@ test.describe("object actions", () => {
   test("describe diff: d compares with the previous look (times ignored), r takes a new look", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-1");
-    const dialog = page.getByRole("dialog", { name: "object detail" });
+    const dialog = page.getByRole("region", { name: "object detail" });
     // the look counter of the tape's fake "Looked" event, from the loaded describe (not the virtualized DOM)
     const count = async () =>
       Number(((await page.evaluate(() => (window as any).__kw.inspect().describe?.text)) ?? "").match(/\(x(\d+) over/)?.[1] ?? 0);
@@ -2487,8 +2662,8 @@ test.describe("object actions", () => {
     await page.keyboard.press("Tab");
     await expect(ns).toHaveValue("kube-system");
     await dialog.getByRole("combobox", { name: "image" }).fill("busybox:ops");
+    // nothing highlighted in the image's list: ⏎ starts (a second one would reach the table once the dialog is gone)
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter"); // the first ⏎ takes nothing (no suggestion), so it starts
     await expect(dialog).toHaveCount(0);
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     const header = page.locator("section[data-pane] header").filter({ hasText: "node shell" });
@@ -2937,10 +3112,10 @@ test.describe("object actions", () => {
     await expect(page.getByLabel("message")).toContainText("read-only context");
     expect(Object.values((await inspect(page)).panes).some((p) => (p as { term?: unknown }).term)).toBe(false);
     await page.keyboard.press("d");
-    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
+    await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
   });
   test.describe("edit", () => {
-    const dialog = (page: Page) => page.getByRole("dialog", { name: "edit object" });
+    const dialog = (page: Page) => page.getByRole("region", { name: "edit object" });
     /**
      * Changes one value in the editor by typing: find it (⌘F), close the find
      * widget (the match stays selected) and type over it. Typed, not pasted:
@@ -2965,7 +3140,10 @@ test.describe("object actions", () => {
       expect((await inspect(page)).focus).toBe("edit");
       // keys are text in the editor: typing "green" (r: refresh, e: edit, n …) only edits
       await retype(page, "blue", "green");
-      expect((await inspect(page)).overlays).toEqual(["edit"]);
+      // in the pane, over its table: no dialog, the pane marked as having unsaved changes
+      expect((await inspect(page)).overlays).toEqual([]);
+      expect(Object.values((await inspect(page)).objects)).toEqual([expect.objectContaining({ editing: true, split: false })]);
+      await expect(page.getByLabel("unsaved changes")).toBeVisible();
       await expect(dialog(page)).toContainText("edit (changed)");
       await page.keyboard.press("ControlOrMeta+S");
       await expect(dialog(page)).toContainText("preview (server dry run");
@@ -2986,15 +3164,67 @@ test.describe("object actions", () => {
       expect((await inspect(page)).focus).toBe("table");
       // the watch delivers the new version: the YAML view shows it
       await page.keyboard.press("Enter");
-      await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("mode: green");
+      await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("mode: green");
       // e from the YAML view edits the version just written
       await page.keyboard.press("e");
       await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText("mode: green");
       await expect(dialog(page).locator("[data-editor=yaml] .view-lines")).toContainText('resourceVersion: "8"');
-      // nothing changed: esc closes at once
+      // nothing changed: esc closes at once, back to the YAML it was opened from
       await page.keyboard.press("Escape");
       await expect(dialog(page)).toHaveCount(0);
-      expect((await inspect(page)).overlays).toEqual([]);
+      expect(await viewing(page)).toBe(true);
+      await page.keyboard.press("Escape");
+      expect((await inspect(page)).objects).toEqual({});
+    });
+
+    test("⇧E edits in a split to the right; the table stays; esc back to the YAML, esc again closes it", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      const table = (await inspect(page)).focusedPane;
+      await page.keyboard.press("Shift+E");
+      await expect(dialog(page)).toContainText("ConfigMap settings");
+      const s = await inspect(page);
+      expect(s.focusedPane).not.toBe(table);
+      expect(s.focus).toBe("edit");
+      expect(s.objects[s.focusedPane]).toMatchObject({ split: true, editing: true, from: table });
+      expect(s.objects[table]).toBeUndefined();
+      await page.keyboard.press("Escape");
+      await expect(dialog(page)).toHaveCount(0);
+      await expect(page.locator(`section[data-pane="${s.focusedPane}"]`).getByRole("region", { name: "object detail" })).toContainText("name: settings");
+      await page.keyboard.press("Escape");
+      await expect.poll(async () => (await inspect(page)).focusedPane).toBe(table);
+      expect((await inspect(page)).objects).toEqual({});
+    });
+
+    test("an unsaved edit asks before its pane or tab closes", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      await page.keyboard.press("Shift+Enter");
+      await page.keyboard.press("e");
+      // replicas: no other test writes it (one backend serves the whole run), and it's never sent
+      await retype(page, 'replicas: "3"', 'replicas: "4"');
+      const split = (await inspect(page)).focusedPane;
+      // left behind (the table focused, ⌘⌥←: the editor is modal, ⌘W there is nothing), the pane says it holds changes
+      await page.keyboard.press("ControlOrMeta+Alt+ArrowLeft");
+      await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+      await expect(page.locator(`section[data-pane="${split}"]`).getByLabel("unsaved changes")).toBeVisible();
+      // ⌘W on the tab asks, for the edit in a pane not in use
+      await page.keyboard.press("ControlOrMeta+W");
+      const tab = page.getByRole("alertdialog", { name: "confirm close tab" });
+      await expect(tab).toContainText("An edit not applied yet would be lost.");
+      await page.keyboard.press("Escape");
+      await expect(tab).toHaveCount(0);
+      await page.keyboard.press("ControlOrMeta+Alt+ArrowRight");
+      await expect.poll(async () => (await inspect(page)).focus).toBe("edit");
+      // closing just the pane (the native menu's Close Pane: the editor keeps ⌃D as text) asks
+      await page.evaluate(() => (window as unknown as { __kw: { dispatch(c: string): void } }).__kw.dispatch("pane.close"));
+      const pane = page.getByRole("alertdialog", { name: "confirm close pane" });
+      await expect(pane).toContainText("Its edit isn't applied yet");
+      await page.keyboard.press("Escape");
+      expect((await inspect(page)).objects[split]).toMatchObject({ editing: true });
+      await page.evaluate(() => (window as unknown as { __kw: { dispatch(c: string): void } }).__kw.dispatch("pane.close"));
+      await page.keyboard.press("Enter");
+      await expect.poll(async () => (await inspect(page)).objects[split]).toBeUndefined();
     });
 
     test("the editor is modal: ⌥↓ moves a line, ⌘D deletes it (no split behind it), ⌘S still previews", async ({ page }) => {
@@ -3075,7 +3305,8 @@ test.describe("object actions", () => {
       await retype(page, "dev-before", "dev-after");
       await page.keyboard.press("ControlOrMeta+S");
       await expect(dialog(page)).toContainText("preview (server dry run");
-      await expect(dialog(page)).toContainText("DEV");
+      // the context's label in the pane's header, its color around the pane
+      await expect(page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"] header:visible`).getByLabel("context label")).toHaveText("DEV");
       await page.keyboard.press("Enter");
       const confirm = page.getByRole("alertdialog", { name: "confirm edit" });
       await expect(confirm).toContainText("edit e2e-static/settings -n shop on tape-dev");
@@ -3153,6 +3384,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - text: web-1 · pod · shop
         - menuitem "view YAML ⏎"
         - menuitem "edit YAML… e"
+        - menuitem "edit YAML in a split… ⇧E"
         - menuitem "describe d"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name"
@@ -3167,9 +3399,11 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j/k skip the disabled diff entry: edit YAML → describe → copy name → describe
+    // j/k skip the disabled diff entry: edit YAML → in a split → describe → copy name → describe
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("edit YAML…");
+    await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("edit YAML in a split…");
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("j");
@@ -3178,7 +3412,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("Enter");
     await expect(menu(page)).toHaveCount(0);
-    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
+    await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("Name:         web-1");
     await page.keyboard.press("Escape");
     expect((await inspect(page)).focus).toBe("table");
   });
@@ -3311,7 +3545,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     const mb = (await menu(page).boundingBox())!;
     expect(Math.abs(mb.x - (box.x + 60))).toBeLessThan(4);
     await menu(page).getByRole("menuitem", { name: /view YAML/ }).click();
-    await expect(page.getByRole("dialog", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-1");
+    await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-1");
   });
 
   test("⌘⇧C copies a cell of the row; right-click highlights the cell clicked; the whole row is tab-separated", async ({ page, context }) => {
@@ -3472,12 +3706,17 @@ test.describe("jump to (⌘J)", () => {
     expect((await focused(page)).selected).toBe(startRow);
     await expect(page.getByLabel("field selector")).toHaveCount(0);
 
-    // from the detail view, and the jump menu's events entry: the same jump
+    // from the object view, and the jump menu's events entry: the same jump
     await page.keyboard.press("Enter");
-    await expect(page.getByRole("dialog", { name: "object detail" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "object detail" })).toBeVisible();
     await page.keyboard.press("v");
-    await expect(page.getByRole("dialog", { name: "object detail" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "object detail" })).toHaveCount(0);
     await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    // as in a browser: ⌘← goes back to the object the jump started from, ⌘← again to the table
+    await leads(page, "back", "rel-pods");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(page.getByRole("region", { name: "object detail" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-7d9f-b");
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(backOnPod).toBe("rp-web-b");
     await page.keyboard.press("ControlOrMeta+J");

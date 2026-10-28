@@ -73,13 +73,54 @@ export interface PaneState {
   ambiguous?: boolean;
   /** A name given to the pane (⌘I), shown in its header; it names the tab too while the tab has none. */
   name?: string;
+  /** Shows one object (YAML, diff, describe) instead of its table: over it (⏎) or as a pane of its own (⇧⏎). */
+  object?: ObjectView;
+  /**
+   * serverId is another pane's (the table a split object view came from):
+   * it holds it open, but never changes it (a new spec opens one of its own).
+   */
+  leased?: boolean;
 }
 
-/** A view in a pane's jump history: its spec and the row selected there. */
+/**
+ * A pane's object view: the YAML, the diff of a version against the one
+ * before, or kubectl describe, of one row (by key). Opened over the pane's
+ * table (⏎: a step in its history, Esc or ⌘← back) or in a split of its own
+ * (⇧⏎: Esc closes it), where it can follow the table's selection. Decoding
+ * and editing happen in it.
+ */
+export interface ObjectView {
+  key: string;
+  view: "yaml" | "describe";
+  diff?: boolean;
+  /** diff: the version shown (diffed against the one before); unset = follow the newest. */
+  version?: number;
+  /** describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
+  describeGen?: number;
+  /** "pod/web-0" once loaded, for the tab and the history list. */
+  title?: string;
+  /** Opened in a split (⇧⏎): there's no table under it. */
+  split?: boolean;
+  /** split: the table pane it came from; its selection can be followed. */
+  from?: string;
+  /** split: shows the row selected in `from`, as it moves. */
+  follow?: boolean;
+  /** Why following stopped on its own (the table closed, or shows another source now). */
+  followOff?: string;
+  /** The field under the cursor decoded (⏎), level by level (Esc back up). */
+  decode?: DecodeState;
+  /** The object in the editor (e), then the server's dry-run diff. */
+  edit?: EditState;
+  /** Opened by e in the table: the editor closing goes back to the table. */
+  viaEdit?: boolean;
+}
+
+/** A view in a pane's jump history: its spec, the row selected there, and the object shown over it, if any. */
 export interface HistoryEntry {
   spec: PaneSpec;
   /** Row key (the row index moves with the data). */
   key?: string;
+  object?: ObjectView;
 }
 
 /** History depth per pane and direction. */
@@ -169,30 +210,28 @@ export interface Tab {
 }
 
 export interface Overlay {
-  /** detail: yaml/diff/describe of a row; open: ⌘O; confirm: a prepared action;
+  /** open: ⌘O; confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
-   *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes;
+   *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes, or unsaved edits;
+   *  closePane: closing a pane with unsaved edits;
    *  container: which container a prepared exec enters;
    *  debug: image, target and profile of a prepared debug container;
    *  opspod: node, image and host access of an ops pod (prepared on submit);
-   *  edit: a row's object in the YAML editor, then the server's dry-run diff;
    *  jump: where the pane can go from a row (namespace, owners, owned);
    *  history: a pane's back or forward history (holding its ← / → button);
    *  error: the full text of an error in the status line (a click on it);
    *  columns: the pane's columns (its resource type's), -o wide and custom ones;
    *  cells: which of the selected row's cells to copy;
+   *  field: a field's values over time (⇧H in an object view);
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
-   *  logs: containers, history and follow of a log tail, before it starts;
-   *  decode: the field under the detail view's cursor decoded (⏎), over it (back). */
-  kind: "detail" | "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "container" | "debug" | "opspod" | "edit" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "decode";
+   *  logs: containers, history and follow of a log tail, before it starts. */
+  kind: "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
-  /** detail: which view; describe is fetched separately. error: which error (the source's or the CEL filter's). */
-  view?: "yaml" | "describe" | "source" | "filter";
+  /** error: which error (the source's or the CEL filter's). */
+  view?: "source" | "filter";
   /** error: its full text. */
   text?: string;
-  /** detail/describe: bumped by r (re-run); each value is exactly one describe call = one "look". */
-  describeGen?: number;
   /** forwards, menu, container, jump, history, cells: highlighted entry. */
   index?: number;
   /** menu, jump, cells: pointer position when opened by right-click; else it's anchored to the row (rowIndex). history: below its button. */
@@ -207,9 +246,6 @@ export interface Overlay {
   key?: string;
   /** closeTab: the tab to close (not the index: tabs move while the dialog is open). renameTab: the tab named. */
   tabId?: string;
-  diff?: boolean;
-  /** detail diff: the version shown (diffed against the one before); unset = follow the newest. */
-  version?: number;
   /** confirm, container: the prepared action. */
   pending?: Pending;
   /** container: the pod's containers to pick from. */
@@ -223,7 +259,7 @@ export interface Overlay {
   ops?: OpsPodOptions;
   /** opspod: the dialog's initial values, loaded before it opens. */
   opsDefaults?: OpsPodDefaults;
-  /** edit: the editor's state; confirm: the edit being written (a failed write reopens the editor with it). */
+  /** confirm: the edit being written (the pane's; a failed write goes back to its editor). */
   edit?: EditState;
   /** columns: the pane's columns, loaded before it opens. */
   columns?: ColumnChoices;
@@ -231,12 +267,6 @@ export interface Overlay {
   field?: FieldHistory;
   /** logs: tail every pod the pane shows (⌥⌘L), not the row's (key). */
   whole?: boolean;
-  /** decode: what's decoded, level by level (⏎ again goes deeper, Esc back up). */
-  decode?: DecodeState;
-  /** field, decode: the detail view it was opened from, back on Esc. */
-  back?: Overlay;
-  /** detail, decode: a message in its own status line (the pane's is covered by it). */
-  flash?: { text: string; error: boolean };
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -341,11 +371,114 @@ export function paneFocus(s: UIState): UIState {
   // the find field belongs to the focused terminal/log pane's open bar; otherwise it's the pane's own context
   if (s.focus === "termfind" && focusedPane(s)?.term?.find?.open) return s;
   if (s.focus === "logsfind" && focusedPane(s)?.logs?.find?.open) return s;
-  const paneContexts = ["table", "terminal", "ended", "termfind", "logs", "logsfind"];
+  const paneContexts: FocusContext[] = ["table", "terminal", "ended", "termfind", "logs", "logsfind", "detail", "edit", "editpreview"];
   if (!paneContexts.includes(s.focus)) return s;
   const p = focusedPane(s);
-  const want = p?.logs ? "logs" : !p?.term ? "table" : p.term.exited === undefined ? "terminal" : "ended";
+  const want: FocusContext = p?.logs ? "logs" : p?.term ? (p.term.exited === undefined ? "terminal" : "ended") : p?.object ? objectFocus(p.object) : "table";
   return s.focus === want ? s : { ...s, focus: want };
+}
+
+/** An object view's focus context: its viewer, or the editor (or the editor's dry-run diff). */
+const objectFocus = (o: ObjectView): FocusContext => (o.edit ? (o.edit.preview ? "editpreview" : "edit") : "detail");
+
+/** The edit in a pane's object view has changes not written yet. */
+export const unsaved = (p: PaneState | undefined) => !!p?.object?.edit && p.object.edit.yaml !== p.object.edit.opened;
+
+/** What the history keeps of an object view: not its editor (the session is gone once it's left). */
+const kept = (o: ObjectView | undefined): ObjectView | undefined => {
+  if (!o?.edit) return o;
+  const { edit: _, viaEdit: __, ...rest } = o;
+  return rest;
+};
+
+/**
+ * ⏎ (y, d, e …) in the table: the row's object over it, in place. A
+ * navigation like a jump: the table (with the row) goes on the back
+ * history, so Esc or ⌘← return to it, scrolled as it was.
+ */
+export function openObject(s: UIState, paneId: string, object: ObjectView): UIState {
+  const p = s.panes[paneId];
+  if (!p) return s;
+  s = pushHistory(s, paneId, object.key);
+  s = updatePane(s, paneId, (q) => ({ ...q, object: { ...object, split: false, from: undefined, follow: undefined, followOff: undefined } }));
+  return { ...focusPane(s, paneId), focus: "table", overlay: undefined };
+}
+
+/**
+ * ⇧⏎ in the table (or in an object view, its decoded value): the object in
+ * a pane of its own, to the right. It holds the table's server pane (see
+ * PaneState.leased), so it stays when the table closes or shows another
+ * source; `from` is the table, whose selection it can follow.
+ */
+export function openObjectSplit(s: UIState, object: ObjectView, from = activeTab(s).focused): UIState {
+  const src = s.panes[from];
+  if (!src?.serverId) return s;
+  // from an object view in a split: the table that one came from
+  const table = src.object?.split ? src.object.from : from;
+  const id = `v${s.nextId}`;
+  const next = withTab(focusPane(s, from), (t) => ({ ...t, layout: split(t.layout, from, "row", id), focused: id }));
+  const pane: PaneState = {
+    id,
+    spec: { ...src.spec },
+    selected: 0,
+    serverId: src.serverId,
+    leased: true,
+    context: src.context,
+    kind: src.kind,
+    type: src.type,
+    ambiguous: src.ambiguous,
+    object: { ...kept(object)!, split: true, from: table, follow: undefined, followOff: undefined },
+  };
+  return { ...next, nextId: s.nextId + 1, panes: { ...s.panes, [id]: pane }, focus: "table", overlay: undefined };
+}
+
+/** The focused pane's object view (a split just opened) gets an editor. */
+export function withEdit(s: UIState, edit: EditState): UIState {
+  return setObject(s, activeTab(s).focused, (o) => ({ ...o, edit }));
+}
+
+/** Changes the object view of a pane (no view: unchanged). */
+export function setObject(s: UIState, paneId: string, f: (o: ObjectView) => ObjectView): UIState {
+  const o = s.panes[paneId]?.object;
+  return o ? updatePane(s, paneId, (p) => ({ ...p, object: f(o) })) : s;
+}
+
+/** Why a split object view can't follow its table (none: it can). */
+export function followBlocked(s: UIState, p: PaneState): string | undefined {
+  const from = p.object?.from ? s.panes[p.object.from] : undefined;
+  if (!p.object?.split || !p.object.from) return "opened from no table";
+  if (!from) return "the table it came from was closed";
+  if (from.serverId !== p.serverId) return "the table it came from shows another source now";
+  return undefined;
+}
+
+/** The follow checkbox: on (if the table is still there, on the same source) or off. */
+export function setFollow(s: UIState, paneId: string, on: boolean): UIState {
+  const p = s.panes[paneId];
+  if (!p?.object) return s;
+  if (on && followBlocked(s, p)) return s;
+  return setObject(s, paneId, (o) => ({ ...o, follow: on || undefined, followOff: undefined }));
+}
+
+/** Following: the table's selected row is shown instead (its diff from the newest, nothing decoded). */
+export function followTo(s: UIState, paneId: string, key: string): UIState {
+  const o = s.panes[paneId]?.object;
+  if (!o?.follow || o.edit || o.key === key) return s;
+  return setObject(s, paneId, (x) => ({ ...x, key, version: undefined, decode: undefined, title: undefined }));
+}
+
+/**
+ * Following stops once its table is gone or shows another source (the rows
+ * there aren't this source's); the header says why. Applied after every
+ * state update, like paneFocus.
+ */
+export function checkFollow(s: UIState): UIState {
+  for (const p of Object.values(s.panes)) {
+    if (!p.object?.follow) continue;
+    const why = followBlocked(s, p);
+    if (why) s = setObject(s, p.id, (o) => ({ ...o, follow: undefined, followOff: why }));
+  }
+  return s;
 }
 
 /** Opens a terminal pane for an exec session below the focused pane (⌘D direction) and focuses it. */
@@ -403,6 +536,19 @@ export function closeLogFind(s: UIState): UIState {
 
 export function updateLogFind(s: UIState, paneId: string, f: (x: TermFind) => TermFind): UIState {
   return updatePane(s, paneId, (q) => (q.logs ? { ...q, logs: { ...q.logs, find: f(q.logs.find ?? noFind) } } : q));
+}
+
+/** Edit sessions (Go holds the original) no pane's editor references any more: closed, left, or the pane gone. */
+export function orphanedEdits(prev: UIState, next: UIState): string[] {
+  if (prev.panes === next.panes) return [];
+  const sess = (p: PaneState) => p.object?.edit?.session;
+  const live = new Set(Object.values(next.panes).map(sess));
+  // a confirm of the edit being written still needs it
+  if (next.overlay?.edit) live.add(next.overlay.edit.session);
+  return Object.values(prev.panes).flatMap((p) => {
+    const id = sess(p);
+    return id && !live.has(id) ? [id] : [];
+  });
 }
 
 /** Exec and log sessions no pane references any more (closed panes/tabs). */
@@ -546,7 +692,9 @@ export function closePane(s: UIState, id = activeTab(s).focused): UIState {
   if (!layout) return closeTab({ ...s, panes }, index, false);
   const idx = ids.indexOf(id);
   const rest = paneIds(layout);
-  const focused = t.focused === id ? rest[Math.max(0, idx - 1)] ?? rest[0]! : t.focused;
+  // a split object view hands the focus back to the table it came from, if it's still there
+  const from = s.panes[id]?.object?.from;
+  const focused = t.focused !== id ? t.focused : from && rest.includes(from) ? from : rest[Math.max(0, idx - 1)] ?? rest[0]!;
   const tabs = [...s.tabs];
   const { maximized: _, ...kept } = t;
   tabs[index] = { ...kept, layout, focused };
@@ -766,10 +914,10 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
 
 /** The focus context an overlay holds while it is open. */
 const overlayFocus: Record<Overlay["kind"], FocusContext> = {
-  detail: "detail",
   open: "dialog",
   confirm: "confirm",
   closeTab: "confirm",
+  closePane: "confirm",
   portforward: "dialog",
   debug: "dialog",
   opspod: "dialog",
@@ -778,7 +926,6 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a menu too: the same keys (j/k, ⏎, Esc)
   container: "menu",
   help: "help",
-  edit: "edit",
   // the menu's keys, plus ⇧⏎ (split)
   jump: "menu",
   history: "menu",
@@ -788,8 +935,6 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   // a menu too: j/k, ⏎, Esc
   cells: "menu",
   field: "menu",
-  // the detail view's keys: ⏎ deeper, Esc back, j/k, [ / ], w
-  decode: "detail",
   // a text field: every plain key is typing
   renameTab: "dialog",
   renamePane: "dialog",
@@ -803,82 +948,80 @@ export function openOverlay(s: UIState, o: Omit<Overlay, "restore">): UIState {
   return { ...s, overlay: { ...o, restore: s.focus }, focus: overlayFocus[o.kind] };
 }
 
-/** The edit overlay's focus follows what it shows: the editor, or the dry-run diff. */
-export function setEdit(s: UIState, f: (e: EditState) => EditState): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "edit" || !o.edit) return s;
-  const edit = f(o.edit);
-  return { ...s, overlay: { ...o, edit }, focus: edit.preview ? "editpreview" : "edit" };
+/** A pane's editor (its object view's); the focus follows what it shows: the editor, or the dry-run diff. */
+export function setEdit(s: UIState, paneId: string, f: (e: EditState) => EditState): UIState {
+  const o = s.panes[paneId]?.object;
+  if (!o?.edit) return s;
+  return setObject(s, paneId, (x) => ({ ...x, edit: f(o.edit!) }));
 }
 
 /**
- * [ / ]: the detail diff one version older or newer, within the kept ones
- * (`range` is the loaded diff's). Steps from the version asked for, not the
- * loaded one, so quick presses add up while a load is under way. Stepping to
- * the newest follows it again (version unset), so new changes show as they
- * come in.
+ * [ / ]: the object diff (or the decoded diff) one version older or newer,
+ * within the kept ones (`range` is the loaded diff's). Steps from the
+ * version asked for, not the loaded one, so quick presses add up while a
+ * load is under way. Stepping to the newest follows it again (version
+ * unset), so new changes show as they come in.
  */
-export function stepVersion(s: UIState, dir: -1 | 1, range: { to: number; first: number; last: number } | undefined): UIState {
-  const o = s.overlay;
-  if (o?.kind === "decode" && o.decode?.diff && range) {
+export function stepVersion(s: UIState, paneId: string, dir: -1 | 1, range: { to: number; first: number; last: number } | undefined): UIState {
+  const o = s.panes[paneId]?.object;
+  if (!o || !range || o.edit) return s;
+  if (o.decode) {
     const d = o.decode;
+    if (!d.diff) return s;
     const from = d.version ?? range.to;
     const to = Math.max(range.first, Math.min(from + dir, range.last));
     if (to === from) return s;
-    return { ...s, overlay: { ...o, decode: { ...d, version: to >= range.last ? undefined : to, gen: d.gen + 1 } } };
+    return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, version: to >= range.last ? undefined : to, gen: d.gen + 1 } }));
   }
-  if (o?.kind !== "detail" || !o.diff || o.view === "describe" || !range) return s;
+  if (!o.diff || o.view === "describe") return s;
   const from = o.version ?? range.to;
   const to = Math.max(range.first, Math.min(from + dir, range.last));
   if (to === from) return s;
-  return { ...s, overlay: { ...o, version: to >= range.last ? undefined : to } };
+  return setObject(s, paneId, (x) => ({ ...x, version: to >= range.last ? undefined : to }));
 }
 
-/** ⏎ in a decoded YAML: the field on its line (0-based), a level deeper. */
-export function decodeDeeper(s: UIState, line: number): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "decode" || !o.decode) return s;
+/** ⏎ in an object view: the field on its line (0-based) decoded; in a decoded YAML, a level deeper. */
+export function decodeDeeper(s: UIState, paneId: string, line: number): UIState {
+  const o = s.panes[paneId]?.object;
+  if (!o || o.edit) return s;
   const d = o.decode;
-  return { ...s, overlay: { ...o, decode: { ...d, levels: [...d.levels, { line, steps: null }], gen: d.gen + 1, toggled: false } } };
+  if (!d) {
+    if (o.view === "describe") return s;
+    // the line is one of the YAML view (the object) or of the diff's right side (normalized)
+    const decode: DecodeState = { levels: [{ line, steps: null }], diff: !!o.diff, which: o.diff ? "norm" : "yaml", version: o.diff ? o.version : undefined, gen: 0 };
+    return setObject(s, paneId, (x) => ({ ...x, decode }));
+  }
+  if (d.diff) return s; // a diff has two values under the cursor: deeper from the YAML view
+  return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, levels: [...d.levels, { line, steps: null }], gen: d.gen + 1, toggled: false } }));
 }
 
 /** The levels as Go resolved them (paths and chains), kept without reloading: [ / ] and toggles go by them. */
-export function decodeResolved(s: UIState, levels: DecodeLevel[]): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "decode" || !o.decode || levels.length !== o.decode.levels.length) return s;
-  if (o.decode.levels.every((l) => l.path)) return s;
-  return { ...s, overlay: { ...o, decode: { ...o.decode, levels } } };
+export function decodeResolved(s: UIState, paneId: string, levels: DecodeLevel[]): UIState {
+  const d = s.panes[paneId]?.object?.decode;
+  if (!d || levels.length !== d.levels.length || d.levels.every((l) => l.path)) return s;
+  return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, levels } }));
 }
 
 /** ↺: the shown level's chain detected again. */
-export function decodeAuto(s: UIState): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "decode" || !o.decode) return s;
-  const d = o.decode;
+export function decodeAuto(s: UIState, paneId: string): UIState {
+  const d = s.panes[paneId]?.object?.decode;
+  if (!d) return s;
   const last = d.levels[d.levels.length - 1]!;
-  return { ...s, overlay: { ...o, decode: { ...d, levels: [...d.levels.slice(0, -1), { ...last, steps: null, raw: false }], gen: d.gen + 1, toggled: false } } };
+  return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, levels: [...d.levels.slice(0, -1), { ...last, steps: null, raw: false }], gen: d.gen + 1, toggled: false } }));
 }
 
 /**
- * A message in the open detail view's or decode's status line: the pane's
- * own is covered by them. Kept by the overlay that's open when it comes, so
- * Esc to the one below doesn't take it along.
+ * Esc in a decoded value: a level up; from the first, back to the object.
+ * Unchanged (the same state) when nothing is decoded.
  */
-export function flashOverlay(s: UIState, f: { text: string; error: boolean } | undefined): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "detail" && o?.kind !== "decode") return s;
-  return { ...s, overlay: { ...o, flash: f } };
-}
-
-/** Esc in a decode: a level up; from the first, back to the detail view it was opened from. */
-export function decodeUp(s: UIState): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "decode" || !o.decode) return s;
-  const d = o.decode;
+export function decodeUp(s: UIState, paneId: string): UIState {
+  const d = s.panes[paneId]?.object?.decode;
+  if (!d) return s;
   // a level never loaded (refused: nothing to decode on its line) goes without reloading the one shown
   const pending = d.levels[d.levels.length - 1]!.path === undefined;
-  if (d.levels.length > 1) return { ...s, overlay: { ...o, decode: { ...d, levels: d.levels.slice(0, -1), gen: pending ? d.gen : d.gen + 1, toggled: pending ? d.toggled : false } } };
-  return o.back ? { ...s, overlay: o.back, focus: "detail" } : closeOverlay(s);
+  if (d.levels.length > 1)
+    return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, levels: d.levels.slice(0, -1), gen: pending ? d.gen : d.gen + 1, toggled: pending ? d.toggled : false } }));
+  return setObject(s, paneId, ({ decode: _, ...x }) => x);
 }
 
 /**
@@ -888,14 +1031,41 @@ export function decodeUp(s: UIState): UIState {
  * `levels` are the loaded ones (paths resolved); a chain cut short is kept
  * as it is until the level is left.
  */
-export function decodeToggle(s: UIState, levels: DecodeLevel[], step: number | "render"): UIState {
-  const o = s.overlay;
-  if (o?.kind !== "decode" || !o.decode || !levels.length) return s;
-  const d = o.decode;
+export function decodeToggle(s: UIState, paneId: string, levels: DecodeLevel[], step: number | "render"): UIState {
+  const d = s.panes[paneId]?.object?.decode;
+  if (!d || !levels.length) return s;
   const last = levels[levels.length - 1]!;
   const steps = last.steps ?? [];
   const next: DecodeLevel = step === "render" ? { ...last, raw: !last.raw } : { ...last, steps: steps.slice(0, step), raw: false };
-  return { ...s, overlay: { ...o, decode: { ...d, levels: [...levels.slice(0, -1), next], gen: d.gen + 1, toggled: true } } };
+  return setObject(s, paneId, (x) => ({ ...x, decode: { ...d, levels: [...levels.slice(0, -1), next], gen: d.gen + 1, toggled: true } }));
+}
+
+/**
+ * Esc at the top of an object view (nothing decoded, no editor): over a
+ * table, back to it (the history step it was); in a split, the pane closes.
+ * `repeat`: a held Esc (key repeat) climbs decode levels but stops here, so
+ * holding it can't close anything.
+ */
+export function leaveObject(s: UIState, paneId: string, repeat = false): UIState {
+  const p = s.panes[paneId];
+  if (!p?.object || repeat) return s;
+  if (p.object.split) return closePane(s, paneId);
+  return back(s, paneId);
+}
+
+/** The view before an object opened over the table: the table, with the row and scroll it had. */
+function back(s: UIState, paneId: string): UIState {
+  const p = s.panes[paneId]!;
+  const entry = p.back?.at(-1);
+  // opened from the table, as the history says: the table comes back as it was (the same server pane)
+  if (entry && !entry.object && sameSource(entry.spec, p.spec)) {
+    const forward = [...(p.forward ?? []), { spec: p.spec, key: p.object!.key, object: kept(p.object) }].slice(-historyLimit);
+    const { object: _, ...rest } = p;
+    return updatePane(s, paneId, () => ({ ...rest, back: orNone(p.back!.slice(0, -1)), forward }));
+  }
+  // nothing to go back to (an old history): the table under it
+  const { object: _, ...rest } = p;
+  return updatePane(s, paneId, () => rest);
 }
 
 export function closeOverlay(s: UIState): UIState {
@@ -925,7 +1095,8 @@ export function pipelineYAML(spec: PaneSpec): string {
 export function orphanedServerPanes(prev: UIState, next: UIState): string[] {
   if (prev.panes === next.panes) return [];
   const live = new Set(Object.values(next.panes).map((p) => p.serverId));
-  return Object.values(prev.panes).flatMap((p) => (p.serverId && !live.has(p.serverId) ? [p.serverId] : []));
+  // a split object view shares its table's: once each
+  return [...new Set(Object.values(prev.panes).flatMap((p) => (p.serverId && !live.has(p.serverId) ? [p.serverId] : [])))];
 }
 
 export const sameSource = (a: PaneSpec, b: PaneSpec) =>
@@ -962,7 +1133,12 @@ const orNone = <T>(l: T[]) => (l.length ? l : undefined);
  * applies the new spec (applySpec).
  */
 export function pushHistory(s: UIState, paneId: string, key: string | undefined): UIState {
-  return updatePane(s, paneId, (p) => ({ ...p, back: [...(p.back ?? []), { spec: p.spec, key }].slice(-historyLimit), forward: undefined, reselect: undefined }));
+  return updatePane(s, paneId, (p) => ({
+    ...p,
+    back: [...(p.back ?? []), { spec: p.spec, key: p.object?.key ?? key, object: kept(p.object) }].slice(-historyLimit),
+    forward: undefined,
+    reselect: undefined,
+  }));
 }
 
 /**
@@ -1003,10 +1179,14 @@ export function moveHistory(s: UIState, paneId: string, dir: "back" | "forward",
   if (!p || !entry) return { state: s };
   const rest = from!.slice(0, -steps);
   const passed = from!.slice(-steps + 1 || from!.length).reverse();
-  const other = [...((dir === "back" ? p.forward : p.back) ?? []), { spec: p.spec, key }, ...passed].slice(-historyLimit);
+  const other = [...((dir === "back" ? p.forward : p.back) ?? []), { spec: p.spec, key: p.object?.key ?? key, object: kept(p.object) }, ...passed].slice(-historyLimit);
   const back = dir === "back" ? rest : other;
   const forward = dir === "back" ? other : rest;
-  return { state: updatePane(s, paneId, (x) => ({ ...x, back: orNone(back), forward: orNone(forward), reselect: entry.key })), entry };
+  // the entry's object view comes back with it (decoded levels and all); its row is selected under it, for Esc
+  return {
+    state: updatePane(s, paneId, (x) => ({ ...x, back: orNone(back), forward: orNone(forward), reselect: entry.key, object: entry.object })),
+    entry,
+  };
 }
 
 /** The row to reselect after moving through the history is shown at index (or gone, -1): select it and stop looking. */

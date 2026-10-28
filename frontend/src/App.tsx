@@ -1,5 +1,5 @@
 import { ConfigErrors } from "./components/ConfigErrors";
-import { Confirm, ConfirmCloseTab } from "./components/Confirm";
+import { Confirm, ConfirmClosePane, ConfirmCloseTab } from "./components/Confirm";
 import { ContainerPicker } from "./components/ContainerPicker";
 import { CellPicker } from "./components/CellPicker";
 import { ContextMenu } from "./components/ContextMenu";
@@ -12,9 +12,6 @@ import { ColumnsDialog } from "./components/Columns";
 import { OpsPodDialog } from "./components/OpsPod";
 import { LogsDialog } from "./logs/LogsDialog";
 import { PortForwardDialog, PortForwardList } from "./components/PortForward";
-import { Detail } from "./components/Detail";
-import { Decode } from "./components/Decode";
-import { Edit } from "./components/Edit";
 import { Dock } from "./components/Dock";
 import { DragPreview } from "./components/PaneDrag";
 import { Help } from "./components/Help";
@@ -113,13 +110,11 @@ export function App() {
           </div>
         ))}
       </main>
-      <Detail />
       <FieldList />
-      <Decode />
-      <Edit />
       <OpenSource />
       <Confirm />
       <ConfirmCloseTab />
+      <ConfirmClosePane />
       <PortForwardDialog />
       <PortForwardList />
       <ContextMenu />

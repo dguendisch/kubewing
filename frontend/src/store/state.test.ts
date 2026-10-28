@@ -323,8 +323,8 @@ describe("jumps and their history", () => {
 describe("overlays", () => {
   it("restores previous focus on close", () => {
     let s: S.UIState = { ...S.initialState(), focus: "filter" };
-    s = S.openOverlay(s, { kind: "detail", pane: "v1", key: "k" });
-    expect(s.focus).toBe("detail");
+    s = S.openOverlay(s, { kind: "help", pane: "v1" });
+    expect(s.focus).toBe("help");
     s = S.closeOverlay(s);
     expect(s.focus).toBe("filter");
     expect(s.overlay).toBeUndefined();
@@ -914,41 +914,6 @@ describe("movePane (drag and drop by the grip)", () => {
   });
 });
 
-describe("detail diff versions ([ / ])", () => {
-  const range = { to: 5, first: 3, last: 5 };
-  const diffOpen = (version?: number): S.UIState =>
-    S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "yaml", diff: true, version });
-
-  it("steps back to older versions and stops at the oldest kept", () => {
-    let s = S.stepVersion(diffOpen(), -1, range);
-    expect(s.overlay?.version).toBe(4);
-    s = S.stepVersion(s, -1, { ...range, to: 4 });
-    expect(s.overlay?.version).toBe(3);
-    const same = S.stepVersion(s, -1, { ...range, to: 3 });
-    expect(same).toBe(s);
-  });
-
-  it("quick presses add up while the last step is still loading", () => {
-    // range still the newest's (v5), version already asked for v4: the next [ goes to v3
-    expect(S.stepVersion(diffOpen(4), -1, range).overlay?.version).toBe(3);
-    expect(S.stepVersion(diffOpen(3), -1, range)).toEqual(diffOpen(3));
-  });
-
-  it("back at the newest it follows new versions again", () => {
-    const s = S.stepVersion(diffOpen(4), 1, { ...range, to: 4 });
-    expect(s.overlay && "version" in s.overlay ? s.overlay.version : "absent").toBeUndefined();
-    expect(S.stepVersion(diffOpen(), 1, range).overlay?.version).toBeUndefined();
-  });
-
-  it("only in the object diff, once loaded", () => {
-    const yaml = S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "yaml" });
-    expect(S.stepVersion(yaml, -1, range)).toBe(yaml);
-    const describe = S.openOverlay(S.initialState(), { kind: "detail", pane: "p1", key: "u1", view: "describe", diff: true });
-    expect(S.stepVersion(describe, -1, range)).toBe(describe);
-    expect(S.stepVersion(diffOpen(), -1, undefined).overlay?.version).toBeUndefined();
-  });
-});
-
 describe("clusters", () => {
   it("splits a terminal's kubeconfig reference off the context name", () => {
     expect(S.splitCluster("")).toEqual({ kubeconfig: "", context: "" });
@@ -975,60 +940,248 @@ describe("clusters", () => {
   });
 });
 
-describe("decode (⏎ in the detail view)", () => {
-  const detail = (diff = false): S.UIState => S.openOverlay(S.initialState(), { kind: "detail", pane: "v1", key: "u1", view: "yaml", diff });
-  const decoding = (levels: S.DecodeState["levels"], diff = false): S.UIState => {
-    const s = detail(diff);
-    const back = s.overlay!;
-    return { ...s, overlay: { kind: "decode", pane: "v1", key: "u1", decode: { levels, diff, which: diff ? "norm" : "yaml", gen: 0 }, back, restore: back.restore } };
-  };
-  const resolved = [{ line: 3, path: [{ key: "data" }, { key: "yaml.br" }], steps: ["base64", "brotli"] }];
+describe("object views (⏎ in place, ⇧⏎ in a split)", () => {
+  // a table pane on a server pane, the way applySpec leaves it
+  const table = (s = S.initialState("kind")): S.UIState => S.updatePane(s, "v1", (p) => ({ ...p, serverId: "p1", context: "kind", kind: "Pod", type: "pods" }));
+  const inPlace = (o: Partial<S.ObjectView> = {}) => apply(table(), (x) => S.openObject(x, "v1", { key: "u1", view: "yaml", ...o }));
+  const inSplit = (o: Partial<S.ObjectView> = {}) => apply(table(), (x) => S.openObjectSplit(x, { key: "u1", view: "yaml", ...o }, "v1"));
 
-  it("deeper adds a level from the decoded view's line; up removes it, then goes back to the detail view", () => {
-    let s = S.decodeDeeper(decoding(resolved), 7);
-    expect(s.overlay?.decode?.levels).toEqual([...resolved, { line: 7, steps: null }]);
-    expect(s.overlay?.decode?.gen).toBe(1);
-    s = S.decodeUp(s);
-    expect(s.overlay?.decode?.levels).toEqual(resolved);
-    s = S.decodeUp(s);
-    expect(s.overlay).toEqual(detail().overlay);
+  it("⏎ shows the object over the table, a step in its history; Esc goes back to it", () => {
+    let s = inPlace();
+    invariants(s);
+    expect(ids(s)).toEqual(["v1"]);
+    expect(s.panes.v1!.object).toMatchObject({ key: "u1", view: "yaml", split: false });
     expect(s.focus).toBe("detail");
+    expect(s.panes.v1!.back).toEqual([{ spec: s.panes.v1!.spec, key: "u1", object: undefined }]);
+    s = apply(s, (x) => S.leaveObject(x, "v1"));
+    expect(s.panes.v1!.object).toBeUndefined();
+    expect(s.panes.v1!.serverId).toBe("p1"); // the same table, scrolled as it was
+    expect(s.panes.v1!.back).toBeUndefined();
+    expect(s.panes.v1!.forward).toEqual([{ spec: s.panes.v1!.spec, key: "u1", object: expect.objectContaining({ key: "u1" }) }]);
+    expect(s.focus).toBe("table");
+  });
+
+  it("⌘→ after Esc shows the object again; ⌘← goes back to the table", () => {
+    let s = apply(inPlace({ diff: true }), (x) => S.leaveObject(x, "v1"));
+    const fwd = S.moveHistory(s, "v1", "forward", "u1");
+    s = apply(fwd.state, (x) => x);
+    expect(s.panes.v1!.object).toMatchObject({ key: "u1", diff: true });
+    expect(s.panes.v1!.reselect).toBe("u1"); // its row, selected under it for Esc
+    expect(s.focus).toBe("detail");
+    s = apply(S.moveHistory(s, "v1", "back", undefined).state, (x) => x);
+    expect(s.panes.v1!.object).toBeUndefined();
+    expect(s.panes.v1!.reselect).toBe("u1");
+    expect(s.focus).toBe("table");
+  });
+
+  it("⇧⏎ opens a pane to the right on the table's server pane, without changing it", () => {
+    const s = inSplit();
+    invariants(s);
+    expect(ids(s)).toEqual(["v1", "v2"]);
+    const l = S.activeTab(s).layout;
+    expect(l.type === "split" && l.dir).toBe("row");
+    expect(s.panes.v2).toMatchObject({ serverId: "p1", leased: true, context: "kind", object: { key: "u1", split: true, from: "v1" } });
+    expect(s.panes.v1!.object).toBeUndefined();
+    expect(S.activeTab(s).focused).toBe("v2");
+    expect(s.focus).toBe("detail");
+    // the server pane stays while either holds it
+    expect(S.orphanedServerPanes(s, apply(s, (x) => S.closePane(x, "v1")))).toEqual([]);
+    expect(S.orphanedServerPanes(s, apply(s, (x) => S.closeTab(x)))).toEqual(["p1"]);
+  });
+
+  it("Esc at the top of a split closes it; the focus goes back to its table", () => {
+    const s = apply(table(), (x) => S.splitPane(x, "row")); // v2 between them
+    let t = apply(s, (x) => S.focusPane(x, "v1"));
+    t = apply(t, (x) => S.openObjectSplit(x, { key: "u1", view: "yaml" }, "v1")); // v3, right of v1
+    expect(ids(t)).toEqual(["v1", "v3", "v2"]);
+    t = apply(t, (x) => S.focusPane(x, "v2"));
+    t = apply(t, (x) => S.focusPane(x, "v3"));
+    t = apply(t, (x) => S.leaveObject(x, "v3"));
+    invariants(t);
+    expect(ids(t)).toEqual(["v1", "v2"]);
+    expect(S.activeTab(t).focused).toBe("v1");
+    expect(t.focus).toBe("table");
+  });
+
+  it("a held Esc (key repeat) stops at the top: nothing goes back or closes", () => {
+    const s = inSplit();
+    expect(S.leaveObject(s, "v2", true)).toBe(s);
+    const p = inPlace();
+    expect(S.leaveObject(p, "v1", true)).toBe(p);
+  });
+
+  it("follow: off by default; on, the table's selection is shown; it stops once the table goes or changes source", () => {
+    let s = inSplit({ diff: true, version: 3 });
+    expect(s.panes.v2!.object!.follow).toBeUndefined();
+    s = apply(s, (x) => S.setFollow(x, "v2", true));
+    expect(s.panes.v2!.object!.follow).toBe(true);
+    s = apply(s, (x) => S.followTo(x, "v2", "u2"));
+    // the diff from the newest version, of the row now selected
+    expect(s.panes.v2!.object).toMatchObject({ key: "u2", diff: true, version: undefined, follow: true });
+    // the same key again: unchanged
+    expect(S.followTo(s, "v2", "u2")).toBe(s);
+    // the table shows another source now: following stops, with why
+    const other = S.checkFollow(S.updatePane(s, "v1", (p) => ({ ...p, serverId: "p9" })));
+    expect(other.panes.v2!.object).toMatchObject({ follow: undefined, followOff: "the table it came from shows another source now" });
+    expect(S.setFollow(other, "v2", true)).toBe(other); // can't be turned on again
+    const closed = S.checkFollow(apply(s, (x) => S.closePane(x, "v1")));
+    expect(closed.panes.v2!.object).toMatchObject({ follow: undefined, followOff: "the table it came from was closed" });
+    // off again by hand: it stays on the object shown
+    s = apply(s, (x) => S.setFollow(x, "v2", false));
+    expect(S.followTo(s, "v2", "u3")).toBe(s);
+  });
+
+  it("an object view in place has nothing to follow", () => {
+    const s = inPlace();
+    expect(S.followBlocked(s, s.panes.v1!)).toBe("opened from no table");
+    expect(S.setFollow(s, "v1", true)).toBe(s);
+  });
+
+  it("⇧⏎ in a split object view opens another split from the same table", () => {
+    let s = inSplit();
+    s = apply(s, (x) => S.openObjectSplit(x, s.panes.v2!.object!, "v2"));
+    expect(ids(s)).toEqual(["v1", "v2", "v3"]);
+    expect(s.panes.v3!.object).toMatchObject({ from: "v1", split: true });
+  });
+
+  it("the history keeps an object view but not its editor", () => {
+    const edit: S.EditState = { session: "e1", key: "u1", title: "Pod web", opened: "a", yaml: "b" };
+    let s = inPlace({ edit, viaEdit: true });
+    expect(s.focus).toBe("edit");
+    expect(S.unsaved(s.panes.v1)).toBe(true);
+    s = apply(s, (x) => S.pushHistory(x, "v1", "u1"));
+    expect(s.panes.v1!.back!.at(-1)!.object).toEqual({ key: "u1", view: "yaml", split: false, from: undefined, follow: undefined, followOff: undefined });
+  });
+
+  it("an edit session no pane holds any more is closed; one being confirmed is kept", () => {
+    const edit: S.EditState = { session: "e1", key: "u1", title: "Pod web", opened: "a", yaml: "b" };
+    // a split never takes the editor along (the session is the pane's it was opened in)
+    expect(inSplit({ edit }).panes.v2!.object!.edit).toBeUndefined();
+    const s = apply(inSplit(), (x) => S.setObject(x, "v2", (o) => ({ ...o, edit })));
+    const closed = apply(s, (x) => S.closePane(x, "v2"));
+    expect(S.orphanedEdits(s, closed)).toEqual(["e1"]);
+    const confirming = { ...closed, overlay: { kind: "confirm" as const, pane: "v2", edit, restore: "edit" as const } };
+    expect(S.orphanedEdits(s, confirming)).toEqual([]);
+  });
+
+  it("the focus context follows what the object view shows: viewer, editor, dry-run diff", () => {
+    const edit: S.EditState = { session: "e1", key: "u1", title: "Pod web", opened: "a", yaml: "a" };
+    let s = inPlace();
+    expect(s.focus).toBe("detail");
+    s = apply(s, (x) => S.setObject(x, "v1", (o) => ({ ...o, edit })));
+    expect(s.focus).toBe("edit");
+    s = apply(s, (x) => S.setEdit(x, "v1", (e) => ({ ...e, preview: { patch: "", prevNorm: "a", curNorm: "b" } })));
+    expect(s.focus).toBe("editpreview");
+  });
+});
+
+describe("object diff versions ([ / ])", () => {
+  const range = { to: 5, first: 3, last: 5 };
+  const diffOpen = (version?: number): S.UIState =>
+    S.updatePane(S.initialState(), "v1", (p) => ({ ...p, object: { key: "u1", view: "yaml", diff: true, version } }));
+  const version = (s: S.UIState) => s.panes.v1!.object!.version;
+
+  it("steps back to older versions and stops at the oldest kept", () => {
+    let s = S.stepVersion(diffOpen(), "v1", -1, range);
+    expect(version(s)).toBe(4);
+    s = S.stepVersion(s, "v1", -1, { ...range, to: 4 });
+    expect(version(s)).toBe(3);
+    const same = S.stepVersion(s, "v1", -1, { ...range, to: 3 });
+    expect(same).toBe(s);
+  });
+
+  it("quick presses add up while the last step is still loading", () => {
+    // range still the newest's (v5), version already asked for v4: the next [ goes to v3
+    expect(version(S.stepVersion(diffOpen(4), "v1", -1, range))).toBe(3);
+    expect(S.stepVersion(diffOpen(3), "v1", -1, range)).toEqual(diffOpen(3));
+  });
+
+  it("back at the newest it follows new versions again", () => {
+    const s = S.stepVersion(diffOpen(4), "v1", 1, { ...range, to: 4 });
+    expect(version(s)).toBeUndefined();
+    expect(version(S.stepVersion(diffOpen(), "v1", 1, range))).toBeUndefined();
+  });
+
+  it("only in the object diff, once loaded", () => {
+    const yaml = S.updatePane(S.initialState(), "v1", (p) => ({ ...p, object: { key: "u1", view: "yaml" } }));
+    expect(S.stepVersion(yaml, "v1", -1, range)).toBe(yaml);
+    const describe = S.updatePane(S.initialState(), "v1", (p) => ({ ...p, object: { key: "u1", view: "describe", diff: true } }));
+    expect(S.stepVersion(describe, "v1", -1, range)).toBe(describe);
+    expect(version(S.stepVersion(diffOpen(), "v1", -1, undefined))).toBeUndefined();
+  });
+});
+
+describe("decode (⏎ in an object view)", () => {
+  const viewing = (diff = false): S.UIState => S.updatePane(S.initialState(), "v1", (p) => ({ ...p, object: { key: "u1", view: "yaml", diff } }));
+  const decoding = (levels: S.DecodeState["levels"], diff = false): S.UIState =>
+    S.setObject(viewing(diff), "v1", (o) => ({ ...o, decode: { levels, diff, which: diff ? "norm" : "yaml", gen: 0 } }));
+  const resolved = [{ line: 3, path: [{ key: "data" }, { key: "yaml.br" }], steps: ["base64", "brotli"] }];
+  const dec = (s: S.UIState) => s.panes.v1!.object!.decode;
+
+  it("⏎ decodes the line under the cursor, of the YAML or of the diff's normalized side", () => {
+    expect(dec(S.decodeDeeper(viewing(), "v1", 4))).toEqual({ levels: [{ line: 4, steps: null }], diff: false, which: "yaml", version: undefined, gen: 0 });
+    expect(dec(S.decodeDeeper(viewing(true), "v1", 4))).toMatchObject({ diff: true, which: "norm" });
+    const describe = S.updatePane(S.initialState(), "v1", (p) => ({ ...p, object: { key: "u1", view: "describe" } }));
+    expect(S.decodeDeeper(describe, "v1", 4)).toBe(describe);
+  });
+
+  it("deeper adds a level from the decoded view's line; up removes it, then back to the object", () => {
+    let s = S.decodeDeeper(decoding(resolved), "v1", 7);
+    expect(dec(s)?.levels).toEqual([...resolved, { line: 7, steps: null }]);
+    expect(dec(s)?.gen).toBe(1);
+    s = S.decodeUp(s, "v1");
+    expect(dec(s)?.levels).toEqual(resolved);
+    s = S.decodeUp(s, "v1");
+    expect(s.panes.v1!.object).toEqual(viewing().panes.v1!.object);
+    // nothing decoded: unchanged (Esc then leaves the object view)
+    expect(S.decodeUp(s, "v1")).toBe(s);
+  });
+
+  it("a decoded diff has two values under the cursor: no deeper level", () => {
+    const s = decoding(resolved, true);
+    expect(S.decodeDeeper(s, "v1", 7)).toBe(s);
   });
 
   it("a refused deeper level goes without reloading the level shown", () => {
-    const s = S.decodeDeeper(decoding(resolved), 7); // gen 1, the new level not resolved
-    const back = S.decodeUp(s);
-    expect(back.overlay?.decode?.levels).toEqual(resolved);
-    expect(back.overlay?.decode?.gen).toBe(1);
+    const s = S.decodeDeeper(decoding(resolved), "v1", 7); // gen 1, the new level not resolved
+    const back = S.decodeUp(s, "v1");
+    expect(dec(back)?.levels).toEqual(resolved);
+    expect(dec(back)?.gen).toBe(1);
   });
 
   it("keeps the resolved levels (paths), once, without reloading", () => {
-    const s = S.decodeResolved(decoding([{ line: 3, steps: null }]), resolved);
-    expect(s.overlay?.decode?.levels).toEqual(resolved);
-    expect(s.overlay?.decode?.gen).toBe(0);
-    expect(S.decodeResolved(s, resolved)).toBe(s);
+    const s = S.decodeResolved(decoding([{ line: 3, steps: null }]), "v1", resolved);
+    expect(dec(s)?.levels).toEqual(resolved);
+    expect(dec(s)?.gen).toBe(0);
+    expect(S.decodeResolved(s, "v1", resolved)).toBe(s);
   });
 
   it("a click on a step leaves it and what follows out; on the rendering, raw; ↺ detects again", () => {
-    let s = S.decodeToggle(decoding(resolved), resolved, 1);
-    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: ["base64"], raw: false });
-    expect(s.overlay?.decode?.toggled).toBe(true);
-    s = S.decodeToggle(s, s.overlay!.decode!.levels, "render");
-    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: ["base64"], raw: true });
-    s = S.decodeAuto(s);
-    expect(s.overlay?.decode?.levels[0]).toMatchObject({ steps: null, raw: false, path: resolved[0]!.path });
-    expect(s.overlay?.decode?.toggled).toBe(false);
+    let s = S.decodeToggle(decoding(resolved), "v1", resolved, 1);
+    expect(dec(s)?.levels[0]).toMatchObject({ steps: ["base64"], raw: false });
+    expect(dec(s)?.toggled).toBe(true);
+    s = S.decodeToggle(s, "v1", dec(s)!.levels, "render");
+    expect(dec(s)?.levels[0]).toMatchObject({ steps: ["base64"], raw: true });
+    s = S.decodeAuto(s, "v1");
+    expect(dec(s)?.levels[0]).toMatchObject({ steps: null, raw: false, path: resolved[0]!.path });
+    expect(dec(s)?.toggled).toBe(false);
   });
 
   it("[ / ] step the decoded diff's versions as the object diff's", () => {
     const range = { to: 5, first: 3, last: 5 };
-    let s = S.stepVersion(decoding(resolved, true), -1, range);
-    expect(s.overlay?.decode?.version).toBe(4);
-    expect(s.overlay?.decode?.gen).toBe(1);
-    s = S.stepVersion(s, 1, { ...range, to: 4 });
-    expect(s.overlay?.decode?.version).toBeUndefined();
+    let s = S.stepVersion(decoding(resolved, true), "v1", -1, range);
+    expect(dec(s)?.version).toBe(4);
+    expect(dec(s)?.gen).toBe(1);
+    s = S.stepVersion(s, "v1", 1, { ...range, to: 4 });
+    expect(dec(s)?.version).toBeUndefined();
     // not in a decoded value (no diff)
     const single = decoding(resolved);
-    expect(S.stepVersion(single, -1, range)).toBe(single);
+    expect(S.stepVersion(single, "v1", -1, range)).toBe(single);
+  });
+
+  it("a decoded level opened in a split keeps its levels there", () => {
+    const s = S.updatePane(decoding(resolved), "v1", (p) => ({ ...p, serverId: "p1" }));
+    const t = apply(s, (x) => S.openObjectSplit(x, x.panes.v1!.object!, "v1"));
+    expect(t.panes.v2!.object!.decode?.levels).toEqual(resolved);
   });
 });

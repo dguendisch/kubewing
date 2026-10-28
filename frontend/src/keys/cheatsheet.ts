@@ -83,7 +83,8 @@ const sections: { title: string; rows: Row[] }[] = [
   {
     title: "object",
     rows: [
-      row("view YAML", "detail.open"),
+      row("view YAML (in place: esc back to the table)", "detail.open"),
+      row("view YAML in a split to the right (to compare; esc closes it)", "detail.openSplit"),
       row("diff last change", "object.diff"),
       row("copy the text selected in a cell, else the name", "table.copy"),
       row("clear the cell's text selection", "table.clearSelection"),
@@ -91,6 +92,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("edit YAML…", "object.edit"),
+      row("edit YAML in a split to the right…", "object.editSplit"),
       row("logs of the row's pods… (⌥ for the whole pane)", "object.logs", "view.logs"),
       row("exec shell", "object.exec"),
       row("debug container…", "object.debug"),
@@ -130,7 +132,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("older / newer version (diff)", "diff.older", "diff.newer"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),
       row("decode the value under the cursor (base64, brotli, gzip, JWT, certificate…); in it: deeper", "detail.decode"),
-      row("close", "detail.close"),
+      row("up a decoded level; at the top back to the table, or close the split", "detail.close"),
     ],
   },
   {

@@ -136,11 +136,20 @@ describe("edit", () => {
     expect(resolve("Meta+S", "edit")).toBe("edit.submit");
     expect(resolve("Meta+Enter", "edit")).toBe("edit.submit");
   });
-  it("the editor and its preview are modal: no global keys behind them", () => {
+  it("the editor and its preview are modal: no global keys that change anything behind them", () => {
     for (const ctx of ["edit", "editpreview"] as const)
-      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+1", "Meta+]", "Meta+Shift+Enter", "Ctrl+Tab", "Meta+O"]) expect(resolve(k, ctx)).toBeUndefined();
+      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+Shift+Enter", "Meta+O", "Meta+I"]) expect(resolve(k, ctx)).toBeUndefined();
     expect(resolve("Meta+D", "table")).toBe("pane.splitDown");
     expect(resolve("Meta+D", "detail")).toBe("pane.splitDown");
+  });
+  it("from the editor the focus can move to another pane or tab: the edit stays in its pane", () => {
+    for (const ctx of ["edit", "editpreview"] as const) {
+      expect(resolve("Alt+Meta+ArrowLeft", ctx)).toBe("pane.focusLeft");
+      expect(resolve("Meta+]", ctx)).toBeUndefined(); // the editor's indent
+      expect(resolve("Meta+1", ctx)).toBe("tab.goto1");
+      expect(resolve("Ctrl+Tab", ctx)).toBe("tab.mruNext");
+      expect(resolve("Meta+Shift+]", ctx)).toBe("tab.next");
+    }
   });
   it("the preview steps through changes and applies with ⏎", () => {
     expect(resolve("J", "editpreview")).toBe("diff.next");
@@ -262,11 +271,22 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     for (const ctx of ["filter", "terminal", "edit", "menu"] as const) expect(resolve("V", ctx)).toBeUndefined();
   });
 
-  it("⌘← / ⌘→ move through the jump history in the table; elsewhere they're the field's or nothing", () => {
+  it("⌘← / ⌘→ move through the jump history in the table and an object view; elsewhere they're the field's or nothing", () => {
     expect(resolve("Meta+ArrowLeft", "table")).toBe("history.back");
     expect(resolve("Meta+ArrowRight", "table")).toBe("history.forward");
+    // an object view over the table is a step in its history
+    expect(resolve("Meta+ArrowLeft", "detail")).toBe("history.back");
+    expect(resolve("Meta+ArrowRight", "detail")).toBe("history.forward");
     expect(resolve("Meta+ArrowLeft", "filter")).toBeUndefined(); // start of line
-    for (const ctx of ["detail", "menu", "terminal"] as const) expect(resolve("Meta+ArrowLeft", ctx)).toBeUndefined();
+    for (const ctx of ["edit", "menu", "terminal"] as const) expect(resolve("Meta+ArrowLeft", ctx)).toBeUndefined();
+  });
+
+  it("⏎ shows the row's object in place, ⇧⏎ in a split; in an object view ⇧⏎ splits what it shows", () => {
+    expect(resolve("Enter", "table")).toBe("detail.open");
+    expect(resolve("Shift+Enter", "table")).toBe("detail.openSplit");
+    expect(resolve("Shift+Enter", "detail")).toBe("detail.openSplit");
+    expect(resolve("Escape", "detail")).toBe("detail.close");
+    expect(resolve("Shift+Enter", "edit")).toBeUndefined(); // a newline in the editor
   });
 
   it("⌘⇧[ / ⌘⇧] cycle tabs from anywhere, also from a shell", () => {

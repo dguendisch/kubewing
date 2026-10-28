@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useConfig } from "../store/config";
+import { claimFocus } from "./focus";
 import { loadMonaco } from "./load";
 import { common, defineTheme } from "./Viewer";
 
@@ -10,6 +11,10 @@ interface Props {
   /** ⌘⏎ in the editor (⏎ is a newline here). */
   onSubmit?: () => void;
   label: string;
+  /** Takes the keyboard focus on mount, and again when it becomes true (its pane focused again). */
+  autoFocus?: boolean;
+  /** A click into it. */
+  onFocus?: () => void;
 }
 
 /**
@@ -18,11 +23,12 @@ interface Props {
  * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
  * ⌥↑/⌥↓ move it.
  */
-export function Editor({ initial, onChange, onSubmit, label }: Props) {
+export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, onFocus }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
-  const cb = useRef({ onChange, onSubmit });
-  cb.current = { onChange, onSubmit };
+  const cb = useRef({ onChange, onSubmit, onFocus });
+  cb.current = { onChange, onSubmit, onFocus };
+  const editor = useRef<{ focus(): void }>(undefined);
 
   useEffect(() => {
     let disposed = false;
@@ -32,21 +38,32 @@ export function Editor({ initial, onChange, onSubmit, label }: Props) {
       defineTheme(m);
       const model = m.editor.createModel(initial, "yaml");
       const ed = m.editor.create(host.current, { ...common, readOnly: false, domReadOnly: false, renderLineHighlight: "line", stickyScroll: { enabled: false }, tabSize: 2, model, ariaLabel: label });
-      ed.focus();
+      editor.current = ed;
+      if (autoFocus) ed.focus();
       const sub = model.onDidChangeContent(() => cb.current.onChange(model.getValue()));
+      const focusSub = ed.onDidFocusEditorText(() => cb.current.onFocus?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => cb.current.onSubmit?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
       dispose = () => {
         sub.dispose();
+        focusSub.dispose();
         ed.dispose();
         model.dispose();
       };
     });
     return () => {
       disposed = true;
+      editor.current = undefined;
       dispose();
     };
   }, []);
+
+  // and while it should have them, the dock gives them back after a layout change took them (see focus.ts)
+  useEffect(() => {
+    if (!autoFocus) return;
+    editor.current?.focus();
+    return claimFocus(() => editor.current?.focus());
+  }, [autoFocus]);
 
   useEffect(() => {
     if (themeGen) void loadMonaco().then(defineTheme);
