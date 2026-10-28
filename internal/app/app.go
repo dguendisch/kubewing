@@ -37,8 +37,8 @@ func (a *App) Preview(pane string, d bridge.Draft) (view.Preview, error) {
 func (a *App) FieldKeys(pane string, path []string) (bridge.FieldKeys, error) {
 	return a.svc.FieldKeys(pane, path)
 }
-func (a *App) FieldValues(pane string, path []string) (bridge.FieldValues, error) {
-	return a.svc.FieldValues(pane, path)
+func (a *App) Labels(pane, key, others string) (bridge.LabelCounts, error) {
+	return a.svc.Labels(pane, key, others)
 }
 func (a *App) ColumnChoices(pane string) (view.ColumnChoices, error) {
 	return a.svc.ColumnChoices(pane)

@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { bridge, paneData } from "../store/store";
-import type { FieldKeys, FieldValues } from "../transport/types";
+import type { FieldKeys, LabelCounts } from "../transport/types";
 import { celContext, celGlobals, keyCandidates, operatorCandidates } from "./cel";
 import { rank, type Candidate, type Match } from "./complete";
-import { labelContext, labelKeyCandidates, labelOperators, labelValueCandidates } from "./labels";
+import { labelCandidates, labelContext, labelOperators } from "./labels";
 
 export interface CompletionList {
   matches: Match[];
@@ -16,7 +16,9 @@ export interface CompletionList {
  * field keys from Go (per path; cached until the object count changes), CEL
  * globals and functions, and after an operand the operators that fit its
  * type. A label selector: the objects' label keys, the operators after a
- * key and a space, and a key's values after `=`, `!=` or in `in (…)`.
+ * key and a space, and a key's values after `=`, `!=` or in `in (…)`; among
+ * the source's objects matching the selector's other requirements, so the
+ * applied selector doesn't limit them (Go lists what the pane doesn't hold).
  * The list opens as you type where there is something to complete, and on
  * ↓ anywhere (with the first entry highlighted: an empty field lists
  * everything that can start it). The caller owns the value; onKeyDown
@@ -56,14 +58,14 @@ export function useFieldCompletion({
     const k = JSON.stringify(path);
     return keys.current.get(k) ?? keys.current.set(k, bridge().fieldKeys(id, path).catch(() => undefined)).get(k)!;
   };
-  const values = useRef(new Map<string, Promise<FieldValues | undefined>>());
-  const fieldValues = (id: string, path: string[]) => {
-    const k = JSON.stringify(path);
-    return values.current.get(k) ?? values.current.set(k, bridge().fieldValues(id, path).catch(() => undefined)).get(k)!;
+  const labelSets = useRef(new Map<string, Promise<LabelCounts | undefined>>());
+  const labels = (id: string, key: string, others: string) => {
+    const k = JSON.stringify([key, others]);
+    return labelSets.current.get(k) ?? labelSets.current.set(k, bridge().labels(id, key, others).catch(() => undefined)).get(k)!;
   };
   useEffect(() => {
     keys.current.clear();
-    values.current.clear();
+    labelSets.current.clear();
   }, [serverId, objects]);
 
   /** The context at the caret and its candidates; undefined = nothing to complete there. */
@@ -72,13 +74,10 @@ export function useFieldCompletion({
       const ctx = labelContext(value, caret);
       // a key opens the list once typed, a value or operator right away
       if (!ctx || (ctx.at === "key" && !ctx.word && !explicit)) return undefined;
-      const labels = ["metadata", "labels"];
       const cands =
-        ctx.at === "key"
-          ? fieldKeys(id, labels).then(labelKeyCandidates)
-          : ctx.at === "value"
-            ? fieldValues(id, [...labels, ctx.key!]).then((f) => labelValueCandidates(f, ctx.listed))
-            : Promise.resolve(labelOperators);
+        ctx.at === "operator"
+          ? Promise.resolve(labelOperators)
+          : labels(id, ctx.at === "key" ? "" : ctx.key!, ctx.others).then((f) => labelCandidates(f, ctx.listed));
       return { from: ctx.from, word: ctx.word, cands };
     }
     const ctx = celContext(value, caret);

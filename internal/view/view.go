@@ -1486,7 +1486,7 @@ func (v *View) PreviewLabels(draft, applied string) Preview {
 		pv.Invalid, pv.Error = true, err.Error()
 		return pv
 	}
-	pv.AtLeast = !narrower(draft, applied)
+	pv.AtLeast = !Narrower(draft, applied)
 	for _, e := range v.entries {
 		if !e.deletedAt.IsZero() {
 			continue
@@ -1502,10 +1502,10 @@ func (v *View) PreviewLabels(draft, applied string) Preview {
 	return pv
 }
 
-// narrower reports whether every requirement of applied is also one of
+// Narrower reports whether every requirement of applied is also one of
 // draft (so draft selects a subset of what's loaded). Conservative: an
 // equivalent selector written differently counts as not narrower.
-func narrower(draft, applied string) bool {
+func Narrower(draft, applied string) bool {
 	a, err := labels.ParseToRequirements(applied)
 	if err != nil {
 		return false
@@ -1597,48 +1597,16 @@ type ValueCount struct {
 	Count int `json:"count"`
 }
 
-// FieldValues lists the scalar values found at a path (as for FieldKeys,
-// e.g. [metadata labels app]) across the view's live objects, most common
-// first. Lists on the way and at the end are looked into element-wise.
-// Strings are taken as they are, numbers and bools formatted; maps, lists
-// and null are skipped. At most limit values.
-func (v *View) FieldValues(segs []string, limit int) (values []ValueCount, objects int) {
-	counts := map[string]int{}
+// Labels returns the label sets of the view's live objects (label
+// selector completion over what the pane holds).
+func (v *View) Labels() []labels.Set {
+	var out []labels.Set
 	for _, e := range v.entries {
-		if !e.deletedAt.IsZero() {
-			continue
+		if e.deletedAt.IsZero() {
+			out = append(out, labels.Set(e.item.Object.GetLabels()))
 		}
-		objects++
-		seen := map[string]bool{}
-		visit(e.item.Object.Object, segs, func(cur any) {
-			var s string
-			switch x := cur.(type) {
-			case map[string]any:
-				return
-			case string:
-				s = x
-			default:
-				s = fmt.Sprint(x)
-			}
-			if !seen[s] {
-				seen[s] = true
-				counts[s]++
-			}
-		})
 	}
-	for s, n := range counts {
-		values = append(values, ValueCount{Value: s, Count: n})
-	}
-	sort.Slice(values, func(i, j int) bool {
-		if values[i].Count != values[j].Count {
-			return values[i].Count > values[j].Count
-		}
-		return values[i].Value < values[j].Value
-	})
-	if limit > 0 && len(values) > limit {
-		values = values[:limit]
-	}
-	return values, objects
+	return out
 }
 
 // visit calls fn with what is at the path below cur (nothing if it's

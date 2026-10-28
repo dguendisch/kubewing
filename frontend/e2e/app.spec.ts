@@ -488,6 +488,28 @@ test("label selector completes keys and values from the live objects; ↓ opens 
   await expect(list.getByRole("option", { selected: true })).toContainText("api");
 });
 
+test("label completion isn't limited by the applied selector, only by the draft's other requirements", async ({ page }) => {
+  // rel-pods honors selectors: app=web leaves 4 of its 6 pods loaded
+  await openTape(page, "rel-pods", 6);
+  await page.keyboard.press("l");
+  const labels = page.getByLabel("label selector");
+  const list = page.getByRole("listbox", { name: "label suggestions" });
+  await page.keyboard.type("app=web");
+  await page.keyboard.press("Enter");
+  await expect.poll(async () => (await focused(page)).total).toBe(4);
+  // the keys of every pod, also those app=web filtered out
+  await labels.fill("");
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option")).toHaveText(["app4/6", "widget1/6"]);
+  // switching the selector: the other key's values, without emptying the field first
+  await labels.fill("widget=");
+  await expect(list.getByRole("option")).toHaveText(["gizmo1/6"]);
+  // the draft's other requirements still narrow: no widget among app=web
+  await labels.fill("app=web,");
+  await page.keyboard.press("ArrowDown");
+  await expect(list.getByRole("option")).toHaveText(["app4/4"]);
+});
+
 test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("c");
