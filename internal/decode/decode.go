@@ -1,7 +1,7 @@
 // Package decode turns a field's value into something readable: a chain of
 // steps (base64, brotli, gzip) detected one after the other, each feeding the
 // next, and a rendering of the result (JWT, PEM/x509, JSON or YAML in a
-// string, text, else a hex dump). Pure; the detail view's ⏎ builds on it.
+// string as it is, text, else a hex dump). Pure; the detail view's ⏎ builds on it.
 package decode
 
 import (
@@ -47,7 +47,7 @@ type Result struct {
 	Kind string `json:"kind"`
 	// Text is the rendering's text (JWT, PEM and binary as annotated YAML or a hex dump).
 	Text string `json:"text"`
-	// Language is the viewer's: yaml or plaintext.
+	// Language is the viewer's: yaml, json or plaintext.
 	Language string `json:"language"`
 	// Size is the decoded bytes' size (before rendering).
 	Size int `json:"size"`
@@ -256,7 +256,7 @@ func render(b []byte, o Options) (kind, text, lang string) {
 		return PEM, t, "yaml"
 	}
 	if t, ok := prettyJSON(b); ok {
-		return JSON, t, "yaml"
+		return JSON, t, "json"
 	}
 	if t, ok := prettyYAML(b); ok {
 		return YAML, t, "yaml"

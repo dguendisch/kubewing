@@ -1765,9 +1765,9 @@ test.describe("detail view (Monaco)", () => {
 });
 
 // e2e-versions: deployment web scaled 1 → 2 (1s) → 3 (1.5s), then a new image (2s): four versions.
-test("diff without recorded history: previous → current, no versions; record history is off", async ({ page }) => {
+test("diff without recorded history: previous → current, no versions; record changes is off", async ({ page }) => {
   await openTape(page, "e2e-versions", 1);
-  const record = page.getByRole("button", { name: "record history" });
+  const record = page.getByRole("button", { name: "record changes" });
   await expect(record).toHaveAttribute("aria-pressed", "false");
   // after the scale-up to 3 (1.5s): the diff then has a previous version
   await expect.poll(async () => (await focused(page)).rows[0]?.cells, tapeSteps).toContain("3/3");
@@ -1781,11 +1781,11 @@ test("diff without recorded history: previous → current, no versions; record h
   expect(await viewing(page)).toBe(true);
 });
 
-test("diff versions: record history (⇧R), then [ / ] step through it, the changed fields above the diff", async ({ page }) => {
+test("diff versions: record changes (⇧R), then [ / ] step through it, the changed fields above the diff", async ({ page }) => {
   await openTape(page, "e2e-versions", 1);
   // before the tape's first change (1s): the current object is the first version
   await page.keyboard.press("Shift+R");
-  const record = page.getByRole("button", { name: "record history" });
+  const record = page.getByRole("button", { name: "record changes" });
   await expect(record).toHaveAttribute("aria-pressed", "true");
   await expect(record).toHaveText(/recording/);
   await page.keyboard.press("Enter");
@@ -2011,6 +2011,25 @@ test.describe("decode (⏎ in the YAML)", () => {
     await expect(view).toContainText("exp: 2082758400  # 2036-01-01T00:00:00Z, in");
   });
 
+  test("JSON stays JSON (colored as such), and goes deeper by its lines", async ({ page }) => {
+    await openSecrets(page);
+    const dialog = await yamlOf(page, "e2e-token");
+    await dialog.locator(".view-line", { hasText: ".dockerconfigjson:" }).click();
+    await page.keyboard.press("Enter");
+    const dec = decoded(page);
+    await expect(steps(page)).toHaveText(/^base64→json/);
+    await expect(dec.locator(".view-lines")).toContainText('"registry.example.com": {');
+    await expect(dec.locator(".view-lines")).not.toContainText("auths:");
+    expect(await dec.locator(".view-lines").evaluate((el) => el.closest("[data-mode-id]")?.getAttribute("data-mode-id"))).toBe("json");
+    // tokenized as JSON: a key and a string value in different colors
+    const color = (text: string) => dec.locator(".view-lines span span", { hasText: text }).first().evaluate((el) => getComputedStyle(el).color);
+    expect(await color('"auths"')).not.toBe(await color('"ZTJl'));
+    await dec.locator(".view-line", { hasText: '"auth":' }).click();
+    await page.keyboard.press("Enter");
+    await expect(crumbs(page)).toContainText('auths["registry.example.com"].auth');
+    await expect(dec.locator(".view-lines")).toContainText("e2e:s3cret");
+  });
+
   test("the decoded diff: ⏎ in the object diff decodes both versions, [ / ] step them", async ({ page }) => {
     await openSecrets(page, true);
     // the scale-up (1s) is in: two versions
@@ -2068,7 +2087,7 @@ test.describe("time-travel", () => {
   // recording from the start, then all three changes in
   async function recorded(page: Page) {
     await openTravel(page, true);
-    await expect(page.getByRole("button", { name: "record history" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "record changes" })).toHaveAttribute("aria-pressed", "true");
     // recording began before the first change: all three are on the timeline later
     expect(await readyCell(page)).toBe("1/1");
     await expect.poll(async () => (await focused(page)).rows[0]?.cells.join(" "), tapeSteps).toContain("3/3");
@@ -2125,7 +2144,7 @@ test.describe("time-travel", () => {
     await page.keyboard.press("t"); // starts recording: the timeline begins now
     // the timeline replaces the status line, with its own record button and the messages
     await expect(timeline(page)).toBeVisible();
-    await expect(page.getByRole("button", { name: "record history" })).toHaveAttribute("aria-pressed", "true");
+    await expect(page.getByRole("button", { name: "record changes" })).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByLabel("message")).toContainText("recording history from now on");
     await page.keyboard.press("Escape");
     await expect.poll(async () => (await focused(page)).rows[0]?.cells.join(" "), tapeSteps).toContain("3/3");

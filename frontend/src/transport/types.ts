@@ -87,7 +87,7 @@ export interface Decoded {
   steps: string[] | null;
   kind: "jwt" | "pem" | "json" | "yaml" | "text" | "binary" | "";
   text: string;
-  language: "yaml" | "plaintext" | "";
+  language: "yaml" | "json" | "plaintext" | "";
   size: number;
   absent?: boolean;
   /** Why the field can't be decoded (a map, plain text …): an answer, not an error; the rest is unset. */

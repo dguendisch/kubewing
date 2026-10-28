@@ -187,7 +187,7 @@ export const defaultBindings: Binding[] = [
   { key: "H", command: "filter.toggleHealthy", when: ["table"] },
   // as in kubectl get -o wide
   { key: "O", command: "view.columns", when: ["table"] },
-  // record history for the source (off by default: it costs per event)
+  // record changes for the source (off by default: it costs per event)
   { key: "Shift+R", command: "history.toggleRecording", when: ["table"] },
   // time-travel: t in the table; while in the past ("travel": the table keys still apply) the arrows move in time
   { key: "T", command: "travel.toggle", when: ["table", "travel"] },

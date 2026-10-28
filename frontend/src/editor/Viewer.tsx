@@ -105,10 +105,10 @@ interface Props {
   /** Shown text; with `original` the viewer is a side-by-side diff (original → value). */
   value: string;
   original?: string;
-  language?: "yaml" | "plaintext";
+  language?: "yaml" | "json" | "plaintext";
   label: string;
   /**
-   * Whose cursor (YAML only) and diff navigation it has: a pane's object
+   * Whose cursor (YAML or JSON only) and diff navigation it has: a pane's object
    * viewer (the pane id), or what's shown in its place ("<pane>/decode",
    * "<pane>/edit"), so the object's stays as it was under them.
    */
@@ -137,7 +137,7 @@ function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAct
 }
 
 /**
- * Read-only Monaco viewer (YAML/text) or diff viewer of a pane's object
+ * Read-only Monaco viewer (YAML/JSON/text) or diff viewer of a pane's object
  * view. A new text in the same mode swaps the models: cursor and scroll
  * stay (a newer version, a followed row of the same shape).
  */
@@ -146,6 +146,8 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
   const wrap = useUI((s) => s.wrap);
+  // a cursor for line commands: YAML, or JSON (YAML reads it too: a decoded value's ⏎ deeper)
+  const fields = language !== "plaintext";
   const editor = useRef<{ updateOptions(o: Monaco.editor.IEditorOptions): void; focus(): void }>(undefined);
   // the latest callbacks and texts, for the editor created once per mode
   const live = useRef({ onFocus, value, original });
@@ -168,13 +170,13 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         editor.current = ed;
         if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
         if (autoFocus) ed.focus();
-        if (language === "yaml") {
+        if (fields) {
           cur.text = live.current.value;
           cur.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
         }
         const subs = [
           ed.onDidChangeCursorPosition((e) => {
-            if (language === "yaml") cur.line = e.position.lineNumber - 1;
+            if (fields) cur.line = e.position.lineNumber - 1;
           }),
           ed.onDidFocusEditorText(() => live.current.onFocus?.()),
         ];
@@ -185,7 +187,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           ed.setModel(model);
           if (view) ed.restoreViewState(view);
           old.dispose();
-          if (language === "yaml") cur.text = value;
+          if (fields) cur.text = value;
         };
         const acts = addActions(ed, contextActions);
         dispose = () => {
@@ -207,7 +209,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.IDiffEditorViewState);
         if (autoFocus) mod.focus();
         // the right side's cursor line, for "the field at the cursor" (⇧H) in the diff
-        if (language === "yaml") {
+        if (fields) {
           cur.text = live.current.value;
           cur.line = 0;
         }
@@ -228,7 +230,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
             sync();
           }),
           mod.onDidChangeCursorPosition((e) => {
-            if (language === "yaml") cur.line = e.position.lineNumber - 1;
+            if (fields) cur.line = e.position.lineNumber - 1;
             sync();
           }),
           mod.onDidFocusEditorText(() => live.current.onFocus?.()),
@@ -242,7 +244,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           ed.setModel({ original: a, modified: b });
           oa.dispose();
           ob.dispose();
-          if (language === "yaml") cur.text = value;
+          if (fields) cur.text = value;
         };
         setNav(slot, { index: 0, total: 0, go });
         dispose = () => {

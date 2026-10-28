@@ -132,7 +132,7 @@ func content(o *unstructured.Unstructured) map[string]any {
 
 // decodeLevels follows the levels from obj down: each level's field is
 // resolved (from its line while it has no path) and decoded, the next one
-// is looked up in that decoded YAML. It returns the last level's result
+// is looked up in that decoded YAML (or JSON: YAML reads it too). It returns the last level's result
 // and the levels with paths and chains filled in.
 func decodeLevels(obj map[string]any, in []DecodeLevel) (decode.Result, []DecodeLevel, error) {
 	levels := make([]DecodeLevel, len(in))
@@ -146,8 +146,8 @@ func decodeLevels(obj map[string]any, in []DecodeLevel) (decode.Result, []Decode
 				text = toYAML(&unstructured.Unstructured{Object: obj})
 			}
 		} else {
-			if r.Language != "yaml" {
-				return r, levels, errors.New("the decoded value isn't YAML: no field in it to decode")
+			if r.Language != "yaml" && r.Language != "json" {
+				return r, levels, errors.New("the decoded value isn't YAML or JSON: no field in it to decode")
 			}
 			docs := splitDocs(r.Text)
 			if len(l.Path) == 0 {

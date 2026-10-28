@@ -2,7 +2,7 @@
  * Monaco, trimmed to a YAML/text viewer, diff viewer and the YAML editor: the
  * core API plus only the contributions we use (find, folding, sticky scroll,
  * bracket matching, copy, line operations: ⌥↑/⌥↓ move a line, ⌘D deletes it
- * in the editor) and the YAML tokenizer, instead of editor.main's
+ * in the editor) and the YAML tokenizer (and a small JSON one, see json.ts), instead of editor.main's
  * ~80 languages; YAML gets its own folding ranges (see yamlFoldingRanges),
  * which sticky scroll follows too. Loaded lazily (see loadMonaco); workers
  * are bundled by Vite, nothing is fetched from a CDN.
@@ -26,11 +26,16 @@ import "../../node_modules/monaco-editor/esm/vs/base/browser/ui/codicons/codicon
 import "monaco-editor/languages/definitions/yaml/register.js";
 import EditorWorker from "monaco-editor/editor/editor.worker.js?worker";
 import { yamlFoldingRanges } from "./yamlFolding";
+import { jsonConf, jsonLanguage } from "./json";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 
 monaco.languages.registerFoldingRangeProvider("yaml", {
   provideFoldingRanges: (model) => yamlFoldingRanges(model.getLinesContent()),
 });
+
+monaco.languages.register({ id: "json" });
+monaco.languages.setMonarchTokensProvider("json", jsonLanguage);
+monaco.languages.setLanguageConfiguration("json", jsonConf);
 
 export { monaco };

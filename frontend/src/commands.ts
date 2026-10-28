@@ -1001,7 +1001,7 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
   }
 }
 
-/** Record history on/off for a pane's source; the status line shows it once the next frame says so. */
+/** Record changes on/off for a pane's source; the status line shows it once the next frame says so. */
 export async function toggleRecording(paneId: string) {
   const pane = useUI.getState().panes[paneId];
   if (!pane?.serverId) return;
@@ -1009,7 +1009,7 @@ export async function toggleRecording(paneId: string) {
   try {
     await bridge().setRecording(pane.serverId, on);
   } catch (e) {
-    flash(paneId, `record history: ${(e as Error).message}`, true);
+    flash(paneId, `record changes: ${(e as Error).message}`, true);
   }
 }
 
@@ -1100,7 +1100,7 @@ async function openFieldHistory() {
   if (!o || o.view === "describe" || o.decode || o.edit || !pane.serverId) return;
   const cur = cursorOf(pane.id);
   if (cur.text === undefined) return;
-  if (!paneData.get(pane.serverId).status?.recording) return flash(pane.id, "field history needs record history (⇧R in the table)", true);
+  if (!paneData.get(pane.serverId).status?.recording) return flash(pane.id, "field history needs record changes (⇧R in the table)", true);
   try {
     // the line is one of the YAML view (the object) or of the diff's right side (normalized)
     const fh = await bridge().fieldHistory(pane.serverId, o.key, o.diff ? (o.version ?? 0) : 0, cur.line, o.diff ? "norm" : "yaml");

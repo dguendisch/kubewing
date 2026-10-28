@@ -88,22 +88,23 @@ func writeYAML(w *strings.Builder, m map[string]any, indent string, note func(k 
 	}
 }
 
-// prettyJSON reindents a JSON object or array as YAML (JSON in a string:
-// last-applied-configuration, a docker config, a kubeconfig in JSON).
+// prettyJSON keeps a JSON object or array as JSON (last-applied-configuration,
+// a docker config, a kubeconfig in JSON): as written if it spans lines,
+// indented if it's on one (so a line picks a field, for ⏎ deeper).
 func prettyJSON(b []byte) (string, bool) {
 	t := bytes.TrimSpace(b)
-	if len(t) < 2 || (t[0] != '{' && t[0] != '[') {
+	if len(t) < 2 || (t[0] != '{' && t[0] != '[') || !json.Valid(t) {
 		return "", false
 	}
-	var v any
-	if json.Unmarshal(t, &v) != nil {
+	if bytes.ContainsRune(t, '\n') {
+		return string(b), true
+	}
+	var out bytes.Buffer
+	if json.Indent(&out, t, "", "  ") != nil {
 		return "", false
 	}
-	out, err := yaml.Marshal(v)
-	if err != nil {
-		return "", false
-	}
-	return string(out), true
+	out.WriteByte('\n')
+	return out.String(), true
 }
 
 // prettyYAML keeps YAML that holds a map or a list of them (a kubeconfig, a

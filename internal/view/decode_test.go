@@ -117,6 +117,18 @@ func TestDecodeLevels(t *testing.T) {
 	if err != nil || !strings.Contains(r.Refused, "isn't YAML") {
 		t.Fatalf("deeper into text: %+v %v", r, err)
 	}
+	// JSON stays JSON (a docker config), and goes deeper by its lines
+	auth := b64("user:pass")
+	v.Apply(source.Event{Type: source.Added, Item: secret("s2", map[string]any{".dockerconfigjson": b64(`{"auths":{"r.io":{"auth":"` + auth + `"}}}`)})}, t0)
+	d2, _ := v.Object("s2")
+	r, err = v.Decode(DecodeRequest{Key: "s2", Which: "yaml", Levels: []DecodeLevel{{Line: lineOf(t, d2.YAML, ".dockerconfigjson:")}}})
+	if err != nil || r.Kind != "json" || r.Language != "json" || !strings.Contains(r.Text, `"auth": "`+auth+`"`) {
+		t.Fatalf("json: %+v %v", r, err)
+	}
+	r, err = v.Decode(DecodeRequest{Key: "s2", Which: "yaml", Levels: append(r.Levels, DecodeLevel{Line: lineOf(t, r.Text, `"auth":`)})})
+	if err != nil || r.Text != "user:pass" || !strings.HasSuffix(r.Path, `auths["r.io"].auth`) {
+		t.Fatalf("deeper into json: %+v %v", r, err)
+	}
 	// a request that can't be served is an error
 	if _, err := v.Decode(DecodeRequest{Key: "nope", Levels: []DecodeLevel{{}}}); err == nil {
 		t.Fatal("unknown object: no error")

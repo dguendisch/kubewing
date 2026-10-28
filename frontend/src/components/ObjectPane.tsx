@@ -285,7 +285,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
         {data && "deleted" in data && data.deleted ? <span className="shrink-0 text-deleted">deleted</span> : null}
         {diff && !describe && info ? <VersionNav paneId={pane.id} info={info} /> : null}
         {diff && !describe && data && "yaml" in data && !info ? (
-          <span className="shrink-0" title="record history (status line, or ⇧R in the table) keeps this source's versions, within its memory budget, to step through with [ / ]">
+          <span className="shrink-0" title="record changes (status line, or ⇧R in the table) keeps this source's versions, within its memory budget, to step through with [ / ]">
             previous → current
           </span>
         ) : null}
@@ -476,11 +476,11 @@ function DecodeView({ pane, o, d, focused }: { pane: S.PaneState; o: S.ObjectVie
   };
   const loaded = data && "text" in data ? data : undefined;
   const actions: ContextAction[] | undefined =
-    !d.diff && loaded?.language === "yaml" ? [{ id: "kubewing.decodeDeeper", label: "decode value", key, run: () => dispatch("detail.decode") }] : undefined;
+    !d.diff && fielded(loaded) ? [{ id: "kubewing.decodeDeeper", label: "decode value", key, run: () => dispatch("detail.decode") }] : undefined;
   const hints = [
     d.diff ? "j/k: changes" : "",
     d.diff && info ? "[/]: versions" : "",
-    !d.diff && key && loaded?.language === "yaml" ? `${key}: decode deeper` : "",
+    !d.diff && key && fielded(loaded) ? `${key}: decode deeper` : "",
     "⇧⏎: split",
     "w: wrap",
     d.levels.length > 1 ? "esc: up" : "esc: back",
@@ -519,7 +519,9 @@ function DecodeView({ pane, o, d, focused }: { pane: S.PaneState; o: S.ObjectVie
   );
 }
 
-const lang = (d: Decoded) => (d.language === "yaml" ? "yaml" : "plaintext");
+const lang = (d: Decoded) => (d.language === "yaml" || d.language === "json" ? d.language : "plaintext");
+/** A decoded level with fields to go deeper into (YAML or JSON). */
+const fielded = (d: Decoded | undefined) => d?.language === "yaml" || d?.language === "json";
 
 /** A loaded level, by its path through the levels and how it's decoded: its viewer, and the cursor kept for it. */
 const levelKey = (d: Decoded) => `decode ${d.levels.map((l) => `${JSON.stringify(l.path)}|${l.doc ?? 0}|${(l.steps ?? []).join(",")}|${l.raw ? 1 : 0}`).join(" > ")}`;

@@ -171,20 +171,20 @@ export function FieldList() {
   );
 }
 
-/** Record history on/off for the pane's source (shared by its splits); off by default, it costs per event. */
+/** Record changes on/off for the pane's source (shared by its splits); off by default, it costs per event. */
 export function RecordButton({ paneId, on, pushRight }: { paneId: string; on: boolean; pushRight: boolean }) {
   const key = useKey("history.toggleRecording");
   return (
     <button
       type="button"
-      aria-label="record history"
+      aria-label="record changes"
       aria-pressed={on}
-      title={`${on ? "recording: diff versions ([ / ]) and time-travel (t); click to stop and drop the history" : "record history: keep this source's changes, for diff versions ([ / ]) and time-travel (t); costs per event"}${key ? ` (${prettyKey(key)})` : ""}`}
+      title={`${on ? "recording: diff versions ([ / ]) and time-travel (t); click to stop and drop the history" : "record changes: keep this source's changes, for diff versions ([ / ]) and time-travel (t); costs per event"}${key ? ` (${prettyKey(key)})` : ""}`}
       className={`${pushRight ? "ml-auto" : ""} shrink-0 ${on ? "text-deleted" : "hover:text-fg"}`}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => void toggleRecording(paneId)}
     >
-      <span aria-hidden>{on ? "●" : "⏸︎"}</span> {on ? "recording" : "record history"}
+      <span aria-hidden>{on ? "●" : "⏸︎"}</span> {on ? "recording" : "record changes"}
     </button>
   );
 }
