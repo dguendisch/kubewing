@@ -2413,6 +2413,29 @@ test.describe("object actions", () => {
     expect(Object.keys(s.panes)).toHaveLength(1);
   });
 
+  test("⌃D in one of two shells hands the keys to the other: ⌃D ends that one too", async ({ page }) => {
+    const shells = async () => Object.values((await inspect(page)).panes).filter((p) => (p as { term?: unknown }).term).length;
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("x");
+    await expect.poll(() => termText(page)).toContain("$");
+    // back to the table for a second shell: it opens right below it, above the first
+    await page.keyboard.press("ControlOrMeta+BracketLeft");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    await page.keyboard.press("x");
+    await expect.poll(shells).toBe(2);
+    await expect.poll(async () => (await page.locator("[data-terminal] .xterm-rows").allInnerTexts()).filter((t) => t.includes("$")).length).toBe(2);
+    // the bottom shell ends: the one above it gets the focus, and its pane moves in the DOM
+    await page.keyboard.press("ControlOrMeta+BracketRight");
+    await page.keyboard.press("Control+D");
+    await expect.poll(shells).toBe(1);
+    expect((await inspect(page)).focus).toBe("terminal");
+    await expect.poll(() => page.evaluate(() => !!document.activeElement?.closest("[data-terminal]"))).toBe(true);
+    await page.keyboard.press("Control+D");
+    await expect.poll(shells).toBe(0);
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
   test("⌃⇧D closes the shell pane even when the shell ignores ⌃D", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");

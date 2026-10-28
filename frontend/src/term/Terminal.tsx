@@ -7,6 +7,7 @@ import { toHex } from "../grid/cells";
 import type { TermFind } from "../store/state";
 import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
+import { claimFocus } from "../editor/focus";
 import { useConfig } from "../store/config";
 import { DEFAULT_SCROLLBACK, sessions } from "./sessions";
 
@@ -130,9 +131,14 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     };
   }, [session]);
 
+  // claimed like an editor's focus: a sibling pane closing (⌃D in another shell) re-parents this one, dropping the browser focus
   useEffect(() => {
-    if (focused) term.current?.focus();
-    else term.current?.blur();
+    if (!focused) {
+      term.current?.blur();
+      return;
+    }
+    term.current?.focus();
+    return claimFocus(() => term.current?.focus());
   }, [focused]);
 
   // the find bar closed: back to the prompt, as Monaco returns to the cursor (a match may be far up)

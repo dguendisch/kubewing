@@ -1,6 +1,6 @@
 /**
- * The Monaco viewer or editor that should have the keys (the focused pane's
- * object view). A layout change moves pane elements in the DOM (dockview
+ * The Monaco viewer or editor, or the terminal, that should have the keys
+ * (the focused pane's). A layout change moves pane elements in the DOM (dockview
  * re-parents a pane whose sibling closed), which drops the browser focus to
  * the body: the dock gives it back to this one afterwards.
  */

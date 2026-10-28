@@ -74,7 +74,6 @@ Done: the row menu's view entries are consistent: view YAML, edit YAML and descr
 Done: label selector completion isn't limited by the applied selector (switching `app=web` to `app=api` or `widget=…` offered only what the selector had loaded): keys and values are counted among the source's objects that match the draft's other requirements (`labelContext`'s `others`, those after the caret too), by `Service.Labels` (`internal/bridge/labels.go`): from the pane's objects when the rest is at least as strict as the applied selector (`view.Narrower`) or the pane shows the past, else from a metadata-only list of the source (namespace and field selector kept); an unparsable rest or a failed list falls back to the pane's objects. It replaces `FieldValues`. CEL completion was never limited: its filter only marks rows, the pane holds every object (so CEL keys are limited by the applied label selector only).
 
 Next up:
-- bug: having two terminals, exiting a terminal with ctrl+d, gives focus to the next terminal but this one can't be exited with ctrl+d, only after I switch focus to another pane and back to the terminal, only then ctrl+d works again
 - bug: in time travel, AGE columns must not compare (and update) to the current time, but to the time of the resp. step/snapshot of time travel
 - dedicated annotate/label/scale commands
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps

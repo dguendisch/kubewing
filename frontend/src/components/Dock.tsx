@@ -96,7 +96,7 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
       return;
     }
     push();
-    // a pane moved in the DOM (its sibling closed) lost the browser focus: back to its viewer or editor
+    // a pane moved in the DOM (its sibling closed) lost the browser focus: back to its viewer, editor or terminal
     const id = requestAnimationFrame(refocusEditor);
     return () => cancelAnimationFrame(id);
   }, [layout, maximized, active]);
