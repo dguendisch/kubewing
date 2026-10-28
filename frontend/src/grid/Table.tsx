@@ -20,7 +20,7 @@ import { useConfig } from "../store/config";
 import { bridge, paneData, useColumns } from "../store/store";
 import { grepRanges, layout, withAlpha, type ColorToken, type Range } from "./cells";
 import { parseGrep } from "../components/grep";
-import { rowAt, type PaneData } from "./rowcache";
+import { nowOf, rowAt, type PaneData } from "./rowcache";
 import { boundaryAt, charAt, current, selectIn, setTextSel, shownRange, textStart, useTextSel, wordAt, type TextSel } from "./textsel";
 import type { RowData } from "../transport/types";
 
@@ -153,10 +153,10 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     });
   }, [serverId]);
 
-  // age columns are rendered client-side; repaint them once per second
+  // age columns are rendered client-side (against nowOf); repaint them once per second (in the past they stand still)
   useEffect(() => {
     const ageCols = data.current.columns.flatMap((c, i) => (c.type === "age" ? [i] : []));
-    if (!ageCols.length) return;
+    if (!ageCols.length || data.current.status.at) return;
     const id = setInterval(() => {
       const d = data.current;
       ref.current?.updateCells(d.order.flatMap((_, i) => ageCols.map((c) => ({ cell: [c, d.offset + i] as Item }))));
@@ -215,7 +215,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
         if (!b || clientX < b.x || clientX >= b.x + b.width) continue;
         const r = rowAt(d, row);
         if (!r) return undefined;
-        const l = layout(r, col, d.columns[col], Date.now());
+        const l = layout(r, col, d.columns[col], nowOf(d));
         const measure = measurer();
         const x = clientX - textStart(b, measure(l.text), l.align, theme.cellHorizontalPadding ?? 8);
         return { row, col, r, text: l.text, x, measure };
@@ -234,7 +234,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     if (args.kind === "cell") {
       const [col, row] = args.location;
       const d = data.current;
-      const text = layout(rowAt(d, row), col, d.columns[col], Date.now()).text;
+      const text = layout(rowAt(d, row), col, d.columns[col], nowOf(d)).text;
       if (text && measurer()(text) > args.bounds.width - 2 * (theme.cellHorizontalPadding ?? 8)) tip = text;
     }
     if (tip) el.title = tip;
@@ -262,7 +262,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
       const rect = ref.current?.getBounds(h.col, h.row);
       if (!rect) return;
       // the drag stays in the cell it started in: x is clamped into it
-      const x = Math.max(rect.x, Math.min(m.clientX, rect.x + rect.width)) - textStart(rect, h.measure(h.text), layout(h.r, h.col, cols[h.col], Date.now()).align, theme.cellHorizontalPadding ?? 8);
+      const x = Math.max(rect.x, Math.min(m.clientX, rect.x + rect.width)) - textStart(rect, h.measure(h.text), layout(h.r, h.col, cols[h.col], nowOf(data.current)).align, theme.cellHorizontalPadding ?? 8);
       const to = boundaryAt(h.text, x, h.measure);
       setTextSel(serverId, selectIn(h.r, cols, h.col, [Math.min(from, to), Math.max(from, to)]));
     };
@@ -308,7 +308,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   });
 
   const getCellContent = ([col, row]: Item): GridCell => {
-    const l = layout(rowAt(data.current, row), col, data.current.columns[col], Date.now());
+    const l = layout(rowAt(data.current, row), col, data.current.columns[col], nowOf(data.current));
     return { kind: GridCellKind.Text, data: l.text, displayData: l.text, allowOverlay: false, readonly: true };
   };
 
@@ -341,7 +341,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     const { ctx, rect, col, row, theme: t } = args;
     const r = rowAt(data.current, row);
     const column = data.current.columns[col];
-    const l = layout(r, col, column, Date.now());
+    const l = layout(r, col, column, nowOf(data.current));
     if (l.tint) {
       ctx.save();
       ctx.globalAlpha = 0.16;
@@ -378,7 +378,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     // the cell's text selection, if it still holds (the text unchanged)
     const sel = useTextSel.getState()[serverId];
     if (sel && current(sel, r, data.current.columns) === col) {
-      const [s, e] = shownRange(sel, Date.now());
+      const [s, e] = shownRange(sel, nowOf(data.current));
       ctx.save();
       ctx.globalAlpha = 0.5;
       ctx.fillStyle = colors["accent"]!;

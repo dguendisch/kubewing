@@ -11,7 +11,7 @@ import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
 import { moveShown } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
-import { rowAt } from "./grid/rowcache";
+import { nowOf, rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
 import { logBuffers } from "./logs/buffer";
 
@@ -481,7 +481,7 @@ function openCells() {
   const d = paneData.get(pane.serverId);
   const row = rowAt(d, pane.selected);
   if (!row) return;
-  const cells = cellChoices(row, d.columns, Date.now());
+  const cells = cellChoices(row, d.columns, nowOf(d));
   const fromMenu = s.overlay?.kind === "menu" ? s.overlay : undefined;
   const index = initialCell(cells, fromMenu?.column ?? lastCell);
   setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "cells", pane: pane.id, key, cells, index, rowIndex: pane.selected, at: fromMenu?.at }));

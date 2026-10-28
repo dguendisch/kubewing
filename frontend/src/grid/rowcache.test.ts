@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyFrame, emptyPane, rowAt } from "./rowcache";
+import { applyFrame, emptyPane, nowOf, rowAt } from "./rowcache";
 
 const cols = [{ name: "NAME" }];
 
@@ -34,5 +34,13 @@ describe("applyFrame", () => {
     p = applyFrame(p, { seq: 2, columns: [{ name: "X" }], total: 1, offset: 0, order: ["a"], rows: [{ key: "a", cells: ["x"] }] });
     expect(rowAt(p, 0)?.cells).toEqual(["x"]);
     expect(p.columns[0]?.name).toBe("X");
+  });
+
+  it("ages count from the moment shown while in the past", () => {
+    const at = "2026-01-01T12:00:00Z";
+    const past = applyFrame(emptyPane(), { seq: 1, total: 0, offset: 0, order: [], status: { synced: true, objects: 0, at } });
+    expect(nowOf(past)).toBe(Date.parse(at));
+    const live = applyFrame(past, { seq: 2, total: 0, offset: 0, order: [], status: { synced: true, objects: 0 } });
+    expect(Math.abs(nowOf(live) - Date.now())).toBeLessThan(1000);
   });
 });

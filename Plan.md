@@ -73,8 +73,9 @@ Done: the row menu's view entries are consistent: view YAML, edit YAML and descr
 
 Done: label selector completion isn't limited by the applied selector (switching `app=web` to `app=api` or `widget=…` offered only what the selector had loaded): keys and values are counted among the source's objects that match the draft's other requirements (`labelContext`'s `others`, those after the caret too), by `Service.Labels` (`internal/bridge/labels.go`): from the pane's objects when the rest is at least as strict as the applied selector (`view.Narrower`) or the pane shows the past, else from a metadata-only list of the source (namespace and field selector kept); an unparsable rest or a failed list falls back to the pane's objects. It replaces `FieldValues`. CEL completion was never limited: its filter only marks rows, the pane holds every object (so CEL keys are limited by the applied label selector only).
 
+Done: in time travel, age cells (AGE, an event's LAST SEEN, …) count from the moment shown (`status.at`), not now, and don't tick while there (`nowOf` in `grid/rowcache.ts`; the table, its text selection and ⌘⇧C's cell choices).
+
 Next up:
-- bug: in time travel, AGE columns must not compare (and update) to the current time, but to the time of the resp. step/snapshot of time travel
 - dedicated annotate/label/scale commands
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
 - nit: decoder must not reformat result (e.g. json is json and not yaml)

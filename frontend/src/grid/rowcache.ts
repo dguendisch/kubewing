@@ -44,3 +44,8 @@ export function rowAt(p: PaneData, index: number): RowData | undefined {
   const k = p.order[index - p.offset];
   return k === undefined ? undefined : p.rows.get(k);
 }
+
+/** What age cells count from: the moment shown while in the past (time travel), else now. */
+export function nowOf(p: PaneData): number {
+  return p.status.at ? Date.parse(p.status.at) : Date.now();
+}
