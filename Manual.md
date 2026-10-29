@@ -90,6 +90,10 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 At the bottom of every table pane: the connection state (a green dot and **connected** once the watch is synced), `N shown / M objects`, errors, the **record changes** toggle and **columns**.
 
+When a synced watch starts failing (the network is down, the API server is unreachable), the state turns red and says **disconnected**. The rows stay as they last were, and the watch keeps retrying with a growing pause (up to 30 s).
+
+**Reconnect** (`⌘⇧R`, a click on **connected**/**disconnected**, or File → Reconnect) doesn't wait for the retry: it drops the connection to the focused pane's context and lists every resource shown from that context again, over a fresh connection. Use it after the network comes back, or when a pane looks stuck while still saying connected. Panes keep their rows, filters and recorded history; whatever changed in the meantime shows as changes. Panes on that context whose open had failed open again. Shells, port-forwards and log tails keep their own connection.
+
 Errors (a failed list or watch, a CEL filter failing on some objects) show their first line. A click opens the full message, selectable (`⌘C`) or with **copy all**; `Esc` or a click elsewhere closes it. When client-go only says "the server rejected our request for an unknown reason", kubewing adds what the server actually answered and its HTTP status.
 
 ### Watches are shared
@@ -558,7 +562,7 @@ A pane's name shows in its header, and in the tab while the tab has no name of i
 
 ### Menu bar
 
-The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload".
+The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload" (⌘⇧R reconnects the pane's context).
 
 ---
 
@@ -662,7 +666,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `w` wrap · `⌘F` find |
@@ -676,6 +680,7 @@ The most used keys:
 
 - **Where's the log?** `kubewing.log` in the state directory (default `~/.kubewing/`), rotated to `kubewing.log.1` at 10 MiB. Or start with `-wait` to see it in the terminal.
 - **A pane shows an error.** Click the status line's error to see the full message, including what the server answered.
+- **A pane says disconnected, or looks stuck.** Press `⌘⇧R` (or click the connection state) to reconnect its context.
 - **Completion doesn't know a resource.** The catalog loads once a pane is open on that context and follows CRD changes; unknown text in `⌘O` still opens as typed.
 - **A config change has no effect.** Press `⌘⇧,` and check the banner: invalid parts are reported and skipped.
 - **Launching kubewing again only brought the window to the front.** That's the single-instance behavior: it opened a tab there. Use `-new-process` for a separate one.

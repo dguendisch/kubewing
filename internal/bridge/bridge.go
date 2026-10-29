@@ -165,6 +165,25 @@ func (s *Service) ReloadConfig() config.Effective {
 	return cfg
 }
 
+// Reconnect drops the connection to a cluster ("" = current) and restarts
+// every watch on it with a fresh list (after the network was down, or a
+// watch got stuck): the panes keep their objects, a list that differs
+// shows as changes. Open shells, port-forwards and log streams keep their
+// own connection. It returns how many watches restarted.
+func (s *Service) Reconnect(cluster string) int {
+	names := []string{cluster}
+	if rc, ok := s.reg.Opener().(source.Reconnector); ok {
+		names = rc.Reconnect(cluster)
+	}
+	n := s.reg.Restart(names...)
+	if cat := s.opts.Catalog; cat != nil {
+		for _, c := range names {
+			cat.Restart(c)
+		}
+	}
+	return n
+}
+
 type pane struct {
 	id     string
 	mu     sync.Mutex

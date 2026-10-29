@@ -72,6 +72,7 @@ func (a *App) Contexts(cluster string) (bridge.ContextList, error) { return a.Co
 func (a *App) Catalog(context string) catalog.Snapshot             { return a.svc.Catalog(context) }
 func (a *App) Config() config.Effective                            { return a.svc.Config() }
 func (a *App) ReloadConfig() config.Effective                      { return a.svc.ReloadConfig() }
+func (a *App) Reconnect(cluster string) int                        { return a.svc.Reconnect(cluster) }
 func (a *App) ContextRule(context string) safety.Rule              { return a.svc.ContextRule(context) }
 func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)

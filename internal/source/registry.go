@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -23,6 +24,13 @@ type Key struct {
 type Opener interface {
 	Resolve(cluster, resource string) (Resolved, error)
 	Watch(ctx context.Context, cluster string, res Resolved, k Key, out chan<- Event)
+}
+
+// Reconnector is an Opener that can drop a context's connection, so the
+// next request connects anew. Reconnect returns every cluster name that
+// shared the connection ("" and the current context's name are one).
+type Reconnector interface {
+	Reconnect(cluster string) []string
 }
 
 // Registry shares one watch per key between all subscribers (splits on the
@@ -48,7 +56,9 @@ func NewRegistry(o Opener) *Registry {
 }
 
 type shared struct {
-	key     Key
+	key Key
+	// cluster as the first subscriber named it (key has the resolved resource)
+	cluster string
 	res     Resolved
 	cancel  context.CancelFunc
 	refs    int
@@ -184,6 +194,9 @@ func (r *Registry) SetLimits(l history.Limits) {
 	}
 }
 
+// Opener is the registry's opener.
+func (r *Registry) Opener() Opener { return r.opener }
+
 // Same reports whether h and o read the same shared watch.
 func (h *History) Same(o *History) bool { return o != nil && h.sh == o.sh }
 
@@ -260,12 +273,9 @@ func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscripti
 		if norm == nil {
 			norm = normalize.New()
 		}
-		ctx, cancel := context.WithCancel(context.Background())
-		sh = &shared{key: id, res: res, cancel: cancel, subs: map[int]chan Event{}, items: map[string]Item{}, norm: norm}
+		sh = &shared{key: id, cluster: k.Cluster, res: res, subs: map[int]chan Event{}, items: map[string]Item{}, norm: norm}
 		r.shared[id] = sh
-		in := make(chan Event, 256)
-		go r.opener.Watch(ctx, k.Cluster, res, k, in)
-		go r.fanout(ctx, sh, in)
+		r.start(sh, k)
 	}
 	sh.refs++
 	sub := sh.nextSub
@@ -283,6 +293,37 @@ func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscripti
 	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, now: r.Now}, close: func() {
 		once.Do(func() { r.unsubscribe(sh, sub) })
 	}}, nil
+}
+
+// start runs the opener's watch for sh; r.mu held (or sh not shared yet).
+func (r *Registry) start(sh *shared, k Key) {
+	ctx, cancel := context.WithCancel(context.Background())
+	sh.cancel = cancel
+	in := make(chan Event, 256)
+	go r.opener.Watch(ctx, k.Cluster, sh.res, k, in)
+	go r.fanout(ctx, sh, in)
+}
+
+// Restart starts the running watches on the given clusters anew (after a
+// reconnect): a fresh list, without the backoff of a failing watch.
+// Subscribers stay attached and keep their objects (and history); the new
+// list reaches them as a Relist, which they diff as usual. It returns how
+// many watches restarted.
+func (r *Registry) Restart(clusters ...string) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for _, sh := range r.shared {
+		if !slices.Contains(clusters, sh.cluster) {
+			continue
+		}
+		sh.cancel()
+		k := sh.key
+		k.Cluster = sh.cluster
+		r.start(sh, k)
+		n++
+	}
+	return n
 }
 
 // shareKey identifies the watch k resolves to. Openers without GVRs (tapes)
@@ -345,8 +386,19 @@ func (r *Registry) fanout(ctx context.Context, sh *shared, in <-chan Event) {
 			// the items are stored, so a recording that starts meanwhile
 			// seeds from exactly what the history has seen.
 			sh.hmu.Lock()
+			if ctx.Err() != nil {
+				sh.hmu.Unlock()
+				return
+			}
 			ev = r.record(sh, ev)
 			r.mu.Lock()
+			if ctx.Err() != nil {
+				// restarted (or stopped) meanwhile: only the new watch's
+				// events reach subscribers
+				r.mu.Unlock()
+				sh.hmu.Unlock()
+				return
+			}
 			switch ev.Type {
 			case Relist:
 				sh.items = make(map[string]Item, len(ev.Items))

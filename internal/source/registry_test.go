@@ -272,3 +272,77 @@ func TestRegistryRecordingToggle(t *testing.T) {
 		t.Fatal("still normalizing after switching off")
 	}
 }
+
+// restartOpener starts one feed per watch, so a test sees which watch
+// (the first or the restarted one) delivers.
+type restartOpener struct{ feeds chan chan Event }
+
+func (f *restartOpener) Resolve(_, _ string) (Resolved, error) { return Resolved{Namespaced: true}, nil }
+
+func (f *restartOpener) Watch(ctx context.Context, _ string, _ Resolved, _ Key, out chan<- Event) {
+	feed := make(chan Event)
+	f.feeds <- feed
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case ev := <-feed:
+			select {
+			case out <- ev:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}
+}
+
+// A restart (reconnect) runs the watch anew under its subscribers: they
+// stay attached, get the new list as a Relist, and nothing more from the
+// old watch. Watches on other clusters keep running.
+func TestRegistryRestart(t *testing.T) {
+	f := &restartOpener{feeds: make(chan chan Event, 4)}
+	r := NewRegistry(f)
+	a, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods"})
+	defer a.Close()
+	other, _ := r.Subscribe(Key{Cluster: "d", Resource: "pods"})
+	defer other.Close()
+	first := <-f.feeds
+	<-f.feeds // d's
+	first <- Event{Type: Relist, Items: []Item{pod("x")}}
+	recv(t, a.Events)
+	first <- Event{Type: Error, Err: "connection refused"}
+	recv(t, a.Events)
+
+	if n := r.Restart("c"); n != 1 {
+		t.Fatalf("restarted %d watches, want 1", n)
+	}
+	var second chan Event
+	select {
+	case second = <-f.feeds:
+	case <-time.After(2 * time.Second):
+		t.Fatal("no new watch")
+	}
+	select {
+	case first <- Event{Type: Added, Item: pod("stale")}:
+		t.Fatal("the old watch still runs")
+	case <-time.After(50 * time.Millisecond):
+	}
+	second <- Event{Type: Relist, Items: []Item{pod("x"), pod("y")}}
+	if ev := recv(t, a.Events); ev.Type != Relist || len(ev.Items) != 2 {
+		t.Fatalf("%+v", ev)
+	}
+	// a late subscriber sees the new state, without the old error
+	b, _ := r.Subscribe(Key{Cluster: "c", Resource: "pods"})
+	defer b.Close()
+	if ev := recv(t, b.Events); ev.Type != Relist || len(ev.Items) != 2 {
+		t.Fatalf("%+v", ev)
+	}
+	select {
+	case ev := <-b.Events:
+		t.Fatalf("unexpected %+v", ev)
+	default:
+	}
+	if r.Active() != 2 {
+		t.Fatalf("active = %d", r.Active())
+	}
+}

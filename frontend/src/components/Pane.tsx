@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec, moveColumn, openColumns } from "../commands";
-import { RecordButton, TravelBadge, TravelBar, usePaneStatus } from "./Travel";
+import { applySpec, moveColumn, openColumns, reconnect } from "../commands";
+import { RecordButton, TravelBadge, TravelBar, useKey, usePaneStatus } from "./Travel";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
@@ -574,6 +574,26 @@ function Syncing({ stalled }: { stalled: boolean }) {
   );
 }
 
+/**
+ * The connection state once synced: connected, or disconnected while the watch fails (it keeps retrying,
+ * the objects shown are the last ones it got). A click reconnects, as ⌘⇧R.
+ */
+function Connection({ paneId, down }: { paneId: string; down: boolean }) {
+  const key = useKey("source.reconnect");
+  return (
+    <button
+      type="button"
+      aria-label="reconnect"
+      title={`${down ? "updates stopped: the watch fails and retries; the rows are the last ones it got. " : ""}Click to reconnect: a fresh connection and fresh lists for every pane on this context${key ? ` (${prettyKey(key)})` : ""}`}
+      className="shrink-0 cursor-pointer hover:text-fg"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => void reconnect(paneId)}
+    >
+      <span className={down ? "text-deleted" : "text-connected"}>●</span> {down ? "disconnected" : "connected"}
+    </button>
+  );
+}
+
 /** While the pane shows the past the timeline replaces the status line. */
 function PaneFooter({ pane }: { pane: S.PaneState }) {
   const st = usePaneStatus(pane.serverId);
@@ -591,13 +611,7 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
   const st = d?.status;
   return (
     <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
-      {st?.synced ? (
-        <span>
-          <span className="text-connected">●</span> connected
-        </span>
-      ) : (
-        <Syncing stalled={!!st?.error} />
-      )}
+      {st?.synced ? <Connection paneId={pane.id} down={!!st.error} /> : <Syncing stalled={!!st?.error} />}
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>

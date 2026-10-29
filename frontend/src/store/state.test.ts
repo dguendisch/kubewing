@@ -937,6 +937,16 @@ describe("clusters", () => {
     expect(S.clusterLabel("@3/")).toBe("(current)");
   });
 
+  it("a reconnect retries the table panes on its cluster whose open failed", () => {
+    let s = S.splitPane(S.splitPane(S.initialState("dev"), "row"), "row"); // v1 v2 v3 on dev
+    s = S.updatePane(s, "v1", (p) => ({ ...p, error: "dial tcp: connection refused" }));
+    s = S.updatePane(s, "v2", (p) => ({ ...p, serverId: "p2" }));
+    s = S.updatePane(s, "v3", (p) => ({ ...p, error: "forbidden", spec: { ...p.spec, context: "prod" } }));
+    expect(S.failedPanes(s, "dev")).toEqual(["v1"]);
+    expect(S.failedPanes(s, "prod")).toEqual(["v3"]);
+    expect(S.failedPanes(s, "")).toEqual([]);
+  });
+
   it("a launch opens a fresh tab on its cluster, not a copy of the focused one", () => {
     let s = S.initialState("dev", "shop");
     s = S.updatePane(s, "v1", (p) => ({ ...p, spec: { ...p.spec, resource: "deployments", filter: "x" } }));

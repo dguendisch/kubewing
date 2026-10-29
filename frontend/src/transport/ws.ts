@@ -115,6 +115,7 @@ export function wsTransport(url: string): Transport {
     copyText: (t) => navigator.clipboard.writeText(t),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
+    reconnect: (c) => call("Reconnect", c),
     setMenu: (m) => call("SetMenu", m),
     onFrame: (cb) => {
       frameListeners.add(cb);

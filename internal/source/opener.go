@@ -62,6 +62,34 @@ func (o *ClusterOpener) Watch(ctx context.Context, cluster string, res Resolved,
 	c.Watch(ctx, res, k.Namespace, k.LabelSelector, k.FieldSelector, out)
 }
 
+// Reconnect implements Reconnector: the next request on the context
+// connects anew (a new transport; an exec plugin's credentials stay cached
+// by client-go). Running sessions, port-forwards and log streams keep the
+// old connection until they end.
+func (o *ClusterOpener) Reconnect(cluster string) []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	c, ok := o.clusters[cluster]
+	if !ok {
+		for _, x := range o.clusters {
+			if x.is(cluster) {
+				c = x
+				break
+			}
+		}
+	}
+	names := []string{cluster}
+	for n, x := range o.clusters {
+		if c != nil && x == c {
+			delete(o.clusters, n)
+			if n != cluster {
+				names = append(names, n)
+			}
+		}
+	}
+	return names
+}
+
 // Connected reports whether a connection to the context exists. The catalog
 // uses it to avoid starting exec-plugin logins in the background.
 func (o *ClusterOpener) Connected(cluster string) bool {

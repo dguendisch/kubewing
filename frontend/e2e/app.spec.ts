@@ -780,6 +780,27 @@ test("an error in the status line: its first line, a click shows all of it above
   await expect(pop).toHaveCount(0);
 });
 
+test("a failing watch shows disconnected; ⌘⇧R or a click on it reconnects", async ({ page }) => {
+  await openTape(page, "e2e-disconnect", 1);
+  const status = page.getByRole("status", { name: "pane status" });
+  const state = status.getByRole("button", { name: "reconnect" });
+  await expect(state).toHaveText("● connected");
+  // the watch fails: the rows stay, the state says so
+  await expect(state).toHaveText("● disconnected", tapeSteps);
+  await expect(status.getByRole("button", { name: "pane error" })).toContainText("network is unreachable");
+  expect((await focused(page)).total).toBe(1);
+  // a reconnect lists anew: connected again (until the tape's failure comes again)
+  await page.keyboard.press("ControlOrMeta+Shift+R");
+  await expect(state).toHaveText("● connected");
+  await expect(status.getByLabel("message")).toHaveText("reconnected (current): 1 view reloading");
+  await expect(status.getByRole("button", { name: "pane error" })).toHaveCount(0);
+  await expect(state).toHaveText("● disconnected", tapeSteps);
+  await state.click();
+  await expect(state).toHaveText("● connected");
+  // keys still go to the table
+  expect((await inspect(page)).focus).toBe("table");
+});
+
 test("⌘C copies the selected row's name; in a text field it stays the native copy", async ({ page, context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await openTape(page);

@@ -33,7 +33,7 @@ const tabJumps = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Entry => [n ===
 const layout: { title: string; entries: Entry[] }[] = [
   {
     title: "File",
-    entries: [["New Tab", "tab.new"], ["Open…", "source.open"], null, ["Close Tab", "tab.close"], ["Close Pane", "pane.close"], null, ["Reload Config", "config.reload"]],
+    entries: [["New Tab", "tab.new"], ["Open…", "source.open"], null, ["Close Tab", "tab.close"], ["Close Pane", "pane.close"], null, ["Reconnect", "source.reconnect"], ["Reload Config", "config.reload"]],
   },
   {
     title: "Object",

@@ -285,6 +285,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
+    case "source.reconnect":
+      return void reconnect(pane.id);
     case "help.toggle":
       // from an open menu or port-forward list: that overlay closes, the sheet replaces it
       return setUI((x) => (x.overlay?.kind === "help" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "help", pane: pane.id })));
@@ -998,6 +1000,27 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, spec: sort === spec.sort ? q.spec : { ...q.spec, sort }, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, ambiguous: res.ambiguous, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
+  }
+}
+
+/**
+ * A fresh connection to the pane's context (⌘⇧R, a click on the status line's
+ * connection state): Go restarts every watch on it; panes on it whose open
+ * failed (the network was down then) open again.
+ */
+export async function reconnect(paneId: string) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane) return;
+  // a shell's or log pane's spec is the table's it came from: the same context
+  const context = pane.spec.context;
+  try {
+    const n = await bridge().reconnect(context);
+    const failed = S.failedPanes(useUI.getState(), context);
+    for (const id of failed) void applySpec(id, useUI.getState().panes[id]!.spec);
+    const what = n + failed.length === 1 ? "1 view" : `${n + failed.length} views`;
+    flash(paneId, `reconnected ${S.clusterLabel(context)}: ${what} reloading`);
+  } catch (e) {
+    flash(paneId, errorText(e), true);
   }
 }
 

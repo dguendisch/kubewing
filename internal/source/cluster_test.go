@@ -168,3 +168,21 @@ func TestAmbiguousPluralAcrossGroups(t *testing.T) {
 		}
 	}
 }
+
+// A reconnect drops the context's connection, under every name it was
+// reached by ("" and the current context's name are one).
+func TestReconnectDropsConnection(t *testing.T) {
+	c := &Cluster{Context: "dev"}
+	o := &ClusterOpener{clusters: map[string]*Cluster{"": c, "dev": c, "prod": {Context: "prod"}}}
+	got := o.Reconnect("dev")
+	if len(got) != 2 || got[0] != "dev" || got[1] != "" {
+		t.Fatalf("names = %q", got)
+	}
+	if o.Connected("dev") || o.Connected("") || !o.Connected("prod") {
+		t.Fatal("wrong connections dropped")
+	}
+	// never connected: nothing to drop, its watches still restart
+	if got := o.Reconnect("stage"); len(got) != 1 || got[0] != "stage" {
+		t.Fatalf("names = %q", got)
+	}
+}

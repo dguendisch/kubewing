@@ -716,6 +716,13 @@ export function splitCluster(cluster: string): { kubeconfig: string; context: st
 /** A cluster as shown: the context's name, "(current)" for the current one. */
 export const clusterLabel = (cluster: string) => splitCluster(cluster).context || "(current)";
 
+/** Table panes on a cluster whose open failed (their error replaces the table): a reconnect retries them. */
+export function failedPanes(s: UIState, cluster: string): string[] {
+  return Object.values(s.panes)
+    .filter((p) => p.error && !p.serverId && !p.opening && !p.term && !p.logs && p.spec.context === cluster)
+    .map((p) => p.id);
+}
+
 /** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
 export function launchTab(s: UIState, cluster: string, namespace = ""): UIState {
   const next = newTab(s);

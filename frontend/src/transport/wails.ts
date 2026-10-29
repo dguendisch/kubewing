@@ -64,6 +64,7 @@ export function wailsTransport(): Transport {
     copyText: async (t) => void (await Clipboard.SetText(t)),
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
+    reconnect: (c) => call("Reconnect", c),
     setMenu: (m) => call("SetMenu", m),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),
     onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),

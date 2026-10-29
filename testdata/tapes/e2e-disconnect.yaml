@@ -1,0 +1,12 @@
+# E2E tape for the connection state: listed, then the watch fails (the
+# network went down) shortly after; every reconnect replays it from the start.
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: net-0, namespace: shop, uid: net-0, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [net-0]
+steps:
+  - at: 1500ms
+    error: "Get \"https://api.dev:443/api/v1/pods?watch=true\": dial tcp 10.0.0.1:443: connect: network is unreachable"

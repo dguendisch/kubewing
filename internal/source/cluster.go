@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -78,6 +79,10 @@ func Connect(cluster string) (*Cluster, error) {
 	}
 	cfg.QPS, cfg.Burst = 50, 100
 	cfg.UserAgent = "kubewing"
+	// a dialer of its own makes client-go build a transport for this
+	// connection instead of sharing a cached one (by TLS settings, or an exec
+	// plugin's): after Reconnect, nothing reuses a stuck connection
+	cfg.Dial = (&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext
 	hc, err := rest.HTTPClientFor(cfg)
 	if err != nil {
 		return nil, err

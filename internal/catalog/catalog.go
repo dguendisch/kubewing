@@ -112,6 +112,23 @@ func (c *Catalog) Invalidate(cluster string) {
 	}
 }
 
+// Restart refetches a tracked context and restarts its change watches
+// (after a reconnect); the last snapshot stays until the new one arrives.
+// No-op for untracked contexts.
+func (c *Catalog) Restart(cluster string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[cluster]
+	if !ok || c.closed {
+		return
+	}
+	e.cancel()
+	ctx, cancel := context.WithCancel(context.Background())
+	ne := &entry{snap: e.snap.clone(), cancel: cancel, kick: make(chan source.Change, 1), used: e.used}
+	c.entries[cluster] = ne
+	go c.run(ctx, cluster, ne)
+}
+
 // Close stops all background work.
 func (c *Catalog) Close() {
 	c.mu.Lock()

@@ -731,6 +731,8 @@ export interface Transport {
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
   reloadConfig(): Promise<Config>;
+  /** Drops the connection to a cluster ("" = current) and restarts its watches; resolves to how many restarted. */
+  reconnect(cluster: string): Promise<number>;
   /** Installs the native menu's command menus (macOS app; a no-op headless). */
   setMenu(menus: AppMenu[]): Promise<void>;
   onFrame(cb: (p: FramePayload) => void): () => void;

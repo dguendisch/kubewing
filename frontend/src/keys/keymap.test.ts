@@ -33,6 +33,9 @@ describe("chord", () => {
     expect(resolve(chord({ key: "=", code: "Equal" }), "detail")).toBe("filter.fromDetail");
     expect(chord({ key: "j", code: "KeyJ" })).toBe("J");
     expect(resolve(chord({ key: "<", metaKey: true, shiftKey: true }), "table")).toBe("config.reload");
+    // ⌘⇧R reconnects from anywhere, also a shell or a log pane
+    expect(resolve(chord({ key: "R", metaKey: true, shiftKey: true }), "terminal")).toBe("source.reconnect");
+    expect(resolve(chord({ key: "R", metaKey: true, shiftKey: true }), "filter")).toBe("source.reconnect");
   });
 });
 
@@ -175,10 +178,10 @@ describe("default keymap", () => {
     expect(collisions([...defaultBindings, { key: "J", command: "row.up", when: ["table"] }])).toHaveLength(1);
   });
   it("suppressed webview defaults are either bound or explicitly unbound", () => {
-    // Meta+F is ours (Monaco's find in the detail view), Meta+S the editor's preview/apply; the rest must
-    // not be bound to a command by accident (that would make suppression depend on focus).
+    // Meta+F is ours (Monaco's find in the detail view), Meta+Shift+R the reconnect, Meta+S the editor's
+    // preview/apply; the rest must not be bound to a command by accident (that would make suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
-    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+S"]);
+    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+Shift+R", "Meta+S"]);
   });
   it("pretty-prints chords", () => {
     expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");

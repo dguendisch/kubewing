@@ -5,10 +5,11 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 ## Next up
 
 - dedicated annotate/label/scale commands
+- cmd+o to support to show all namespaced or non-namespaced resources
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
-- force refresh (e.g. after network down), also instead of connected it should then say disconnected
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - nit: remember window position across restarts
+- nit: shadow below dialogs (themeable on/off)
 - hide-healthy filter with special support for e.g. managedresources?
 - nit: what to do with last pane/tab closing? currently it reloads the pane with which it started, but that's weird
 - Completion and regular UI for a context picked in `⌘O` (instead of the system UI's drop down)

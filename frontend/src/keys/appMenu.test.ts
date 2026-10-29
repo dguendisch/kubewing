@@ -25,6 +25,7 @@ describe("native menu", () => {
     expect(i["tab.goto9"]!.accelerator).toBe("CmdOrCtrl+9");
     expect(i["portforward.list"]!.accelerator).toBe("OptionOrAlt+CmdOrCtrl+p");
     expect(i["pane.toggleMaximize"]!.accelerator).toBe("CmdOrCtrl+Shift+return");
+    expect(i["source.reconnect"]).toEqual({ label: "Reconnect", command: "source.reconnect", accelerator: "CmdOrCtrl+Shift+r" });
   });
 
   it("names scoped and plain keys in the label instead (natively they'd fire in text fields)", () => {

@@ -177,6 +177,7 @@ const sections: { title: string; rows: Row[] }[] = [
     title: "app",
     rows: [
       row("open context / resource / ns", "source.open"),
+      row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
       row("reload the config", "config.reload"),
       row("this cheat sheet", "help.toggle"),
       row("run the prepared action", "confirm.accept"),
