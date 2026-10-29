@@ -53,14 +53,15 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
 
   // field path completion, one segment at a time from the pane's live objects
   const keys = useRef(new Map<string, Promise<FieldKeys>>());
-  const [fieldKeys, setFieldKeys] = useState<FieldKeys>();
+  // with the parent they're for: a step into a key (spec.) shows none until its own keys are there, not the old ones under the new path
+  const [fieldKeys, setFieldKeys] = useState<{ parent: string; keys?: FieldKeys }>();
   const parent = add.mode === "path" ? pathContext(add.value).parent.join("\0") : undefined;
   useEffect(() => {
     if (parent === undefined) return;
     let p = keys.current.get(parent);
     if (!p) keys.current.set(parent, (p = bridge().fieldKeys(serverId, parent ? parent.split("\0") : [])));
     let live = true;
-    p.then((k) => live && setFieldKeys(k), () => live && setFieldKeys(undefined));
+    p.then((keys) => live && setFieldKeys({ parent, keys }), () => live && setFieldKeys({ parent }));
     return () => void (live = false);
   }, [serverId, parent]);
 
@@ -71,10 +72,13 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
   };
   // the keyboard starts in the list (autoFocus only works on form fields, not on a list item)
   useEffect(() => list.current?.querySelector("li")?.focus(), []);
+  // a removed row (⌫, ✕) takes the focus with it: the list gets it back, on the row now at its place
+  const refocus = useRef(false);
   useEffect(() => {
     // the list follows the focused row (keyboard)
-    if (list.current?.contains(document.activeElement)) list.current.querySelectorAll("li")[at]?.focus();
-  }, [at]);
+    if (refocus.current || list.current?.contains(document.activeElement)) list.current?.querySelectorAll("li")[at]?.focus();
+    refocus.current = false;
+  }, [at, rows]);
 
   const save = () => void submitColumns(type, toConfig(rows, choices.defaults)).then((err) => err && setError(err));
   const submitAdd = (value = add.value) => {
@@ -100,6 +104,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
       update(toggle(rows, at));
     } else if ((k === "Backspace" || k === "Delete") && rows[at] && isCustom(rows[at])) {
       e.preventDefault();
+      refocus.current = true;
       update(remove(rows, at));
     }
   };
@@ -170,7 +175,16 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
             {isCustom(r) ? <span className="truncate text-[11px] text-fg-muted">{r.path ?? r.expr}</span> : null}
             <span className="flex-1" />
             {isCustom(r) ? (
-              <button type="button" tabIndex={-1} aria-label={`remove ${r.name}`} className="text-fg-muted hover:text-deleted" onClick={() => update(remove(rows, i), i)}>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={`remove ${r.name}`}
+                className="text-fg-muted hover:text-deleted"
+                onClick={() => {
+                  refocus.current = true;
+                  update(remove(rows, i), i);
+                }}
+              >
                 ✕
               </button>
             ) : null}
@@ -179,11 +193,12 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
       </ul>
       <fieldset
         className="flex flex-col gap-1 border border-border p-2 text-fg-muted"
-        // ⏎ in the add fields adds the column instead of saving
+        // ⏎ in the add fields adds the column instead of saving; with nothing typed (e.g. right after adding one) it saves
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.defaultPrevented) {
             e.preventDefault();
-            submitAdd();
+            if (add.value.trim()) submitAdd();
+            else save();
           }
         }}
       >
@@ -202,8 +217,9 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
                 value={add.value}
                 onChange={(value) => setAdd({ ...add, value })}
                 enterAccepts
-                onSubmit={(value) => submitAdd(value)}
-                candidates={pathCandidates(add.value, fieldKeys)}
+                continues={(v) => v.endsWith(".")}
+                onSubmit={(value) => (value.trim() ? submitAdd(value) : save())}
+                candidates={pathCandidates(add.value, fieldKeys && fieldKeys.parent === parent ? fieldKeys.keys : undefined)}
                 placeholder="e.g. spec.nodeName"
                 className={`w-full ${field}`}
               />

@@ -11,6 +11,8 @@ interface Props {
   onRemove?: (c: Candidate) => void;
   /** Enter on a highlighted suggestion that differs from the text only accepts it; the next Enter submits (as the port-forward dialog). */
   enterAccepts?: boolean;
+  /** An accepted value that is only a step (a field path ending in "."): the list stays open for the next one, nothing preselected. */
+  continues?: (v: string) => boolean;
   candidates: Candidate[];
   /** Shown under the list (loading, partial discovery, errors). */
   hint?: string;
@@ -31,17 +33,20 @@ interface Props {
  * typing would replace it anyway; ranked by the text once typed). Keys: ↓/↑
  * (also ctrl+n/p) move, ⌥↑/⌥↓ first/last, Tab accepts and stays, Enter
  * accepts and submits (with enterAccepts: a highlighted suggestion is only
- * accepted and the list closed, the next Enter submits), Esc closes the list (a second
+ * accepted and the list closed, the next Enter submits; a value that continues
+ * keeps the list open instead), Esc closes the list (a second
  * Esc reaches the dialog). Removable entries (history) have a ✕, mouse only:
  * keys like ⌫ are typing here.
  */
-export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRemove, candidates, hint, placeholder, autoFocus, openOnMount, className }: Props) {
+export function Combobox({ label, value, onChange, onSubmit, enterAccepts, continues, onRemove, candidates, hint, placeholder, autoFocus, openOnMount, className }: Props) {
   const id = useId();
   const [open, setOpen] = useState(!!openOnMount);
   // -1 = nothing active: Enter submits the typed text
   const [active, setActive] = useState(-1);
   // the value as it was when focused (prefilled or accepted): ↓ then browses everything
   const [typed, setTyped] = useState(false);
+  // a continuing value was just accepted: its next step starts empty, so nothing is preselected (as for empty input)
+  const [stepped, setStepped] = useState(false);
   const matches = open ? rank(typed ? value : "", candidates, 50) : [];
   const preselect = (q: string) => {
     const m = rank(q, candidates, 1)[0];
@@ -52,14 +57,17 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
   // deliberate "nothing selected" must stay)
   const loaded = candidates.length;
   useEffect(() => {
-    if (typed && open && active < 0) setActive(preselect(value));
+    if (typed && open && active < 0 && !stepped) setActive(preselect(value));
   }, [loaded]);
   const accept = (c: Candidate) => {
     if (c.disabled) return; // shown with its reason, can't be picked
+    // a step (e.g. "spec."): the list stays open, ranked by the new value, for the next one
+    const more = !!continues?.(c.value);
     onChange(c.value);
-    setOpen(false);
+    setOpen(more);
     setActive(-1);
-    setTyped(false);
+    setTyped(more);
+    setStepped(more);
   };
   const move = (d: number) => {
     if (!open) return setOpen(true), setActive(0);
@@ -87,11 +95,13 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
         onFocus={(e) => {
           e.currentTarget.select();
           setTyped(false);
+          setStepped(false);
         }}
         onBlur={() => setOpen(false)}
         onChange={(e) => {
           onChange(e.target.value);
           setTyped(true);
+          setStepped(false);
           setOpen(true);
           setActive(preselect(e.target.value));
         }}
@@ -111,15 +121,17 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, onRem
             // Tab completes to the active (or best pickable) match and stays in the field
             e.preventDefault();
             accept((cur ?? matches.find((m) => !m.candidate.disabled))!.candidate);
-          } else if (e.key === "Enter" && enterAccepts && cur && !cur.candidate.disabled) {
+          } else if (e.key === "Enter" && (enterAccepts || continues?.(cur?.candidate.value ?? "")) && cur && !cur.candidate.disabled) {
             // a highlighted suggestion is only taken (and the list closed); the next Enter, with
-            // nothing showing, submits — even when the suggestion already equals the field's text
+            // nothing showing, submits — even when the suggestion already equals the field's text.
+            // A continuing one is only taken, enterAccepts or not: it's not a value to submit yet
             e.preventDefault();
             accept(cur.candidate);
           } else if (e.key === "Enter" && onSubmit) {
             e.preventDefault();
             const v = cur && !cur.candidate.disabled ? cur.candidate.value : value;
             if (cur) accept(cur.candidate);
+            else setOpen(false);
             onSubmit(v);
           } else if (e.key === "Escape" && open && matches.length) {
             e.preventDefault();

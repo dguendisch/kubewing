@@ -4,10 +4,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 ## Next up
 
-- **Column configurator nits**:
-  - completing a path (with return) adds a dot, but completion should now continue, instead I have to press arrow down first
-  - hitting return on an added path column adds it, hitting return again on the empty add a column fields should apply the current settings
-  - removing a column (with del) from the list, removes the focus from the list and I can't close with return
 - dedicated annotate/label/scale commands
 - special jumps from viewer/editor to e.g. volumes/secrets/configmaps
 - force refresh (e.g. after network down), also instead of connected it should then say disconnected

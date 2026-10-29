@@ -171,6 +171,39 @@ test.describe("columns (per resource type)", () => {
     expect((await focused(page)).rows.map((r) => r.cells[3])).toEqual(["node-a", "node-b"]);
   });
 
+  test("keyboard only: ⏎ completes a path step by step, adds it, saves from the empty fields; ⌫ keeps the focus in the list", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    const path = dialog(page).getByRole("combobox", { name: "column path" });
+    const suggestions = dialog(page).getByRole("listbox", { name: "column path suggestions" });
+    await path.focus();
+    await page.keyboard.type("sp");
+    await page.keyboard.press("Enter");
+    // a map key is a step: the list goes on with its keys, no ↓ needed
+    await expect(path).toHaveValue("spec.");
+    await expect(suggestions).toContainText("nodeName");
+    await page.keyboard.type("nod");
+    await page.keyboard.press("Enter");
+    await expect(path).toHaveValue("spec.nodeName");
+    await expect(suggestions).toBeHidden();
+    await page.keyboard.press("Enter");
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /NODENAME\s*spec\.nodeName/, /IP/, /NODE/]);
+    await expect(path).toHaveValue("");
+    // ⏎ again, with nothing to add: saves
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toBeHidden();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE", "NODENAME"]);
+
+    await page.keyboard.press("o");
+    await columnList(page).nth(4).focus();
+    await page.keyboard.press("Delete");
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP/, /NODE/]);
+    await expect(columnList(page).nth(4)).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toBeHidden();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+  });
+
   test("CEL columns complete from the objects, as the filter bar's CEL field", async ({ page }) => {
     await openTape(page, "e2e-wide", 2);
     await page.keyboard.press("o");

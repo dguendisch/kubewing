@@ -118,8 +118,9 @@ A cell whose text doesn't fit shows it whole as a tooltip.
 
 - It lists every server column, `-o wide` ones too (marked `wide`; the **-o wide** switch shows or hides them all at once).
 - `space` shows or hides a column; drag & drop or `⌥↑`/`⌥↓` reorders.
-- **Custom columns** take a field path (completed from the pane's live objects, one key at a time) or a CEL expression over `o` (keys with dots, such as labels, need CEL: `o.metadata.labels["app.kubernetes.io/name"]`). Each is typed as text, number, bytes or age. An invalid expression is refused in the dialog.
-- `⏎` saves. Columns belong to the **resource type** (`pods`, `deployments.apps`), in every context: every pane of that type follows at once.
+- **Custom columns** take a field path (completed from the pane's live objects, one key at a time: `⏎` on a key with more below, such as `spec.`, goes on with its keys) or a CEL expression over `o` (keys with dots, such as labels, need CEL: `o.metadata.labels["app.kubernetes.io/name"]`). Each is typed as text, number, bytes or age. `⏎` in the add fields adds the column. An invalid expression is refused in the dialog.
+- `⌫` removes a custom column from the list.
+- `⏎` saves (in the add fields: once they're empty, e.g. right after adding a column). Columns belong to the **resource type** (`pods`, `deployments.apps`), in every context: every pane of that type follows at once.
 - **reset columns** goes back to the server's defaults (so new server columns, e.g. after a CRD upgrade, show again).
 
 In the table itself:
