@@ -86,6 +86,12 @@ Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). ku
 - **Reconnect:** each context's connection has a dialer of its own (`rest.Config.Dial`), so client-go builds a transport for it rather than sharing one from its TLS/exec-plugin cache. A reconnect drops the connection (`ClusterOpener.Reconnect`, under every name it was reached by), restarts the context's shared watches in place (`Registry.Restart`: subscribers, objects and history stay; the new list reaches them as a relist; the old watch's fanout stops delivering) and restarts the catalog's watches. Sessions, port-forwards and log streams keep the old transport until they end. "Disconnected" is derived, not tracked: a synced view with a source error (cleared by the next successful list).
 - **Kubeconfigs from other terminals:** a launch that hands over to a running kubewing passes the `$KUBECONFIG` path encrypted with `instance.key`. Such a cluster is addressed as `@n/<context>` (`internal/source/kubeconfig.go`); kubewing's own kubeconfig uses plain context names. The references live as long as the process.
 
+## Metrics
+
+- **Columns, not a view.** `kubectl top` values are extra available columns of Pod and Node views (`metricColumns` in `internal/view/metrics.go`), referenced by name in `columns.yaml` like server columns, never among the defaults. So sort, grep, filters, splits and jumps apply without a second table.
+- **Polled, shared.** metrics.k8s.io can't be watched. The bridge runs one poller per source key (cluster, resource, namespace, selectors) + kind, ref-counted by the panes on it that show a metric column (`internal/bridge/metrics.go`): started when a pane's columns gain one (open, type columns change), stopped when the last pane hides them or closes. A joining pane gets the last poll at once. `source.Metrics` is implemented by the cluster opener (`metrics.k8s.io/v1beta1` pods/nodes, container usage summed) and by tapes (`metrics:`); NotFound/Forbidden/ServiceUnavailable are `ErrNoMetrics`, shown in the status line.
+- **Outside the object.** Usage is held by the view by namespace/name (`SetUsage`), not in the object or its hash: a poll re-renders only metric cells (and the match: grep sees them), marks nothing (metric columns are `timeDerived`) and isn't recorded. The past renders them empty.
+
 ## Keyed diff
 
 Object identity from watch events, not screen position (avoids viddy's row-shift, AGE-tick and same-name-recreate artifacts).
@@ -186,7 +192,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/fieldpath` | field-path diff of two objects (lists matched by `name`/`type`/…), applied forward or in reverse; a YAML line → its field path; pure |
 | `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; pure |
 | `internal/history` | per-object versions: newest object + reverse deltas; global memory budget; the table at a moment, changes over time, a field's values |
-| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), discovery + metadata-only lists/watches/gets; actions (describe, delete, exec, debug containers, node shells, port-forward, logs) |
+| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, exec, debug containers, node shells, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
 | `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml` |
@@ -195,7 +201,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |
 | `internal/app` | the Wails-bound service (thin adapter over the bridge), native menu, window, single instance, detaching |
 | `internal/relations` | the jump menu's relations (namespace, owners, owned, references), each as a pipeline target; field reference rules (`refs.yaml`, embedded) matched over a YAML text; pure |
-| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
+| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward); fake metrics (`metrics:`); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
 | `frontend/src` | React 19 + Compiler, Glide grid, zustand, transport (Wails / WS) |
 | `frontend/src/actions` | row actions registry (row menu) |
 | `frontend/src/keys` | keymap, cheat sheet, native menu |

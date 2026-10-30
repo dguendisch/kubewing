@@ -10,14 +10,16 @@ export interface ColumnRow {
   path?: string;
   expr?: string;
   missing?: boolean;
+  metric?: boolean;
 }
 
 export const isCustom = (r: ColumnRow) => !!(r.path || r.expr);
 export const isWide = (r: ColumnRow) => (r.priority ?? 0) > 0;
+export const isMetric = (r: ColumnRow) => !!r.metric;
 
 /** The dialog's rows: Go lists the shown columns in order, then the other server columns. */
 export function initialColumns(options: ColumnOption[]): ColumnRow[] {
-  return options.map((o) => ({ name: o.name, shown: o.shown, type: o.type || undefined, priority: o.priority, path: o.path, expr: o.expr, missing: o.missing }));
+  return options.map((o) => ({ name: o.name, shown: o.shown, type: o.type || undefined, priority: o.priority, path: o.path, expr: o.expr, missing: o.missing, metric: o.metric }));
 }
 
 /** The server's defaults again: those shown in order, the other server columns hidden, custom ones dropped. */
@@ -42,6 +44,26 @@ export function wideOn(rows: ColumnRow[]): boolean {
 export function toggleWide(rows: ColumnRow[]): ColumnRow[] {
   const on = !wideOn(rows);
   return rows.map((r) => (isWide(r) ? { ...r, shown: on } : r));
+}
+
+/** Metrics (kubectl top): on when every metric column is shown. */
+export function metricsOn(rows: ColumnRow[]): boolean {
+  const m = rows.filter(isMetric);
+  return m.length > 0 && m.every((r) => r.shown);
+}
+
+/**
+ * Shows all metric columns, or hides them all if they all are shown. Shown,
+ * they go right after NAME, in their order (after the last shown column
+ * without one); hidden ones stay where they are.
+ */
+export function toggleMetrics(rows: ColumnRow[]): ColumnRow[] {
+  if (metricsOn(rows)) return rows.map((r) => (isMetric(r) ? { ...r, shown: false } : r));
+  const rest = rows.filter((r) => !isMetric(r));
+  const metric = rows.filter(isMetric).map((r) => ({ ...r, shown: true }));
+  const name = rest.findIndex((r) => r.shown && r.name === "NAME");
+  const at = (name >= 0 ? name : rest.findLastIndex((r) => r.shown)) + 1;
+  return [...rest.slice(0, at), ...metric, ...rest.slice(at)];
 }
 
 /** Moves row i by delta (−1 up, +1 down); at an end it stays. */

@@ -89,6 +89,8 @@ type colSpec struct {
 	cellIndex int // index into server-side table cells; -1 if unused
 	// stamp: the cell is a timestamp read from the object, shown as an age
 	stamp func(obj *unstructured.Unstructured) string
+	// metric: the cell is from the object's usage (see SetUsage)
+	metric func(obj map[string]any, u source.Usage) string
 }
 
 type entry struct {
@@ -136,6 +138,11 @@ type View struct {
 	serverDefs []metav1.TableColumnDefinition
 	cols       []colSpec
 	sortKeys   []sortKey
+
+	// usage by namespace/name for metric columns (SetUsage); usageErr: why
+	// there is none
+	usage    map[string]source.Usage
+	usageErr string
 
 	entries map[string]*entry
 	synced  bool
@@ -304,7 +311,7 @@ func (v *View) resolveColumns(render []pipeline.Column, defs []metav1.TableColum
 	if len(render) == 0 {
 		var out []colSpec
 		for _, c := range available {
-			if c.priority == 0 {
+			if c.byDefault() {
 				out = append(out, c)
 			}
 		}
@@ -328,13 +335,20 @@ func (v *View) resolveColumns(render []pipeline.Column, defs []metav1.TableColum
 }
 
 // availableColumns are all server columns, -o wide ones too; without a
-// server table (nil defs) the built-in NAMESPACE/NAME/AGE.
+// server table (nil defs) the built-in NAMESPACE/NAME/AGE. Pods and nodes
+// have the metric columns too.
 func (v *View) availableColumns(defs []metav1.TableColumnDefinition) []colSpec {
+	var out []colSpec
 	if defs == nil {
-		return defaultColumns(v.opts.Namespaced)
+		out = defaultColumns(v.opts.Namespaced)
+	} else {
+		out = serverColumns(defs, v.opts.Namespaced, v.opts.Kind)
 	}
-	return serverColumns(defs, v.opts.Namespaced, v.opts.Kind)
+	return append(out, metricColumns[v.opts.Kind]...)
 }
+
+// byDefault: shown without column settings (not -o wide, not a metric).
+func (c colSpec) byDefault() bool { return c.priority == 0 && c.metric == nil }
 
 // ColumnOption is a column the column configurator offers: a server column
 // (Priority > 0: -o wide only), or a custom one of the shown columns.
@@ -348,6 +362,8 @@ type ColumnOption struct {
 	Expr string `json:"expr,omitempty"`
 	// Missing: a server column of the config this resource doesn't have
 	Missing bool `json:"missing,omitempty"`
+	// Metric: a usage column (kubectl top), polled while shown
+	Metric bool `json:"metric,omitempty"`
 }
 
 // ColumnChoices are what the column configurator offers for a pane.
@@ -363,7 +379,7 @@ type ColumnChoices struct {
 func (v *View) ColumnChoices() ColumnChoices {
 	defaults := []string{}
 	for _, c := range v.availableColumns(v.serverDefs) {
-		if c.priority == 0 {
+		if c.byDefault() {
 			defaults = append(defaults, c.info.Name)
 		}
 	}
@@ -380,7 +396,7 @@ func (v *View) columnOptions() []ColumnOption {
 	shown := map[string]bool{}
 	if len(v.shown) == 0 {
 		for _, c := range v.cols {
-			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Shown: true})
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Shown: true, Metric: c.metric != nil})
 			shown[strings.ToUpper(c.info.Name)] = true
 		}
 	}
@@ -393,13 +409,13 @@ func (v *View) columnOptions() []ColumnOption {
 		o := ColumnOption{Name: c.Name, Shown: true, Missing: true}
 		if i := slices.IndexFunc(available, func(a colSpec) bool { return strings.EqualFold(a.info.Name, c.Name) }); i >= 0 {
 			a := available[i]
-			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true}
+			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true, Metric: a.metric != nil}
 		}
 		out = append(out, o)
 	}
 	for _, c := range available {
 		if !shown[strings.ToUpper(c.info.Name)] {
-			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority})
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Metric: c.metric != nil})
 		}
 	}
 	return out
@@ -605,6 +621,11 @@ func (v *View) render(e *entry) {
 		switch {
 		case c.stamp != nil:
 			val = c.stamp(e.item.Object)
+		case c.metric != nil:
+			// the past has no usage: only now is polled
+			if u, ok := v.usage[e.item.Object.GetNamespace()+"/"+e.item.Object.GetName()]; ok && v.at.IsZero() {
+				val = c.metric(obj, u)
+			}
 		case c.cellIndex >= 0:
 			if c.cellIndex < len(e.item.Cells) {
 				val = e.item.Cells[c.cellIndex]
@@ -745,6 +766,9 @@ func humanDuration(s string) (float64, bool) {
 
 func numericValue(s string) (float64, bool) {
 	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f, true
+	}
+	if f, ok := percent(s); ok {
 		return f, true
 	}
 	if q, err := resource.ParseQuantity(s); err == nil {
@@ -920,6 +944,9 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 	}
 	if v.matchErrs > 0 {
 		status.FilterError = v.firstErr
+	}
+	if v.ShowsMetrics() && v.at.IsZero() {
+		status.MetricsError = v.usageErr
 	}
 
 	changed := !v.everFramed || v.colsDirty || len(f.Rows) > 0 ||
@@ -1202,6 +1229,8 @@ func (v *View) travel(t time.Time, marks bool) {
 		e.norm = ver.Object
 		past[k] = e
 	}
+	// set before rendering: metric cells are empty in the past
+	v.at = t
 	v.entries = past
 	for _, e := range past {
 		v.render(e)

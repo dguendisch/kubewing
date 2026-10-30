@@ -62,6 +62,7 @@ func (s *Service) SetTypeColumns(typ string, cols []pipeline.Column) error {
 			}
 			pn.mu.Unlock()
 		}
+		s.syncMetrics(pn)
 		pn.poke()
 	}
 	s.emit.Emit(ColumnsEvent, s.opts.Columns.All())

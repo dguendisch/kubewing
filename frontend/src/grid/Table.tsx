@@ -22,7 +22,7 @@ import { layout, withAlpha, type ColorToken } from "./cells";
 import { grepRanges, parseGrep, type Range } from "../components/grep";
 import { nowOf, rowAt, type PaneData } from "./rowcache";
 import { boundaryAt, charAt, current, selectIn, setTextSel, shownRange, textStart, useTextSel, wordAt, type TextSel } from "./textsel";
-import type { RowData } from "../transport/types";
+import type { ColumnInfo, RowData } from "../transport/types";
 
 /** Reads a theme token (CSS variable) so the canvas uses the same palette as the DOM. */
 function token(name: string): string {
@@ -79,6 +79,17 @@ interface Props {
   /** A click on a header (not its resize edge): sort by that column. */
   onSort?: (column: string) => void;
 }
+
+/** A column's width until it's dragged: NAME wide (and growing), ages and metric numbers narrow. */
+export function defaultWidth(c: ColumnInfo): number {
+  if (c.name === "NAME") return 260;
+  if (c.type === "age") return 70;
+  if (metricWidths[c.name] !== undefined) return metricWidths[c.name]!;
+  return 120;
+}
+
+// kubectl top's columns ("1200m", "512.0Mi", "100%"): as wide as their header and values
+const metricWidths: Record<string, number> = { CPU: 64, MEM: 72, "%CPU": 60, "%MEM": 60, "%CPU/R": 68, "%CPU/L": 68, "%MEM/R": 68, "%MEM/L": 68 };
 
 /** How long after the last resize step the widths are saved (a drag fires one per mouse move). */
 const saveWidthsAfter = 300;
@@ -303,7 +314,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
       title: c.name,
       id: c.name,
       grow: c.name === "NAME" ? 1 : undefined,
-      width: c.name === "NAME" ? 260 : c.type === "age" ? 70 : 120,
+      width: defaultWidth(c),
     };
   });
 

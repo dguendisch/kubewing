@@ -5,12 +5,13 @@ import { Suggestions, useFieldCompletion } from "../complete/useFieldCompletion"
 import { bridge, setUI, useColumns, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { ColumnChoices, ColumnType, FieldKeys } from "../transport/types";
-import { addColumn, emptyColumn, initialColumns, isCustom, isWide, move, moveTo, pathCandidates, pathContext, remove, resetColumns, toConfig, toggle, toggleWide, wideOn, type ColumnRow, type NewColumn } from "./columnsForm";
+import { addColumn, emptyColumn, initialColumns, isCustom, isMetric, isWide, metricsOn, move, moveTo, pathCandidates, pathContext, remove, resetColumns, toConfig, toggle, toggleMetrics, toggleWide, wideOn, type ColumnRow, type NewColumn } from "./columnsForm";
 
 /**
  * o (or a right-click on the header): the pane's columns, kept per resource
  * type (all panes of it, all clusters; columns.yaml). Every server column is
  * listed, -o wide ones too (the wide switch shows or hides those at once),
+ * pods' and nodes' metric columns (kubectl top) as well (the metrics switch),
  * and custom ones can be added by field path or CEL (both completed from
  * the pane's live objects). In the list ↑/↓ move,
  * space shows/hides, ⌥↑/⌥↓ (or drag & drop) reorder, ⌫ removes a custom column; ⏎ saves
@@ -44,6 +45,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
   const hasWidths = useColumns((c) => Object.keys(c.types[type]?.widths ?? {}).length > 0);
   const list = useRef<HTMLUListElement>(null);
   const hasWide = rows.some(isWide);
+  const hasMetrics = rows.some(isMetric);
   const [drag, setDrag] = useState<{ from: number; over: number }>();
 
   // CEL completion, as in the filter bar's CEL field
@@ -131,6 +133,12 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
         </span>
         <span className="text-fg-muted">· all panes and clusters</span>
         <span className="flex-1" />
+        {hasMetrics ? (
+          <label className="flex items-center gap-1 text-fg-muted" title="CPU and memory usage (kubectl top), polled while shown">
+            <input type="checkbox" aria-label="metrics" checked={metricsOn(rows)} onChange={() => update(toggleMetrics(rows))} />
+            metrics
+          </label>
+        ) : null}
         {hasWide ? (
           <label className="flex items-center gap-1 text-fg-muted" title="all -o wide columns">
             <input type="checkbox" aria-label="wide" checked={wideOn(rows)} onChange={() => update(toggleWide(rows))} />
@@ -171,6 +179,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
             <input type="checkbox" tabIndex={-1} aria-label={r.name} checked={r.shown} onChange={() => update(toggle(rows, i), i)} />
             <span className={r.shown ? "text-fg" : "text-fg-muted"}>{r.name}</span>
             {isWide(r) ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">wide</span> : null}
+            {isMetric(r) ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">metrics</span> : null}
             {r.missing ? <span className="rounded bg-bg px-1 text-[10px] text-deleted" title="this resource has no such server column">missing</span> : null}
             {isCustom(r) ? <span className="truncate text-[11px] text-fg-muted">{r.path ?? r.expr}</span> : null}
             <span className="flex-1" />

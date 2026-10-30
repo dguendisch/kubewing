@@ -617,6 +617,11 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
       </span>
       {st?.error ? <StatusError paneId={pane.id} which="source" text={st.error} /> : null}
       {st?.filterErrors ? <StatusError paneId={pane.id} which="filter" text={st.filterError ?? ""} prefix={`filter failed on ${st.filterErrors}: `} /> : null}
+      {st?.metricsError ? (
+        <span aria-label="metrics hint" className="truncate" title={st.metricsError}>
+          {st.metricsError}
+        </span>
+      ) : null}
       {pane.flash ? (
         <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
           {pane.flash.text}

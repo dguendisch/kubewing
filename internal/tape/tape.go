@@ -31,6 +31,16 @@ type Tape struct {
 	// CRD is the CustomResourceDefinition of a custom kind this tape serves
 	// (its scale subresource drives the jump menu's owned pods).
 	CRD map[string]any `json:"crd,omitempty"`
+	// Metrics fakes metrics.k8s.io for the tape's pods or nodes: usage by
+	// namespace/name ("/name" for nodes). A tape without is a cluster
+	// without metrics-server.
+	Metrics map[string]Usage `json:"metrics,omitempty"`
+}
+
+// Usage is an object's usage as quantities ("250m", "128Mi").
+type Usage struct {
+	CPU    string `json:"cpu"`
+	Memory string `json:"memory"`
 }
 
 // Object is an object plus optional table cells.

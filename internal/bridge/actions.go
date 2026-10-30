@@ -736,6 +736,7 @@ const shutdownWait = 10 * time.Second
 // Shutdown ends all sessions and port-forwards (app quit) and waits, up to
 // shutdownWait, for the sessions to clean up: ops pods are deleted.
 func (s *Service) Shutdown() {
+	s.stopPollers()
 	s.mu.Lock()
 	sessions := make([]*session, 0, len(s.sessions))
 	for _, ss := range s.sessions {

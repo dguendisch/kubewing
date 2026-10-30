@@ -9,7 +9,7 @@ import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
 import * as S from "./store/state";
 import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
-import { moveShown } from "./components/columnsForm";
+import { initialColumns, metricsOn, moveShown, toConfig, toggleMetrics } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
 import { nowOf, rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
@@ -231,6 +231,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return;
     case "view.columns":
       return void openColumns(pane.id);
+    case "view.toggleMetrics":
+      return void toggleMetricColumns(pane.id);
     case "history.toggleRecording":
       return void toggleRecording(pane.id);
     case "travel.toggle":
@@ -656,6 +658,25 @@ export async function moveColumn(paneId: string, from: number, to: number) {
     if (next !== undefined) await bridge().setTypeColumns(type, next);
   } catch (e) {
     flash(paneId, `moving the column failed: ${errorText(e)}`, true);
+  }
+}
+
+/**
+ * m: the metric columns (kubectl top) on or off for the pane's type, as the
+ * column dialog's metrics switch: every pane of the type follows.
+ */
+export async function toggleMetricColumns(paneId: string) {
+  const p = useUI.getState().panes[paneId];
+  if (!p?.serverId || !p.type) return;
+  try {
+    const choices = await bridge().columnChoices(p.serverId);
+    const rows = initialColumns(choices.options);
+    if (!rows.some((r) => r.metric)) return flash(paneId, "metrics (kubectl top) are for pods and nodes", true);
+    const on = !metricsOn(rows);
+    await bridge().setTypeColumns(p.type, toConfig(toggleMetrics(rows), choices.defaults));
+    flash(paneId, on ? "metrics on: polled every 15s" : "metrics off");
+  } catch (e) {
+    flash(paneId, `metrics: ${errorText(e)}`, true);
   }
 }
 

@@ -78,6 +78,8 @@ test.describe("columns (per resource type)", () => {
       const b = (window as unknown as { __kw: { bridge(): { setTypeColumns(t: string, c: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
       await b.setTypeColumns("e2e-wide", null);
       await b.setColumnWidths("e2e-wide", null);
+      await b.setTypeColumns("nodes", null);
+      await b.setColumnWidths("nodes", null);
     });
   });
   const dialog = (page: Page) => page.getByRole("dialog", { name: "columns" });
@@ -106,7 +108,7 @@ test.describe("columns (per resource type)", () => {
     await expect(dialog(page)).toBeVisible();
     // the keyboard starts in the list, no click needed
     await expect(columnList(page).first()).toBeFocused();
-    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP\s*wide/, /NODE\s*wide/]);
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP\s*wide/, /NODE\s*wide/, /CPU\s*metrics/, /%CPU\/R/, /%CPU\/L/, /MEM\s*metrics/, /%MEM\/R/, /%MEM\/L/]);
     // esc: nothing changes
     await page.getByLabel("wide", { exact: true }).check();
     await page.keyboard.press("Escape");
@@ -155,7 +157,7 @@ test.describe("columns (per resource type)", () => {
     await expect(path).toHaveValue("spec.nodeName");
     await page.getByLabel("column name").fill("host");
     await path.press("Enter");
-    await expect(options).toHaveText([/NAMESPACE/, /STATUS/, /NAME/, /AGE/, /HOST\s*spec\.nodeName/, /IP/, /NODE/]);
+    await expect(options).toHaveText([/NAMESPACE/, /STATUS/, /NAME/, /AGE/, /HOST\s*spec\.nodeName/, /IP/, /NODE/, /CPU/, /%CPU\/R/, /%CPU\/L/, /MEM/, /%MEM\/R/, /%MEM\/L/]);
     // a bad CEL expression is refused by Go, the dialog stays
     await page.getByLabel("column source").selectOption("expr");
     await page.getByLabel("column expression").fill("o.spec.");
@@ -187,7 +189,7 @@ test.describe("columns (per resource type)", () => {
     await expect(path).toHaveValue("spec.nodeName");
     await expect(suggestions).toBeHidden();
     await page.keyboard.press("Enter");
-    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /NODENAME\s*spec\.nodeName/, /IP/, /NODE/]);
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /NODENAME\s*spec\.nodeName/, /IP/, /NODE/, /CPU/, /%CPU\/R/, /%CPU\/L/, /MEM/, /%MEM\/R/, /%MEM\/L/]);
     await expect(path).toHaveValue("");
     // ⏎ again, with nothing to add: saves
     await page.keyboard.press("Enter");
@@ -197,7 +199,7 @@ test.describe("columns (per resource type)", () => {
     await page.keyboard.press("o");
     await columnList(page).nth(4).focus();
     await page.keyboard.press("Delete");
-    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP/, /NODE/]);
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /NAME/, /STATUS/, /AGE/, /IP/, /NODE/, /CPU/, /%CPU\/R/, /%CPU\/L/, /MEM/, /%MEM\/R/, /%MEM\/L/]);
     await expect(columnList(page).nth(4)).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog(page)).toBeHidden();
@@ -244,7 +246,7 @@ test.describe("columns (per resource type)", () => {
     await page.keyboard.press("o");
     // AGE onto NAME: it lands where NAME was
     await columnList(page).nth(3).dragTo(columnList(page).nth(1));
-    await expect(columnList(page)).toHaveText([/NAMESPACE/, /AGE/, /NAME/, /STATUS/, /IP/, /NODE/]);
+    await expect(columnList(page)).toHaveText([/NAMESPACE/, /AGE/, /NAME/, /STATUS/, /IP/, /NODE/, /CPU/, /%CPU\/R/, /%CPU\/L/, /MEM/, /%MEM\/R/, /%MEM\/L/]);
     await dialog(page).getByRole("button", { name: "OK" }).click();
     await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "AGE", "NAME", "STATUS"]);
   });
@@ -335,6 +337,67 @@ test.describe("columns (per resource type)", () => {
     const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
     await page.mouse.click(box.x + 60, box.y + 12, { button: "right" });
     await expect(dialog(page)).toBeVisible();
+  });
+
+  test("m: the metric columns (kubectl top) for the type, filled from the polled usage; m again hides them", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("ControlOrMeta+D"); // a second pane of the type
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    await page.keyboard.press("m");
+    // right after NAME
+    const top = ["NAMESPACE", "NAME", "CPU", "%CPU/R", "%CPU/L", "MEM", "%MEM/R", "%MEM/L", "STATUS", "AGE"];
+    await expect.poll(async () => (await focused(page)).columns).toEqual(top);
+    await expect(page.getByLabel("message")).toContainText("metrics on");
+    // web-0 requests 500m/256Mi and is limited to 1/1Gi; web-1 sets nothing (no percentages)
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 8))).toEqual([
+      ["250m", "50%", "25%", "128.0Mi", "50%", "13%"],
+      ["1200m", "", "", "64.0Mi", "", ""],
+    ]);
+    // the other pane follows
+    await expect.poll(async () => Object.values((await inspect(page)).panes).filter((p) => p.spec.resource === "e2e-wide").map((p) => p.columns)).toEqual([top, top]);
+    // the column dialog shows them as the metrics switch
+    await page.keyboard.press("o");
+    await expect(page.getByLabel("metrics", { exact: true })).toBeChecked();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+  });
+
+  test("metric columns start narrow; a dragged width stays across m off and on", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toContain("CPU");
+    // NAMESPACE 120, NAME 260 (it grows into the free width: measured from the right instead) — CPU's edge is
+    // found by its default width of 64 after NAME's end; NAME's end is where CPU's header starts
+    const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
+    const y = box.y + 12;
+    // the metric columns and STATUS/AGE after them: 64+68+68+72+68+68 + 120 + 70 from the right edge
+    const cpuStart = box.x + box.width - (64 + 68 + 68 + 72 + 68 + 68 + 120 + 70);
+    await page.mouse.move(cpuStart + 63, y);
+    await page.mouse.down();
+    await page.mouse.move(cpuStart + 80, y, { steps: 4 });
+    await page.mouse.move(cpuStart + 100, y, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(async () => (await focused(page)).view?.widths?.["CPU"]).toBe(100);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).not.toContain("CPU");
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toContain("CPU");
+    expect((await focused(page)).view?.widths?.["CPU"]).toBe(100);
+  });
+
+  test("metrics without metrics-server: empty cells and a hint in the status line; not offered for other kinds", async ({ page }) => {
+    await openTape(page, "nodes", 3);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "STATUS"]);
+    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("metrics hint")).toContainText("metrics unavailable");
+    expect((await focused(page)).rows.map((r) => r.cells.slice(2, 6).join(""))).toEqual(["", "", ""]);
+    await page.keyboard.press("m");
+    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("metrics hint")).toHaveCount(0);
+
+    await openTape(page, "e2e-deploys");
+    await page.keyboard.press("m");
+    await expect(page.getByLabel("message")).toContainText("metrics (kubectl top) are for pods and nodes");
   });
 });
 

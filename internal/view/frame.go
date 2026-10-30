@@ -63,4 +63,7 @@ type Status struct {
 	// Behind: live events since, applied behind it
 	At     string `json:"at,omitempty"`
 	Behind int    `json:"behind,omitempty"`
+	// MetricsError: the pane shows metric columns but there is no usage
+	// (no metrics-server, forbidden, unreachable)
+	MetricsError string `json:"metricsError,omitempty"`
 }

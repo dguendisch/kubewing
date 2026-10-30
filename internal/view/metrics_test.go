@@ -1,0 +1,185 @@
+package view
+
+import (
+	"slices"
+	"testing"
+	"time"
+
+	"github.com/dguendisch/kubewing/internal/history"
+	"github.com/dguendisch/kubewing/internal/pipeline"
+	"github.com/dguendisch/kubewing/internal/source"
+)
+
+// topPod is a pod with one container requesting 500m/256Mi, limited to 1/1Gi.
+func topPod(uid, name string) source.Item {
+	it := stagePod(uid, name, "Running", "api", 0)
+	c := it.Object.Object["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any)
+	c["resources"] = map[string]any{
+		"requests": map[string]any{"cpu": "500m", "memory": "256Mi"},
+		"limits":   map[string]any{"cpu": "1", "memory": "1Gi"},
+	}
+	it.Cells = []any{name, "Running", "2h", ""}
+	return it
+}
+
+func topView(t *testing.T, opts Options, cols ...pipeline.Column) *View {
+	t.Helper()
+	opts.Kind = "Pod"
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "pods"}, Render: pipeline.Render{Columns: cols}}, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+var topColumns = []pipeline.Column{{Name: "NAME"}, {Name: "CPU"}, {Name: "%CPU/R"}, {Name: "%CPU/L"}, {Name: "MEM"}, {Name: "%MEM/R"}, {Name: "%MEM/L"}}
+
+// Metric columns are offered for pods (not by default) and filled from the usage.
+func TestMetricColumns(t *testing.T) {
+	v := topView(t, Options{})
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
+	if v.ShowsMetrics() {
+		t.Fatal("metric columns shown by default")
+	}
+	ch := v.ColumnChoices()
+	var metric []string
+	for _, o := range ch.Options {
+		if o.Metric {
+			metric = append(metric, o.Name)
+		}
+	}
+	if want := []string{"CPU", "%CPU/R", "%CPU/L", "MEM", "%MEM/R", "%MEM/L"}; !slices.Equal(metric, want) {
+		t.Fatalf("metric options = %v", metric)
+	}
+	if slices.Contains(ch.Defaults, "CPU") {
+		t.Fatalf("defaults = %v", ch.Defaults)
+	}
+
+	if err := v.SetRender(pipeline.Render{Columns: topColumns}); err != nil {
+		t.Fatal(err)
+	}
+	if !v.ShowsMetrics() {
+		t.Fatal("ShowsMetrics = false")
+	}
+	if got := cells(v)["a"]; !slices.Equal(got, []string{"api-0", "", "", "", "", "", ""}) {
+		t.Fatalf("before a poll = %q", got)
+	}
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 128 << 20}}, "")
+	if got := cells(v)["a"]; !slices.Equal(got, []string{"api-0", "250m", "50%", "25%", "128.0Mi", "50%", "13%"}) {
+		t.Fatalf("cells = %q", got)
+	}
+}
+
+// A poll is not a change: no markers, no "changed, not visible".
+func TestMetricColumnsNotDiffed(t *testing.T) {
+	v := topView(t, Options{}, topColumns...)
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 1}}, "")
+	v.Frame(t0)
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 900, Memory: 1}}, "")
+	// the object changes too: still only its own columns are marked
+	v.Apply(source.Event{Type: source.Modified, Item: topPod("a", "api-0")}, t0.Add(time.Second))
+	f, ok := v.Frame(t0.Add(time.Second))
+	if !ok || len(f.Rows) != 1 {
+		t.Fatalf("frame = %+v", f)
+	}
+	if r := f.Rows[0]; r.Cells[1] != "900m" || len(r.Changed) != 0 || r.Hidden || r.Mark != MarkNone {
+		t.Fatalf("row = %+v", r)
+	}
+}
+
+// Sorted numerically, a pod without usage last; grep sees the cells.
+func TestMetricColumnsSortAndGrep(t *testing.T) {
+	v := topView(t, Options{}, topColumns...)
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0"), topPod("b", "api-1"), topPod("c", "api-2")}}, t0)
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 90}, "ns/api-1": {CPU: 1200}}, "")
+	if err := v.SetStages([]pipeline.Stage{{Sort: []string{"-CPU"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(v); !slices.Equal(got, []string{"api-1", "api-0", "api-2"}) {
+		t.Fatalf("by -CPU = %v", got)
+	}
+	if err := v.SetStages([]pipeline.Stage{{Sort: []string{"%CPU/R"}}}); err != nil {
+		t.Fatal(err)
+	}
+	// 18% < 240% (as numbers, not text)
+	if got := names(v); !slices.Equal(got, []string{"api-0", "api-1", "api-2"}) {
+		t.Fatalf("by %%CPU/R = %v", got)
+	}
+	if err := v.SetStages([]pipeline.Stage{{Grep: "1200m"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(v); !slices.Equal(got, []string{"api-1"}) {
+		t.Fatalf("grep = %v", got)
+	}
+	// the next poll re-evaluates the grep
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 1200}}, "")
+	if got := names(v); !slices.Equal(got, []string{"api-0"}) {
+		t.Fatalf("grep after a poll = %v", got)
+	}
+}
+
+// Nodes: usage against allocatable.
+func TestNodeMetricColumns(t *testing.T) {
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "nodes"}, Render: pipeline.Render{Columns: []pipeline.Column{{Name: "NAME"}, {Name: "CPU"}, {Name: "%CPU"}, {Name: "MEM"}, {Name: "%MEM"}}}}, Options{Kind: "Node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := item(map[string]any{
+		"apiVersion": "v1", "kind": "Node",
+		"metadata": map[string]any{"name": "n1", "uid": "n1"},
+		"status":   map[string]any{"allocatable": map[string]any{"cpu": "4", "memory": "8Gi"}},
+	})
+	node.Cells = []any{"n1"}
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs[:1], Items: []source.Item{node}}, t0)
+	v.SetUsage(map[string]source.Usage{"/n1": {CPU: 1000, Memory: 2 << 30}}, "")
+	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "1000m", "25%", "2.0Gi", "25%"}) {
+		t.Fatalf("cells = %q", got)
+	}
+}
+
+// No metrics-server: empty cells and the reason in the status.
+func TestMetricsUnavailable(t *testing.T) {
+	v := topView(t, Options{}, topColumns...)
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
+	v.SetUsage(nil, "metrics unavailable: the server could not find the requested resource")
+	f, _ := v.Frame(t0)
+	if f.Status == nil || f.Status.MetricsError == "" {
+		t.Fatalf("status = %+v", f.Status)
+	}
+	if got := cells(v)["a"][1]; got != "" {
+		t.Fatalf("cpu = %q", got)
+	}
+	// without metric columns shown, no hint
+	if err := v.SetRender(pipeline.Render{}); err != nil {
+		t.Fatal(err)
+	}
+	if f, _ := v.Frame(t0); f.Status == nil || f.Status.MetricsError != "" {
+		t.Fatalf("status without metric columns = %+v", f.Status)
+	}
+}
+
+// The past has no usage: empty metric cells; back to live, they're there again.
+func TestMetricColumnsInThePast(t *testing.T) {
+	r := &recorder{Store: history.New(history.Limits{}), on: true}
+	v := topView(t, Options{History: r}, topColumns...)
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{r.item(topPod("a", "api-0"), t0)}}, t0)
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250}}, "")
+	if err := v.SetTime(t0); err != nil {
+		t.Fatal(err)
+	}
+	if got := cells(v)["a"][1]; got != "" {
+		t.Fatalf("cpu in the past = %q", got)
+	}
+	// a poll while in the past doesn't fill them
+	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 300}}, "")
+	if got := cells(v)["a"][1]; got != "" {
+		t.Fatalf("cpu in the past after a poll = %q", got)
+	}
+	if err := v.SetTime(time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := cells(v)["a"][1]; got != "300m" {
+		t.Fatalf("cpu live again = %q", got)
+	}
+}

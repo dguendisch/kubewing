@@ -88,7 +88,7 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 ### The status line
 
-At the bottom of every table pane: the connection state (a green dot and **connected** once the watch is synced), `N shown / M objects`, errors, the **record changes** toggle and **columns**.
+At the bottom of every table pane: the connection state (a green dot and **connected** once the watch is synced), `N shown / M objects`, errors, why metric columns are empty (see [Metrics](#metrics-m)), the **record changes** toggle and **columns**.
 
 When a synced watch starts failing (the network is down, the API server is unreachable), the state turns red and says **disconnected**. The rows stay as they last were, and the watch keeps retrying with a growing pause (up to 30 s).
 
@@ -134,6 +134,21 @@ In the table itself:
 - **Resize:** dragging a header edge resizes; a double-click fits the column to the visible rows. Widths are saved for the type; **reset widths** goes back to defaults.
 
 Columns and widths are kept in `columns.yaml` across restarts. Changing columns keeps the watch and its diff state.
+
+### Metrics: `m`
+
+`m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. Turned on, they're placed right after NAME, as narrow as their numbers; a width you drag stays when they're turned off and on again. The column configurator lists them marked `metrics`, with a **metrics** switch that shows or hides them all at once (also right after NAME); they can also be shown, hidden and moved one by one.
+
+| Kind | Columns |
+|---|---|
+| Pods | `CPU` (millicores, as `kubectl top`), `%CPU/R` and `%CPU/L` (of the containers' summed requests and limits), `MEM`, `%MEM/R`, `%MEM/L` |
+| Nodes | `CPU`, `%CPU` (of the node's allocatable), `MEM`, `%MEM` |
+
+- The usage comes from the cluster's metrics-server. It is read every 15 s, and only while a pane shows a metric column; panes on the same source share the reads.
+- They sort as numbers, and grep matches them. A pod without metrics yet (pending, just started) has empty cells, sorted last. A percentage is empty if the pod sets no requests (or limits).
+- New usage doesn't count as a change: no marker, nothing recorded. In time travel the metric cells are empty, since past usage isn't known.
+- Without a metrics-server (or without permission to read it) the cells stay empty and the status line says so.
+- Other resource types have no metrics: `m` says so.
 
 **Events** get real timestamps: LAST SEEN and FIRST SEEN (`-o wide`) are taken from the event object as kubectl picks them, shown as ages that tick and sort by the exact time. An events pane starts sorted by LAST SEEN, newest first.
 
@@ -723,7 +738,7 @@ The most used keys:
 | Where | Keys |
 |---|---|
 | Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
-| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `⇧R` record changes · `t` time travel |
+| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
 | Diff | `j`/`k` changes · `[`/`]` versions |

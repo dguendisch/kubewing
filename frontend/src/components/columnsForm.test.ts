@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { rank } from "../complete/complete";
-import { addColumn, emptyColumn, moveShown, moveTo, pathCandidates, pathContext, resetColumns, initialColumns, move, remove, toConfig, toggle, toggleWide, wideOn, type ColumnRow } from "./columnsForm";
+import { addColumn, emptyColumn, moveShown, moveTo, pathCandidates, pathContext, resetColumns, initialColumns, move, remove, toConfig, toggle, toggleMetrics, toggleWide, metricsOn, wideOn, type ColumnRow } from "./columnsForm";
 
 // kubectl get pods: IP and NODE only with -o wide
 const rows = (): ColumnRow[] =>
@@ -25,6 +25,28 @@ describe("column dialog", () => {
     expect(wideOn(r)).toBe(false);
     expect(shown(toggleWide(r))).toEqual(["NAME", "STATUS", "AGE", "IP", "NODE"]);
     expect(shown(toggleWide(toggleWide(r)))).toEqual(["NAME", "STATUS", "AGE"]);
+  });
+
+  test("metrics switch shows the metric columns right after NAME, in their order; again hides them", () => {
+    let r = initialColumns([
+      { name: "NAME", shown: true },
+      { name: "STATUS", shown: true },
+      { name: "IP", priority: 1, shown: false },
+      { name: "CPU", type: "number", shown: false, metric: true },
+      { name: "MEM", type: "bytes", shown: false, metric: true },
+    ]);
+    expect(metricsOn(r)).toBe(false);
+    r = toggleMetrics(toggle(r, 2));
+    // right after NAME, whatever else is shown
+    expect(shown(r)).toEqual(["NAME", "CPU", "MEM", "STATUS", "IP"]);
+    expect(metricsOn(r)).toBe(true);
+    expect(toConfig(r, ["NAME", "STATUS"])).toEqual([{ name: "NAME" }, { name: "CPU" }, { name: "MEM" }, { name: "STATUS" }, { name: "IP" }]);
+    r = toggleMetrics(r);
+    expect(shown(r)).toEqual(["NAME", "STATUS", "IP"]);
+    // partly shown counts as off: all of them on
+    expect(shown(toggleMetrics(toggle(r, r.findIndex((x) => x.name === "CPU"))))).toEqual(["NAME", "CPU", "MEM", "STATUS", "IP"]);
+    // NAME hidden: after the last shown column
+    expect(shown(toggleMetrics(initialColumns([{ name: "NAME", shown: false }, { name: "STATUS", shown: true }, { name: "CPU", shown: false, metric: true }])))).toEqual(["STATUS", "CPU"]);
   });
 
   test("the server's defaults save as null (follow the server); anything else as the shown columns in order", () => {

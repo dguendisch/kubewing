@@ -64,8 +64,11 @@ type Options struct {
 	History *config.HistoryStore
 	// Columns are the column settings per resource type; nil = in memory only.
 	Columns *config.ColumnStore
-	// Actor performs object actions (delete …); nil disables them.
+	// Actor performs object actions (delete …); nil disables them. If it
+	// implements source.Metrics, it feeds the metric columns.
 	Actor source.Actor
+	// MetricsInterval is how often metric columns are polled (default 15s).
+	MetricsInterval time.Duration
 }
 
 // Service manages panes.
@@ -93,6 +96,8 @@ type Service struct {
 	// edits: open editors, by session id
 	edits map[string]*editSession
 	useq  uint64
+	// pollers feed the metric columns, by source
+	pollers map[metricsKey]*poller
 }
 
 // New creates a service.
@@ -103,7 +108,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, pollers: map[metricsKey]*poller{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")
@@ -197,6 +202,10 @@ type pane struct {
 	// explicit: the pipeline brought its own render, the type's columns don't apply
 	typ      string
 	explicit bool
+	// metrics: the poller feeding its metric columns (nil = none shown);
+	// closed: Close ran, so no poller may take it on any more
+	metrics *poller
+	closed  bool
 	// seq numbers frames per pane, monotonic across view rebuilds (Update),
 	// so clients can drop stale frames.
 	seq uint64
@@ -283,6 +292,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.panes[id] = pn
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
+	s.syncMetrics(pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
 	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ, Ambiguous: sub.Resolved.Ambiguous, Sort: sortBy}, nil
 }
@@ -321,6 +331,7 @@ func (s *Service) Update(paneID, pipelineYAML string) error {
 	}
 	pn.mu.Unlock()
 	if err == nil {
+		s.syncMetrics(pn)
 		pn.poke()
 	}
 	return err
@@ -572,6 +583,10 @@ func (s *Service) Close(paneID string) error {
 	}
 	pn.cancel()
 	pn.sub.Close()
+	pn.mu.Lock()
+	pn.closed = true
+	pn.mu.Unlock()
+	s.leaveMetrics(pn)
 	return nil
 }
 

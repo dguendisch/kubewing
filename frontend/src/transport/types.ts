@@ -30,6 +30,8 @@ export interface Status {
   at?: string;
   /** Live events since, applied behind the past. */
   behind?: number;
+  /** The pane shows metric columns but there is no usage (no metrics-server, forbidden …). */
+  metricsError?: string;
 }
 
 /** Mirrors view.Timeline: what a pane can travel over (RFC 3339 times). */
@@ -151,6 +153,8 @@ export interface ColumnOption {
   expr?: string;
   /** A configured server column this resource doesn't have. */
   missing?: boolean;
+  /** A usage column (kubectl top), polled while shown. */
+  metric?: boolean;
 }
 
 /** Mirrors view.ColumnChoices. */

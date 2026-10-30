@@ -106,6 +106,7 @@ export type CommandId =
   | "term.findPrev"
   | "term.findClose"
   | "view.columns"
+  | "view.toggleMetrics"
   | "history.toggleRecording"
   | "travel.toggle"
   | "travel.prev"
@@ -132,7 +133,7 @@ export const commandIds: readonly CommandId[] = [
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
-  "view.columns", "history.toggleRecording",
+  "view.columns", "view.toggleMetrics", "history.toggleRecording",
   "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",
 ];
 
@@ -191,6 +192,8 @@ export const defaultBindings: Binding[] = [
   { key: "H", command: "filter.toggleHealthy", when: ["table"] },
   // as in kubectl get -o wide
   { key: "O", command: "view.columns", when: ["table"] },
+  // kubectl top: CPU/memory columns of pods and nodes (for the type, like -o wide)
+  { key: "M", command: "view.toggleMetrics", when: ["table"] },
   // record changes for the source (off by default: it costs per event)
   { key: "Shift+R", command: "history.toggleRecording", when: ["table"] },
   // time-travel: t in the table; while in the past ("travel": the table keys still apply) the arrows move in time

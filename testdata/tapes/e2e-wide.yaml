@@ -1,4 +1,5 @@
 # E2E tape: pods with -o wide columns (IP, NODE at priority 1), no steps; for the column dialog.
+# Fakes metrics.k8s.io (metric columns: m); web-0 requests 500m/256Mi, web-1 sets nothing.
 pipeline:
   source: {resource: e2e-wide}
 columns:
@@ -8,7 +9,10 @@ columns:
   - {name: IP, type: string, priority: 1}
   - {name: Node, type: string, priority: 1}
 initial:
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-0, namespace: prod, uid: w-web-0, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-a, containers: [{name: c, image: nginx:1.27}]}, status: {phase: Running, podIP: 10.0.0.1}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-0, namespace: prod, uid: w-web-0, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-a, containers: [{name: c, image: nginx:1.27, resources: {requests: {cpu: 500m, memory: 256Mi}, limits: {cpu: '1', memory: 1Gi}}}]}, status: {phase: Running, podIP: 10.0.0.1}}
     cells: [web-0, Running, 3d, 10.0.0.1, node-a]
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-1, namespace: prod, uid: w-web-1, labels: {app: web}, creationTimestamp: "2026-01-04T09:55:00Z"}, spec: {nodeName: node-b, containers: [{name: c, image: nginx:1.27}]}, status: {phase: Running, podIP: 10.0.0.2}}
     cells: [web-1, Running, 5m, 10.0.0.2, node-b]
+metrics:
+  prod/web-0: {cpu: 250m, memory: 128Mi}
+  prod/web-1: {cpu: 1200m, memory: 64Mi}
