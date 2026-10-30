@@ -30,10 +30,12 @@ type TypeView struct {
 	Columns []pipeline.Column `json:"columns,omitempty"`
 	// Widths are the dragged column widths by column name; others keep their defaults.
 	Widths map[string]int `json:"widths,omitempty"`
-	// Metrics is where the metric columns (kubectl top) were when they were
-	// turned off; nil = right after NAME, in their built-in order. Turned
-	// on again, they go back there.
-	Metrics *MetricsPlace `json:"metrics,omitempty"`
+	// Metrics is where the usage columns (kubectl top) were when they were
+	// turned off, Allocation the same for a node's requests/limits columns;
+	// nil = right after NAME, in their built-in order. Turned on again,
+	// they go back there.
+	Metrics    *MetricsPlace `json:"metrics,omitempty"`
+	Allocation *MetricsPlace `json:"allocation,omitempty"`
 }
 
 // MetricsPlace is where the metric columns were shown.
@@ -45,15 +47,18 @@ type MetricsPlace struct {
 }
 
 func (t TypeView) clone() TypeView {
-	c := TypeView{Columns: slices.Clone(t.Columns), Widths: maps.Clone(t.Widths)}
-	if t.Metrics != nil {
-		c.Metrics = &MetricsPlace{After: t.Metrics.After, Order: slices.Clone(t.Metrics.Order)}
+	return TypeView{Columns: slices.Clone(t.Columns), Widths: maps.Clone(t.Widths), Metrics: t.Metrics.clone(), Allocation: t.Allocation.clone()}
+}
+
+func (m *MetricsPlace) clone() *MetricsPlace {
+	if m == nil {
+		return nil
 	}
-	return c
+	return &MetricsPlace{After: m.After, Order: slices.Clone(m.Order)}
 }
 
 func (t TypeView) empty() bool {
-	return len(t.Columns) == 0 && len(t.Widths) == 0 && t.Metrics == nil
+	return len(t.Columns) == 0 && len(t.Widths) == 0 && t.Metrics == nil && t.Allocation == nil
 }
 
 // ColumnStore reads and writes dir/columns.yaml. dir "" keeps the settings
@@ -116,11 +121,28 @@ func (s *ColumnStore) SetColumns(typ string, cols []pipeline.Column) error {
 	return s.update(typ, func(t *TypeView) { t.Columns = slices.Clone(cols) })
 }
 
-// SetMetrics sets where the metric columns go when turned on (nil = right
-// after NAME) and saves.
-func (s *ColumnStore) SetMetrics(typ string, m *MetricsPlace) error {
-	return s.update(typ, func(t *TypeView) { t.Metrics = m })
+// Metric column groups (view.ColumnOption.Metric).
+const (
+	GroupUsage = "usage"
+	GroupAlloc = "alloc"
+)
+
+// SetMetrics sets where a group's metric columns go when turned on (nil =
+// right after NAME) and saves.
+func (s *ColumnStore) SetMetrics(typ, group string, m *MetricsPlace) error {
+	return s.update(typ, func(t *TypeView) { *t.place(group) = m })
 }
+
+// place is a group's saved place.
+func (t *TypeView) place(group string) **MetricsPlace {
+	if group == GroupAlloc {
+		return &t.Allocation
+	}
+	return &t.Metrics
+}
+
+// Place returns a group's saved place (nil = none).
+func (t TypeView) Place(group string) *MetricsPlace { return *t.place(group) }
 
 // SetWidths replaces a type's column widths (nil = the defaults) and saves.
 func (s *ColumnStore) SetWidths(typ string, widths map[string]int) error {

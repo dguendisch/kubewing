@@ -74,6 +74,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("hide / show healthy pods and workloads", "filter.toggleHealthy"),
       row("columns: -o wide, custom ones (also right-click the header)", "view.columns"),
       row("metrics on / off: CPU and memory of pods and nodes (kubectl top)", "view.toggleMetrics"),
+      row("requests / limits of the pods on each node on / off (kubectl describe node)", "view.toggleAllocation"),
       row("record changes on / off (diff steps through versions)", "history.toggleRecording"),
       row("leave the filter bar (the field's previous value comes back)", "filter.blur"),
       row("next / previous row", "row.down", "row.up"),

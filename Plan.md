@@ -27,7 +27,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 - **Moving panes:** a keyboard equivalent to move/swap the focused pane (e.g. `⌘⇧⌥` arrows).
 - **Resizing panes:** a keyboard equivalent to resize the focused pane (e.g. `⌘+ctrl` arrows up/down).
 - **Names:** persisted with the layout, once there is layout persistence.
-- **Metrics:** per-container breakdown (`top --containers`) in the object view or the row menu; metrics in CEL filters (e.g. `m.cpu > 500`); sparklines of recent values (needs kept samples, which could then also feed time travel); metric columns rendered as `cpu-gauge` once that type exists (P1).
+- **Metrics:** per-container breakdown (`top --containers`) in the object view or the row menu; metrics in CEL filters (e.g. `m.cpu > 500`); sparklines of recent values (needs kept samples, which could then also feed time travel); metric columns rendered as `cpu-gauge` once that type exists (P1). Allocation: absolute request/limit columns on pods (`CPU REQ`, `MEM REQ`, …, to see who reserves the most on a node after `⌘J`); `ephemeral-storage` and extended resources (GPUs) of nodes; the unfinished-pods watch is cluster-wide, so a per-node watch for single-node panes on very large clusters.
 
 ## P1 — "Shell parity" (v0.5)
 

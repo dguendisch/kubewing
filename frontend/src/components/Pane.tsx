@@ -622,6 +622,12 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
           {st.metricsError}
         </span>
       ) : null}
+      {st?.allocLoading ? <span aria-label="requests/limits loading">loading requests/limits…</span> : null}
+      {st?.allocError ? (
+        <span aria-label="requests/limits hint" className="truncate text-deleted" title={st.allocError}>
+          {st.allocError}
+        </span>
+      ) : null}
       {pane.flash ? (
         <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
           {pane.flash.text}

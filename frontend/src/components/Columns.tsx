@@ -4,8 +4,8 @@ import { Combobox } from "../complete/Combobox";
 import { Suggestions, useFieldCompletion } from "../complete/useFieldCompletion";
 import { bridge, setUI, useColumns, useUI } from "../store/store";
 import * as S from "../store/state";
-import type { ColumnChoices, ColumnType, FieldKeys } from "../transport/types";
-import { addColumn, emptyColumn, initialColumns, isCustom, isMetric, isWide, metricsOn, move, moveTo, pathCandidates, pathContext, remove, resetColumns, toConfig, toggle, toggleMetrics, toggleWide, wideOn, type ColumnRow, type NewColumn } from "./columnsForm";
+import type { ColumnChoices, ColumnType, FieldKeys, MetricsPlace } from "../transport/types";
+import { addColumn, emptyColumn, initialColumns, isCustom, isWide, metricsOn, move, moveTo, pathCandidates, pathContext, remove, resetColumns, toConfig, toggle, toggleMetrics, toggleWide, wideOn, type ColumnRow, type MetricGroup, type NewColumn } from "./columnsForm";
 
 /**
  * o (or a right-click on the header): the pane's columns, kept per resource
@@ -43,12 +43,12 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
   const [add, setAdd] = useState<NewColumn>(emptyColumn);
   const [error, setError] = useState<string>();
   const hasWidths = useColumns((c) => Object.keys(c.types[type]?.widths ?? {}).length > 0);
-  // where the metric columns go when switched on, and where they were when switched off (saved with OK)
-  const [metricsPlace, setMetricsPlace] = useState(() => useColumns.getState().types[type]?.metrics);
-  const [metricsSwitched, setMetricsSwitched] = useState(false);
+  // per metric group: where its columns go when switched on, where they were when switched off (saved with OK)
+  const [places, setPlaces] = useState<Partial<Record<MetricGroup, MetricsPlace | undefined>>>(() => ({ usage: useColumns.getState().types[type]?.metrics, alloc: useColumns.getState().types[type]?.allocation }));
+  const [switched, setSwitched] = useState<MetricGroup[]>([]);
   const list = useRef<HTMLUListElement>(null);
   const hasWide = rows.some(isWide);
-  const hasMetrics = rows.some(isMetric);
+  const has = (g: MetricGroup) => rows.some((r) => r.metric === g);
   const [drag, setDrag] = useState<{ from: number; over: number }>();
 
   // CEL completion, as in the filter bar's CEL field
@@ -85,12 +85,13 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
     refocus.current = false;
   }, [at, rows]);
 
-  const save = () => void submitColumns(type, toConfig(rows, choices.defaults), metricsSwitched ? (metricsPlace ?? null) : undefined).then((err) => err && setError(err));
-  const switchMetrics = () => {
-    const t = toggleMetrics(rows, metricsPlace);
+  const save = () =>
+    void submitColumns(type, toConfig(rows, choices.defaults), Object.fromEntries(switched.map((g) => [g, places[g] ?? null]))).then((err) => err && setError(err));
+  const switchMetrics = (g: MetricGroup) => {
+    const t = toggleMetrics(rows, g, places[g]);
     // off: where they were; on: the place is used (off again in the dialog takes the new one)
-    setMetricsPlace(t.place);
-    setMetricsSwitched(true);
+    setPlaces({ ...places, [g]: t.place });
+    if (!switched.includes(g)) setSwitched([...switched, g]);
     update(t.rows);
   };
   const submitAdd = (value = add.value) => {
@@ -143,10 +144,16 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
         </span>
         <span className="text-fg-muted">· all panes and clusters</span>
         <span className="flex-1" />
-        {hasMetrics ? (
+        {has("usage") ? (
           <label className="flex items-center gap-1 text-fg-muted" title="CPU and memory usage (kubectl top), polled while shown">
-            <input type="checkbox" aria-label="metrics" checked={metricsOn(rows)} onChange={switchMetrics} />
+            <input type="checkbox" aria-label="metrics" checked={metricsOn(rows, "usage")} onChange={() => switchMetrics("usage")} />
             metrics
+          </label>
+        ) : null}
+        {has("alloc") ? (
+          <label className="flex items-center gap-1 text-fg-muted" title="what the pods on each node request and are limited to (kubectl describe node); lists all pods first">
+            <input type="checkbox" aria-label="requests/limits" checked={metricsOn(rows, "alloc")} onChange={() => switchMetrics("alloc")} />
+            requests/limits
           </label>
         ) : null}
         {hasWide ? (
@@ -189,7 +196,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
             <input type="checkbox" tabIndex={-1} aria-label={r.name} checked={r.shown} onChange={() => update(toggle(rows, i), i)} />
             <span className={r.shown ? "text-fg" : "text-fg-muted"}>{r.name}</span>
             {isWide(r) ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">wide</span> : null}
-            {isMetric(r) ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">metrics</span> : null}
+            {r.metric ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">{r.metric === "usage" ? "metrics" : "requests/limits"}</span> : null}
             {r.missing ? <span className="rounded bg-bg px-1 text-[10px] text-deleted" title="this resource has no such server column">missing</span> : null}
             {isCustom(r) ? <span className="truncate text-[11px] text-fg-muted">{r.path ?? r.expr}</span> : null}
             <span className="flex-1" />

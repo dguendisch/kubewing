@@ -9,7 +9,7 @@ import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
 import * as S from "./store/state";
 import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
-import { initialColumns, metricsOn, moveShown, toConfig, toggleMetrics } from "./components/columnsForm";
+import { initialColumns, metricsOn, moveShown, toConfig, toggleMetrics, type MetricGroup } from "./components/columnsForm";
 import { cellChoices, initialCell, wholeRow } from "./grid/cells";
 import { nowOf, rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
@@ -232,7 +232,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "view.columns":
       return void openColumns(pane.id);
     case "view.toggleMetrics":
-      return void toggleMetricColumns(pane.id);
+      return void toggleMetricColumns(pane.id, "usage");
+    case "view.toggleAllocation":
+      return void toggleMetricColumns(pane.id, "alloc");
     case "history.toggleRecording":
       return void toggleRecording(pane.id);
     case "travel.toggle":
@@ -661,36 +663,49 @@ export async function moveColumn(paneId: string, from: number, to: number) {
   }
 }
 
+/** The saved place of a group of metric columns (TypeView.metrics / .allocation). */
+export const placeKey = { usage: "metrics", alloc: "allocation" } as const;
+
+const groupText = {
+  usage: { name: "metrics", on: "metrics on: polled every 15s", none: "metrics (kubectl top) are for pods and nodes" },
+  alloc: { name: "requests/limits", on: "requests/limits on: summed from the pods on each node", none: "requests/limits of their pods are for nodes" },
+};
+
 /**
- * m: the metric columns (kubectl top) on or off for the pane's type, as the
- * column dialog's metrics switch: every pane of the type follows.
+ * m: the usage columns (kubectl top) on or off for the pane's type; ⇧M the
+ * same for a node's requests/limits (kubectl describe node), which list all
+ * the context's pods first. As the column dialog's switches: every pane of
+ * the type follows.
  */
-export async function toggleMetricColumns(paneId: string) {
+export async function toggleMetricColumns(paneId: string, group: MetricGroup) {
   const p = useUI.getState().panes[paneId];
   if (!p?.serverId || !p.type) return;
+  const text = groupText[group];
   try {
     const choices = await bridge().columnChoices(p.serverId);
     const rows = initialColumns(choices.options);
-    if (!rows.some((r) => r.metric)) return flash(paneId, "metrics (kubectl top) are for pods and nodes", true);
-    const on = !metricsOn(rows);
-    const t = toggleMetrics(rows, useColumns.getState().types[p.type]?.metrics);
+    if (!rows.some((r) => r.metric === group)) return flash(paneId, text.none, true);
+    const on = !metricsOn(rows, group);
+    const t = toggleMetrics(rows, group, useColumns.getState().types[p.type]?.[placeKey[group]]);
     // on: the place is used, nothing to keep (off again saves the one then)
-    await bridge().setTypeMetrics(p.type, toConfig(t.rows, choices.defaults), t.place ?? null);
-    flash(paneId, on ? "metrics on: polled every 15s" : "metrics off");
+    await bridge().setTypeMetrics(p.type, group, toConfig(t.rows, choices.defaults), t.place ?? null);
+    flash(paneId, on ? text.on : `${text.name} off`);
   } catch (e) {
-    flash(paneId, `metrics: ${errorText(e)}`, true);
+    flash(paneId, `${text.name}: ${errorText(e)}`, true);
   }
 }
 
 /**
  * The column dialog's ⏎: Go validates and saves; the error, if any, is
- * shown in the dialog. metrics: the metrics switch was used, where the
- * metric columns were when it was turned off (null: turned on, used up).
+ * shown in the dialog. places: the metric switches used, with where their
+ * columns were when turned off (null: turned on, used up).
  */
-export async function submitColumns(type: string, columns: ColumnSpec[] | null, metrics?: MetricsPlace | null): Promise<string | undefined> {
+export async function submitColumns(type: string, columns: ColumnSpec[] | null, places: Partial<Record<MetricGroup, MetricsPlace | null>> = {}): Promise<string | undefined> {
   try {
-    if (metrics !== undefined) await bridge().setTypeMetrics(type, columns, metrics);
-    else await bridge().setTypeColumns(type, columns);
+    const groups = Object.keys(places) as MetricGroup[];
+    if (groups.length === 0) await bridge().setTypeColumns(type, columns);
+    // one group's place per call; the columns are the same each time
+    for (const g of groups) await bridge().setTypeMetrics(type, g, columns, places[g]!);
   } catch (e) {
     return String((e as Error).message ?? e);
   }

@@ -89,8 +89,9 @@ type colSpec struct {
 	cellIndex int // index into server-side table cells; -1 if unused
 	// stamp: the cell is a timestamp read from the object, shown as an age
 	stamp func(obj *unstructured.Unstructured) string
-	// metric: the cell is from the object's usage (see SetUsage)
-	metric func(obj map[string]any, u source.Usage) string
+	// metric: the cell is from data outside the object (see SetMetrics)
+	metric     func(obj map[string]any, d metricData) string
+	metricFrom metricSource
 }
 
 type entry struct {
@@ -139,10 +140,8 @@ type View struct {
 	cols       []colSpec
 	sortKeys   []sortKey
 
-	// usage by namespace/name for metric columns (SetUsage); usageErr: why
-	// there is none
-	usage    map[string]source.Usage
-	usageErr string
+	// metrics feed the metric columns (SetMetrics)
+	metrics Metrics
 
 	entries map[string]*entry
 	synced  bool
@@ -362,8 +361,9 @@ type ColumnOption struct {
 	Expr string `json:"expr,omitempty"`
 	// Missing: a server column of the config this resource doesn't have
 	Missing bool `json:"missing,omitempty"`
-	// Metric: a usage column (kubectl top), polled while shown
-	Metric bool `json:"metric,omitempty"`
+	// Metric: a metric column's group, "usage" (kubectl top, polled while
+	// shown) or "alloc" (a node's requests and limits, summed from its pods)
+	Metric string `json:"metric,omitempty"`
 }
 
 // ColumnChoices are what the column configurator offers for a pane.
@@ -396,7 +396,7 @@ func (v *View) columnOptions() []ColumnOption {
 	shown := map[string]bool{}
 	if len(v.shown) == 0 {
 		for _, c := range v.cols {
-			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Shown: true, Metric: c.metric != nil})
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Shown: true, Metric: c.metricGroup()})
 			shown[strings.ToUpper(c.info.Name)] = true
 		}
 	}
@@ -409,13 +409,13 @@ func (v *View) columnOptions() []ColumnOption {
 		o := ColumnOption{Name: c.Name, Shown: true, Missing: true}
 		if i := slices.IndexFunc(available, func(a colSpec) bool { return strings.EqualFold(a.info.Name, c.Name) }); i >= 0 {
 			a := available[i]
-			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true, Metric: a.metric != nil}
+			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true, Metric: a.metricGroup()}
 		}
 		out = append(out, o)
 	}
 	for _, c := range available {
 		if !shown[strings.ToUpper(c.info.Name)] {
-			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Metric: c.metric != nil})
+			out = append(out, ColumnOption{Name: c.info.Name, Type: c.info.Type, Priority: c.priority, Metric: c.metricGroup()})
 		}
 	}
 	return out
@@ -622,10 +622,7 @@ func (v *View) render(e *entry) {
 		case c.stamp != nil:
 			val = c.stamp(e.item.Object)
 		case c.metric != nil:
-			// the past has no usage: only now is polled
-			if u, ok := v.usage[e.item.Object.GetNamespace()+"/"+e.item.Object.GetName()]; ok && v.at.IsZero() {
-				val = c.metric(obj, u)
-			}
+			val = v.metricCell(c, e, v.metricData(e))
 		case c.cellIndex >= 0:
 			if c.cellIndex < len(e.item.Cells) {
 				val = e.item.Cells[c.cellIndex]
@@ -945,8 +942,11 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 	if v.matchErrs > 0 {
 		status.FilterError = v.firstErr
 	}
-	if v.ShowsMetrics() && v.at.IsZero() {
-		status.MetricsError = v.usageErr
+	if v.ShowsUsage() && v.at.IsZero() {
+		status.MetricsError = v.metrics.UsageErr
+	}
+	if v.ShowsAllocation() && v.at.IsZero() {
+		status.AllocError, status.AllocLoading = v.metrics.AllocErr, v.metrics.AllocLoading
 	}
 
 	changed := !v.everFramed || v.colsDirty || len(f.Rows) > 0 ||

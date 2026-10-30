@@ -96,8 +96,8 @@ type Service struct {
 	// edits: open editors, by session id
 	edits map[string]*editSession
 	useq  uint64
-	// pollers feed the metric columns, by source
-	pollers map[metricsKey]*poller
+	// feeds feed the metric columns (usage polls, allocation sums)
+	feeds map[feedKey]*feed
 }
 
 // New creates a service.
@@ -108,7 +108,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, pollers: map[metricsKey]*poller{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")
@@ -202,9 +202,9 @@ type pane struct {
 	// explicit: the pipeline brought its own render, the type's columns don't apply
 	typ      string
 	explicit bool
-	// metrics: the poller feeding its metric columns (nil = none shown);
-	// closed: Close ran, so no poller may take it on any more
-	metrics *poller
+	// metrics: the feeds of its metric columns and what they delivered;
+	// closed: Close ran, so no feed may take it on any more
+	metrics paneMetrics
 	closed  bool
 	// seq numbers frames per pane, monotonic across view rebuilds (Update),
 	// so clients can drop stale frames.

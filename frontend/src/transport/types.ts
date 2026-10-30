@@ -32,6 +32,10 @@ export interface Status {
   behind?: number;
   /** The pane shows metric columns but there is no usage (no metrics-server, forbidden …). */
   metricsError?: string;
+  /** The pane shows a node's requests/limits columns and their pods are still being listed. */
+  allocLoading?: boolean;
+  /** Why the requests/limits columns are empty (the pods can't be listed). */
+  allocError?: string;
 }
 
 /** Mirrors view.Timeline: what a pane can travel over (RFC 3339 times). */
@@ -140,8 +144,9 @@ export interface ColumnSpec {
 export interface TypeView {
   columns?: ColumnSpec[];
   widths?: Record<string, number>;
-  /** Where the metric columns were when turned off; unset = right after NAME, in their built-in order. */
+  /** Where the usage (metrics) and requests/limits (allocation) columns were when turned off; unset = the default place. */
   metrics?: MetricsPlace;
+  allocation?: MetricsPlace;
 }
 
 /** Mirrors config.MetricsPlace: after this column ("" = first), the shown ones in their order. */
@@ -161,8 +166,8 @@ export interface ColumnOption {
   expr?: string;
   /** A configured server column this resource doesn't have. */
   missing?: boolean;
-  /** A usage column (kubectl top), polled while shown. */
-  metric?: boolean;
+  /** A metric column: "usage" (kubectl top, polled while shown) or "alloc" (a node's requests/limits, summed from its pods). */
+  metric?: "usage" | "alloc";
 }
 
 /** Mirrors view.ColumnChoices. */
@@ -667,7 +672,7 @@ export interface Transport {
   /** Saves a type's shown columns (null = defaults) and applies them to its panes; rejects an invalid column. */
   setTypeColumns(type: string, columns: ColumnSpec[] | null): Promise<void>;
   /** setTypeColumns for the metrics switch, saving where the metric columns were too (null = right after NAME). */
-  setTypeMetrics(type: string, columns: ColumnSpec[] | null, place: MetricsPlace | null): Promise<void>;
+  setTypeMetrics(type: string, group: "usage" | "alloc", columns: ColumnSpec[] | null, place: MetricsPlace | null): Promise<void>;
   /** Saves a type's dragged column widths (null = defaults). */
   setColumnWidths(type: string, widths: Record<string, number> | null): Promise<void>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;

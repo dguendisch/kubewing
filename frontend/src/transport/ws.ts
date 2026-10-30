@@ -65,7 +65,7 @@ export function wsTransport(url: string): Transport {
     columnChoices: (p) => call("ColumnChoices", p),
     columnConfigs: () => call("ColumnConfigs"),
     setTypeColumns: (t, c) => call("SetTypeColumns", t, c),
-    setTypeMetrics: (t, c, a) => call("SetTypeMetrics", t, c, a),
+    setTypeMetrics: (t, g, c, a) => call("SetTypeMetrics", t, g, c, a),
     setColumnWidths: (t, w) => call("SetColumnWidths", t, w),
     setViewport: (p, o, l) => call("SetViewport", p, o, l),
     resync: (p) => call("Resync", p),

@@ -15,6 +15,10 @@ import (
 	"github.com/dguendisch/kubewing/internal/source"
 )
 
+// UnfinishedPodsTape is the tape the cluster's unfinished pods are watched
+// from (the nodes' allocation columns), if there is one.
+const UnfinishedPodsTape = "unfinished-pods"
+
 // Opener replays tapes as sources (headless backend for E2E tests). Any
 // resource name matching a tape's pipeline resource replays that tape in
 // real time; Speed > 1 replays faster.
@@ -54,6 +58,10 @@ func (o *Opener) Resolve(_, resource string) (source.Resolved, error) {
 // Watch implements source.Opener.
 func (o *Opener) Watch(ctx context.Context, _ string, res source.Resolved, k source.Key, out chan<- source.Event) {
 	t := o.Tapes[k.Resource]
+	if u, ok := o.Tapes[UnfinishedPodsTape]; ok && k.Resource == "pods" && k.FieldSelector == source.UnfinishedPods {
+		// the node allocation columns' pods
+		t = u
+	}
 	speed := o.Speed
 	if speed <= 0 {
 		speed = 1
@@ -87,6 +95,13 @@ func (o *Opener) Watch(ctx context.Context, _ string, res source.Resolved, k sou
 	}
 	inject, done := o.attach(t)
 	defer done()
+	if d, _ := time.ParseDuration(t.ListDelay); d > 0 {
+		select {
+		case <-time.After(d):
+		case <-ctx.Done():
+			return
+		}
+	}
 	if !emit(o.withoutDeleted(t.InitialEvent())) {
 		return
 	}

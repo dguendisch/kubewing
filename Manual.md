@@ -135,19 +135,21 @@ In the table itself:
 
 Columns and widths are kept in `columns.yaml` across restarts. Changing columns keeps the watch and its diff state.
 
-### Metrics: `m`
+### Metrics: `m`, requests/limits: `⇧M`
 
-`m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. The first time they're turned on, they're placed right after NAME, as narrow as their numbers. Moved and resized, they keep it: turned off and on again (`m` or the switch), they come back where they were, in their order and widths (right after NAME if the column they followed is hidden by then). The column configurator lists them marked `metrics`, with a **metrics** switch that shows or hides them all at once; they can also be shown, hidden and moved one by one.
+`m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. `⇧M` does the same for what the pods on each node request and are limited to, like `kubectl describe node`. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. The first time they're turned on, they're placed right after NAME, as narrow as their numbers. Moved and resized, they keep it: turned off and on again (`m` or the switch), they come back where they were, in their order and widths (right after NAME if the column they followed is hidden by then). Each group keeps its own place. The column configurator lists them marked `metrics` or `requests/limits`, with a **metrics** and a **requests/limits** switch that show or hide a group at once; they can also be shown, hidden and moved one by one.
 
 | Kind | Columns |
 |---|---|
-| Pods | `CPU` (millicores, as `kubectl top`), `%CPU/R` and `%CPU/L` (of the containers' summed requests and limits), `MEM`, `%MEM/R`, `%MEM/L` |
-| Nodes | `CPU`, `%CPU` (of the node's allocatable), `MEM`, `%MEM` |
+| Pods | `CPU` (millicores, as `kubectl top`), `%CPU/R` and `%CPU/L` (of the pod's requests and limits), `MEM`, `%MEM/R`, `%MEM/L` |
+| Nodes | `m`: `CPU`, `%CPU` (of the node's allocatable), `MEM`, `%MEM`. `⇧M`: `%CPU REQ`, `%CPU LIM`, `%MEM REQ`, `%MEM LIM`, what the pods on it request and are limited to, of its allocatable (kubectl describe node's "Allocated resources") |
 
-- The usage comes from the cluster's metrics-server. It is read every 15 s, and only while a pane shows a metric column; panes on the same source share the reads.
-- They sort as numbers, and grep matches them. A pod without metrics yet (pending, just started) has empty cells, sorted last. A percentage is empty if the pod sets no requests (or limits).
-- New usage doesn't count as a change: no marker, nothing recorded. In time travel the metric cells are empty, since past usage isn't known.
-- Without a metrics-server (or without permission to read it) the cells stay empty and the status line says so.
+- The usage comes from the cluster's metrics-server. It is read every 15 s, and only while a pane shows a usage column; panes on the same source share the reads.
+- A pod's requests and limits are counted as the scheduler and kubectl count them: its containers summed, sidecars added, an init container as the larger of it and the rest (it runs alone), pod-level resources and the runtime's overhead included. A node's are the sum over its pods that haven't finished; a pod without a limit adds nothing to the limits, so they can be below what the node may really use (and above 100%: overcommitted).
+- The nodes' requests and limits follow the pods live (one watch of the context's pods, while a pane shows such a column), and need no metrics-server. They're separate from `m` because they list every pod of the context first, which takes a few seconds on a big cluster: meanwhile the status line says **loading requests/limits…**. If the pods can't be listed (no permission across namespaces), the status line says why.
+- Percentages are cut off, not rounded, as in kubectl. They sort as numbers, and grep matches them. A pod without metrics yet (pending, just started) has empty cells, sorted last. A percentage is empty if the pod sets no requests (or limits).
+- New values don't count as a change: no marker, nothing recorded. In time travel the metric cells are empty, since past values aren't known.
+- Without a metrics-server (or without permission to read it) the usage cells stay empty and the status line says so.
 - Other resource types have no metrics: `m` says so.
 
 **Events** get real timestamps: LAST SEEN and FIRST SEEN (`-o wide`) are taken from the event object as kubectl picks them, shown as ages that tick and sort by the exact time. An events pane starts sorted by LAST SEEN, newest first.
@@ -738,7 +740,7 @@ The most used keys:
 | Where | Keys |
 |---|---|
 | Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
-| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧R` record changes · `t` time travel |
+| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
 | Diff | `j`/`k` changes · `[`/`]` versions |

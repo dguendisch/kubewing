@@ -1,0 +1,62 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "AGE",
+      "type": "age"
+    }
+  ],
+  "total": 4,
+  "offset": 0,
+  "order": [
+    "u-api-0",
+    "u-job-0",
+    "u-pending-0",
+    "u-web-0"
+  ],
+  "rows": [
+    {
+      "key": "u-api-0",
+      "cells": [
+        "prod",
+        "api-0",
+        ""
+      ]
+    },
+    {
+      "key": "u-job-0",
+      "cells": [
+        "prod",
+        "job-0",
+        ""
+      ]
+    },
+    {
+      "key": "u-pending-0",
+      "cells": [
+        "prod",
+        "pending-0",
+        ""
+      ]
+    },
+    {
+      "key": "u-web-0",
+      "cells": [
+        "prod",
+        "web-0",
+        ""
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 4
+  }
+}

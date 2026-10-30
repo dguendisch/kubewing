@@ -72,14 +72,16 @@ test("live table shows server-side columns and rows", async ({ page }) => {
 });
 
 test.describe("columns (per resource type)", () => {
-  // one backend serves the whole run, and columns.yaml with it: leave e2e-wide as it was
+  // one backend serves the whole run, and columns.yaml with it: leave e2e-wide and nodes as they were
   test.afterEach(async ({ page }) => {
     await page.evaluate(async () => {
-      const b = (window as unknown as { __kw: { bridge(): { setTypeColumns(t: string, c: null): Promise<void>; setTypeMetrics(t: string, c: null, p: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
-      await b.setTypeMetrics("e2e-wide", null, null);
-      await b.setColumnWidths("e2e-wide", null);
-      await b.setTypeColumns("nodes", null);
-      await b.setColumnWidths("nodes", null);
+      const b = (window as unknown as { __kw: { bridge(): { setTypeMetrics(t: string, g: string, c: null, p: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
+      // the columns and both metric groups' saved places
+      for (const t of ["e2e-wide", "nodes"]) {
+        await b.setTypeMetrics(t, "usage", null, null);
+        await b.setTypeMetrics(t, "alloc", null, null);
+        await b.setColumnWidths(t, null);
+      }
     });
   });
   const dialog = (page: Page) => page.getByRole("dialog", { name: "columns" });
@@ -350,7 +352,7 @@ test.describe("columns (per resource type)", () => {
     await expect(page.getByLabel("message")).toContainText("metrics on");
     // web-0 requests 500m/256Mi and is limited to 1/1Gi; web-1 sets nothing (no percentages)
     await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 8))).toEqual([
-      ["250m", "50%", "25%", "128.0Mi", "50%", "13%"],
+      ["250m", "50%", "25%", "128.0Mi", "50%", "12%"],
       ["1200m", "", "", "64.0Mi", "", ""],
     ]);
     // the other pane follows
@@ -414,18 +416,41 @@ test.describe("columns (per resource type)", () => {
     await expect.poll(async () => (await focused(page)).columns).toEqual(moved);
   });
 
-  test("metrics without metrics-server: empty cells and a hint in the status line; not offered for other kinds", async ({ page }) => {
+  test("metrics without metrics-server: empty usage cells and a hint; the nodes' requests and limits still; not offered for other kinds", async ({ page }) => {
     await openTape(page, "nodes", 3);
+    const status = page.getByRole("status", { name: "pane status" });
+    // m: only the usage columns
     await page.keyboard.press("m");
     await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "STATUS"]);
-    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("metrics hint")).toContainText("metrics unavailable");
+    await expect(status.getByLabel("metrics hint")).toContainText("metrics unavailable");
     expect((await focused(page)).rows.map((r) => r.cells.slice(2, 6).join(""))).toEqual(["", "", ""]);
     await page.keyboard.press("m");
-    await expect(page.getByRole("status", { name: "pane status" }).getByLabel("metrics hint")).toHaveCount(0);
+    await expect(status.getByLabel("metrics hint")).toHaveCount(0);
+
+    // ⇧M: the requests and limits of the nodes' pods (unfinished-pods.yaml), no metrics-server needed, as kubectl describe node;
+    // listing the pods takes a while (the tape's 1s): the status line says so meanwhile
+    await page.keyboard.press("Shift+M");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "%CPU REQ", "%CPU LIM", "%MEM REQ", "%MEM LIM", "STATUS"]);
+    await expect(status.getByLabel("requests/limits loading")).toHaveText("loading requests/limits…");
+    // 1500m and 4Gi requested of 2 cpu / 8Gi, 1 cpu limited; the init container counts as the max (1 cpu); a node without pods
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 6))).toEqual([
+      ["75%", "50%", "50%", "0%"],
+      ["50%", "0%", "0%", "0%"],
+      ["0%", "0%", "0%", "0%"],
+    ]);
+    await expect(status.getByLabel("requests/limits loading")).toHaveCount(0);
+    // m and ⇧M are independent: with both on, requests/limits stay where they are
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "%CPU REQ", "%CPU LIM", "%MEM REQ", "%MEM LIM", "STATUS"]);
+    await page.keyboard.press("Shift+M");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "STATUS"]);
+    await page.keyboard.press("m");
 
     await openTape(page, "e2e-deploys");
     await page.keyboard.press("m");
     await expect(page.getByLabel("message")).toContainText("metrics (kubectl top) are for pods and nodes");
+    await page.keyboard.press("Shift+M");
+    await expect(page.getByLabel("message")).toContainText("requests/limits of their pods are for nodes");
   });
 });
 

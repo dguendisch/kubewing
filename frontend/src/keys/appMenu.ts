@@ -69,6 +69,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Hide Healthy", "filter.toggleHealthy"],
       ["Columns…", "view.columns"],
       ["Metrics", "view.toggleMetrics"],
+      ["Requests / Limits", "view.toggleAllocation"],
       null,
       ["Toggle Line Wrap", "detail.toggleWrap"],
       null,

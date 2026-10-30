@@ -10,7 +10,8 @@ export interface ColumnRow {
   path?: string;
   expr?: string;
   missing?: boolean;
-  metric?: boolean;
+  /** A metric column's group (see MetricGroup). */
+  metric?: MetricGroup;
 }
 
 export const isCustom = (r: ColumnRow) => !!(r.path || r.expr);
@@ -46,42 +47,51 @@ export function toggleWide(rows: ColumnRow[]): ColumnRow[] {
   return rows.map((r) => (isWide(r) ? { ...r, shown: on } : r));
 }
 
-/** Metrics (kubectl top): on when every metric column is shown. */
-export function metricsOn(rows: ColumnRow[]): boolean {
-  const m = rows.filter(isMetric);
+/** A group of metric columns: usage (kubectl top, m) or a node's requests/limits (⇧M). */
+export type MetricGroup = "usage" | "alloc";
+
+const inGroup = (g: MetricGroup) => (r: ColumnRow) => r.metric === g;
+
+/** On when every metric column of the group is shown. */
+export function metricsOn(rows: ColumnRow[], group: MetricGroup): boolean {
+  const m = rows.filter(inGroup(group));
   return m.length > 0 && m.every((r) => r.shown);
 }
 
 /**
- * Shows all metric columns, or hides them all if they all are shown.
- * Hiding returns where they were (the shown column before the first of
- * them, "" = they were first; their order), to be saved. Showing puts them
- * back as placed (the saved place) if the column they followed is still
- * shown, else right after NAME, else after the last shown column; in the
- * saved order, the ones it doesn't name after them.
+ * Shows all metric columns of a group, or hides them all if they all are
+ * shown. Hiding returns where they were (the shown column before the first
+ * of them, "" = they were first; their order), to be saved. Showing puts
+ * them back as placed (the saved place) if the column they followed is
+ * still shown, else after the other group's last shown column (requests
+ * and limits after usage), else right after NAME, else after the last shown
+ * column; in the saved order, the ones it doesn't name after them.
  */
-export function toggleMetrics(rows: ColumnRow[], place?: MetricsPlace): { rows: ColumnRow[]; place?: MetricsPlace } {
-  if (metricsOn(rows)) {
-    const first = rows.findIndex((r) => isMetric(r) && r.shown);
-    const before = rows.slice(0, first).findLast((r) => r.shown && !isMetric(r));
-    const order = rows.filter((r) => isMetric(r) && r.shown).map((r) => r.name);
-    return { rows: rows.map((r) => (isMetric(r) ? { ...r, shown: false } : r)), place: { after: before?.name ?? "", order } };
+export function toggleMetrics(rows: ColumnRow[], group: MetricGroup, place?: MetricsPlace): { rows: ColumnRow[]; place?: MetricsPlace } {
+  const mine = inGroup(group);
+  if (metricsOn(rows, group)) {
+    const first = rows.findIndex((r) => mine(r) && r.shown);
+    const before = rows.slice(0, first).findLast((r) => r.shown && !mine(r));
+    const order = rows.filter((r) => mine(r) && r.shown).map((r) => r.name);
+    return { rows: rows.map((r) => (mine(r) ? { ...r, shown: false } : r)), place: { after: before?.name ?? "", order } };
   }
-  const rest = rows.filter((r) => !isMetric(r));
+  const rest = rows.filter((r) => !mine(r));
   const rank = (r: ColumnRow) => {
     const i = place?.order?.indexOf(r.name) ?? -1;
     return i < 0 ? Number.MAX_SAFE_INTEGER : i;
   };
   // a stable sort: those the saved order doesn't name keep theirs, after it
   const metric = rows
-    .filter(isMetric)
+    .filter(mine)
     .map((r) => ({ ...r, shown: true }))
     .sort((a, b) => rank(a) - rank(b));
   const after = place?.after;
   const shownAt = (name: string) => rest.findIndex((r) => r.shown && r.name === name);
+  const otherLast = rest.findLastIndex((r) => r.shown && isMetric(r));
   let at: number;
   if (after === "") at = 0;
   else if (after !== undefined && shownAt(after) >= 0) at = shownAt(after) + 1;
+  else if (otherLast >= 0) at = otherLast + 1;
   else at = (shownAt("NAME") >= 0 ? shownAt("NAME") : rest.findLastIndex((r) => r.shown)) + 1;
   return { rows: [...rest.slice(0, at), ...metric, ...rest.slice(at)] };
 }

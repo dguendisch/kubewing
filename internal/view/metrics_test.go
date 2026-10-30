@@ -2,6 +2,7 @@ package view
 
 import (
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -44,7 +45,7 @@ func TestMetricColumns(t *testing.T) {
 	ch := v.ColumnChoices()
 	var metric []string
 	for _, o := range ch.Options {
-		if o.Metric {
+		if o.Metric == "usage" {
 			metric = append(metric, o.Name)
 		}
 	}
@@ -64,8 +65,8 @@ func TestMetricColumns(t *testing.T) {
 	if got := cells(v)["a"]; !slices.Equal(got, []string{"api-0", "", "", "", "", "", ""}) {
 		t.Fatalf("before a poll = %q", got)
 	}
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 128 << 20}}, "")
-	if got := cells(v)["a"]; !slices.Equal(got, []string{"api-0", "250m", "50%", "25%", "128.0Mi", "50%", "13%"}) {
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 128 << 20}}})
+	if got := cells(v)["a"]; !slices.Equal(got, []string{"api-0", "250m", "50%", "25%", "128.0Mi", "50%", "12%"}) {
 		t.Fatalf("cells = %q", got)
 	}
 }
@@ -74,9 +75,9 @@ func TestMetricColumns(t *testing.T) {
 func TestMetricColumnsNotDiffed(t *testing.T) {
 	v := topView(t, Options{}, topColumns...)
 	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 1}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 250, Memory: 1}}})
 	v.Frame(t0)
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 900, Memory: 1}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 900, Memory: 1}}})
 	// the object changes too: still only its own columns are marked
 	v.Apply(source.Event{Type: source.Modified, Item: topPod("a", "api-0")}, t0.Add(time.Second))
 	f, ok := v.Frame(t0.Add(time.Second))
@@ -92,7 +93,7 @@ func TestMetricColumnsNotDiffed(t *testing.T) {
 func TestMetricColumnsSortAndGrep(t *testing.T) {
 	v := topView(t, Options{}, topColumns...)
 	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0"), topPod("b", "api-1"), topPod("c", "api-2")}}, t0)
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 90}, "ns/api-1": {CPU: 1200}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 90}, "ns/api-1": {CPU: 1200}}})
 	if err := v.SetStages([]pipeline.Stage{{Sort: []string{"-CPU"}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -113,13 +114,13 @@ func TestMetricColumnsSortAndGrep(t *testing.T) {
 		t.Fatalf("grep = %v", got)
 	}
 	// the next poll re-evaluates the grep
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 1200}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 1200}}})
 	if got := names(v); !slices.Equal(got, []string{"api-0"}) {
 		t.Fatalf("grep after a poll = %v", got)
 	}
 }
 
-// Nodes: usage against allocatable.
+// Nodes: usage against allocatable; percentages truncated, as kubectl.
 func TestNodeMetricColumns(t *testing.T) {
 	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "nodes"}, Render: pipeline.Render{Columns: []pipeline.Column{{Name: "NAME"}, {Name: "CPU"}, {Name: "%CPU"}, {Name: "MEM"}, {Name: "%MEM"}}}}, Options{Kind: "Node"})
 	if err != nil {
@@ -132,7 +133,7 @@ func TestNodeMetricColumns(t *testing.T) {
 	})
 	node.Cells = []any{"n1"}
 	v.Apply(source.Event{Type: source.Relist, Columns: podDefs[:1], Items: []source.Item{node}}, t0)
-	v.SetUsage(map[string]source.Usage{"/n1": {CPU: 1000, Memory: 2 << 30}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"/n1": {CPU: 1000, Memory: 2 << 30}}})
 	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "1000m", "25%", "2.0Gi", "25%"}) {
 		t.Fatalf("cells = %q", got)
 	}
@@ -142,7 +143,7 @@ func TestNodeMetricColumns(t *testing.T) {
 func TestMetricsUnavailable(t *testing.T) {
 	v := topView(t, Options{}, topColumns...)
 	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
-	v.SetUsage(nil, "metrics unavailable: the server could not find the requested resource")
+	v.SetMetrics(Metrics{UsageErr: "metrics unavailable: the server could not find the requested resource"})
 	f, _ := v.Frame(t0)
 	if f.Status == nil || f.Status.MetricsError == "" {
 		t.Fatalf("status = %+v", f.Status)
@@ -164,7 +165,7 @@ func TestMetricColumnsInThePast(t *testing.T) {
 	r := &recorder{Store: history.New(history.Limits{}), on: true}
 	v := topView(t, Options{History: r}, topColumns...)
 	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{r.item(topPod("a", "api-0"), t0)}}, t0)
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 250}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 250}}})
 	if err := v.SetTime(t0); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestMetricColumnsInThePast(t *testing.T) {
 		t.Fatalf("cpu in the past = %q", got)
 	}
 	// a poll while in the past doesn't fill them
-	v.SetUsage(map[string]source.Usage{"ns/api-0": {CPU: 300}}, "")
+	v.SetMetrics(Metrics{Usage: map[string]source.Usage{"ns/api-0": {CPU: 300}}})
 	if got := cells(v)["a"][1]; got != "" {
 		t.Fatalf("cpu in the past after a poll = %q", got)
 	}
@@ -181,5 +182,56 @@ func TestMetricColumnsInThePast(t *testing.T) {
 	}
 	if got := cells(v)["a"][1]; got != "300m" {
 		t.Fatalf("cpu live again = %q", got)
+	}
+}
+
+// Nodes: their pods' requests and limits of allocatable, as kubectl describe
+// node; a node no pod runs on has 0%, one with nothing summed yet (the
+// watch not synced) nothing. No metrics-server needed: no hint.
+func TestNodeAllocationColumns(t *testing.T) {
+	cols := []pipeline.Column{{Name: "NAME"}, {Name: "%CPU REQ"}, {Name: "%CPU LIM"}, {Name: "%MEM REQ"}, {Name: "%MEM LIM"}}
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "nodes"}, Render: pipeline.Render{Columns: cols}}, Options{Kind: "Node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := func(name string) source.Item {
+		it := item(map[string]any{
+			"apiVersion": "v1", "kind": "Node",
+			"metadata": map[string]any{"name": name, "uid": name},
+			// allocatable wins over capacity
+			"status": map[string]any{"allocatable": map[string]any{"cpu": "3870m", "memory": "15Gi"}, "capacity": map[string]any{"cpu": "4", "memory": "16Gi"}},
+		})
+		it.Cells = []any{name}
+		return it
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs[:1], Items: []source.Item{node("n1"), node("n2")}}, t0)
+	if !v.ShowsAllocation() || v.ShowsUsage() {
+		t.Fatalf("allocation %v, usage %v", v.ShowsAllocation(), v.ShowsUsage())
+	}
+	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "", "", "", ""}) {
+		t.Fatalf("before the sums = %q", got)
+	}
+	for _, o := range v.ColumnChoices().Options {
+		if strings.HasSuffix(o.Name, " REQ") && o.Metric != "alloc" {
+			t.Fatalf("%s: group %q", o.Name, o.Metric)
+		}
+	}
+	v.SetMetrics(Metrics{AllocLoading: true})
+	if f, _ := v.Frame(t0); f.Status == nil || !f.Status.AllocLoading {
+		t.Fatalf("status while loading = %+v", f.Status)
+	}
+	v.SetMetrics(Metrics{Alloc: map[string]source.Allocation{"n1": {
+		Requests: source.Usage{CPU: 3809, Memory: 15340778266},
+		Limits:   source.Usage{CPU: 2000, Memory: 10896 << 20},
+	}}})
+	// as in kubectl describe node: 3809m of 3870m is 98%, 2 is 51%; 15340778266 of 15Gi 95%
+	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "98%", "51%", "95%", "70%"}) {
+		t.Fatalf("n1 = %q", got)
+	}
+	if got := cells(v)["n2"]; !slices.Equal(got, []string{"n2", "0%", "0%", "0%", "0%"}) {
+		t.Fatalf("n2 = %q", got)
+	}
+	if f, _ := v.Frame(t0); f.Status != nil && f.Status.MetricsError != "" {
+		t.Fatalf("status = %+v", f.Status)
 	}
 }

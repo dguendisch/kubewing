@@ -35,6 +35,9 @@ type Tape struct {
 	// namespace/name ("/name" for nodes). A tape without is a cluster
 	// without metrics-server.
 	Metrics map[string]Usage `json:"metrics,omitempty"`
+	// ListDelay delays the initial list (e.g. "1s"), as a large cluster's
+	// list takes a while (replays only; not scaled by speed).
+	ListDelay string `json:"listDelay,omitempty"`
 }
 
 // Usage is an object's usage as quantities ("250m", "128Mi").

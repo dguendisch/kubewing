@@ -1,0 +1,14 @@
+# The cluster's unfinished pods, as the nodes' allocation columns watch them
+# (kubectl describe node's "Allocated resources"), on the nodes of
+# nodes.yaml (allocatable 2 cpu / 8Gi). ip-10-0-1-11: 1500m/4Gi requested,
+# 1 cpu limited (the sidecar-less api sets no limit); ip-10-0-2-22: an init
+# container counted as the max (1 cpu); ip-10-0-3-33: none.
+pipeline:
+  source: {resource: unfinished-pods}
+# listing all pods takes a while: the status line says it's loading
+listDelay: 1s
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-0, namespace: prod, uid: u-web-0}, spec: {nodeName: ip-10-0-1-11.ec2.internal, containers: [{name: c, resources: {requests: {cpu: 500m, memory: 1Gi}, limits: {cpu: "1"}}}]}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: api-0, namespace: prod, uid: u-api-0}, spec: {nodeName: ip-10-0-1-11.ec2.internal, containers: [{name: c, resources: {requests: {cpu: "1", memory: 3Gi}}}]}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: job-0, namespace: prod, uid: u-job-0}, spec: {nodeName: ip-10-0-2-22.ec2.internal, initContainers: [{name: migrate, resources: {requests: {cpu: "1"}}}], containers: [{name: c, resources: {requests: {cpu: 100m}}}]}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: pending-0, namespace: prod, uid: u-pending-0}, spec: {containers: [{name: c, resources: {requests: {cpu: "2"}}}]}, status: {phase: Pending}}

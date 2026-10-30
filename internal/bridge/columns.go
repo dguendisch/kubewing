@@ -69,17 +69,20 @@ func (s *Service) SetTypeColumns(typ string, cols []pipeline.Column) error {
 	return nil
 }
 
-// SetTypeMetrics turns a type's metric columns on or off, as columns
-// (see SetTypeColumns), and saves where they were (nil = right after
-// NAME): turned on again, they go back there. Both are sent with
-// ColumnsEvent at once.
-func (s *Service) SetTypeMetrics(typ string, cols []pipeline.Column, place *config.MetricsPlace) error {
-	prev := s.opts.Columns.Get(typ).Metrics
-	if err := s.opts.Columns.SetMetrics(typ, place); err != nil {
+// SetTypeMetrics turns a group of a type's metric columns ("usage",
+// "alloc") on or off, as columns (see SetTypeColumns), and saves where they
+// were (nil = right after NAME): turned on again, they go back there. Both
+// are sent with ColumnsEvent at once.
+func (s *Service) SetTypeMetrics(typ, group string, cols []pipeline.Column, place *config.MetricsPlace) error {
+	if group != config.GroupUsage && group != config.GroupAlloc {
+		return fmt.Errorf("unknown metric column group %q", group)
+	}
+	prev := s.opts.Columns.Get(typ).Place(group)
+	if err := s.opts.Columns.SetMetrics(typ, group, place); err != nil {
 		return fmt.Errorf("save %s: %w", config.ColumnsFile, err)
 	}
 	if err := s.SetTypeColumns(typ, cols); err != nil {
-		_ = s.opts.Columns.SetMetrics(typ, prev)
+		_ = s.opts.Columns.SetMetrics(typ, group, prev)
 		return err
 	}
 	return nil

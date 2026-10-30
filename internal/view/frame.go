@@ -66,4 +66,8 @@ type Status struct {
 	// MetricsError: the pane shows metric columns but there is no usage
 	// (no metrics-server, forbidden, unreachable)
 	MetricsError string `json:"metricsError,omitempty"`
+	// AllocLoading: the pane shows a node's requests/limits columns and
+	// their pods are still being listed; AllocError: they can't be
+	AllocLoading bool   `json:"allocLoading,omitempty"`
+	AllocError   string `json:"allocError,omitempty"`
 }

@@ -138,21 +138,21 @@ func TestTypeMetricsPlace(t *testing.T) {
 	}
 	defer svc.Close(a.Pane)
 	place := &config.MetricsPlace{After: "STATUS", Order: []string{"MEM", "CPU"}}
-	if err := svc.SetTypeMetrics("pods", []pipeline.Column{{Name: "NAME"}}, place); err != nil {
+	if err := svc.SetTypeMetrics("pods", "usage", []pipeline.Column{{Name: "NAME"}}, place); err != nil {
 		t.Fatal(err)
 	}
 	got := config.OpenColumns(dir).Get("pods")
 	if got.Metrics == nil || got.Metrics.After != "STATUS" || !slices.Equal(got.Metrics.Order, place.Order) || !slices.Equal(got.Columns, []pipeline.Column{{Name: "NAME"}}) {
 		t.Fatalf("saved = %+v", got)
 	}
-	if err := svc.SetTypeMetrics("pods", []pipeline.Column{{Name: "X", Expr: "o."}}, nil); err == nil {
+	if err := svc.SetTypeMetrics("pods", "usage", []pipeline.Column{{Name: "X", Expr: "o."}}, nil); err == nil {
 		t.Fatal("want error")
 	}
 	if got := svc.ColumnConfigs()["pods"].Metrics; got == nil || got.After != "STATUS" {
 		t.Fatalf("after a refused change = %+v", got)
 	}
 	// turned on: the place is used up; with the defaults nothing is left of the type
-	if err := svc.SetTypeMetrics("pods", nil, nil); err != nil {
+	if err := svc.SetTypeMetrics("pods", "usage", nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := config.OpenColumns(dir).All()["pods"]; ok {

@@ -33,38 +33,61 @@ describe("column dialog", () => {
         { name: "NAME", shown: true },
         { name: "STATUS", shown: true },
         { name: "IP", priority: 1, shown: true },
-        { name: "CPU", type: "number", shown: false, metric: true },
-        { name: "MEM", type: "bytes", shown: false, metric: true },
+        { name: "CPU", type: "number", shown: false, metric: "usage" },
+        { name: "MEM", type: "bytes", shown: false, metric: "usage" },
       ]);
     let r = base();
-    expect(metricsOn(r)).toBe(false);
-    r = toggleMetrics(r).rows;
+    expect(metricsOn(r, "usage")).toBe(false);
+    r = toggleMetrics(r, "usage").rows;
     expect(shown(r)).toEqual(["NAME", "CPU", "MEM", "STATUS", "IP"]);
-    expect(metricsOn(r)).toBe(true);
+    expect(metricsOn(r, "usage")).toBe(true);
     expect(toConfig(r, ["NAME", "STATUS"])).toEqual([{ name: "NAME" }, { name: "CPU" }, { name: "MEM" }, { name: "STATUS" }, { name: "IP" }]);
 
     // moved after STATUS (and MEM before CPU): off says so, on puts them back there, in that order
     r = moveTo(moveTo(r, 1, 3), 1, 2);
     expect(shown(r)).toEqual(["NAME", "STATUS", "MEM", "CPU", "IP"]);
-    const off = toggleMetrics(r);
+    const off = toggleMetrics(r, "usage");
     expect(off.place).toEqual({ after: "STATUS", order: ["MEM", "CPU"] });
     expect(shown(off.rows)).toEqual(["NAME", "STATUS", "IP"]);
     // as Go lists hidden columns again: in their built-in order
     const again = [...off.rows.filter((x) => !x.metric), ...base().filter((x) => x.metric)];
-    expect(shown(toggleMetrics(again, off.place).rows)).toEqual(["NAME", "STATUS", "MEM", "CPU", "IP"]);
+    expect(shown(toggleMetrics(again, "usage", off.place).rows)).toEqual(["NAME", "STATUS", "MEM", "CPU", "IP"]);
     // first: "" (not NAME)
-    const first = toggleMetrics(moveTo(moveTo(toggleMetrics(base()).rows, 1, 0), 2, 1));
+    const first = toggleMetrics(moveTo(moveTo(toggleMetrics(base(), "usage").rows, 1, 0), 2, 1), "usage");
     expect(first.place?.after).toBe("");
-    expect(shown(toggleMetrics(first.rows, first.place).rows)).toEqual(["CPU", "MEM", "NAME", "STATUS", "IP"]);
+    expect(shown(toggleMetrics(first.rows, "usage", first.place).rows)).toEqual(["CPU", "MEM", "NAME", "STATUS", "IP"]);
     // the column they followed is hidden meanwhile: after NAME (in their own order still)
-    expect(shown(toggleMetrics(toggle(again, 1), off.place).rows)).toEqual(["NAME", "MEM", "CPU", "IP"]);
+    expect(shown(toggleMetrics(toggle(again, 1), "usage", off.place).rows)).toEqual(["NAME", "MEM", "CPU", "IP"]);
     // turned on, the place is used up: nothing to save
-    expect(toggleMetrics(again, off.place).place).toBeUndefined();
+    expect(toggleMetrics(again, "usage", off.place).place).toBeUndefined();
 
     // partly shown counts as off: all of them on
-    expect(shown(toggleMetrics(toggle(base(), 3)).rows)).toEqual(["NAME", "CPU", "MEM", "STATUS", "IP"]);
+    expect(shown(toggleMetrics(toggle(base(), 3), "usage").rows)).toEqual(["NAME", "CPU", "MEM", "STATUS", "IP"]);
     // NAME hidden: after the last shown column
-    expect(shown(toggleMetrics(initialColumns([{ name: "NAME", shown: false }, { name: "STATUS", shown: true }, { name: "CPU", shown: false, metric: true }])).rows)).toEqual(["STATUS", "CPU"]);
+    expect(shown(toggleMetrics(initialColumns([{ name: "NAME", shown: false }, { name: "STATUS", shown: true }, { name: "CPU", shown: false, metric: "usage" }]), "usage").rows)).toEqual(["STATUS", "CPU"]);
+  });
+
+  test("requests/limits switch is its own group: after the usage columns by default, each keeps its place", () => {
+    let r = initialColumns([
+      { name: "NAME", shown: true },
+      { name: "STATUS", shown: true },
+      { name: "CPU", shown: false, metric: "usage" },
+      { name: "%CPU REQ", shown: false, metric: "alloc" },
+    ]);
+    r = toggleMetrics(r, "alloc").rows;
+    // no usage shown: right after NAME
+    expect(shown(r)).toEqual(["NAME", "%CPU REQ", "STATUS"]);
+    expect(metricsOn(r, "alloc")).toBe(true);
+    expect(metricsOn(r, "usage")).toBe(false);
+    const off = toggleMetrics(r, "alloc");
+    r = toggleMetrics(off.rows, "usage").rows;
+    expect(shown(r)).toEqual(["NAME", "CPU", "STATUS"]);
+    // its saved place wins: after NAME again, not after CPU
+    expect(shown(toggleMetrics(r, "alloc", off.place).rows)).toEqual(["NAME", "%CPU REQ", "CPU", "STATUS"]);
+    // without one: after the usage columns
+    expect(shown(toggleMetrics(r, "alloc").rows)).toEqual(["NAME", "CPU", "%CPU REQ", "STATUS"]);
+    // m doesn't touch them
+    expect(shown(toggleMetrics(toggleMetrics(r, "alloc").rows, "usage").rows)).toEqual(["NAME", "%CPU REQ", "STATUS"]);
   });
 
   test("the server's defaults save as null (follow the server); anything else as the shown columns in order", () => {
