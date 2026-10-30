@@ -357,7 +357,7 @@ What's sent:
 
 Anything refused (invalid YAML, a webhook, a conflict, "no changes") shows below the editor with your text kept.
 
-The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent). Only `Esc`, `⌘S` and `⌘⏎` reach the app, plus the keys that move focus to another pane or tab. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
+The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent). Only `Esc`, `⌘S` and `⌘⏎` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
 
 Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a context rule asks after the preview.
 

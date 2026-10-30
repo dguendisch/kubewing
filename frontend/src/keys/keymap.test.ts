@@ -141,7 +141,7 @@ describe("edit", () => {
   });
   it("the editor and its preview are modal: no global keys that change anything behind them", () => {
     for (const ctx of ["edit", "editpreview"] as const)
-      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+Shift+Enter", "Meta+O", "Meta+I"]) expect(resolve(k, ctx)).toBeUndefined();
+      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+O", "Meta+I"]) expect(resolve(k, ctx)).toBeUndefined();
     expect(resolve("Meta+D", "table")).toBe("pane.splitDown");
     expect(resolve("Meta+D", "detail")).toBe("pane.splitDown");
   });
@@ -152,6 +152,7 @@ describe("edit", () => {
       expect(resolve("Meta+1", ctx)).toBe("tab.goto1");
       expect(resolve("Ctrl+Tab", ctx)).toBe("tab.mruNext");
       expect(resolve("Meta+Shift+]", ctx)).toBe("tab.next");
+      expect(resolve("Meta+Shift+Enter", ctx)).toBe("pane.toggleMaximize");
     }
   });
   it("the preview steps through changes and applies with ⏎", () => {
