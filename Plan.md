@@ -4,9 +4,11 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 ## Next up
 
+- **Reverse references ("used by"):** the field reference rules (`refs.yaml`) read backwards: pods using this secret/configmap/claim, bindings granting this role, attachments of this volume. A `⌘J` section run on request (like the owned scan): a reverse step lists the referring kinds in full unless the field is metadata. `**` patterns expand to concrete paths per listed kind (pod, workload templates, cron job), which also build the target pane's CEL filter.
+- **Chains:** transitive jumps as configured sequences of rule ids, `~` reversing a step, e.g. `via: [pod-volume-pvc, pvc-volumename, ~va-pv]`, `show: each | set`. Bounded depth (~3) and lookups; no syntax beyond `via` + `show`. Port today's hand-written storage paths to built-in chains (the bridge tests prove it). Selector- and naming-convention-based relations (deployment → pods, stateful set claims) stay in Go.
+- top po/no
 - dedicated annotate/label/scale commands
 - cmd+o to support to show all namespaced or non-namespaced resources
-- special jumps from viewer/editor to e.g. volumes/secrets/configmaps
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - nit: remember window position across restarts
 - nit: shadow below dialogs (themeable on/off)
@@ -20,7 +22,8 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 - **Logs:** a whole-pane tail for non-pod panes (the union of their pods); previous-container logs (`--previous`); saving a tail to a file; an optional timestamp column.
 - **Decode:** a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
 - **Edit:** server-side apply (field manager `kubewing`, conflicts listed with their owners, force); recreate for immutable fields (delete + create, confirmed as delete); applying from files (see Scratch apply).
-- **Jump menu references:** more of them (pod → node, the configmaps/secrets/service account it uses, svc → pods, ingress → svc); a dependency tree view. Potentially also offer jump to from the viewer/editor!
+- **Jump menu references:** svc → pods (by selector: not a field rule); a dependency tree view.
+- **Field jumps:** a `*KeyRef` landing at `data.<key>` in the target's YAML; references inside decoded YAML (a managed resource's manifests); `⌘←` after a jump from the YAML back to the YAML at the same line (today: to the object view, cursor at the top).
 - **Field-path diff:** list items matched via OpenAPI `x-kubernetes-list-map-keys` (today: by `name`/`type`/… heuristics); "what changed" on the "changed, not visible" marker; a change stream for filters ("only rows whose `spec` changed", "image changed in last 10m").
 - **Moving panes:** a keyboard equivalent to move/swap the focused pane (e.g. `⌘⇧⌥` arrows).
 - **Resizing panes:** a keyboard equivalent to resize the focused pane (e.g. `⌘+ctrl` arrows up/down).

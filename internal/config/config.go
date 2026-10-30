@@ -1,5 +1,5 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
-// (config.yaml, keybindings.yaml, themes/*.yaml). kubewing only reads them:
+// (config.yaml, keybindings.yaml, refs.yaml, themes/*.yaml). kubewing only reads them:
 // the files it writes there are its own history.yaml (see HistoryStore) and
 // columns.yaml (see ColumnStore).
 // Missing files mean defaults;
@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/normalize"
+	"github.com/dguendisch/kubewing/internal/relations"
 )
 
 // Dir is $KUBEWING_HOME, else ~/.kubewing.
@@ -209,6 +210,17 @@ type Effective struct {
 	// Theme maps token names (theme.css without "--color-") to colors.
 	Theme  map[string]string `json:"theme"`
 	Errors []string          `json:"errors"`
+	// Refs are the field reference rules: refs.yaml's before the built-in
+	// ones; nil without refs.yaml (see Rules).
+	Refs *relations.Rules `json:"-"`
+}
+
+// Rules are the field reference rules in effect.
+func (e Effective) Rules() *relations.Rules {
+	if e.Refs == nil {
+		return relations.DefaultRules
+	}
+	return e.Refs
 }
 
 // Defaults is the configuration used without any files.
@@ -298,6 +310,15 @@ func Load(dir string) Effective {
 			}
 			e.Keybindings = append(e.Keybindings, b)
 		}
+	}
+
+	var refs relations.RulesFile
+	if read(dir, "refs.yaml", &refs, errf) {
+		rs, errs := relations.Compile(refs)
+		for _, err := range errs {
+			errf("refs.yaml", "%v", err)
+		}
+		e.Refs = rs
 	}
 
 	if t := e.Config.Theme; t != "" && t != "default" {

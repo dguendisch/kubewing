@@ -118,3 +118,19 @@ describe("jump menu items", () => {
     expect(view(jumpItems({ kind: "X", name: "x", items: [] }))).toEqual(["no owner |  | no ownerReferences | 0", "nothing known |  | no uid to look for | 0"]);
   });
 });
+
+describe("jump menu field section", () => {
+  it("from an object's YAML: the references at the cursor come first, the highlight on the first that can go; missing ones are disabled", () => {
+    const field = [
+      { id: "field:v1/Secret/shop/gizmo-token", section: "field" as const, label: "secret gizmo-token", gone: "missing" },
+      { id: "field:v1/Secret/shop/db", section: "field" as const, label: "secret db", places: 2, target: { resource: "secrets", namespace: "shop", filter: 'o.metadata.name == "db"' } },
+      { id: "field:v1/Node//n", section: "field" as const, label: "node n", note: "not checked: forbidden", target: { resource: "nodes" } },
+    ];
+    const items = jumpItems(pod, { field });
+    expect(view(items).slice(0, 4)).toEqual(["secret gizmo-token |  | missing | 0", "secret db | 2× |  | 0", "node n |  |  | 0", "pods in shop |  |  | 0"]);
+    expect(items[2]!.note).toBe("not checked: forbidden");
+    expect(firstJumpable(items)).toBe(1);
+    // nothing at the cursor: as from the table
+    expect(firstJumpable(jumpItems(pod, { field: [] }))).toBe(2);
+  });
+});

@@ -242,6 +242,8 @@ export interface Overlay {
   column?: string;
   /** cells: the row's cells to pick from. */
   cells?: CellChoice[];
+  /** jump: from an object's YAML (view, diff or editor), its text and the cursor line: the field section's references. */
+  yaml?: { text: string; line: number };
   pane: string;
   key?: string;
   /** closeTab: the tab to close (not the index: tabs move while the dialog is open). renameTab: the tab named. */
@@ -672,10 +674,10 @@ export function splitPane(s: UIState, dir: "row" | "column"): UIState {
   };
 }
 
-/** ⇧⏎ in the jump menu: a new pane below the focused one (⌘D direction), showing spec. */
-export function splitWith(s: UIState, spec: PaneSpec): UIState {
+/** ⇧⏎ in the jump menu: a new pane below the focused one (⌘D direction; "row": to its right), showing spec. */
+export function splitWith(s: UIState, spec: PaneSpec, dir: "row" | "column" = "column"): UIState {
   const id = `v${s.nextId}`;
-  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, t.focused, "column", id), focused: id }));
+  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, t.focused, dir, id), focused: id }));
   return { ...next, nextId: s.nextId + 1, panes: { ...s.panes, [id]: { id, spec, selected: 0 } }, focus: "table" };
 }
 

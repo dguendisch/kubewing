@@ -104,12 +104,12 @@ func TestRelationsOwnerChain(t *testing.T) {
 	if deploy.Depth != 2 || deploy.Label != "deployment web" || deploy.Target == nil || deploy.Target.Resource != "rel-deployments" {
 		t.Errorf("deployment = %+v %+v", deploy, deploy.Target)
 	}
-	// order: namespace, then owners by depth
+	// order: namespace, then owners by depth, references (its node, by the field rules)
 	var ids []string
 	for _, r := range got.Items {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, " ") != "ns:here ns:object owner:rr-web-7d9f owner:rd-web events" {
+	if strings.Join(ids, " ") != "ns:here ns:object owner:rr-web-7d9f owner:rd-web ref:v1/Node//node-1 events" {
 		t.Errorf("items = %v", ids)
 	}
 }
@@ -189,8 +189,9 @@ func TestOwnedScan(t *testing.T) {
 	if count(pods) != 1 || len(got.Items) != 2 {
 		t.Errorf("items = %+v", got.Items)
 	}
-	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, statefulsets, widgets; e2e-deploys shares a kind
-	if got.Scanned != 7 || got.Skipped != 0 {
+	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, rolebindings, roles, secrets,
+	// serviceaccounts, statefulsets, widgets; e2e-deploys shares a kind
+	if got.Scanned != 11 || got.Skipped != 0 {
 		t.Errorf("scanned %d skipped %d", got.Scanned, got.Skipped)
 	}
 }
@@ -374,25 +375,37 @@ func TestRelationsPodVolumes(t *testing.T) {
 			refs = append(refs, r.Label)
 		}
 	}
-	// in volume order, each claim followed by its volume; the attachments of both volumes; no config map
-	want := "persistentvolumeclaim data-0 / persistentvolume pv-data-0 / persistentvolumeclaim gizmo-0-scratch / persistentvolume pv-scratch / persistentvolumeclaim cache / rel-volumeattachments"
+	// in volume order, each claim followed by its volume; the attachments of both volumes; then what the
+	// field rules find besides, in YAML order (keys sorted: env, node, service account, volumes), each object
+	// once (db: two env vars), the claims not again
+	want := "persistentvolumeclaim data-0 / persistentvolume pv-data-0 / persistentvolumeclaim gizmo-0-scratch / persistentvolume pv-scratch / persistentvolumeclaim cache / rel-volumeattachments / " +
+		"secret db / secret gizmo-token / node node-2 / serviceaccount gizmo / configmap gizmo-config / secret gizmo-tls"
 	if strings.Join(refs, " / ") != want {
 		t.Errorf("references = %s", strings.Join(refs, " / "))
 	}
 	if c := m["ref:v1/PersistentVolumeClaim/shop/data-0"]; c.Target == nil || *c.Target != (relations.Target{Resource: "rel-pvcs", Namespace: "shop", Filter: `o.metadata.name == "data-0"`}) {
 		t.Errorf("claim = %+v %+v", c, c.Target)
 	}
-	if c := m["ref:v1/PersistentVolumeClaim/shop/cache"]; c.Gone != "not found" || c.Target != nil {
+	if c := m["ref:v1/PersistentVolumeClaim/shop/cache"]; c.Gone != "missing" || c.Target != nil {
 		t.Errorf("missing claim = %+v", c)
 	}
 	va := m["ref:storage.k8s.io/v1/VolumeAttachment"]
 	if count(va) != 3 || va.Target.Filter != `o.spec.source.persistentVolumeName in ["pv-data-0", "pv-scratch"]` {
 		t.Errorf("attachments = %+v %+v", va, va.Target)
 	}
-	// a pod without claims: no references
+	if db := m["ref:v1/Secret/shop/db"]; db.Places != 2 || db.Target == nil || db.Target.Resource != "rel-secrets" {
+		t.Errorf("db = %+v", db)
+	}
+	if tok := m["ref:v1/Secret/shop/gizmo-token"]; tok.Gone != "missing" || tok.Target != nil {
+		t.Errorf("gizmo-token = %+v", tok)
+	}
+	if cm := m["ref:v1/ConfigMap/shop/gizmo-config"]; cm.Target == nil || *cm.Target != (relations.Target{Resource: "rel-configmaps", Namespace: "shop", Filter: `o.metadata.name == "gizmo-config"`}) {
+		t.Errorf("config map = %+v %+v", cm, cm.Target)
+	}
+	// a pod without claims: its node only
 	got, _ = svc.Relations(pods.Pane, "rp-web-a")
 	for _, r := range got.Items {
-		if r.Section == relations.SectionReference {
+		if r.Section == relations.SectionReference && r.ID != "ref:v1/Node//node-1" {
 			t.Errorf("web-7d9f-a: %+v", r)
 		}
 	}
@@ -506,4 +519,111 @@ func TestEventsTarget(t *testing.T) {
 	if r := byID(rel.Items)["events"]; r.Count == nil || *r.Count != 1 || r.Target.Namespace != "" {
 		t.Errorf("node: events entry = %+v %+v", r, r.Target)
 	}
+}
+
+// lineOf is the 0-based line of the first line of text containing s.
+func lineOf(t *testing.T, text, s string) int {
+	t.Helper()
+	for i, l := range strings.Split(text, "\n") {
+		if strings.Contains(l, s) {
+			return i
+		}
+	}
+	t.Fatalf("%q not in\n%s", s, text)
+	return -1
+}
+
+func TestFieldRelations(t *testing.T) {
+	svc, _ := relSetup(t)
+	pods := openSynced(t, svc, "source: {resource: rel-pods}", 6)
+	d, err := svc.Object(pods.Pane, "rp-gizmo-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	marks, err := svc.FieldRefs(pods.Pane, d.YAML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var labels []string
+	for _, m := range marks {
+		labels = append(labels, m.Label)
+	}
+	// every reference value, in the text's order: the owner too (a click on it goes there)
+	if got := strings.Join(labels, ", "); got != "widget gizmo, secret db, secret db, secret gizmo-token, node node-2, serviceaccount gizmo, persistentvolumeclaim data-0, persistentvolumeclaim cache, configmap gizmo-config, secret gizmo-tls" {
+		t.Errorf("marks = %s", got)
+	}
+	tls := lineOf(t, d.YAML, "secretName: gizmo-tls")
+	if m := marks[len(marks)-1]; m.Line != tls || strings.Split(d.YAML, "\n")[tls][m.Col-1:m.EndCol-1] != "gizmo-tls" {
+		t.Errorf("gizmo-tls mark = %+v", m)
+	}
+
+	at := func(line int) map[string]relations.Relation {
+		t.Helper()
+		got, err := svc.FieldRelations(pods.Pane, d.YAML, line)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range got {
+			if r.Section != relations.SectionField {
+				t.Errorf("%+v: section %s", r, r.Section)
+			}
+		}
+		return byID(got)
+	}
+	// on the value: that secret, checked and jumpable
+	m := at(tls)
+	if r := m["field:v1/Secret/shop/gizmo-tls"]; len(m) != 1 || r.Target == nil || *r.Target != (relations.Target{Resource: "rel-secrets", Namespace: "shop", Filter: `o.metadata.name == "gizmo-tls"`}) {
+		t.Errorf("at gizmo-tls: %+v", m)
+	}
+	// on the container: its env's secrets, db once for two fields, the missing one
+	m = at(lineOf(t, d.YAML, "- env:"))
+	if db := m["field:v1/Secret/shop/db"]; len(m) != 2 || db.Places != 2 || db.Target == nil {
+		t.Errorf("at the container: %+v", m)
+	}
+	if tok := m["field:v1/Secret/shop/gizmo-token"]; tok.Gone != "missing" || tok.Target != nil {
+		t.Errorf("gizmo-token = %+v", tok)
+	}
+	// the node is cluster-scoped: no namespace; nothing on a line without a reference
+	if r := at(lineOf(t, d.YAML, "nodeName:"))["field:v1/Node//node-2"]; r.Target == nil || *r.Target != (relations.Target{Resource: "rel-nodes", Filter: `o.metadata.name == "node-2"`}) {
+		t.Errorf("node = %+v", r)
+	}
+	if m := at(lineOf(t, d.YAML, "name: gizmo-0")); len(m) != 0 {
+		t.Errorf("at the name: %+v", m)
+	}
+
+	// a role binding: the role by apiGroup without a version, subjects as service accounts (in their namespace)
+	rbs := openSynced(t, svc, "source: {resource: rel-rolebindings}", 1)
+	d, _ = svc.Object(rbs.Pane, "rrb-gizmo-reader")
+	if r := at2(t, svc, rbs.Pane, d.YAML, lineOf(t, d.YAML, "roleRef:"))["field:rbac.authorization.k8s.io//Role/shop/gizmo-reader"]; r.Target == nil || r.Target.Resource != "rel-roles" || r.Label != "role gizmo-reader" {
+		t.Errorf("role = %+v", r)
+	}
+	m = at2(t, svc, rbs.Pane, d.YAML, lineOf(t, d.YAML, "subjects:"))
+	if r := m["field:v1/ServiceAccount/shop/gizmo"]; len(m) != 2 || r.Target == nil || r.Target.Resource != "rel-serviceaccounts" {
+		t.Errorf("subjects = %+v", m)
+	}
+	if r := m["field:v1/ServiceAccount/tools/ci"]; r.Gone != "missing" {
+		t.Errorf("ci = %+v", r)
+	}
+	// the editor's text: what's typed, not what's stored
+	role := lineOf(t, d.YAML, "roleRef:")
+	lines := strings.Split(d.YAML, "\n")
+	for i := role + 1; i < len(lines) && strings.HasPrefix(lines[i], "  "); i++ {
+		lines[i] = strings.Replace(lines[i], "name: gizmo-reader", "name: other", 1)
+	}
+	edited := strings.Join(lines, "\n")
+	if r := at2(t, svc, rbs.Pane, edited, role)["field:rbac.authorization.k8s.io//Role/shop/other"]; r.Gone != "missing" {
+		t.Errorf("edited role = %+v", r)
+	}
+	if _, err := svc.FieldRelations(rbs.Pane, "a: [", 0); err == nil {
+		t.Error("invalid YAML: no error")
+	}
+}
+
+func at2(t *testing.T, svc *Service, pane, text string, line int) map[string]relations.Relation {
+	t.Helper()
+	got, err := svc.FieldRelations(pane, text, line)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return byID(got)
 }

@@ -23,11 +23,13 @@ export interface JumpItem {
   indent?: number;
 }
 
-export const sectionTitle: Record<Relation["section"], string> = { namespace: "namespace", owner: "owners", owned: "owned", reference: "references", events: "events" };
+export const sectionTitle: Record<Relation["section"], string> = { field: "at the cursor", namespace: "namespace", owner: "owners", owned: "owned", reference: "references", events: "events" };
 
 /** State of the open jump menu (read by the dispatcher for ⏎ / j / k). */
 export interface JumpState {
   rel?: Relations;
+  /** From an object's YAML: what the field at the cursor refers to (loading: undefined). */
+  field?: Relation[];
   items: JumpItem[];
   /** The owned scan: running, its result, or what went wrong. */
   scanning?: boolean;
@@ -47,11 +49,21 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /**
  * Menu rows for a row's relations, plus the owned scan's state. Pure.
+ * From an object's YAML, the references at its cursor come first (field).
  * Owned entries list the known kinds; the scan entry is replaced by what
  * the scan found (kinds already listed aren't repeated). References and
  * events follow the owned section, scan entries included.
  */
-export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "scanned" | "scanError" | "scanAsked"> = {}): JumpItem[] {
+export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "scanned" | "scanError" | "scanAsked" | "field"> = {}): JumpItem[] {
+  const field: JumpItem[] = (scan.field ?? []).map((r) => ({
+    id: r.id,
+    section: "field",
+    label: r.label,
+    target: r.target,
+    note: r.note,
+    detail: r.places ? `${r.places}×` : undefined,
+    disabled: r.gone ?? (r.target ? undefined : "nowhere to go"),
+  }));
   const out: JumpItem[] = [];
   const refs: JumpItem[] = [];
   const events: JumpItem[] = [];
@@ -62,6 +74,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
       if (r.controller) it.detail = "controller";
     }
     if (r.count !== undefined) it.detail = String(r.count);
+    else if (r.places) it.detail = `${r.places}×`;
     if (r.gone) it.disabled = r.gone;
     else if (!r.target) it.disabled = "nowhere to go";
     // no events yet is still worth watching
@@ -101,11 +114,13 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     out.push({ id: "owned:none", section: "owned", label: "nothing known", disabled: "no uid to look for" });
   }
   // after the owned scan's entries
-  return [...out, ...refs, ...events];
+  return [...field, ...out, ...refs, ...events];
 }
 
-/** The first entry that can be run (the highlight's start), or 0. */
+/** The first entry that can be run (the highlight's start: the field section's, else past the namespace), or 0. */
 export function firstJumpable(items: JumpItem[]): number {
+  const f = items.findIndex((x) => jumpable(x) && x.section === "field");
+  if (f >= 0) return f;
   const i = items.findIndex((x) => jumpable(x) && !x.scan && x.section !== "namespace");
   if (i >= 0) return i;
   const j = items.findIndex(jumpable);

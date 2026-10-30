@@ -2075,9 +2075,9 @@ test.describe("decode (⏎ in the YAML)", () => {
     await expect(dec.locator(".view-lines")).toContainText('"registry.example.com": {');
     await expect(dec.locator(".view-lines")).not.toContainText("auths:");
     expect(await dec.locator(".view-lines").evaluate((el) => el.closest("[data-mode-id]")?.getAttribute("data-mode-id"))).toBe("json");
-    // tokenized as JSON: a key and a string value in different colors
+    // tokenized as JSON: a key and a string value in different colors (Monaco tokenizes after rendering: poll)
     const color = (text: string) => dec.locator(".view-lines span span", { hasText: text }).first().evaluate((el) => getComputedStyle(el).color);
-    expect(await color('"auths"')).not.toBe(await color('"ZTJl'));
+    await expect.poll(async () => (await color('"auths"')) !== (await color('"ZTJl'))).toBe(true);
     await dec.locator(".view-line", { hasText: '"auth":' }).click();
     await page.keyboard.press("Enter");
     await expect(crumbs(page)).toContainText('auths["registry.example.com"].auth');
@@ -3860,6 +3860,8 @@ test.describe("jump to (⌘J)", () => {
         - menuitem "↑ deployment web controller"
         - separator "owned"
         - menuitem "scan for owned… in shop"
+        - separator "references"
+        - menuitem "node node-2"
         - separator "events"
         - menuitem "events 2"
     `);
@@ -3869,13 +3871,13 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("j");
     await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
     // it wraps around: past the last entry to the first, and back up
-    for (let i = 0; i < 2; i++) await page.keyboard.press("ArrowDown");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowDown");
     await expect(jump(page).locator("[data-active]")).toContainText("events");
     await page.keyboard.press("ArrowDown");
     await expect(jump(page).locator("[data-active]")).toContainText("rel-pods in shop");
     await page.keyboard.press("ArrowUp");
     await expect(jump(page).locator("[data-active]")).toContainText("events");
-    for (let i = 0; i < 2; i++) await page.keyboard.press("k");
+    for (let i = 0; i < 3; i++) await page.keyboard.press("k");
     await expect(jump(page).locator("[data-active]")).toContainText("deployment web");
     await page.keyboard.press("Enter");
     await expect(jump(page)).toHaveCount(0);
@@ -4210,7 +4212,7 @@ test.describe("jump to (⌘J)", () => {
     // tape resource names; the pods are already listed above (same kind), so not repeated
     await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
     await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
-    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 9 types");
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 12 types");
     await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
     await expect.poll(async () => {
       const p = await focused(page);
@@ -4276,7 +4278,8 @@ test.describe("jump to (⌘J)", () => {
     await openRel(page, "rel-pods", 6);
     await select(page, "rp-gizmo-0");
     await page.keyboard.press("ControlOrMeta+J");
-    // in volume order (the ephemeral volume's claim too), each claim followed by its volume; the config map volume isn't listed
+    // in volume order (the ephemeral volume's claim too), each claim followed by its volume; then what the field
+    // rules find (in the YAML's order: env, node, service account, volumes), each object once, a missing one disabled
     await expect(jump(page)).toMatchAriaSnapshot(`
       - menu "jump from gizmo-0":
         - text: jump from pod gizmo-0 · shop ⏎ here · ⇧⏎ split
@@ -4292,8 +4295,14 @@ test.describe("jump to (⌘J)", () => {
         - menuitem "persistentvolume pv-data-0"
         - menuitem "persistentvolumeclaim gizmo-0-scratch"
         - menuitem "persistentvolume pv-scratch"
-        - menuitem "persistentvolumeclaim cache · not found" [disabled]
+        - menuitem "persistentvolumeclaim cache · missing" [disabled]
         - menuitem "rel-volumeattachments 3"
+        - menuitem "secret db 2×"
+        - menuitem "secret gizmo-token · missing" [disabled]
+        - menuitem "node node-2"
+        - menuitem "serviceaccount gizmo"
+        - menuitem "configmap gizmo-config"
+        - menuitem "secret gizmo-tls"
         - separator "events"
         - menuitem "events 0"
     `);
@@ -4308,6 +4317,82 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("ControlOrMeta+J");
     await jump(page).getByRole("menuitem", { name: "persistentvolumeclaim gizmo-0-scratch" }).click();
     await expect.poll(shown).toBe("rel-pvcs shop rpvc-scratch");
+  });
+
+  test("from a pod's YAML: ⌘J lists the references at the cursor first; ⌘-click jumps; the editor jumps into a split", async ({ page }) => {
+    // Monaco renders the lines on screen only: tall enough for the whole pod
+    await page.setViewportSize({ width: 1400, height: 1400 });
+    await openRel(page, "rel-pods", 6);
+    await select(page, "rp-gizmo-0");
+    await page.keyboard.press("Enter");
+    const yaml = page.getByRole("region", { name: "object detail" });
+    await expect(yaml.locator(".view-lines")).toContainText("secretName: gizmo-tls");
+    // the reference values are marked
+    await expect(yaml.locator(".kw-ref", { hasText: "gizmo-tls" })).toBeVisible();
+    await expect(yaml.locator(".kw-ref", { hasText: "gizmo-config" })).toBeVisible();
+
+    // on the value: that secret, highlighted, above the rest of the menu
+    await yaml.locator(".view-line", { hasText: "secretName: gizmo-tls" }).click();
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("separator").first()).toHaveAccessibleName("at the cursor");
+    // anchored at the cursor: just below its line, or (no room below) just above it
+    const atCursor = async (line: { y: number; height: number }) => {
+      const m = (await jump(page).boundingBox())!;
+      return Math.min(Math.abs(m.y - (line.y + line.height)), Math.abs(m.y + m.height - (line.y + line.height))) < 4;
+    };
+    expect(await atCursor((await yaml.locator(".view-line", { hasText: "secretName: gizmo-tls" }).boundingBox())!)).toBe(true);
+    await expect(jump(page).locator("[data-active]")).toContainText("secret gizmo-tls");
+    await page.keyboard.press("Escape");
+
+    // on the container: its env's secrets (db once, for two fields; the missing one disabled)
+    await yaml.locator(".view-line", { hasText: "- env:" }).click();
+    await page.keyboard.press("ControlOrMeta+J");
+    // (the menu's references section has them too, further down: the field section is first)
+    await expect(jump(page).getByRole("menuitem", { name: "secret db 2×" }).first()).toHaveAttribute("data-active", "true");
+    await expect(jump(page).getByRole("menuitem", { name: /^secret gizmo-token/ }).first()).toBeDisabled();
+    await expect(jump(page).locator("[data-active]")).toContainText("secret db");
+    // ⏎: the secret in place; ⌘← back to the pod's YAML
+    await page.keyboard.press("Enter");
+    const shown = async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace ?? ""} ${p.rows.map((r) => r.key).sort()}` : "";
+    };
+    await expect.poll(shown).toBe("rel-secrets shop rs-db");
+    await expect(page.getByLabel("cel")).toHaveValue('o.metadata.name == "db"');
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(yaml.locator(".view-lines")).toContainText("secretName: gizmo-tls");
+
+    // ⌘-click on a marked value goes straight there; ⇧⌘-click into a split
+    await yaml.locator(".view-line", { hasText: "serviceAccountName: gizmo" }).locator(".kw-ref").click({ modifiers: ["ControlOrMeta"] });
+    await expect.poll(shown).toBe("rel-serviceaccounts shop rsa-gizmo");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect(yaml.locator(".kw-ref", { hasText: "node-2" })).toBeVisible();
+    const panes = page.locator("section[data-pane]");
+    await expect(panes).toHaveCount(1);
+    await yaml.locator(".kw-ref", { hasText: "node-2" }).click({ modifiers: ["ControlOrMeta", "Shift"] });
+    await expect.poll(shown).toBe("rel-nodes  rnd-2");
+    await expect(panes).toHaveCount(2);
+    await page.keyboard.press("Control+D"); // closes the split (⌘W would ask: the tab has two panes)
+    await expect(panes).toHaveCount(1);
+
+    // in the editor, on the text as typed: ⌘J's entries open in a split (the edit stays)
+    await expect(yaml.locator(".view-lines")).toContainText("secretName: gizmo-tls");
+    await page.keyboard.press("e");
+    const editor = page.getByRole("region", { name: "edit object" });
+    await expect(editor.locator(".view-lines")).toContainText("secretName: gizmo-tls");
+    await editor.locator(".view-line", { hasText: "configMap:" }).click();
+    await page.keyboard.press("ControlOrMeta+J");
+    // in the editor too
+    expect(await atCursor((await editor.locator(".view-line", { hasText: "configMap:" }).boundingBox())!)).toBe(true);
+    await expect(jump(page).locator("[data-active]")).toContainText("configmap gizmo-config");
+    await page.keyboard.press("Enter");
+    await expect.poll(shown).toBe("rel-configmaps shop rc-gizmo-config");
+    // the editor is still there, the split to its right
+    await expect(panes).toHaveCount(2);
+    await expect(editor).toBeVisible();
+    const [left, right] = [(await panes.nth(0).boundingBox())!, (await panes.nth(1).boundingBox())!];
+    expect(right.x).toBeGreaterThan(left.x);
+    expect(Math.abs(right.y - left.y)).toBeLessThan(2);
   });
 
   test("a stateful set jumps to its claims, their volumes and attachments, each as one counted entry", async ({ page }) => {

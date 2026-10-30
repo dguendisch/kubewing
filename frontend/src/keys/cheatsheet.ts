@@ -126,7 +126,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("toggle diff", "detail.toggleDiff"),
       row("re-run describe", "detail.refresh"),
       rowIn("detail", "edit YAML", "object.edit"),
-      rowIn("detail", "jump to namespace / owner / owned", "object.jump"),
+      rowIn("detail", "jump: what the field at the cursor refers to, then namespace / owner / owned (⌘-click a marked value: straight there)", "object.jump"),
       rowIn("detail", "events of the object", "object.events"),
       row("wrap long lines on / off", "detail.toggleWrap"),
       row("next / previous change (diff)", "diff.next", "diff.prev"),
@@ -141,6 +141,7 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("preview the change (server dry run), then apply", "edit.submit"),
       row("back to editing / close", "edit.back"),
+      rowIn("edit", "jump from the field at the cursor (into a split to the right; ⌘-click a marked value too)", "object.jump"),
     ],
   },
   {

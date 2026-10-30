@@ -250,7 +250,7 @@ func TestPodVolumes(t *testing.T) {
 		"PersistentVolumeClaim bound c1  ",
 		"PersistentVolume pv-1   ",
 		"PersistentVolumeClaim pending c2  ",
-		"PersistentVolumeClaim gone  not found ",
+		"PersistentVolumeClaim gone  missing ",
 		"PersistentVolumeClaim bound2 c4  ",
 		"PersistentVolume pv-2   ",
 		`VolumeAttachment    o.spec.source.persistentVolumeName in ["pv-1", "pv-2"]`,
@@ -259,7 +259,7 @@ func TestPodVolumes(t *testing.T) {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(s, "\n"), strings.Join(want, "\n"))
 	}
 	// no bound volume: no attachments entry
-	if got := PodVolumes(pod, nil); len(got) != 4 || got[0].Missing != "not found" {
+	if got := PodVolumes(pod, nil); len(got) != 4 || got[0].Missing != "missing" {
 		t.Errorf("no claims read = %+v", got)
 	}
 }

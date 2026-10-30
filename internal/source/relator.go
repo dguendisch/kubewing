@@ -113,7 +113,8 @@ func qualified(gvr schema.GroupVersionResource) string {
 }
 
 // ResolveKind maps apiVersion + kind to a resource via the RESTMapper, so
-// CRD kinds work like built-ins (a miss refreshes discovery once).
+// CRD kinds work like built-ins (a miss refreshes discovery once). A group
+// without a version ("rbac.authorization.k8s.io/") maps to its preferred one.
 func (c *Cluster) ResolveKind(apiVersion, kind string) (Resolved, error) {
 	gv, err := schema.ParseGroupVersion(apiVersion)
 	if err != nil {

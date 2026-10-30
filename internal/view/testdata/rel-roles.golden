@@ -1,0 +1,30 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "rro-gizmo-reader"
+  ],
+  "rows": [
+    {
+      "key": "rro-gizmo-reader",
+      "cells": [
+        "shop",
+        "gizmo-reader"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}

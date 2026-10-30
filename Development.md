@@ -32,7 +32,7 @@ cd frontend && VITE_KW_TRANSPORT=ws npx vite        # terminal 2
 
 ### Tapes
 
-Scenario tapes (`testdata/tapes/*.yaml`) are scripted fake clusters: starting objects plus timed watch events (add, update, delete, relist, recreate under the same name). They drive the goldens, and the headless E2E backend. `testdata/catalog.yaml` is the fake catalog for completion. `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata, acting as a fake API for the jump menu. The headless backend also fakes actions (an echo shell, port-forward, logs).
+Scenario tapes (`testdata/tapes/*.yaml`) are scripted fake clusters: starting objects plus timed watch events (add, update, delete, relist, recreate under the same name). They drive the goldens, and the headless E2E backend. `testdata/catalog.yaml` is the fake catalog for completion. `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata, acting as a fake API for the jump menu (a tape serves its first object's kind; a group without a version, as in RBAC's `apiGroup`, takes any tape of that group and kind). The headless backend also fakes actions (an echo shell, port-forward, logs).
 
 ## Tests
 

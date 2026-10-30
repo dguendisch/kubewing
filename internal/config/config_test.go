@@ -9,6 +9,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/dguendisch/kubewing/internal/normalize"
+	"github.com/dguendisch/kubewing/internal/relations"
 )
 
 func write(t *testing.T, files map[string]string) string {
@@ -258,5 +259,27 @@ func TestHistoryLimits(t *testing.T) {
 	e = Load(dir)
 	if b, _ := e.Config.History.Parse(); len(e.Errors) != 1 || !strings.Contains(e.Errors[0], `unknown field "window"`) || b != 64<<20 {
 		t.Errorf("old window: errors %v, budget %v", e.Errors, b)
+	}
+}
+
+func TestRefs(t *testing.T) {
+	if Load("").Rules() != relations.DefaultRules {
+		t.Error("no config: the built-in rules")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "refs.yaml"), []byte(`rules:
+- {id: widget-config, kinds: [e2e.kubewing/Widget], path: "spec.configs[*]", name: ref, target: ConfigMap}
+- {id: broken, path: "a..b", target: Secret}
+disable: [node-name]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := Load(dir)
+	if len(e.Errors) != 1 || !strings.Contains(e.Errors[0], "refs.yaml: rules[1] (broken)") {
+		t.Errorf("errors %v", e.Errors)
+	}
+	root, _ := relations.ParseYAML("spec: {configs: [{ref: a}], nodeName: n}")
+	if got := e.Rules().Match(root, "e2e.kubewing", "Widget", "shop"); len(got) != 1 || got[0].Name != "a" {
+		t.Errorf("refs = %+v", got)
 	}
 }

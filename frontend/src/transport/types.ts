@@ -365,7 +365,7 @@ export interface JumpTarget {
 /** Mirrors relations.Relation: one jump menu entry. */
 export interface Relation {
   id: string;
-  section: "namespace" | "owner" | "owned" | "reference" | "events";
+  section: "field" | "namespace" | "owner" | "owned" | "reference" | "events";
   label: string;
   kind?: string;
   name?: string;
@@ -380,6 +380,16 @@ export interface Relation {
   gone?: string;
   /** Qualifies an entry that still works (not checked, not counted). */
   note?: string;
+  /** How many fields refer to this object (from 2 on). */
+  places?: number;
+}
+
+/** Mirrors bridge.FieldMark: a reference value in a YAML text (0-based line, 1-based columns, end exclusive). */
+export interface FieldMark {
+  line: number;
+  col: number;
+  endCol: number;
+  label: string;
 }
 
 /** Mirrors bridge.Relations: the jump menu of one row. */
@@ -686,6 +696,10 @@ export interface Transport {
   rowIndex(pane: string, key: string): Promise<number>;
   /** The jump menu of a row: namespace, owner chain, known owned kinds (read-only, metadata only). */
   relations(pane: string, key: string): Promise<Relations>;
+  /** The reference values in an object's YAML (as shown), to mark and ⌘-click. */
+  fieldRefs(pane: string, text: string): Promise<FieldMark[]>;
+  /** The jump menu's field section: what the field at line (0-based) of text refers to, looked up. */
+  fieldRelations(pane: string, text: string, line: number): Promise<Relation[]>;
   /** Where v goes: the events about the row's object (read-only; refused for an event). */
   eventsTarget(pane: string, key: string): Promise<JumpTarget>;
   /** Every resource type with objects owned by the row (lists all types: explicit only). */

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { dispatch, flash } from "../commands";
+import { dispatch, flash, jumpToField } from "../commands";
 import { Editor } from "../editor/Editor";
-import { setDiffRange, useDiffNavOf, viewSlot, Viewer, type ContextAction, type ViewState } from "../editor/Viewer";
+import { setDiffRange, useDiffNavOf, viewSlot, Viewer, type ContextAction, type FieldRefs, type ViewState } from "../editor/Viewer";
 import { prettyKey } from "../keys/keymap";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
@@ -189,6 +189,9 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
   const version = o.version;
   const follow = !!o.diff && !describe && version === undefined;
   const key = o.key;
+  const st = usePaneStatus(serverId);
+  // a source just (re)opened (back to a YAML a jump left) doesn't hold its objects yet: "not found" then is only "not yet"
+  const synced = !!st?.synced;
 
   // another source: start over; another row (following) or version: keep showing the last one until it's there
   useEffect(() => setData(undefined), [serverId]);
@@ -206,7 +209,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
             setUI((s) => (s.panes[pane.id]?.object?.key === key && s.panes[pane.id]?.object?.title !== d.name ? S.setObject(s, pane.id, (x) => ({ ...x, title: d.name })) : s));
           },
           // a row gone meanwhile (deleted while followed): its last state stays, with why
-          (e: Error) => live && setData((cur) => (cur && "yaml" in cur && cur.key === key ? cur : { error: e.message })),
+          (e: Error) => live && synced && setData((cur) => (cur && "yaml" in cur && cur.key === key ? cur : { error: e.message })),
         );
     void load();
     // the newest version moves on while the diff is open (the YAML too): follow it
@@ -215,7 +218,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
       live = false;
       clearInterval(t);
     };
-  }, [key, serverId, version, follow, describe, !!o.diff]);
+  }, [key, serverId, version, follow, describe, !!o.diff, synced]);
 
   const info = data && "yaml" in data && o.diff ? data.diff : undefined;
   useEffect(() => {
@@ -244,7 +247,6 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
     };
   }, [describe, key, serverId, gen]);
 
-  const st = usePaneStatus(serverId);
   const fieldKey = useKey("travel.field");
   const decodeKey = useKey("detail.decode");
   const diff = !!o.diff;
@@ -270,6 +272,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
     : [decodeAction];
   const focus = () => setUI((s) => S.focusPane(s, pane.id));
   const viewer = { slot: pane.id, autoFocus: focused, onFocus: focus };
+  const refs = useFieldRefs(pane);
   return (
     <div role="region" aria-label="object detail" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 whitespace-nowrap border-b border-border px-2 py-0.5 text-fg-muted" aria-busy={stale || undefined}>
@@ -320,13 +323,20 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
           </div>
         ) : diff ? (
           // one diff editor across versions and followed rows: the models are swapped, the scroll position stays
-          <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} contextActions={actions} {...viewer} />
+          <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} contextActions={actions} refs={refs} {...viewer} />
         ) : (
-          <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={actions} {...viewer} />
+          <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={actions} refs={refs} {...viewer} />
         )}
       </div>
     </div>
   );
+}
+
+/** The pane's object YAML marks its references; ⌘-click jumps (see jumpToField). */
+function useFieldRefs(pane: S.PaneState): FieldRefs | undefined {
+  const serverId = pane.serverId;
+  if (!serverId) return undefined;
+  return { serverId, jump: (text, line, split) => void jumpToField(pane.id, text, line, split) };
 }
 
 /** A newer response that shows the same thing keeps the old object (no Monaco reload while following). */
@@ -578,13 +588,14 @@ function Chain({ paneId, data, toggled }: { paneId: string; data: Decoded; toggl
 function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; focused: boolean }) {
   const preview = e.preview;
   const focus = () => setUI((s) => S.focusPane(s, pane.id));
+  const refs = useFieldRefs(pane);
   return (
     <div role="region" aria-label="edit object" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 whitespace-nowrap border-b border-border px-2 py-0.5 text-fg-muted">
         <span className="text-fg">{e.title}</span>
         <span>{preview ? "preview (server dry run: current → after the edit)" : e.yaml !== e.opened ? "edit (changed)" : "edit"}</span>
         {preview ? <DiffNav paneId={pane.id} slot={`${pane.id}/edit`} /> : null}
-        <span className="ml-auto min-w-0 truncate">{preview ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing" : "⌘S / ⌘⏎: preview · esc: close"}</span>
+        <span className="ml-auto min-w-0 truncate">{preview ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing" : "⌘S / ⌘⏎: preview · ⌘J: jump (split right) · esc: close"}</span>
       </div>
       <div className="min-h-0 flex-1">
         {preview ? (
@@ -597,6 +608,8 @@ function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; foc
             initial={e.yaml}
             autoFocus={focused}
             onFocus={focus}
+            slot={`${pane.id}/edit`}
+            refs={refs}
             onChange={(yaml) => setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, yaml, discarding: false })))}
           />
         )}

@@ -1,0 +1,9 @@
+# Relation tapes: see rel-pods.yaml. The role rel-rolebindings grants.
+filter: true
+pipeline:
+  source: {resource: rel-roles}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: rbac.authorization.k8s.io/v1, kind: Role, metadata: {name: gizmo-reader, namespace: shop, uid: rro-gizmo-reader, creationTimestamp: "2026-01-01T10:00:00Z"}, rules: [{apiGroups: [""], resources: [configmaps], verbs: [get]}]}
+    cells: [gizmo-reader]

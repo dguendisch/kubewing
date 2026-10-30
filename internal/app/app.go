@@ -96,6 +96,12 @@ func (a *App) RowIndex(pane, key string) (int, error)           { return a.svc.R
 func (a *App) Relations(pane, key string) (bridge.Relations, error) {
 	return a.svc.Relations(pane, key)
 }
+func (a *App) FieldRefs(pane, text string) ([]bridge.FieldMark, error) {
+	return a.svc.FieldRefs(pane, text)
+}
+func (a *App) FieldRelations(pane, text string, line int) ([]relations.Relation, error) {
+	return a.svc.FieldRelations(pane, text, line)
+}
 func (a *App) EventsTarget(pane, key string) (relations.Target, error) {
 	return a.svc.EventsTarget(pane, key)
 }

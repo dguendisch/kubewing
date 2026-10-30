@@ -797,7 +797,8 @@ function selectedKey(pane: S.PaneState): string | undefined {
 /** An object view has no row on screen to anchor a menu to (its table is hidden, or another pane's): below its header. */
 function belowHeader(pane: S.PaneState): { x: number; y: number } | undefined {
   if (!pane.object) return undefined;
-  const b = document.querySelector(`[data-pane="${pane.id}"] header`)?.getBoundingClientRect();
+  // the object view's header: the table's, hidden under it, has an empty box at the window's top left
+  const b = [...document.querySelectorAll(`[data-pane="${pane.id}"] header`)].map((h) => h.getBoundingClientRect()).find((r) => r.height > 0);
   return b && { x: b.left + 8, y: b.bottom };
 }
 
@@ -811,8 +812,44 @@ function openJump() {
   const pane = S.focusedPane(s);
   const key = selectedKey(pane);
   if (!key) return;
-  const at = o?.kind === "menu" ? o.at : belowHeader(pane);
-  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.object ? undefined : pane.selected, at }));
+  const yaml = fieldAtCursor(pane);
+  // from an object's YAML: below the cursor's line (scrolled out of view: below the header)
+  const at = o?.kind === "menu" ? o.at : ((yaml && cursorOf(yamlSlot(pane)).at?.()) ?? belowHeader(pane));
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "jump", pane: pane.id, key, index: 0, rowIndex: pane.object ? undefined : pane.selected, at, yaml }));
+}
+
+/**
+ * The YAML at an object view's cursor (the view, the diff's right side, or
+ * the editor's text as typed), for the jump menu's field section. Not
+ * describe or a decoded value: no object fields there.
+ */
+function fieldAtCursor(pane: S.PaneState): { text: string; line: number } | undefined {
+  const o = pane.object;
+  if (!o || o.view === "describe" || o.decode || (o.edit && o.edit.preview)) return undefined;
+  const cur = cursorOf(yamlSlot(pane));
+  return cur.text === undefined ? undefined : { text: cur.text, line: cur.line };
+}
+
+/** The cursor slot of a pane's object YAML: the editor's while editing, else the viewer's. */
+const yamlSlot = (pane: S.PaneState) => (pane.object?.edit ? `${pane.id}/edit` : pane.id);
+
+/**
+ * ⌘-click on a marked reference in an object's YAML: straight to the
+ * object it names, as the field section's entry would (⇧: in a split; from
+ * the editor always, so the edit stays).
+ */
+export async function jumpToField(paneId: string, text: string, line: number, inSplit: boolean) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane?.serverId || !pane.object) return;
+  try {
+    const rels = await bridge().fieldRelations(pane.serverId, text, line);
+    const r = rels[0];
+    if (!r) return flash(paneId, "no reference here", true);
+    if (!r.target) return flash(paneId, `${r.label}: ${r.gone ?? "nowhere to go"}`, true);
+    await jumpTo(paneId, r.target, inSplit, pane.object.key);
+  } catch (e) {
+    flash(paneId, errorText(e), true);
+  }
 }
 
 /**
@@ -855,14 +892,16 @@ export async function runJump(index: number, inSplit: boolean) {
  * Shows a jump target in a pane (pushing its current view, an object view
  * over the table included: ⌘← returns to it) or in a new split below it.
  * A split object view has no table of its own: its jumps go to a split.
+ * From the editor always a split, to its right: the edit stays beside it.
  */
 export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolean, fromKey?: string) {
   const pane = useUI.getState().panes[paneId];
   if (!pane) return;
   const spec = S.jumpSpec(pane.spec, target);
-  if (inSplit || pane.object?.split) {
+  const editing = !!pane.object?.edit;
+  if (inSplit || editing || pane.object?.split) {
     // the new pane opens itself on mount (Pane's effect), like any split
-    return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec));
+    return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec, editing ? "row" : "column"));
   }
   setUI((x) => S.updatePane(S.pushHistory(x, paneId, fromKey), paneId, ({ object: _, ...p }) => p));
   await applySpec(paneId, spec);

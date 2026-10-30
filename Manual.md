@@ -367,17 +367,40 @@ Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a co
 
 ### Jump menu: `⌘J`
 
-`⌘J` on a row (also in its YAML view, or **jump to…** in the row menu) lists where it leads.
+`⌘J` on a row (also in its YAML view, or **jump to…** in the row menu) lists where it leads. From the YAML, what the field at the cursor refers to comes first (see [Jumping from a field](#jumping-from-a-field-in-the-yaml)).
 
 | Section | Entries |
 |---|---|
 | **namespace** | "pods in shop" (the same resource narrowed to the row's namespace, filters kept; from an all-namespaces pane), "namespace object shop" |
 | **owners** | the `ownerReferences` chain up (pod → replica set → deployment, and on through Gardener and other CRD owners); each checked by UID, so a deleted or recreated owner is listed disabled with why |
 | **owned** | what the row runs, counted: deployments → replica sets and pods; replica sets, stateful sets, daemon sets, jobs → pods; cron jobs → jobs; nodes → their pods; namespaces → their pods; a custom resource with a scale subresource → the pods its selector selects. **scan for owned…** finds anything else (e.g. a CRD owning config maps) by listing every resource type's metadata in the namespace; it runs only on request |
-| **references** | pod → the claims its volumes use, each followed by its bound volume, and their volume attachments; stateful set → its claims (every ordinal, so claims left by a scale-down count too), their volumes and attachments; claim → volume ("not bound" while pending) → attachments; volume → claim and attachments; volume attachment → volume and node |
+| **references** | pod → the claims its volumes use, each followed by its bound volume, and their volume attachments; stateful set → its claims (every ordinal, so claims left by a scale-down count too), their volumes and attachments; claim → volume ("not bound" while pending) → attachments; volume → claim and attachments; volume attachment → volume and node. Then every other object the row names in a field (see [Jumping from a field](#jumping-from-a-field-in-the-yaml)): a pod's node, service account, secrets and config maps, a binding's role, a shoot's seed … Each is looked up: one that doesn't exist is listed as **missing**; the same object named in several fields is listed once, with how often (`secret db 2×`) |
 | **events** | the row's events (see below) |
 
 `j`/`k` move (wrapping around), `⏎` jumps in place, `⇧⏎` opens the target in a split below, `Esc` closes.
+
+### Jumping from a field in the YAML
+
+In an object's YAML view, values that name another object are underlined: `secretName: certs`, `claimName: data`, `serviceAccountName: web`, a binding's `roleRef`, a shoot's `seedName`, an owner reference.
+
+- `⌘`-click on one jumps there (the pointer turns into a hand while `⌘` is held); `⇧⌘`-click opens it in a split below. A missing object says so in the status line instead.
+- `⌘J` lists what the field at the cursor refers to first, under **at the cursor**, highlighted, above the rest of the menu. On a value, that one object; on a list item (a volume, a container, an `env` entry) or a section (`volumes:`), everything in it. On a line without a reference the menu is as from the table.
+- In the object diff, the right side (the newer version) works the same.
+- In the editor, `⌘J` and `⌘`-click work on the text as typed, and always open in a split to the right, so the edit stays beside it. The marks follow the text a moment after typing.
+
+What counts as a reference is a set of built-in rules, which `refs.yaml` extends (see [Configuration](#refsyaml)):
+
+| Where | Refers to |
+|---|---|
+| pod specs (pods, workload templates, cron jobs, any custom resource embedding one) | secrets and config maps of volumes (projected too), `env`/`envFrom`, image pull secrets; claims; service account, node, priority class, runtime class |
+| storage | claim → volume, storage class; volume → claim, storage class, CSI secrets; volume attachment → volume, node |
+| network | ingress → backend services, TLS secrets, ingress class; endpoints and endpoint slices → their target pods |
+| RBAC | role bindings and cluster role bindings → role or cluster role, service account subjects |
+| object references | owner references, HPA and VPA targets, an event's object, webhooks' and API services' services, a CRD's conversion webhook service |
+| Gardener | shoot → seed, secret binding, credentials binding, cloud profile, exposure class, DNS secrets, resource references; credentials binding → its credentials; managed resource → its secrets |
+| by convention | `secretRef` and `*SecretRef` fields anywhere → a secret (in the field's `namespace`, if it has one) |
+
+A referenced object is in the referring object's namespace unless the field names one; cluster-scoped kinds (nodes, volumes, cluster roles …) have none. A kind the cluster doesn't serve is listed as **unknown kind**.
 
 A jump is an ordinary pane: the target is a source plus filters (`o.metadata.name == "web"`, an owner-UID filter, a label or field selector; a field selector shows as a chip in the header). So the filter bar shows why the pane holds what it holds, and clearing the filter shows the siblings.
 
@@ -602,6 +625,7 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 |---|---|
 | `config.yaml` | settings (below) |
 | `keybindings.yaml` | key overrides |
+| `refs.yaml` | which fields refer to other objects (jumps from the YAML) |
 | `themes/<name>.yaml` | theme token overrides |
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
 | `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
@@ -652,6 +676,38 @@ launch:
 
 Keys are modifiers `cmd`/`ctrl`/`alt` (`opt`)/`shift` joined with `+`. An entry overrides the defaults for that key in the given contexts (all contexts without `when`). The cheat sheet (`?`) and the menu bar show your bindings as they are. Command ids are listed in [frontend/src/keys/keymap.ts](frontend/src/keys/keymap.ts).
 
+### `refs.yaml`
+
+Rules for what a field refers to (see [Jumping from a field](#jumping-from-a-field-in-the-yaml)). Yours come before the built-in ones; a rule with a built-in's `id` replaces it, `disable` turns built-in ones off. The built-in rules are in [internal/relations/refs.yaml](internal/relations/refs.yaml).
+
+```yaml
+rules:
+  # a custom resource naming config maps in a list
+  - id: widget-configs
+    kinds: [example.com/Widget]       # group/Kind ("Pod" for core kinds), globs allowed; omitted or "*": any kind
+    path: "spec.configs[*]"           # where the reference is
+    name: ref                         # the name's field, relative to path; omitted: the value at path
+    target: ConfigMap                 # Kind (core), group/Kind (preferred version) or group/version/Kind
+  # the kind and group come from the object (like a roleRef)
+  - id: widget-owner
+    kinds: [example.com/Widget]
+    path: spec.ownerRef
+    name: name
+    kindField: kind                   # also groupField, apiVersionField
+    namespaceField: namespace         # default: the object's own namespace
+disable: [node-name]                  # ids of built-in rules
+```
+
+Paths are field names separated by dots, plus:
+
+| Syntax | Matches |
+|---|---|
+| `[*]` | any list item |
+| `[kind=ServiceAccount]` | the list items whose `kind` is `ServiceAccount` |
+| `*`, `*SecretRef` | any key, a key matching the glob |
+| `**` | any depth (`**.volumes[*].secret`: pod specs wherever they're embedded) |
+| `["example.com/ref"]` | a key with dots, literally |
+
 ### Themes
 
 `themes/<name>.yaml` overrides the tokens in [theme.css](frontend/src/theme.css) (colors such as `prod`, `changed`, `added`, `deleted`, `match`); select it with `theme: <name>`.
@@ -669,7 +725,7 @@ The most used keys:
 | Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
-| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `w` wrap · `⌘F` find |
+| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |
 | History | `⌘←` back · `⌘→` forward |

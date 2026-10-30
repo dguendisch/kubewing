@@ -1,0 +1,67 @@
+# Built-in field reference rules (see Rule in fieldrefs.go; refs.yaml in
+# the config directory adds rules, replaces them by id, or disables them).
+# Paths starting with ** find pod specs wherever they're embedded: pods,
+# workload templates, cron jobs, custom resources. Ids are stable: user
+# files refer to them.
+rules:
+  # pod spec
+  - {id: pod-volume-secret, path: "**.volumes[*].secret", name: secretName, target: Secret}
+  - {id: pod-volume-configmap, path: "**.volumes[*].configMap", name: name, target: ConfigMap}
+  - {id: pod-volume-pvc, path: "**.volumes[*].persistentVolumeClaim", name: claimName, target: PersistentVolumeClaim}
+  - {id: pod-projected-secret, path: "**.volumes[*].projected.sources[*].secret", name: name, target: Secret}
+  - {id: pod-projected-configmap, path: "**.volumes[*].projected.sources[*].configMap", name: name, target: ConfigMap}
+  - {id: pod-env-secret, path: "**.env[*].valueFrom.secretKeyRef", name: name, target: Secret}
+  - {id: pod-env-configmap, path: "**.env[*].valueFrom.configMapKeyRef", name: name, target: ConfigMap}
+  - {id: pod-envfrom-secret, path: "**.envFrom[*].secretRef", name: name, target: Secret}
+  - {id: pod-envfrom-configmap, path: "**.envFrom[*].configMapRef", name: name, target: ConfigMap}
+  - {id: pod-image-pull-secret, path: "**.imagePullSecrets[*]", name: name, target: Secret}
+  - {id: pod-service-account, path: "**.serviceAccountName", target: ServiceAccount}
+  - {id: pod-priority-class, path: "**.priorityClassName", target: scheduling.k8s.io/PriorityClass}
+  - {id: pod-runtime-class, path: "**.runtimeClassName", target: node.k8s.io/RuntimeClass}
+  # pods, volume attachments, endpoint slices
+  - {id: node-name, path: "**.nodeName", target: Node}
+
+  # storage
+  - {id: pvc-volume, kinds: [PersistentVolumeClaim], path: spec.volumeName, target: PersistentVolume}
+  - {id: pv-claim, kinds: [PersistentVolume], path: spec.claimRef, name: name, namespaceField: namespace, target: PersistentVolumeClaim}
+  - {id: va-pv, kinds: [storage.k8s.io/VolumeAttachment], path: spec.source.persistentVolumeName, target: PersistentVolume}
+  # claims, volumes, claim templates of stateful sets and ephemeral volumes
+  - {id: storage-class, path: "**.storageClassName", target: storage.k8s.io/StorageClass}
+
+  # network
+  - {id: ingress-backend, kinds: [networking.k8s.io/Ingress], path: "spec.**.backend.service", name: name, target: Service}
+  - {id: ingress-tls, kinds: [networking.k8s.io/Ingress], path: "spec.tls[*].secretName", target: Secret}
+  - {id: ingress-class, kinds: [networking.k8s.io/Ingress], path: spec.ingressClassName, target: networking.k8s.io/IngressClass}
+  - {id: endpoint-target, kinds: [Endpoints, discovery.k8s.io/EndpointSlice], path: "**.targetRef", name: name, kindField: kind, apiVersionField: apiVersion, namespaceField: namespace}
+
+  # RBAC
+  - {id: rbac-role, kinds: [rbac.authorization.k8s.io/RoleBinding, rbac.authorization.k8s.io/ClusterRoleBinding], path: roleRef, name: name, kindField: kind, groupField: apiGroup}
+  - {id: rbac-subject-sa, kinds: [rbac.authorization.k8s.io/RoleBinding, rbac.authorization.k8s.io/ClusterRoleBinding], path: "subjects[kind=ServiceAccount]", name: name, namespaceField: namespace, target: ServiceAccount}
+
+  # object references (apiVersion, kind, name)
+  - {id: owner, path: "metadata.ownerReferences[*]", name: name, kindField: kind, apiVersionField: apiVersion}
+  - {id: hpa-target, kinds: [autoscaling/HorizontalPodAutoscaler], path: spec.scaleTargetRef, name: name, kindField: kind, apiVersionField: apiVersion}
+  - {id: vpa-target, kinds: [autoscaling.k8s.io/VerticalPodAutoscaler], path: spec.targetRef, name: name, kindField: kind, apiVersionField: apiVersion}
+  - {id: event-object, kinds: [Event, events.k8s.io/Event], path: involvedObject, name: name, kindField: kind, apiVersionField: apiVersion, namespaceField: namespace}
+  - {id: event-regarding, kinds: [events.k8s.io/Event], path: regarding, name: name, kindField: kind, apiVersionField: apiVersion, namespaceField: namespace}
+
+  # services behind webhooks and aggregated APIs
+  - {id: webhook-service, kinds: [admissionregistration.k8s.io/*], path: "webhooks[*].clientConfig.service", name: name, namespaceField: namespace, target: Service}
+  - {id: apiservice-service, kinds: [apiregistration.k8s.io/APIService], path: spec.service, name: name, namespaceField: namespace, target: Service}
+  - {id: crd-conversion-service, kinds: [apiextensions.k8s.io/CustomResourceDefinition], path: spec.conversion.webhook.clientConfig.service, name: name, namespaceField: namespace, target: Service}
+
+  # Gardener
+  - {id: shoot-seed, kinds: [core.gardener.cloud/Shoot], path: "*.seedName", target: core.gardener.cloud/Seed}
+  - {id: shoot-secret-binding, kinds: [core.gardener.cloud/Shoot], path: spec.secretBindingName, target: core.gardener.cloud/SecretBinding}
+  - {id: shoot-credentials-binding, kinds: [core.gardener.cloud/Shoot], path: spec.credentialsBindingName, target: security.gardener.cloud/CredentialsBinding}
+  - {id: shoot-cloud-profile-name, kinds: [core.gardener.cloud/Shoot], path: spec.cloudProfileName, target: core.gardener.cloud/CloudProfile}
+  - {id: shoot-cloud-profile, kinds: [core.gardener.cloud/Shoot], path: spec.cloudProfile, name: name, kindField: kind, target: core.gardener.cloud/CloudProfile}
+  - {id: shoot-exposure-class, kinds: [core.gardener.cloud/Shoot], path: spec.exposureClassName, target: core.gardener.cloud/ExposureClass}
+  - {id: shoot-dns-secret, kinds: [core.gardener.cloud/Shoot], path: "spec.dns.providers[*].secretName", target: Secret}
+  - {id: shoot-resource, kinds: [core.gardener.cloud/Shoot], path: "spec.resources[*].resourceRef", name: name, kindField: kind, apiVersionField: apiVersion}
+  - {id: credentials-binding-credentials, kinds: [security.gardener.cloud/CredentialsBinding], path: credentialsRef, name: name, kindField: kind, apiVersionField: apiVersion, namespaceField: namespace}
+  - {id: managed-resource-secret, kinds: [resources.gardener.cloud/ManagedResource], path: "spec.secretRefs[*]", name: name, target: Secret}
+
+  # secrets by convention: secretRef (secret bindings, seeds, extensions …), *SecretRef (CSI and others)
+  - {id: secret-ref, path: "**.secretRef", name: name, namespaceField: namespace, target: Secret}
+  - {id: secret-refs, path: "**.*SecretRef", name: name, namespaceField: namespace, target: Secret}

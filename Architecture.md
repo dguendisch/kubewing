@@ -75,7 +75,7 @@ client-go/informers, `k8s.io/kubectl` packages (apply, diff, printers, exec, por
 
 ### User config: `~/.kubewing/`
 
-Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing only reads `config.yaml`, `keybindings.yaml` and `themes/`; it writes its own `history.yaml` and `columns.yaml` (into the state directory, by default the same). Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
+Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing only reads `config.yaml`, `keybindings.yaml`, `refs.yaml` and `themes/`; it writes its own `history.yaml` and `columns.yaml` (into the state directory, by default the same). Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
 
 ## Watches and the source layer
 
@@ -116,6 +116,15 @@ In-memory, newest snapshot + reverse field-path deltas, per shared watch (`inter
 - **Lifecycle:** dropped when the last view on the source closes.
 - **Time travel cost:** a step rebuilds the table from the history, ~50 ms for 10k objects with 10 versions each; quick presses merge into one step. Server cells are recorded with each version. Ages count from the moment shown (`nowOf` in `frontend/src/grid/rowcache.ts`).
 - **Later:** pinning objects/views against eviction; on-disk persistence (e.g. SQLite/Pebble), blocked on secrets landing on disk in plaintext — needs encryption or exclusion first.
+
+## Field references
+
+Which fields name another object (`secretName`, `roleRef`, a shoot's `seedName`) is data, not code: rules in `internal/relations/refs.yaml` (embedded), extended by the user's `refs.yaml` (theirs first, same id replaces, `disable` drops). They drive the jump menu's field section (the references at a YAML view's or the editor's cursor), the marks and `⌘`-click in the viewer, and the direct references of the table's `⌘J`.
+
+- **Path patterns, not CEL.** A rule must say *where* a reference is, so the cursor can be matched to it; CEL evaluates to values and can't. The pattern (`**.volumes[*].secret`, `subjects[kind=ServiceAccount]`, `*SecretRef`) is matched over the YAML node tree of the text shown, which has the lines and columns: one walk gives the reference, the value's position (for the mark) and the field's line span (for "everything in this volume"). The same text Go parses is what the frontend shows (the view, the diff's right side, the editor's text as typed), so nothing has to map lines between two renderings.
+- **Kinds by group, not version.** Targets are `Kind`, `group/Kind` or `group/version/Kind`; a reference without a version (RBAC's `apiGroup`) resolves to the preferred one (`ResolveKind` with `group/`). Two fields naming one object are one entry (counted), compared by group/kind/namespace/name; the namespace defaults to the object's own and is dropped once discovery says the target is cluster-scoped.
+- **Direct only; derived references stay in Go.** A pod's claims → their bound volumes → attachments, a stateful set's claims by the controller's naming pattern, an ephemeral volume's claim `<pod>-<volume>` aren't one field each. `relations.References` keeps them; the rules add what it doesn't list, and on a duplicate the derived entry wins (it knows more: a checked UID, "deleted" vs. "missing"). Planned on top: reverse references (the rules read backwards, e.g. the pods using a secret) and configurable chains of rule ids (see Plan).
+- **Every target is looked up** (metadata only, so secrets aren't read): not there is **missing** (a field may name what was never created, unlike an owner, which is "deleted"); a failed lookup (forbidden) keeps the jump with "not checked".
 
 ## Decoding
 
@@ -185,7 +194,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/view` | pipeline over events → keyed diff → viewport frames |
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |
 | `internal/app` | the Wails-bound service (thin adapter over the bridge), native menu, window, single instance, detaching |
-| `internal/relations` | the jump menu's relations (namespace, owners, owned, references), each as a pipeline target; pure |
+| `internal/relations` | the jump menu's relations (namespace, owners, owned, references), each as a pipeline target; field reference rules (`refs.yaml`, embedded) matched over a YAML text; pure |
 | `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
 | `frontend/src` | React 19 + Compiler, Glide grid, zustand, transport (Wails / WS) |
 | `frontend/src/actions` | row actions registry (row menu) |

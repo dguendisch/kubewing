@@ -29,6 +29,8 @@ const (
 	SectionOwned     Section = "owned"
 	SectionReference Section = "reference"
 	SectionEvents    Section = "events"
+	// SectionField: the references at the cursor of a YAML view.
+	SectionField Section = "field"
 )
 
 // Target is where a jump lands, in the pane's context. Unset fields are
@@ -62,6 +64,8 @@ type Relation struct {
 	Gone string `json:"gone,omitempty"`
 	// Note qualifies an entry that still works (not verified, not counted).
 	Note string `json:"note,omitempty"`
+	// Places: how many fields refer to this object (shown from 2 on).
+	Places int `json:"places,omitempty"`
 }
 
 // Quote renders s as a CEL string literal. Go's escapes (\", \\, \n,
@@ -260,6 +264,10 @@ type Ref struct {
 	MetadataOnly bool
 	// Missing says why there is nothing to refer to (yet): an unbound claim.
 	Missing string
+	// Rule is the field rule that found it ("" = derived here); Places
+	// counts the fields referring to the same object.
+	Rule   string
+	Places int
 }
 
 var (
@@ -435,7 +443,7 @@ func PodVolumes(pod *unstructured.Unstructured, claims []*unstructured.Unstructu
 	for _, r := range podClaims(pod) {
 		c, ok := byName[r.Name]
 		if !ok {
-			r.Missing = "not found"
+			r.Missing = "missing"
 			out = append(out, r)
 			continue
 		}
@@ -477,7 +485,11 @@ func RefRelation(r Ref, resource string) Relation {
 	case r.Missing != "":
 		label = strings.ToLower(r.Kind)
 	}
-	return Relation{ID: id, Section: SectionReference, Label: label, Kind: r.Kind, Name: r.Name, Gone: r.Missing}
+	rel := Relation{ID: id, Section: SectionReference, Label: label, Kind: r.Kind, Name: r.Name, Gone: r.Missing}
+	if r.Places > 1 {
+		rel.Places = r.Places
+	}
+	return rel
 }
 
 // Selector returns spec.selector as a selector string (matchExpressions

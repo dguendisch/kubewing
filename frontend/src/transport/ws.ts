@@ -88,6 +88,8 @@ export function wsTransport(url: string): Transport {
     rowInfo: (p, k) => call("RowInfo", p, k),
     rowIndex: (p, k) => call("RowIndex", p, k),
     relations: (p, k) => call("Relations", p, k),
+    fieldRefs: (p, t) => call("FieldRefs", p, t),
+    fieldRelations: (p, t, l) => call("FieldRelations", p, t, l),
     ownedScan: (p, k) => call("OwnedScan", p, k),
     eventsTarget: (p, k) => call("EventsTarget", p, k),
     describe: (p, k) => call("Describe", p, k),

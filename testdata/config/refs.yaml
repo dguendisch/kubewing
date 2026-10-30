@@ -1,0 +1,21 @@
+# Example ~/.kubewing/refs.yaml: which fields refer to other objects, for
+# jumps from the YAML (⌘J at the cursor, ⌘-click on a marked value) and the
+# jump menu's references. These rules come before the built-in ones
+# (internal/relations/refs.yaml); a rule with a built-in's id replaces it.
+rules:
+  # a custom resource naming config maps in a list
+  - id: widget-configs
+    kinds: [e2e.kubewing/Widget]      # group/Kind ("Pod" for core kinds), globs allowed; omitted or "*": any kind
+    path: "spec.configs[*]"           # [*] any item, [kind=X] items whose kind is X, * any key, ** any depth
+    name: ref                         # the name's field, relative to path; omitted: the value at path
+    target: ConfigMap                 # Kind (core), group/Kind (preferred version) or group/version/Kind
+  # kind and group read from the object, like a roleRef; namespace from a field (default: the object's)
+  - id: widget-owner
+    kinds: [e2e.kubewing/Widget]
+    path: spec.ownerRef
+    name: name
+    kindField: kind
+    groupField: apiGroup
+    namespaceField: namespace
+# built-in rules turned off, by id
+disable: []

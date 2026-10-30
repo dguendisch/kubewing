@@ -41,6 +41,11 @@ input { user-select: text; }
 :root { --kw-window-radius: 0px; }
 :root.kw-mac { --kw-window-radius: 15px; }
 
+/* A reference value in an object's YAML (Viewer's markRefs): dotted underline; with ⌘ held over it, a hand */
+.kw-ref { text-decoration: underline dotted var(--color-match); text-underline-offset: 2px; }
+.kw-ref-hand .view-lines { cursor: pointer; }
+.kw-ref-hand .kw-ref { text-decoration-style: solid; color: var(--color-match); }
+
 /* dockview (split layout): colors from the theme tokens above */
 .kw-dock {
   --dv-group-view-background-color: var(--color-bg);

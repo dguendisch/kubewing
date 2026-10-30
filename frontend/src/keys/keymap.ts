@@ -259,7 +259,8 @@ export const defaultBindings: Binding[] = [
   { key: "Shift+Enter", command: "menu.runSplit", when: ["menu"] },
   // ⌘J: where this row leads (namespace, owners, owned); jumps in place are a browser-like history:
   // ⌘← back, ⌘→ forward again (table only: in text fields they're start/end of line)
-  { key: "Meta+J", command: "object.jump", when: ["table", "detail"] },
+  // in an object's YAML (the editor too): the references at the cursor first
+  { key: "Meta+J", command: "object.jump", when: ["table", "detail", "edit"] },
   { key: "Meta+ArrowLeft", command: "history.back", when: ["table", "detail"] },
   { key: "Meta+ArrowRight", command: "history.forward", when: ["table", "detail"] },
   // the row's events: a jump to the events about it (⌘← back to the row)

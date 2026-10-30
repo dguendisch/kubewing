@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
-import { useUI } from "../store/store";
+import { bridge, useUI } from "../store/store";
 import { changeIndex } from "./diffnav";
 import { claimFocus } from "./focus";
 import { loadMonaco, type MonacoApi } from "./load";
@@ -57,7 +57,18 @@ export const common: Monaco.editor.IEditorOptions = {
  * (0-based) there, for commands that act on "the line under the cursor"
  * (= / ! filters, ⏎ decode, ⇧H field history).
  */
-export type Cursor = { text?: string; line: number };
+export type Cursor = { text?: string; line: number; at?: () => { x: number; y: number } | undefined };
+
+/** Where an editor's cursor is on screen: the bottom left of its line (undefined while scrolled out of view). */
+export function cursorPoint(ed: Monaco.editor.ICodeEditor): { x: number; y: number } | undefined {
+  const pos = ed.getPosition();
+  const dom = ed.getDomNode();
+  const vis = pos && ed.getScrolledVisiblePosition(pos);
+  if (!dom || !vis) return undefined;
+  const box = dom.getBoundingClientRect();
+  if (vis.top < 0 || vis.top + vis.height > box.height) return undefined;
+  return { x: box.left + vis.left, y: box.top + vis.top + vis.height };
+}
 export const cursors = new Map<string, Cursor>();
 export function cursorOf(paneId: string): Cursor {
   let c = cursors.get(paneId);
@@ -125,6 +136,60 @@ interface Props {
    * decode's level, back from a deeper one).
    */
   viewState?: ViewState;
+  /** An object's YAML (the diff: its right side): its references are marked, ⌘-click jumps to one (see useFieldRefs). */
+  refs?: FieldRefs;
+}
+
+/** What marks an object's references: the pane (Go matches the rules for its kind) and where a ⌘-click goes. */
+export interface FieldRefs {
+  serverId: string;
+  /** ⌘-click on the reference at line (0-based) of text; split: ⇧ was held too. */
+  jump: (text: string, line: number, split: boolean) => void;
+}
+
+/**
+ * Marks the reference values of an object's YAML in an editor (asked from
+ * Go for each text shown) and makes them ⌘-clickable: the pointer turns
+ * into a hand over one while ⌘ is held. Returns the disposer.
+ */
+export function markRefs(m: MonacoApi, ed: Monaco.editor.ICodeEditor, refs: FieldRefs): { update: (text: string) => void; dispose: () => void } {
+  const marks = ed.createDecorationsCollection();
+  let gen = 0;
+  let ranges: Monaco.Range[] = [];
+  const update = (text: string) => {
+    const g = ++gen;
+    void bridge()
+      .fieldRefs(refs.serverId, text)
+      .then(
+        (list) => {
+          if (g !== gen) return;
+          ranges = list.map((r) => new m.Range(r.line + 1, r.col, r.line + 1, r.endCol));
+          marks.set(list.map((r, i) => ({ range: ranges[i]!, options: { inlineClassName: "kw-ref", hoverMessage: { value: `${r.label} — ⌘-click: jump · ⇧⌘-click: split · ⌘J: menu` } } })));
+        },
+        // text that doesn't parse (the editor mid-typing): the old marks would be in the wrong places
+        () => g === gen && ((ranges = []), marks.clear()),
+      );
+  };
+  const at = (p: Monaco.Position | null | undefined) => (p ? ranges.find((r) => r.containsPosition(p)) : undefined);
+  const subs = [
+    ed.onMouseDown((e) => {
+      const r = (e.event.metaKey || e.event.ctrlKey) && at(e.target.position);
+      if (!r) return;
+      e.event.preventDefault();
+      e.event.stopPropagation();
+      refs.jump(ed.getModel()?.getValue() ?? "", r.startLineNumber - 1, e.event.shiftKey);
+    }),
+    ed.onMouseMove((e) => ed.getDomNode()?.classList.toggle("kw-ref-hand", (e.event.metaKey || e.event.ctrlKey) && !!at(e.target.position))),
+    ed.onMouseLeave(() => ed.getDomNode()?.classList.remove("kw-ref-hand")),
+  ];
+  return {
+    update,
+    dispose: () => {
+      gen++;
+      subs.forEach((d) => d.dispose());
+      marks.clear();
+    },
+  };
 }
 
 /** A viewer's cursor and scroll position (see Props.viewState). */
@@ -141,7 +206,7 @@ function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAct
  * view. A new text in the same mode swaps the models: cursor and scroll
  * stay (a newer version, a followed row of the same shape).
  */
-export function Viewer({ value, original, language = "yaml", label, slot, autoFocus, contextActions, onFocus, viewState }: Props) {
+export function Viewer({ value, original, language = "yaml", label, slot, autoFocus, contextActions, onFocus, viewState, refs }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
@@ -150,8 +215,10 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
   const fields = language !== "plaintext";
   const editor = useRef<{ updateOptions(o: Monaco.editor.IEditorOptions): void; focus(): void }>(undefined);
   // the latest callbacks and texts, for the editor created once per mode
-  const live = useRef({ onFocus, value, original });
-  live.current = { onFocus, value, original };
+  const live = useRef({ onFocus, value, original, refs });
+  live.current = { onFocus, value, original, refs };
+  // the latest pane and jump for the marks of the editor created once per mode
+  const liveRefs: FieldRefs | undefined = refs && { serverId: refs.serverId, jump: (t, l, sp) => live.current.refs?.jump(t, l, sp) };
   const swap = useRef<(value: string, original?: string) => void>(undefined);
   // wordWrapOverride1, not wordWrap: with accessibility support on, Monaco forces wrapping
   // for text dominated by long lines unless the override says otherwise
@@ -173,6 +240,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         if (fields) {
           cur.text = live.current.value;
           cur.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
+          cur.at = () => cursorPoint(ed);
         }
         const subs = [
           ed.onDidChangeCursorPosition((e) => {
@@ -190,9 +258,18 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           if (fields) cur.text = value;
         };
         const acts = addActions(ed, contextActions);
+        const marked = liveRefs && markRefs(m, ed, liveRefs);
+        marked?.update(live.current.value);
+        const swapped = swap.current;
+        if (marked)
+          swap.current = (value) => {
+            swapped(value);
+            marked.update(value);
+          };
         dispose = () => {
+          marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === model.getValue()) cur.text = undefined;
+          if (cur.text === model.getValue()) cur.text = cur.at = undefined;
           acts.forEach((a) => a.dispose());
           subs.forEach((d) => d.dispose());
           ed.dispose();
@@ -212,6 +289,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         if (fields) {
           cur.text = live.current.value;
           cur.line = 0;
+          cur.at = () => cursorPoint(mod);
         }
         const acts = addActions(mod, contextActions);
         // first line of each change on the modified side (a pure deletion: the line after it)
@@ -247,9 +325,18 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           if (fields) cur.text = value;
         };
         setNav(slot, { index: 0, total: 0, go });
+        const marked = liveRefs && markRefs(m, mod, liveRefs);
+        marked?.update(live.current.value);
+        const swapped = swap.current;
+        if (marked)
+          swap.current = (value, original) => {
+            swapped(value, original);
+            marked.update(value);
+          };
         dispose = () => {
+          marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === b.getValue()) cur.text = undefined;
+          if (cur.text === b.getValue()) cur.text = cur.at = undefined;
           acts.forEach((x) => x.dispose());
           subs.forEach((d) => d.dispose());
           setNav(slot, undefined);
@@ -265,7 +352,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
       swap.current = undefined;
       dispose();
     };
-  }, [slot, language, mode, contextActions?.map((a) => a.id).join()]);
+  }, [slot, language, mode, contextActions?.map((a) => a.id).join(), refs?.serverId]);
 
   // another text in the same viewer: its models swapped (the first is the one it was created with)
   const shown = useRef({ value, original });

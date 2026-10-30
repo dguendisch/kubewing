@@ -45,10 +45,26 @@ func (o *Opener) kindTapes() map[string]string {
 	return out
 }
 
-// ResolveKind implements source.Relator.
+// ResolveKind implements source.Relator. A group without a version
+// ("rbac.authorization.k8s.io/") takes any tape of that group and kind, as
+// the API's preferred version would.
 func (o *Opener) ResolveKind(_, apiVersion, kind string) (string, bool, error) {
-	if name, ok := o.kindTapes()[apiVersion+"/"+kind]; ok {
+	tapes := o.kindTapes()
+	if name, ok := tapes[apiVersion+"/"+kind]; ok {
 		return name, o.namespaced(name), nil
+	}
+	if g, v, ok := strings.Cut(apiVersion, "/"); ok && v == "" {
+		var names []string
+		for k, name := range tapes {
+			i := strings.LastIndex(k, "/")
+			if k[i+1:] == kind && strings.HasPrefix(k[:i], g+"/") {
+				names = append(names, name)
+			}
+		}
+		if len(names) > 0 {
+			sort.Strings(names)
+			return names[0], o.namespaced(names[0]), nil
+		}
 	}
 	return "", false, fmt.Errorf("no matches for kind %q in version %q", kind, apiVersion)
 }

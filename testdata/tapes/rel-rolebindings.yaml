@@ -1,0 +1,10 @@
+# Relation tapes: see rel-pods.yaml. roleRef names its role by apiGroup
+# (no version) and kind; subjects in other namespaces, users (no object).
+filter: true
+pipeline:
+  source: {resource: rel-rolebindings}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: rbac.authorization.k8s.io/v1, kind: RoleBinding, metadata: {name: gizmo-reader, namespace: shop, uid: rrb-gizmo-reader, creationTimestamp: "2026-01-01T10:00:00Z"}, roleRef: {apiGroup: rbac.authorization.k8s.io, kind: Role, name: gizmo-reader}, subjects: [{kind: ServiceAccount, name: gizmo}, {kind: ServiceAccount, name: ci, namespace: tools}, {kind: User, name: alice}]}
+    cells: [gizmo-reader]

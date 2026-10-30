@@ -7,8 +7,9 @@ import { bridge, setUI, useUI } from "../store/store";
 import { prettyKey } from "../keys/keymap";
 
 /**
- * u: where the selected row leads — its namespace, its owners up the chain,
- * what it owns. Go computes every entry as a pipeline (internal/relations);
+ * ⌘J: where the selected row leads — its namespace, its owners up the chain,
+ * what it owns and refers to; from its YAML first what the field at the
+ * cursor refers to. Go computes every entry as a pipeline (internal/relations);
  * ⏎ shows it in this pane (Esc in the table goes back), ⇧⏎ in a split
  * below. The owned scan (any kind owned by this UID) runs only on request.
  */
@@ -23,6 +24,8 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
   const index = useUI((s) => s.overlay?.index ?? 0);
   const at = useUI((s) => s.overlay?.at);
   const rowIndex = useUI((s) => s.overlay?.rowIndex);
+  // opened from an object's YAML: the text and cursor line, read once (the menu is for that moment)
+  const [field] = useState(() => useUI.getState().overlay?.yaml);
   const el = useRef<HTMLDivElement>(null);
   const { rel, items, scanning } = useJump();
   const [error, setError] = useState<string>();
@@ -41,14 +44,19 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
   useEffect(() => {
     useJump.setState({ items: [], rel: undefined }, true);
     let live = true;
-    bridge()
-      .relations(serverId, rowKey)
+    // the field section (looked up from the YAML at the cursor) and the relations come together: the highlight starts once
+    const fieldRels = field
+      ? bridge()
+          .fieldRelations(serverId, field.text, field.line)
+          .catch((e: unknown) => [{ id: "field:error", section: "field" as const, label: "references at the cursor", gone: String((e as Error)?.message ?? e) }])
+      : Promise.resolve(undefined);
+    Promise.all([bridge().relations(serverId, rowKey), fieldRels])
       .then(
-        (r) => {
+        ([r, f]) => {
           if (!live) return;
           const scan = () => runScan(serverId, rowKey, select);
-          const next = jumpItems(r);
-          useJump.setState({ rel: r, items: next, scan }, true);
+          const next = jumpItems(r, { field: f });
+          useJump.setState({ rel: r, field: f, items: next, scan }, true);
           select(next);
         },
         (e) => live && setError(String((e as Error)?.message ?? e)),
@@ -96,7 +104,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
         </span>
       </div>
       {error ? <div role="alert" className="px-3 py-0.5 text-deleted">{error}</div> : null}
-      {!rel && !error ? <div className="px-3 py-0.5 text-fg-muted">looking up owners…</div> : null}
+      {!rel && !error ? <div className="px-3 py-0.5 text-fg-muted">{field ? "looking up references and owners…" : "looking up owners…"}</div> : null}
       {items.map((it, i) => (
         <div key={it.id}>
           {i === 0 || items[i - 1]!.section !== it.section ? (

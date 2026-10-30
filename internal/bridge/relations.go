@@ -9,8 +9,10 @@ import (
 	"sync"
 	"time"
 
+	yaml "go.yaml.in/yaml/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/expr"
 	"github.com/dguendisch/kubewing/internal/relations"
@@ -106,6 +108,7 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
 	refs, listed := refsOf(ctx, rel, cluster, withKind(obj, kind))
+	refs = append(refs, s.ruleRefs(rel, cluster, withKind(obj, kind), refs)...)
 	out.Items = append(out.Items, references(ctx, rel, cluster, refs, listed)...)
 	if kind != "Event" {
 		out.Items = append(out.Items, eventsRelation(ctx, rel, cluster, withKind(obj, kind)))
@@ -239,6 +242,12 @@ func references(ctx context.Context, rel source.Relator, cluster string, refs []
 	var wg sync.WaitGroup
 	for i, ref := range refs {
 		resource, namespaced, err := rel.ResolveKind(cluster, ref.APIVersion, ref.Kind)
+		if err != nil && ref.Resource == "" {
+			// a rule's kind the cluster doesn't serve: nothing to look up
+			out[i] = relations.RefRelation(ref, strings.ToLower(ref.Kind))
+			out[i].Gone = "unknown kind"
+			continue
+		}
 		if err != nil {
 			resource, namespaced = ref.Resource, ref.Namespace != ""
 		}
@@ -256,6 +265,8 @@ func references(ctx context.Context, rel source.Relator, cluster string, refs []
 			if ref.Name != "" {
 				got, err := rel.GetMetadata(ctx, cluster, resource, ref.Namespace, ref.Name)
 				switch {
+				case apierrors.IsNotFound(err) && ref.Rule != "":
+					r.Gone = "missing" // a field names it: maybe never there
 				case apierrors.IsNotFound(err):
 					r.Gone = "deleted"
 				case err != nil:
@@ -526,4 +537,127 @@ func shortErr(err error) string {
 		msg = msg[:77] + "…"
 	}
 	return msg
+}
+
+// FieldMark is a reference value in a YAML text (0-based line, 1-based
+// columns, end exclusive), for the viewer to mark and ⌘-click.
+type FieldMark struct {
+	Line   int    `json:"line"`
+	Col    int    `json:"col"`
+	EndCol int    `json:"endCol"`
+	Label  string `json:"label"`
+}
+
+// fieldRefs parses text (an object's YAML as a viewer or the editor shows
+// it) and matches the reference rules for the pane's kind. The object's
+// own apiVersion, kind and namespace come from the text, else the pane's.
+func (s *Service) fieldRefs(paneID, text string) (*pane, []relations.FieldRef, *yaml.Node, error) {
+	pn, err := s.pane(paneID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	root, err := relations.ParseYAML(text)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	var head struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+		Metadata   struct {
+			Namespace string `json:"namespace"`
+		} `json:"metadata"`
+	}
+	_ = sigsyaml.Unmarshal([]byte(text), &head)
+	pn.mu.Lock()
+	res := pn.res
+	pn.mu.Unlock()
+	group, kind := relations.GroupOf(head.APIVersion), head.Kind
+	if kind == "" {
+		group, kind = res.GVR.Group, res.Kind
+	}
+	return pn, s.Config().Rules().Match(root, group, kind, head.Metadata.Namespace), root, nil
+}
+
+// FieldRefs marks the reference values in an object's YAML (text as the
+// viewer shows it): what ⌘-click and ⌘J's field section can go to.
+func (s *Service) FieldRefs(paneID, text string) ([]FieldMark, error) {
+	_, refs, _, err := s.fieldRefs(paneID, text)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FieldMark, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, FieldMark{Line: r.Line, Col: r.Col, EndCol: r.EndCol, Label: strings.ToLower(r.Kind) + " " + r.Name})
+	}
+	return out, nil
+}
+
+// FieldRelations are the jump menu's field section: the objects the field
+// at line (0-based) of text refers to (see relations.Under), each looked up
+// (metadata only): missing, or not checked when the lookup fails.
+func (s *Service) FieldRelations(paneID, text string, line int) ([]relations.Relation, error) {
+	rel, err := s.relator()
+	if err != nil {
+		return nil, err
+	}
+	pn, refs, root, err := s.fieldRefs(paneID, text)
+	if err != nil {
+		return nil, err
+	}
+	pn.mu.Lock()
+	cluster := pn.p.Source.Cluster
+	pn.mu.Unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), relationWait)
+	defer cancel()
+	out := references(ctx, rel, cluster, merged(relations.Under(refs, root, line)), nil)
+	for i := range out {
+		out[i].Section = relations.SectionField
+		out[i].ID = "field:" + strings.TrimPrefix(out[i].ID, "ref:")
+	}
+	return out, nil
+}
+
+// merged is refs with each object once (counted in Places), in order.
+func merged(refs []relations.FieldRef) []relations.Ref {
+	var out []relations.Ref
+	at := map[string]int{}
+	for _, r := range refs {
+		if i, ok := at[r.Key()]; ok {
+			out[i].Places++
+			continue
+		}
+		at[r.Key()] = len(out)
+		r.Ref.Places = 1
+		out = append(out, r.Ref)
+	}
+	return out
+}
+
+// ruleRefs are the references the rules find in obj that refsOf doesn't
+// already list (it knows more: claims' volumes, checked UIDs), minus the
+// owners (their own section). Cluster-scoped kinds lose the namespace the
+// rules default to, so they compare with refsOf's.
+func (s *Service) ruleRefs(rel source.Relator, cluster string, obj *unstructured.Unstructured, have []relations.Ref) []relations.Ref {
+	root, err := relations.ObjectNode(obj.Object)
+	if err != nil {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, r := range have {
+		if r.Name != "" {
+			known[r.Key()] = true
+		}
+	}
+	var out []relations.Ref
+	for _, r := range merged(s.Config().Rules().Match(root, relations.GroupOf(obj.GetAPIVersion()), obj.GetKind(), obj.GetNamespace())) {
+		if _, namespaced, err := rel.ResolveKind(cluster, r.APIVersion, r.Kind); err == nil && !namespaced {
+			r.Namespace = ""
+		}
+		if r.Rule == "owner" || known[r.Key()] {
+			continue
+		}
+		known[r.Key()] = true
+		out = append(out, r)
+	}
+	return out
 }
