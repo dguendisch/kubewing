@@ -30,13 +30,31 @@ type TypeView struct {
 	Columns []pipeline.Column `json:"columns,omitempty"`
 	// Widths are the dragged column widths by column name; others keep their defaults.
 	Widths map[string]int `json:"widths,omitempty"`
+	// Metrics is where the metric columns (kubectl top) were when they were
+	// turned off; nil = right after NAME, in their built-in order. Turned
+	// on again, they go back there.
+	Metrics *MetricsPlace `json:"metrics,omitempty"`
+}
+
+// MetricsPlace is where the metric columns were shown.
+type MetricsPlace struct {
+	// After: the shown column before them ("" = they were first).
+	After string `json:"after"`
+	// Order: the ones shown, in their order.
+	Order []string `json:"order,omitempty"`
 }
 
 func (t TypeView) clone() TypeView {
-	return TypeView{Columns: slices.Clone(t.Columns), Widths: maps.Clone(t.Widths)}
+	c := TypeView{Columns: slices.Clone(t.Columns), Widths: maps.Clone(t.Widths)}
+	if t.Metrics != nil {
+		c.Metrics = &MetricsPlace{After: t.Metrics.After, Order: slices.Clone(t.Metrics.Order)}
+	}
+	return c
 }
 
-func (t TypeView) empty() bool { return len(t.Columns) == 0 && len(t.Widths) == 0 }
+func (t TypeView) empty() bool {
+	return len(t.Columns) == 0 && len(t.Widths) == 0 && t.Metrics == nil
+}
 
 // ColumnStore reads and writes dir/columns.yaml. dir "" keeps the settings
 // in memory only (headless runs, tests).
@@ -96,6 +114,12 @@ func (s *ColumnStore) Get(typ string) TypeView {
 // The caller validates them.
 func (s *ColumnStore) SetColumns(typ string, cols []pipeline.Column) error {
 	return s.update(typ, func(t *TypeView) { t.Columns = slices.Clone(cols) })
+}
+
+// SetMetrics sets where the metric columns go when turned on (nil = right
+// after NAME) and saves.
+func (s *ColumnStore) SetMetrics(typ string, m *MetricsPlace) error {
+	return s.update(typ, func(t *TypeView) { t.Metrics = m })
 }
 
 // SetWidths replaces a type's column widths (nil = the defaults) and saves.

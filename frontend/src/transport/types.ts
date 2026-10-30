@@ -140,6 +140,14 @@ export interface ColumnSpec {
 export interface TypeView {
   columns?: ColumnSpec[];
   widths?: Record<string, number>;
+  /** Where the metric columns were when turned off; unset = right after NAME, in their built-in order. */
+  metrics?: MetricsPlace;
+}
+
+/** Mirrors config.MetricsPlace: after this column ("" = first), the shown ones in their order. */
+export interface MetricsPlace {
+  after: string;
+  order?: string[];
 }
 
 /** Mirrors view.ColumnOption: a column the column dialog offers. */
@@ -658,6 +666,8 @@ export interface Transport {
   columnConfigs(): Promise<Record<string, TypeView>>;
   /** Saves a type's shown columns (null = defaults) and applies them to its panes; rejects an invalid column. */
   setTypeColumns(type: string, columns: ColumnSpec[] | null): Promise<void>;
+  /** setTypeColumns for the metrics switch, saving where the metric columns were too (null = right after NAME). */
+  setTypeMetrics(type: string, columns: ColumnSpec[] | null, place: MetricsPlace | null): Promise<void>;
   /** Saves a type's dragged column widths (null = defaults). */
   setColumnWidths(type: string, widths: Record<string, number> | null): Promise<void>;
   setViewport(pane: string, offset: number, limit: number): Promise<void>;

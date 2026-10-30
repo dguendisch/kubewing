@@ -43,6 +43,9 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
   const [add, setAdd] = useState<NewColumn>(emptyColumn);
   const [error, setError] = useState<string>();
   const hasWidths = useColumns((c) => Object.keys(c.types[type]?.widths ?? {}).length > 0);
+  // where the metric columns go when switched on, and where they were when switched off (saved with OK)
+  const [metricsPlace, setMetricsPlace] = useState(() => useColumns.getState().types[type]?.metrics);
+  const [metricsSwitched, setMetricsSwitched] = useState(false);
   const list = useRef<HTMLUListElement>(null);
   const hasWide = rows.some(isWide);
   const hasMetrics = rows.some(isMetric);
@@ -82,7 +85,14 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
     refocus.current = false;
   }, [at, rows]);
 
-  const save = () => void submitColumns(type, toConfig(rows, choices.defaults)).then((err) => err && setError(err));
+  const save = () => void submitColumns(type, toConfig(rows, choices.defaults), metricsSwitched ? (metricsPlace ?? null) : undefined).then((err) => err && setError(err));
+  const switchMetrics = () => {
+    const t = toggleMetrics(rows, metricsPlace);
+    // off: where they were; on: the place is used (off again in the dialog takes the new one)
+    setMetricsPlace(t.place);
+    setMetricsSwitched(true);
+    update(t.rows);
+  };
   const submitAdd = (value = add.value) => {
     const r = addColumn(rows, { ...add, value });
     if ("error" in r) return setError(r.error);
@@ -135,7 +145,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
         <span className="flex-1" />
         {hasMetrics ? (
           <label className="flex items-center gap-1 text-fg-muted" title="CPU and memory usage (kubectl top), polled while shown">
-            <input type="checkbox" aria-label="metrics" checked={metricsOn(rows)} onChange={() => update(toggleMetrics(rows))} />
+            <input type="checkbox" aria-label="metrics" checked={metricsOn(rows)} onChange={switchMetrics} />
             metrics
           </label>
         ) : null}

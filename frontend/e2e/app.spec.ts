@@ -75,8 +75,8 @@ test.describe("columns (per resource type)", () => {
   // one backend serves the whole run, and columns.yaml with it: leave e2e-wide as it was
   test.afterEach(async ({ page }) => {
     await page.evaluate(async () => {
-      const b = (window as unknown as { __kw: { bridge(): { setTypeColumns(t: string, c: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
-      await b.setTypeColumns("e2e-wide", null);
+      const b = (window as unknown as { __kw: { bridge(): { setTypeColumns(t: string, c: null): Promise<void>; setTypeMetrics(t: string, c: null, p: null): Promise<void>; setColumnWidths(t: string, w: null): Promise<void> } } }).__kw.bridge();
+      await b.setTypeMetrics("e2e-wide", null, null);
       await b.setColumnWidths("e2e-wide", null);
       await b.setTypeColumns("nodes", null);
       await b.setColumnWidths("nodes", null);
@@ -384,6 +384,34 @@ test.describe("columns (per resource type)", () => {
     await page.keyboard.press("m");
     await expect.poll(async () => (await focused(page)).columns).toContain("CPU");
     expect((await focused(page)).view?.widths?.["CPU"]).toBe(100);
+  });
+
+  test("moved metric columns come back where they were after m off and on, here and from the dialog", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU/R", "%CPU/L", "MEM", "%MEM/R", "%MEM/L", "STATUS", "AGE"]);
+    // STATUS moved before them (⌥↑ six times), and MEM before CPU
+    await page.keyboard.press("o");
+    await columnList(page).nth(8).focus();
+    for (let i = 0; i < 6; i++) await page.keyboard.press("Alt+ArrowUp");
+    await columnList(page).nth(6).focus();
+    for (let i = 0; i < 3; i++) await page.keyboard.press("Alt+ArrowUp");
+    await page.keyboard.press("Enter");
+    const moved = ["NAMESPACE", "NAME", "STATUS", "MEM", "CPU", "%CPU/R", "%CPU/L", "%MEM/R", "%MEM/L", "AGE"];
+    await expect.poll(async () => (await focused(page)).columns).toEqual(moved);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).columns).toEqual(moved);
+    // the dialog's switch too: off and OK, then on and OK
+    await page.keyboard.press("o");
+    await page.getByLabel("metrics", { exact: true }).uncheck();
+    await dialog(page).getByRole("button", { name: "OK" }).click();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+    await page.keyboard.press("o");
+    await page.getByLabel("metrics", { exact: true }).check();
+    await dialog(page).getByRole("button", { name: "OK" }).click();
+    await expect.poll(async () => (await focused(page)).columns).toEqual(moved);
   });
 
   test("metrics without metrics-server: empty cells and a hint in the status line; not offered for other kinds", async ({ page }) => {

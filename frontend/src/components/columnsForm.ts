@@ -1,5 +1,5 @@
 import type { Candidate } from "../complete/complete";
-import type { ColumnOption, ColumnSpec, ColumnType, FieldKeys } from "../transport/types";
+import type { ColumnOption, ColumnSpec, ColumnType, FieldKeys, MetricsPlace } from "../transport/types";
 
 /** A row of the column dialog: a server column (wide if priority > 0) or a custom one. */
 export interface ColumnRow {
@@ -53,17 +53,37 @@ export function metricsOn(rows: ColumnRow[]): boolean {
 }
 
 /**
- * Shows all metric columns, or hides them all if they all are shown. Shown,
- * they go right after NAME, in their order (after the last shown column
- * without one); hidden ones stay where they are.
+ * Shows all metric columns, or hides them all if they all are shown.
+ * Hiding returns where they were (the shown column before the first of
+ * them, "" = they were first; their order), to be saved. Showing puts them
+ * back as placed (the saved place) if the column they followed is still
+ * shown, else right after NAME, else after the last shown column; in the
+ * saved order, the ones it doesn't name after them.
  */
-export function toggleMetrics(rows: ColumnRow[]): ColumnRow[] {
-  if (metricsOn(rows)) return rows.map((r) => (isMetric(r) ? { ...r, shown: false } : r));
+export function toggleMetrics(rows: ColumnRow[], place?: MetricsPlace): { rows: ColumnRow[]; place?: MetricsPlace } {
+  if (metricsOn(rows)) {
+    const first = rows.findIndex((r) => isMetric(r) && r.shown);
+    const before = rows.slice(0, first).findLast((r) => r.shown && !isMetric(r));
+    const order = rows.filter((r) => isMetric(r) && r.shown).map((r) => r.name);
+    return { rows: rows.map((r) => (isMetric(r) ? { ...r, shown: false } : r)), place: { after: before?.name ?? "", order } };
+  }
   const rest = rows.filter((r) => !isMetric(r));
-  const metric = rows.filter(isMetric).map((r) => ({ ...r, shown: true }));
-  const name = rest.findIndex((r) => r.shown && r.name === "NAME");
-  const at = (name >= 0 ? name : rest.findLastIndex((r) => r.shown)) + 1;
-  return [...rest.slice(0, at), ...metric, ...rest.slice(at)];
+  const rank = (r: ColumnRow) => {
+    const i = place?.order?.indexOf(r.name) ?? -1;
+    return i < 0 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  // a stable sort: those the saved order doesn't name keep theirs, after it
+  const metric = rows
+    .filter(isMetric)
+    .map((r) => ({ ...r, shown: true }))
+    .sort((a, b) => rank(a) - rank(b));
+  const after = place?.after;
+  const shownAt = (name: string) => rest.findIndex((r) => r.shown && r.name === name);
+  let at: number;
+  if (after === "") at = 0;
+  else if (after !== undefined && shownAt(after) >= 0) at = shownAt(after) + 1;
+  else at = (shownAt("NAME") >= 0 ? shownAt("NAME") : rest.findLastIndex((r) => r.shown)) + 1;
+  return { rows: [...rest.slice(0, at), ...metric, ...rest.slice(at)] };
 }
 
 /** Moves row i by delta (−1 up, +1 down); at an end it stays. */

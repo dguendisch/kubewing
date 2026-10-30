@@ -125,3 +125,37 @@ func TestDefaultSort(t *testing.T) {
 		t.Fatalf("pods: result %q, stages %+v", pods.Sort, stages(pods.Pane))
 	}
 }
+
+// The metrics switch saves where the metric columns were with the columns,
+// across a restart; a refused change keeps the old place.
+func TestTypeMetricsPlace(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "state")
+	svc := New(source.NewRegistry(stormOpener{n: 1}), &recorder{}, Options{Columns: config.OpenColumns(dir)})
+	// an open pane compiles the columns (a bad one is refused)
+	a, err := svc.Open("source: {resource: pods, namespace: ns}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close(a.Pane)
+	place := &config.MetricsPlace{After: "STATUS", Order: []string{"MEM", "CPU"}}
+	if err := svc.SetTypeMetrics("pods", []pipeline.Column{{Name: "NAME"}}, place); err != nil {
+		t.Fatal(err)
+	}
+	got := config.OpenColumns(dir).Get("pods")
+	if got.Metrics == nil || got.Metrics.After != "STATUS" || !slices.Equal(got.Metrics.Order, place.Order) || !slices.Equal(got.Columns, []pipeline.Column{{Name: "NAME"}}) {
+		t.Fatalf("saved = %+v", got)
+	}
+	if err := svc.SetTypeMetrics("pods", []pipeline.Column{{Name: "X", Expr: "o."}}, nil); err == nil {
+		t.Fatal("want error")
+	}
+	if got := svc.ColumnConfigs()["pods"].Metrics; got == nil || got.After != "STATUS" {
+		t.Fatalf("after a refused change = %+v", got)
+	}
+	// turned on: the place is used up; with the defaults nothing is left of the type
+	if err := svc.SetTypeMetrics("pods", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := config.OpenColumns(dir).All()["pods"]; ok {
+		t.Fatalf("saved = %+v", config.OpenColumns(dir).All())
+	}
+}

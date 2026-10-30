@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, ColumnSpec, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, ColumnSpec, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpable, useJump } from "./actions/jump";
 import { paneIds } from "./store/layout";
@@ -673,17 +673,24 @@ export async function toggleMetricColumns(paneId: string) {
     const rows = initialColumns(choices.options);
     if (!rows.some((r) => r.metric)) return flash(paneId, "metrics (kubectl top) are for pods and nodes", true);
     const on = !metricsOn(rows);
-    await bridge().setTypeColumns(p.type, toConfig(toggleMetrics(rows), choices.defaults));
+    const t = toggleMetrics(rows, useColumns.getState().types[p.type]?.metrics);
+    // on: the place is used, nothing to keep (off again saves the one then)
+    await bridge().setTypeMetrics(p.type, toConfig(t.rows, choices.defaults), t.place ?? null);
     flash(paneId, on ? "metrics on: polled every 15s" : "metrics off");
   } catch (e) {
     flash(paneId, `metrics: ${errorText(e)}`, true);
   }
 }
 
-/** The column dialog's ⏎: Go validates and saves; the error, if any, is shown in the dialog. */
-export async function submitColumns(type: string, columns: ColumnSpec[] | null): Promise<string | undefined> {
+/**
+ * The column dialog's ⏎: Go validates and saves; the error, if any, is
+ * shown in the dialog. metrics: the metrics switch was used, where the
+ * metric columns were when it was turned off (null: turned on, used up).
+ */
+export async function submitColumns(type: string, columns: ColumnSpec[] | null, metrics?: MetricsPlace | null): Promise<string | undefined> {
   try {
-    await bridge().setTypeColumns(type, columns);
+    if (metrics !== undefined) await bridge().setTypeMetrics(type, columns, metrics);
+    else await bridge().setTypeColumns(type, columns);
   } catch (e) {
     return String((e as Error).message ?? e);
   }

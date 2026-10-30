@@ -47,6 +47,9 @@ func (a *App) ColumnConfigs() map[string]config.TypeView { return a.svc.ColumnCo
 func (a *App) SetTypeColumns(typ string, cols []pipeline.Column) error {
 	return a.svc.SetTypeColumns(typ, cols)
 }
+func (a *App) SetTypeMetrics(typ string, cols []pipeline.Column, place *config.MetricsPlace) error {
+	return a.svc.SetTypeMetrics(typ, cols, place)
+}
 func (a *App) SetColumnWidths(typ string, widths map[string]int) error {
 	return a.svc.SetColumnWidths(typ, widths)
 }

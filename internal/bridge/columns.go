@@ -69,6 +69,22 @@ func (s *Service) SetTypeColumns(typ string, cols []pipeline.Column) error {
 	return nil
 }
 
+// SetTypeMetrics turns a type's metric columns on or off, as columns
+// (see SetTypeColumns), and saves where they were (nil = right after
+// NAME): turned on again, they go back there. Both are sent with
+// ColumnsEvent at once.
+func (s *Service) SetTypeMetrics(typ string, cols []pipeline.Column, place *config.MetricsPlace) error {
+	prev := s.opts.Columns.Get(typ).Metrics
+	if err := s.opts.Columns.SetMetrics(typ, place); err != nil {
+		return fmt.Errorf("save %s: %w", config.ColumnsFile, err)
+	}
+	if err := s.SetTypeColumns(typ, cols); err != nil {
+		_ = s.opts.Columns.SetMetrics(typ, prev)
+		return err
+	}
+	return nil
+}
+
 // SetColumnWidths sets a resource type's dragged column widths by column
 // name (nil = the defaults), saved and sent to all clients.
 func (s *Service) SetColumnWidths(typ string, widths map[string]int) error {

@@ -137,7 +137,7 @@ Columns and widths are kept in `columns.yaml` across restarts. Changing columns 
 
 ### Metrics: `m`
 
-`m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. Turned on, they're placed right after NAME, as narrow as their numbers; a width you drag stays when they're turned off and on again. The column configurator lists them marked `metrics`, with a **metrics** switch that shows or hides them all at once (also right after NAME); they can also be shown, hidden and moved one by one.
+`m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. The first time they're turned on, they're placed right after NAME, as narrow as their numbers. Moved and resized, they keep it: turned off and on again (`m` or the switch), they come back where they were, in their order and widths (right after NAME if the column they followed is hidden by then). The column configurator lists them marked `metrics`, with a **metrics** switch that shows or hides them all at once; they can also be shown, hidden and moved one by one.
 
 | Kind | Columns |
 |---|---|
