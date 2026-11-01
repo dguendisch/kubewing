@@ -765,7 +765,13 @@ func (s *Service) pump(ctx context.Context, pn *pane) {
 			}
 			pn.mu.Lock()
 			pn.view.Apply(ev, s.opts.Clock.Now())
+			// a node's extended resource resolves a configured column of it: maybe
+			// the first one to be summed
+			resync := pn.view.ShowsAllocation() != (pn.metrics.alloc != nil)
 			pn.mu.Unlock()
+			if resync {
+				s.syncMetrics(pn)
+			}
 			dirty = true
 		case <-pn.kick:
 			dirty = true

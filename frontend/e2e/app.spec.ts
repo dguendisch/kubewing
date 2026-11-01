@@ -430,18 +430,20 @@ test.describe("columns (per resource type)", () => {
     // ⇧M: the requests and limits of the nodes' pods (unfinished-pods.yaml), no metrics-server needed, as kubectl describe node;
     // listing the pods takes a while (the tape's 1s): the status line says so meanwhile
     await page.keyboard.press("Shift+M");
-    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "%CPU REQ", "%CPU LIM", "%MEM REQ", "%MEM LIM", "STATUS"]);
+    const alloc = ["%CPU REQ", "%CPU LIM", "%MEM REQ", "%MEM LIM", "%EPH REQ", "%EPH LIM", "PODS", "%PODS", "%nvidia.com/gpu REQ"];
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", ...alloc, "STATUS"]);
     await expect(status.getByLabel("requests/limits loading")).toHaveText("loading requests/limits…");
-    // 1500m and 4Gi requested of 2 cpu / 8Gi, 1 cpu limited; the init container counts as the max (1 cpu); a node without pods
-    await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 6))).toEqual([
-      ["75%", "50%", "50%", "0%"],
-      ["50%", "0%", "0%", "0%"],
-      ["0%", "0%", "0%", "0%"],
+    // 1500m and 4Gi requested of 2 cpu / 8Gi, 1 cpu limited, 5Gi/10Gi of 50Gi ephemeral storage, 2 of 10 pods, 1 of 2 GPUs;
+    // the init container counts as the max (1 cpu), a node without GPUs has no GPU percentage; a node without pods
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 11))).toEqual([
+      ["75%", "50%", "50%", "0%", "10%", "20%", "2", "20%", "50%"],
+      ["50%", "0%", "0%", "0%", "0%", "0%", "1", "10%", ""],
+      ["0%", "0%", "0%", "0%", "0%", "0%", "0", "0%", ""],
     ]);
     await expect(status.getByLabel("requests/limits loading")).toHaveCount(0);
     // m and ⇧M are independent: with both on, requests/limits stay where they are
     await page.keyboard.press("m");
-    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "%CPU REQ", "%CPU LIM", "%MEM REQ", "%MEM LIM", "STATUS"]);
+    await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", ...alloc, "STATUS"]);
     await page.keyboard.press("Shift+M");
     await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "CPU", "%CPU", "MEM", "%MEM", "STATUS"]);
     await page.keyboard.press("m");

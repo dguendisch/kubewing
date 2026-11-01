@@ -1,7 +1,9 @@
 package view
 
 import (
+	"maps"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,8 +30,10 @@ const (
 
 // metricGroup names a metric column's group for the column configurator
 // ("" = not a metric column).
-func (c colSpec) metricGroup() string {
-	switch c.metricFrom {
+func (c colSpec) metricGroup() string { return c.metricFrom.group() }
+
+func (s metricSource) group() string {
+	switch s {
 	case fromUsage:
 		return "usage"
 	case fromAlloc:
@@ -46,15 +50,16 @@ type metricData struct {
 	hasAlloc bool
 }
 
-// metricColumns are the metric columns per kind, in their order.
+// metricColumns are the metric columns per kind, in their order; nodes
+// have extendedColumns too.
 var metricColumns = map[string][]colSpec{
 	"Pod": {
 		metricCol("CPU", pipeline.TypeNumber, fromUsage, cpuCell),
-		metricCol("%CPU/R", pipeline.TypeNumber, fromUsage, ofPod(func(u source.Usage) int64 { return u.CPU }, func(r source.Resources) (int64, bool) { return r.Requests.CPU, r.ReqCPU })),
-		metricCol("%CPU/L", pipeline.TypeNumber, fromUsage, ofPod(func(u source.Usage) int64 { return u.CPU }, func(r source.Resources) (int64, bool) { return r.Limits.CPU, r.LimCPU })),
+		metricCol("%CPU/R", pipeline.TypeNumber, fromUsage, ofPod("cpu", func(r source.Resources) source.Amounts { return r.Requests })),
+		metricCol("%CPU/L", pipeline.TypeNumber, fromUsage, ofPod("cpu", func(r source.Resources) source.Amounts { return r.Limits })),
 		metricCol("MEM", pipeline.TypeBytes, fromUsage, memCell),
-		metricCol("%MEM/R", pipeline.TypeNumber, fromUsage, ofPod(func(u source.Usage) int64 { return u.Memory }, func(r source.Resources) (int64, bool) { return r.Requests.Memory, r.ReqMemory })),
-		metricCol("%MEM/L", pipeline.TypeNumber, fromUsage, ofPod(func(u source.Usage) int64 { return u.Memory }, func(r source.Resources) (int64, bool) { return r.Limits.Memory, r.LimMemory })),
+		metricCol("%MEM/R", pipeline.TypeNumber, fromUsage, ofPod("memory", func(r source.Resources) source.Amounts { return r.Requests })),
+		metricCol("%MEM/L", pipeline.TypeNumber, fromUsage, ofPod("memory", func(r source.Resources) source.Amounts { return r.Limits })),
 	},
 	"Node": {
 		metricCol("CPU", pipeline.TypeNumber, fromUsage, cpuCell),
@@ -62,11 +67,90 @@ var metricColumns = map[string][]colSpec{
 		metricCol("MEM", pipeline.TypeBytes, fromUsage, memCell),
 		metricCol("%MEM", pipeline.TypeNumber, fromUsage, ofNode("memory", func(d metricData) int64 { return d.usage.Memory })),
 		// kubectl describe node: requests and limits of its unfinished pods, of allocatable
-		metricCol("%CPU REQ", pipeline.TypeNumber, fromAlloc, ofNode("cpu", func(d metricData) int64 { return d.alloc.Requests.CPU })),
-		metricCol("%CPU LIM", pipeline.TypeNumber, fromAlloc, ofNode("cpu", func(d metricData) int64 { return d.alloc.Limits.CPU })),
-		metricCol("%MEM REQ", pipeline.TypeNumber, fromAlloc, ofNode("memory", func(d metricData) int64 { return d.alloc.Requests.Memory })),
-		metricCol("%MEM LIM", pipeline.TypeNumber, fromAlloc, ofNode("memory", func(d metricData) int64 { return d.alloc.Limits.Memory })),
+		allocCol("%CPU REQ", "cpu", requests),
+		allocCol("%CPU LIM", "cpu", limits),
+		allocCol("%MEM REQ", "memory", requests),
+		allocCol("%MEM LIM", "memory", limits),
+		allocCol("%EPH REQ", "ephemeral-storage", requests),
+		allocCol("%EPH LIM", "ephemeral-storage", limits),
+		// out of pod slots, a node takes no more pods however empty it is
+		metricCol("PODS", pipeline.TypeNumber, fromAlloc, func(_ map[string]any, d metricData) string { return strconv.FormatInt(d.alloc.Pods, 10) }),
+		metricCol("%PODS", pipeline.TypeNumber, fromAlloc, ofNode("pods", func(d metricData) int64 { return d.alloc.Pods })),
 	},
+}
+
+func requests(a source.Allocation) source.Amounts { return a.Requests }
+func limits(a source.Allocation) source.Amounts   { return a.Limits }
+
+// allocCol is a node's pods' requests or limits of a resource, of its allocatable.
+func allocCol(name, res string, of func(source.Allocation) source.Amounts) colSpec {
+	return metricCol(name, pipeline.TypeNumber, fromAlloc, ofNode(res, func(d metricData) int64 { return of(d.alloc)[res] }))
+}
+
+// Extended resources (nvidia.com/gpu …) and huge pages: a node column of
+// requests each ("%nvidia.com/gpu REQ"), offered once a node of the pane
+// has some allocatable. Their limits always equal their requests (no
+// overcommit), so there's no LIM column.
+
+const extendedSuffix = " REQ"
+
+// extendedResource reports whether an allocatable resource gets a column of
+// its own: not cpu/memory/ephemeral-storage/pods (fixed columns), not
+// kubernetes.io's own (attachable volumes …, which pods don't request).
+func extendedResource(name string) bool {
+	if strings.HasPrefix(name, "hugepages-") {
+		return true
+	}
+	return strings.Contains(name, "/") && !strings.Contains(name, "kubernetes.io/")
+}
+
+func extendedColumn(res string) colSpec {
+	return allocCol("%"+res+extendedSuffix, res, requests)
+}
+
+// extendedColumnRes is the resource of an extended column's name ("%x REQ").
+func extendedColumnRes(name string) (string, bool) {
+	res, ok := strings.CutPrefix(name, "%")
+	if !ok || len(res) <= len(extendedSuffix) || !strings.EqualFold(res[len(res)-len(extendedSuffix):], extendedSuffix) {
+		return "", false
+	}
+	res = res[:len(res)-len(extendedSuffix)]
+	return res, extendedResource(res)
+}
+
+// extendedColumns are the columns of the extended resources the nodes have
+// shown so far, by name.
+func (v *View) extendedColumns() []colSpec {
+	out := make([]colSpec, 0, len(v.extended))
+	for _, res := range slices.Sorted(maps.Keys(v.extended)) {
+		out = append(out, extendedColumn(res))
+	}
+	return out
+}
+
+// noteExtended records the extended resources a node has some of; true if
+// one wasn't known (its column is now offered, and resolved if configured).
+func (v *View) noteExtended(obj map[string]any) bool {
+	if v.opts.Kind != "Node" {
+		return false
+	}
+	st, _ := obj["status"].(map[string]any)
+	m, _ := st["allocatable"].(map[string]any)
+	added := false
+	for res, q := range m {
+		if v.extended[res] || !extendedResource(res) {
+			continue
+		}
+		if f, ok := quantity(q); !ok || f <= 0 {
+			continue // huge pages of a size not set up ("0")
+		}
+		if v.extended == nil {
+			v.extended = map[string]bool{}
+		}
+		v.extended[res] = true
+		added = true
+	}
+	return added
 }
 
 func metricCol(name string, typ pipeline.ColumnType, src metricSource, f func(obj map[string]any, d metricData) string) colSpec {
@@ -97,9 +181,14 @@ func pct(part, total float64) string {
 	return strconv.FormatInt(int64(part/total*100), 10) + "%"
 }
 
-// ofPod is a pod's usage as a percentage of its effective requests or
-// limits (see source.PodResources); "" if the pod sets none.
-func ofPod(use func(source.Usage) int64, of func(source.Resources) (int64, bool)) func(map[string]any, metricData) string {
+// ofPod is a pod's usage of a resource ("cpu", "memory") as a percentage
+// of its effective requests or limits (see source.PodResources); "" if the
+// pod sets none.
+func ofPod(res string, of func(source.Resources) source.Amounts) func(map[string]any, metricData) string {
+	use := func(u source.Usage) int64 { return u.Memory }
+	if res == "cpu" {
+		use = func(u source.Usage) int64 { return u.CPU }
+	}
 	return func(obj map[string]any, d metricData) string {
 		if !d.hasUsage {
 			return ""
@@ -108,7 +197,7 @@ func ofPod(use func(source.Usage) int64, of func(source.Resources) (int64, bool)
 		if !ok {
 			return ""
 		}
-		total, set := of(r)
+		total, set := of(r)[res]
 		if !set {
 			return ""
 		}

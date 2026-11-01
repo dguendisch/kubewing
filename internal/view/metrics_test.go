@@ -221,8 +221,8 @@ func TestNodeAllocationColumns(t *testing.T) {
 		t.Fatalf("status while loading = %+v", f.Status)
 	}
 	v.SetMetrics(Metrics{Alloc: map[string]source.Allocation{"n1": {
-		Requests: source.Usage{CPU: 3809, Memory: 15340778266},
-		Limits:   source.Usage{CPU: 2000, Memory: 10896 << 20},
+		Requests: source.Amounts{"cpu": 3809, "memory": 15340778266},
+		Limits:   source.Amounts{"cpu": 2000, "memory": 10896 << 20},
 	}}})
 	// as in kubectl describe node: 3809m of 3870m is 98%, 2 is 51%; 15340778266 of 15Gi 95%
 	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "98%", "51%", "95%", "70%"}) {
@@ -233,5 +233,84 @@ func TestNodeAllocationColumns(t *testing.T) {
 	}
 	if f, _ := v.Frame(t0); f.Status != nil && f.Status.MetricsError != "" {
 		t.Fatalf("status = %+v", f.Status)
+	}
+}
+
+func allocNode(name string, allocatable map[string]any) source.Item {
+	it := item(map[string]any{
+		"apiVersion": "v1", "kind": "Node",
+		"metadata": map[string]any{"name": name, "uid": name},
+		"status":   map[string]any{"allocatable": allocatable},
+	})
+	it.Cells = []any{name}
+	return it
+}
+
+// Nodes: ephemeral storage and pod slots of allocatable, as kubectl
+// describe node; the pod count as a number too.
+func TestNodeEphemeralAndPodColumns(t *testing.T) {
+	cols := []pipeline.Column{{Name: "NAME"}, {Name: "%EPH REQ"}, {Name: "%EPH LIM"}, {Name: "PODS"}, {Name: "%PODS"}}
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "nodes"}, Render: pipeline.Render{Columns: cols}}, Options{Kind: "Node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs[:1], Items: []source.Item{
+		allocNode("n1", map[string]any{"cpu": "4", "ephemeral-storage": "100Gi", "pods": "110"}),
+		allocNode("n2", map[string]any{"cpu": "4", "pods": "110"}),
+	}}, t0)
+	if !v.ShowsAllocation() {
+		t.Fatal("ShowsAllocation = false")
+	}
+	v.SetMetrics(Metrics{Alloc: map[string]source.Allocation{"n1": {
+		Requests: source.Amounts{"ephemeral-storage": 30 << 30},
+		Limits:   source.Amounts{"ephemeral-storage": 55 << 30},
+		Pods:     99,
+	}}})
+	if got := cells(v)["n1"]; !slices.Equal(got, []string{"n1", "30%", "55%", "99", "90%"}) {
+		t.Fatalf("n1 = %q", got)
+	}
+	// no ephemeral storage in allocatable: no percentage; no pods: 0
+	if got := cells(v)["n2"]; !slices.Equal(got, []string{"n2", "", "", "0", "0%"}) {
+		t.Fatalf("n2 = %q", got)
+	}
+}
+
+// Extended resources and huge pages get a requests column once a node has
+// some allocatable (not before, not "0", not kubernetes.io's own); a
+// configured one is resolved when a node with it shows up.
+func TestNodeExtendedColumns(t *testing.T) {
+	cols := []pipeline.Column{{Name: "NAME"}, {Name: "%nvidia.com/gpu REQ"}}
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "nodes"}, Render: pipeline.Render{Columns: cols}}, Options{Kind: "Node"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	extended := func() (out []string) {
+		for _, o := range v.ColumnChoices().Options {
+			if strings.Contains(o.Name, "/") || strings.Contains(o.Name, "hugepages") {
+				out = append(out, o.Name+":"+o.Metric+":"+map[bool]string{true: "missing"}[o.Missing])
+			}
+		}
+		return out
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs[:1], Items: []source.Item{
+		allocNode("n1", map[string]any{"cpu": "4", "hugepages-2Mi": "0", "attachable-volumes-aws-ebs": "25", "kubernetes.io/batch": "1"}),
+	}}, t0)
+	if v.ShowsAllocation() {
+		t.Fatal("a column of a resource no node has is shown")
+	}
+	// configured, not resolvable yet: still switched with requests/limits
+	if got := extended(); !slices.Equal(got, []string{"%nvidia.com/gpu REQ:alloc:missing"}) {
+		t.Fatalf("before a gpu node = %v", got)
+	}
+	v.Apply(source.Event{Type: source.Added, Item: allocNode("gpu-1", map[string]any{"cpu": "8", "nvidia.com/gpu": "4", "hugepages-1Gi": "2Gi"})}, t0)
+	if !v.ShowsAllocation() {
+		t.Fatal("ShowsAllocation = false after a gpu node")
+	}
+	if got := extended(); !slices.Equal(got, []string{"%nvidia.com/gpu REQ:alloc:", "%hugepages-1Gi REQ:alloc:"}) {
+		t.Fatalf("after a gpu node = %v", got)
+	}
+	v.SetMetrics(Metrics{Alloc: map[string]source.Allocation{"gpu-1": {Requests: source.Amounts{"nvidia.com/gpu": 3}}}})
+	if got := cells(v); !slices.Equal(got["gpu-1"], []string{"gpu-1", "75%"}) || !slices.Equal(got["n1"], []string{"n1", ""}) {
+		t.Fatalf("cells = %q", got)
 	}
 }

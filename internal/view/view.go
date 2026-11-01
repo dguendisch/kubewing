@@ -142,6 +142,8 @@ type View struct {
 
 	// metrics feed the metric columns (SetMetrics)
 	metrics Metrics
+	// extended: the extended resources the nodes have (their columns)
+	extended map[string]bool
 
 	entries map[string]*entry
 	synced  bool
@@ -335,7 +337,7 @@ func (v *View) resolveColumns(render []pipeline.Column, defs []metav1.TableColum
 
 // availableColumns are all server columns, -o wide ones too; without a
 // server table (nil defs) the built-in NAMESPACE/NAME/AGE. Pods and nodes
-// have the metric columns too.
+// have the metric columns too, nodes those of their extended resources.
 func (v *View) availableColumns(defs []metav1.TableColumnDefinition) []colSpec {
 	var out []colSpec
 	if defs == nil {
@@ -343,7 +345,8 @@ func (v *View) availableColumns(defs []metav1.TableColumnDefinition) []colSpec {
 	} else {
 		out = serverColumns(defs, v.opts.Namespaced, v.opts.Kind)
 	}
-	return append(out, metricColumns[v.opts.Kind]...)
+	out = append(out, metricColumns[v.opts.Kind]...)
+	return append(out, v.extendedColumns()...)
 }
 
 // byDefault: shown without column settings (not -o wide, not a metric).
@@ -407,6 +410,10 @@ func (v *View) columnOptions() []ColumnOption {
 			continue
 		}
 		o := ColumnOption{Name: c.Name, Shown: true, Missing: true}
+		if _, ok := extendedColumnRes(c.Name); ok && v.opts.Kind == "Node" {
+			// no node of this cluster has it: still switched with its group
+			o.Metric = fromAlloc.group()
+		}
 		if i := slices.IndexFunc(available, func(a colSpec) bool { return strings.EqualFold(a.info.Name, c.Name) }); i >= 0 {
 			a := available[i]
 			o = ColumnOption{Name: a.info.Name, Type: a.info.Type, Priority: a.priority, Shown: true, Metric: a.metricGroup()}
@@ -516,10 +523,16 @@ func (v *View) apply(ev source.Event, now time.Time) {
 		return
 	case source.Relist:
 		v.err = ""
+		extended := false
+		for _, it := range ev.Items {
+			extended = v.noteExtended(it.Object.Object) || extended
+		}
 		if ev.Columns != nil {
 			v.serverDefs = ev.Columns
+		}
+		if ev.Columns != nil || extended {
 			// can't fail: custom columns compiled before
-			cols, _ := v.resolveColumns(v.shown, ev.Columns)
+			cols, _ := v.resolveColumns(v.shown, v.serverDefs)
 			v.setColumns(cols)
 		}
 		seen := make(map[string]bool, len(ev.Items))
@@ -535,6 +548,10 @@ func (v *View) apply(ev source.Event, now time.Time) {
 		}
 		v.synced = true
 	case source.Added, source.Modified:
+		if v.noteExtended(ev.Item.Object.Object) {
+			cols, _ := v.resolveColumns(v.shown, v.serverDefs)
+			v.setColumns(cols)
+		}
 		v.upsert(ev.Item, now)
 	case source.Deleted:
 		if e, ok := v.entries[key(ev.Item)]; ok && e.deletedAt.IsZero() {

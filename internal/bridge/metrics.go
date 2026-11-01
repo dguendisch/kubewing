@@ -307,7 +307,8 @@ func (s *Service) sumAllocations(ctx context.Context, f *feed) {
 	push := func() {
 		out := make(map[string]source.Allocation, len(totals))
 		for n, a := range totals {
-			out[n] = a
+			// the totals' maps change on: the panes get copies
+			out[n] = a.Clone()
 		}
 		s.publish(f, nil, "", out)
 		dirty = false

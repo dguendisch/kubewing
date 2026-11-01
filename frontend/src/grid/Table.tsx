@@ -89,7 +89,7 @@ export function defaultWidth(c: ColumnInfo): number {
 }
 
 // kubectl top's columns ("1200m", "512.0Mi", "100%") and the nodes' allocated ones: as wide as their header and values
-const metricWidths: Record<string, number> = { CPU: 64, MEM: 72, "%CPU": 60, "%MEM": 60, "%CPU/R": 68, "%CPU/L": 68, "%MEM/R": 68, "%MEM/L": 68, "%CPU REQ": 80, "%CPU LIM": 80, "%MEM REQ": 84, "%MEM LIM": 84 };
+const metricWidths: Record<string, number> = { CPU: 64, MEM: 72, "%CPU": 60, "%MEM": 60, "%CPU/R": 68, "%CPU/L": 68, "%MEM/R": 68, "%MEM/L": 68, "%CPU REQ": 80, "%CPU LIM": 80, "%MEM REQ": 84, "%MEM LIM": 84, "%EPH REQ": 80, "%EPH LIM": 80, PODS: 56, "%PODS": 64 };
 
 /** How long after the last resize step the widths are saved (a drag fires one per mouse move). */
 const saveWidthsAfter = 300;
