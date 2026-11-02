@@ -7,11 +7,32 @@ import { rank, type Candidate } from "../complete/complete";
 import type { ClusterEntry, ClusterList } from "../transport/types";
 
 export interface Item {
+  /** What's opened: the line's shoot or its control plane, as toggled. */
   entry: ClusterEntry;
+  /** The line as listed (Go's entry, the other plane its alt). */
+  row: ClusterEntry;
   label: string;
   detail: string;
   /** Indexes into label to highlight. */
   hits: number[];
+}
+
+/** ⌘P's toggle: a shoot line opens the shoot or its control plane. */
+export type Plane = "shoot" | "controlPlane";
+
+/** The entry a line opens on a plane: a shoot's (or control plane's) other plane is its alt. */
+export function onPlane(e: ClusterEntry, plane: Plane): ClusterEntry {
+  if (!e.shoot || !!e.controlPlane === (plane === "controlPlane")) return e;
+  return e.alt ?? { ...e, controlPlane: !e.controlPlane, name: undefined, rule: { context: "", confirm: [] }, used: "" };
+}
+
+/** A shoot line's details: the latest use of either plane, gardenctl if either is a session's. */
+function lineDetail(row: ClusterEntry, shown: ClusterEntry, now: Date): string {
+  const alt = row.alt;
+  if (!alt) return entryDetail(shown, now);
+  const used = (Date.parse(alt.used) || 0) > (Date.parse(row.used) || 0) ? alt.used : row.used;
+  const from = row.from === "gardenctl" || alt.from === "gardenctl" ? "gardenctl" : shown.from;
+  return entryDetail({ ...shown, used, from }, now);
 }
 
 /** What an entry is called in the list: a shoot (or its control plane), a project, a garden, a context. */
@@ -73,36 +94,39 @@ export function pathEntry(text: string): ClusterEntry {
  * pasted), then a kubeconfig path, then recent clusters and gardens ranked
  * by the text (all of them, recent first, when it's empty).
  */
-export function items(list: ClusterList | undefined, matches: ClusterEntry[], text: string, now: Date, limit = 100): Item[] {
+export function items(list: ClusterList | undefined, matches: ClusterEntry[], text: string, now: Date, plane: Plane = "shoot", limit = 100): Item[] {
   const out: Item[] = [];
   const q = text.trim();
-  for (const m of matches) out.push({ entry: m, label: entryLabel(m), detail: entryDetail(m, now), hits: [] });
+  for (const m of matches) out.push(item(m, plane, now));
   if (isPath(q)) {
     const e = pathEntry(q);
-    out.push({ entry: e, label: `kubeconfig ${q}`, detail: "its current context", hits: [] });
+    out.push({ entry: e, row: e, label: `kubeconfig ${q}`, detail: "its current context", hits: [] });
   }
   // a pasted URL ranks nothing else (its letters would match everything fuzzily)
   if (matches.length && /[/:]/.test(q)) return out;
   if (isPath(q)) return out;
   const all = [...(list?.recent ?? []), ...(list?.gardens ?? [])];
-  const cands: (Candidate & { i: number })[] = all.map((e, i) => ({
-    value: String(i),
-    label: entryLabel(e),
-    detail: entryDetail(e, now),
-    aliases: aliases(e),
-    i,
-  }));
+  const cands: (Candidate & { i: number })[] = all.map((e, i) => {
+    const it = item(e, plane, now);
+    return { value: String(i), label: it.label, detail: it.detail, aliases: aliases(e), i };
+  });
   for (const m of rank(q, cands, limit)) {
-    const e = all[Number(m.candidate.value)]!;
-    out.push({ entry: e, label: m.candidate.label, detail: m.candidate.detail ?? "", hits: m.hits });
+    const row = all[Number(m.candidate.value)]!;
+    out.push({ entry: onPlane(row, plane), row, label: m.candidate.label, detail: m.candidate.detail ?? "", hits: m.hits });
   }
   return out.slice(0, limit);
 }
 
-/** The highlight after the list changed: kept on the same entry if it's still there, else the first pickable one. */
+/** A line of the list: its row, shown on a plane. */
+export function item(row: ClusterEntry, plane: Plane, now: Date): Item {
+  const entry = onPlane(row, plane);
+  return { entry, row, label: entryLabel(entry), detail: lineDetail(row, entry, now), hits: [] };
+}
+
+/** The highlight after the list changed (or the plane toggled): kept on the same line if it's still there, else the first pickable one. */
 export function keepIndex(prev: Item | undefined, next: Item[]): number {
   if (prev) {
-    const i = next.findIndex((x) => sameEntry(x.entry, prev.entry));
+    const i = next.findIndex((x) => sameEntry(x.row, prev.row));
     if (i >= 0) return i;
   }
   const i = next.findIndex((x) => !x.entry.disabled);

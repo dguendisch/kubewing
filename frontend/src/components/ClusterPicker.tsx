@@ -3,10 +3,10 @@ import { openCluster } from "../commands";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { ClusterEntry, ClusterList } from "../transport/types";
-import { items as listItems, keepIndex, type Item } from "./clusterList";
+import { item as listItem, items as listItems, keepIndex, type Item, type Plane } from "./clusterList";
 import { Badges } from "./Pane";
 
-/** ⌘P: a cluster for the focused pane (⏎) or a new tab (⌘⏎). */
+/** ⌘P: a cluster for a new tab, a new pane or the focused pane. */
 export function ClusterPicker() {
   const overlay = useUI((s) => s.overlay);
   if (overlay?.kind !== "clusters") return null;
@@ -16,13 +16,27 @@ export function ClusterPicker() {
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 
+const targets: { value: S.ClusterTarget; label: string }[] = [
+  { value: "here", label: "here" },
+  { value: "pane", label: "new pane" },
+  { value: "tab", label: "new tab" },
+];
+const planes: { value: Plane; label: string }[] = [
+  { value: "shoot", label: "shoot" },
+  { value: "controlPlane", label: "control plane" },
+];
+// where clusters open: kept while kubewing runs, a new tab at first
+let lastTarget: S.ClusterTarget = "tab";
+
 /**
  * One field above the list. Empty, the list holds the recently opened
  * clusters (and gardenctl sessions' targets), the latest first, then the
  * gardens; typing ranks them, a text gardenctl's patterns match (a
  * dashboard URL, an API host, shoot--project--name) adds its targets on top,
- * a path (/…, ~/…) a kubeconfig file. ↑/↓ move, ⏎ opens in the pane, ⌘⏎ in a
- * new tab, Esc closes. Resolving a Gardener target may take a login (the
+ * a path (/…, ~/…) a kubeconfig file. ↑/↓ move, ⏎ opens where the toggle says
+ * (⇧⇥: here, new pane, new tab; ⌃⇧⏎ a new pane), a shoot or its control
+ * plane as the other toggle says (⇥), Esc closes. It opens listing nothing,
+ * with ⌘O over it. Resolving a Gardener target may take a login (the
  * garden's exec plugin): the dialog stays until it's done or failed.
  */
 function Picker({ paneId }: { paneId: string }) {
@@ -34,6 +48,10 @@ function Picker({ paneId }: { paneId: string }) {
   const [choices, setChoices] = useState<ClusterEntry[]>();
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string>();
+  const [where, setWhereState] = useState(lastTarget);
+  const setWhere = (w: S.ClusterTarget) => setWhereState((lastTarget = w));
+  // a shoot line opens the shoot or its control plane: shoot at every open
+  const [plane, setPlane] = useState<Plane>("shoot");
   const [error, setError] = useState<string>();
   const now = useMemo(() => new Date(), [list]);
 
@@ -55,20 +73,24 @@ function Picker({ paneId }: { paneId: string }) {
   }, [text]);
 
   const shown: Item[] = useMemo(
-    () => (choices ? choices.map((e) => ({ entry: e, label: e.shoot ?? "", detail: `project ${e.project || e.namespace?.replace(/^garden-/, "")} · ${e.garden}`, hits: [] })) : listItems(list, matches, text, now)),
-    [list, matches, text, choices, now],
+    () =>
+      choices
+        ? choices.map((e) => ({ ...listItem(e, plane, now), detail: `project ${e.project || e.namespace?.replace(/^garden-/, "")} · ${e.garden}` }))
+        : listItems(list, matches, text, now, plane),
+    [list, matches, text, choices, now, plane],
   );
   // a new list (typed text, matches arriving, a forgotten entry): the highlight stays on its
-  // entry while the text is empty (browsing), else goes to the best pickable match
-  const [prev, setPrev] = useState<Item[]>(shown);
-  if (prev !== shown) {
-    setPrev(shown);
-    setActive(keepIndex(text.trim() ? undefined : prev[active], shown));
+  // entry while the text is empty (browsing), else goes to the best pickable match; a toggled
+  // plane keeps it on its line
+  const [prev, setPrev] = useState({ shown, plane });
+  if (prev.shown !== shown) {
+    setPrev({ shown, plane });
+    setActive(keepIndex(text.trim() && prev.plane === plane ? undefined : prev.shown[active], shown));
   }
   const cur = shown[active];
 
   const close = () => setUI(S.closeOverlay);
-  const pick = async (it: Item | undefined, newTab: boolean) => {
+  const pick = async (it: Item | undefined, to = where) => {
     if (!it || busy) return;
     if (it.entry.disabled) return setError(it.entry.disabled);
     setError(undefined);
@@ -82,7 +104,7 @@ function Picker({ paneId }: { paneId: string }) {
       }
       if (useUI.getState().overlay?.kind !== "clusters") return; // closed meanwhile
       close();
-      await openCluster(paneId, o.cluster, o.namespace ?? "", newTab);
+      await openCluster(paneId, o.cluster, o.namespace ?? "", to);
     } catch (e) {
       setError(errorText(e));
     } finally {
@@ -91,7 +113,7 @@ function Picker({ paneId }: { paneId: string }) {
   };
   const forget = (it: Item) => {
     bridge()
-      .forgetCluster(it.entry)
+      .forgetCluster(it.row)
       .then(load, (e: unknown) => setError(errorText(e)));
   };
   const move = (d: number) => {
@@ -142,10 +164,15 @@ function Picker({ paneId }: { paneId: string }) {
           } else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
             e.preventDefault();
             setActive(e.key === "ArrowUp" ? 0 : Math.max(0, shown.length - 1));
+          } else if (e.key === "Tab" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+            e.preventDefault();
+            if (e.shiftKey) setWhere(targets[(targets.findIndex((t) => t.value === where) + 1) % targets.length]!.value);
+            else setPlane((p) => (p === "shoot" ? "controlPlane" : "shoot"));
           } else if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
-            void pick(cur, e.metaKey);
+            // ⌃⇧⏎: a new pane, whatever the toggle says
+            void pick(cur, e.ctrlKey && e.shiftKey ? "pane" : where);
           }
         }}
       />
@@ -168,7 +195,7 @@ function Picker({ paneId }: { paneId: string }) {
             onMouseDown={(e) => {
               e.preventDefault();
               setActive(i);
-              void pick(it, e.metaKey);
+              void pick(it);
             }}
             onMouseMove={() => setActive(i)}
             className={`flex cursor-default items-center gap-3 px-2 py-0.5 ${i === active ? "bg-bg-hover text-fg" : "text-fg-muted"} ${it.entry.disabled ? "opacity-50" : ""}`}
@@ -179,7 +206,7 @@ function Picker({ paneId }: { paneId: string }) {
             </span>
             <span className="min-w-0 shrink-[1000] truncate">{it.detail}</span>
             {it.entry.disabled && <span className="shrink-0 italic">{it.entry.disabled}</span>}
-            {it.entry.from === "recent" && (
+            {it.row.from === "recent" && (
               <button
                 type="button"
                 tabIndex={-1}
@@ -198,8 +225,38 @@ function Picker({ paneId }: { paneId: string }) {
           </li>
         ))}
       </ul>
-      <div className="border-t border-border px-2 py-0.5 text-fg-muted">⏎ open here · ⌘⏎ new tab · esc close</div>
+      <div className="flex items-center gap-3 border-t border-border px-2 py-0.5 text-fg-muted">
+        <Toggle label="open in" keyHint="⇧⇥" options={targets} value={where} onChange={setWhere} />
+        <Toggle label="gardener shoot" keyHint="⇥" options={planes} value={plane} onChange={setPlane} dim={!cur?.row.shoot} />
+        <span className="ml-auto">⏎ open · ⌃⇧⏎ new pane · esc close</span>
+      </div>
     </div>
+  );
+}
+
+/** A segmented toggle in the footer: clicked, or cycled by its key in the field. */
+function Toggle<T extends string>({ label, keyHint, options, value, onChange, dim }: { label: string; keyHint: string; options: { value: T; label: string }[]; value: T; onChange: (v: T) => void; dim?: boolean }) {
+  return (
+    <span role="radiogroup" aria-label={label} title={`${label} (${keyHint})`} className={`flex items-center gap-1 ${dim ? "opacity-50" : ""}`}>
+      <span className="mr-0.5">{keyHint}</span>
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={o.value === value}
+          tabIndex={-1}
+          // the field keeps the focus
+          onMouseDown={(e) => {
+            e.preventDefault();
+            onChange(o.value);
+          }}
+          className={`rounded border px-1.5 leading-tight ${o.value === value ? "border-accent text-fg" : "border-border hover:text-fg"}`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </span>
   );
 }
 

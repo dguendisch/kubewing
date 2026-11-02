@@ -27,7 +27,8 @@ export function useCatalog(context: string, active: boolean): CatalogState {
         .then(
           (c) => {
             if (stop) return;
-            setCat((prev) => (prev.context === c.context && prev.gen === c.gen && c.gen !== 0 ? prev : { ...c, ready: true }));
+            // lists Go sent as null (none yet) are empty ones
+            setCat((prev) => (prev.context === c.context && prev.gen === c.gen && c.gen !== 0 ? prev : { ...c, resources: c.resources ?? [], namespaces: c.namespaces ?? [], ready: true }));
             if (c.loading) timer = setTimeout(load, LOADING_POLL_MS);
           },
           () => !stop && setCat({ ...empty(context), ready: true }),

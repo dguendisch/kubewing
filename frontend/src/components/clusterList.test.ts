@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ClusterEntry, ClusterList } from "../transport/types";
-import { entryDetail, entryLabel, isPath, items, keepIndex, since } from "./clusterList";
+import { entryDetail, entryLabel, isPath, items, keepIndex, onPlane, since } from "./clusterList";
 
 const now = new Date("2026-11-02T12:00:00Z");
 const rule = { context: "", confirm: [] };
@@ -11,7 +11,9 @@ const cp = e({ garden: "live", namespace: "garden-foo", shoot: "bar", controlPla
 const kc = e({ kubeconfig: ["/Users/jd/.kube/config"], context: "kind-dev", used: "2026-10-30T12:00:00Z" });
 const project = e({ garden: "live", namespace: "garden", used: "2026-11-01T11:00:00Z" });
 const garden = e({ garden: "live", from: "garden" });
-const list: ClusterList = { recent: [cp, shoot, project, kc], gardens: [garden] };
+// as Go pairs them: the control plane (used last) carries the shoot as its alt
+const paired = { ...cp, alt: shoot };
+const list: ClusterList = { recent: [paired, project, kc], gardens: [garden] };
 
 describe("cluster list", () => {
   it("labels and details", () => {
@@ -24,22 +26,31 @@ describe("cluster list", () => {
     expect(since("2026-11-02T11:55:00Z", now)).toBe("5m ago");
   });
 
-  it("empty text: every recent one in order, then the gardens", () => {
-    expect(items(list, [], "", now).map((i) => i.entry)).toEqual([cp, shoot, project, kc, garden]);
+  it("empty text: every recent one in order, then the gardens; a shoot once, on the toggled plane", () => {
+    expect(items(list, [], "", now).map((i) => i.entry)).toEqual([shoot, project, kc, garden]);
+    expect(items(list, [], "", now, "controlPlane").map((i) => i.entry)).toEqual([paired, project, kc, garden]);
+    // the line's details: the latest use of either plane, gardenctl if either is a session's
+    expect(items(list, [], "", now)[0]!.detail).toBe("foo · live · gardenctl · just now");
+    expect(items(list, [], "", now)[0]!.row).toBe(paired);
+  });
+
+  it("a shoot without its other plane in the list: made up, without a rule", () => {
+    expect(onPlane(shoot, "controlPlane")).toMatchObject({ shoot: "bar", controlPlane: true, name: undefined, rule: { context: "", confirm: [] } });
+    expect(onPlane(kc, "controlPlane")).toBe(kc);
+    expect(onPlane(paired, "shoot")).toBe(shoot);
   });
 
   it("typing ranks by shoot, project, context, technical id", () => {
     expect(items(list, [], "kind", now)[0]!.entry).toBe(kc);
-    // the shoot and its control plane both: the recent order decides
-    expect(items(list, [], "shoot--foo--bar", now).map((i) => i.entry).slice(0, 2)).toEqual([cp, shoot]);
-    const foo = items(list, [], "foo", now).map((i) => i.entry);
-    expect(foo.slice(0, 2)).toEqual([cp, shoot]);
+    expect(items(list, [], "shoot--foo--bar", now)[0]!.entry).toBe(shoot);
+    expect(items(list, [], "foo", now, "controlPlane")[0]!.label).toBe("bar · control plane");
   });
 
   it("a pasted URL: its targets only", () => {
-    const m = [e({ ...shoot, from: "match", used: "" }), e({ ...cp, from: "match", used: "" })];
+    const m = [e({ ...shoot, from: "match", used: "", alt: e({ ...cp, from: "match", used: "" }) })];
     const got = items(list, m, "https://dashboard.example/namespace/garden-foo/shoots/bar", now);
-    expect(got.map((i) => i.entry)).toEqual(m);
+    expect(got.map((i) => i.row)).toEqual(m);
+    expect(items(list, m, "https://dashboard.example/namespace/garden-foo/shoots/bar", now, "controlPlane")[0]!.entry).toBe(m[0]!.alt);
     // a plain word that matched a pattern still ranks the recent ones below
     expect(items(list, m.slice(0, 1), "bar", now).length).toBeGreaterThan(1);
   });
@@ -52,10 +63,11 @@ describe("cluster list", () => {
     expect(got[0]!.entry.kubeconfig).toEqual(["~/.kube/other"]);
   });
 
-  it("highlight follows its entry, else the first pickable", () => {
+  it("highlight follows its entry (on either plane), else the first pickable", () => {
     const a = items(list, [], "", now);
     const b = items({ ...list, recent: list.recent.slice(1) }, [], "", now);
     expect(keepIndex(a[1], b)).toBe(0);
+    expect(keepIndex(a[0], items(list, [], "", now, "controlPlane"))).toBe(0);
     const disabled = items({ recent: [e({ ...kc, disabled: "gone" }), shoot], gardens: [] }, [], "", now);
     expect(keepIndex(undefined, disabled)).toBe(1);
   });

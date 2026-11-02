@@ -40,6 +40,9 @@ type ClusterEntry struct {
 	Rule safety.Rule `json:"rule"`
 	// Disabled says why it can't be opened ("" = it can).
 	Disabled string `json:"disabled,omitempty"`
+	// Alt is a shoot's other plane (its control plane, or the shoot of a
+	// control plane): the dialog lists a shoot once and toggles between them.
+	Alt *ClusterEntry `json:"alt,omitempty"`
 }
 
 // ClusterList is the clusters dialog's list.
@@ -89,6 +92,7 @@ func (s *Service) Clusters() ClusterList {
 		}
 	}
 	slices.SortStableFunc(out.Recent, func(a, b ClusterEntry) int { return b.Used.Compare(a.Used) })
+	out.Recent = s.pair(cfg, out.Recent)
 	if len(out.Recent) > config.MaxClusters {
 		out.Recent = out.Recent[:config.MaxClusters]
 	}
@@ -118,7 +122,7 @@ func (s *Service) MatchTarget(text string) ([]ClusterEntry, error) {
 	if len(out) > 0 {
 		err = nil
 	}
-	return out, err
+	return s.pair(cfg, out), err
 }
 
 // OpenCluster makes an entry a cluster panes can open: a kubeconfig's
@@ -146,6 +150,7 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 		for _, c := range amb.Choices {
 			out.Choices = append(out.Choices, s.entry(cfg, targetCluster(c), "match"))
 		}
+		out.Choices = s.pair(cfg, out.Choices)
 		return out, nil
 	}
 	if err != nil {
@@ -155,11 +160,57 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 	_, c.Context = source.SplitCluster(o.Cluster)
 	c.Used = s.opts.Clock.Now()
 	_ = s.opts.Clusters.Add(c)
+	s.mu.Lock()
+	s.opened[openedKey(o.Cluster, o.Namespace, o.Target.ControlPlane)] = o.Target
+	s.mu.Unlock()
+	// picked explicitly: the connection is wanted, so ⌘O completes on it before a pane lists anything
+	if s.opts.Catalog != nil {
+		s.opts.Catalog.Track(o.Cluster)
+	}
 	return ClusterOpen{Cluster: o.Cluster, Namespace: o.Namespace}, nil
 }
 
-// ForgetCluster removes a cluster from the recent ones.
+// OtherPlane is the shoot of a control plane, or the control plane of a
+// shoot, a pane shows (cluster and namespace as its spec has them): a target
+// OpenCluster resolved before, opened as one picked in the dialog is.
+func (s *Service) OtherPlane(cluster, namespace string) (ClusterOpen, error) {
+	s.mu.Lock()
+	t, ok := s.opened[openedKey(cluster, "", false)]
+	if !ok {
+		t, ok = s.opened[openedKey(cluster, namespace, true)]
+	}
+	s.mu.Unlock()
+	if !ok {
+		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane opened with ⌘P")
+	}
+	t.ControlPlane = !t.ControlPlane
+	t.Seed = ""
+	o, err := s.OpenCluster(ClusterEntry{Cluster: targetCluster(t)})
+	if err == nil && len(o.Choices) > 0 {
+		// the target was resolved before: its project is known
+		err = errors.New("shoot " + t.Shoot + " exists in several projects")
+	}
+	return o, err
+}
+
+// openedKey is where a resolved target is found again: a shoot by its
+// cluster (its kubeconfig is its own), a control plane by its seed's cluster
+// and the shoot's namespace there (control planes on one seed share it).
+func openedKey(cluster, namespace string, controlPlane bool) string {
+	if !controlPlane {
+		return cluster
+	}
+	return cluster + "\x00" + namespace
+}
+
+// ForgetCluster removes a cluster from the recent ones: a shoot with its
+// other plane (one line in the dialog).
 func (s *Service) ForgetCluster(e ClusterEntry) error {
+	if e.Alt != nil {
+		if err := s.opts.Clusters.Remove(e.Alt.Cluster); err != nil {
+			return err
+		}
+	}
 	return s.opts.Clusters.Remove(e.Cluster)
 }
 
@@ -240,6 +291,36 @@ func (s *Service) entry(cfg gardener.Config, c config.Cluster, from string) Clus
 		e.Rule = s.guard.Rule(e.Name)
 	}
 	return e
+}
+
+// pair makes a shoot and its control plane one entry, kept at the earlier
+// one's place (the list's order: the latest first), the other one its Alt.
+// A shoot whose other plane isn't in the list gets it made up (never used,
+// from the same source), so the dialog can toggle on every shoot.
+func (s *Service) pair(cfg gardener.Config, list []ClusterEntry) []ClusterEntry {
+	out := make([]ClusterEntry, 0, len(list))
+	for _, e := range list {
+		if e.Shoot == "" {
+			out = append(out, e)
+			continue
+		}
+		other := e.Cluster
+		other.ControlPlane = !other.ControlPlane
+		if i := slices.IndexFunc(out, func(o ClusterEntry) bool { return o.Alt == nil && o.Cluster.Same(other) }); i >= 0 {
+			out[i].Alt = &e
+			continue
+		}
+		out = append(out, e)
+	}
+	for i, e := range out {
+		if e.Shoot != "" && e.Alt == nil {
+			other := e.Cluster
+			other.ControlPlane, other.Used = !other.ControlPlane, time.Time{}
+			alt := s.entry(cfg, other, e.From)
+			out[i].Alt = &alt
+		}
+	}
+	return out
 }
 
 // predictedName is the context name a target will get, before it's

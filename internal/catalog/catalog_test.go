@@ -2,7 +2,9 @@ package catalog
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -128,6 +130,22 @@ func TestTrackFetchesInBackground(t *testing.T) {
 	// initial fetch uses cached discovery (the mapper just populated it)
 	if f.refresh[0] {
 		t.Fatal("initial fetch should not bypass the discovery cache")
+	}
+}
+
+// A context still loading has empty lists, never null ones: ⌘P opens ⌘O on
+// a catalog that just started, and the dialog iterates them.
+func TestLoadingSnapshotHasEmptyLists(t *testing.T) {
+	f := newFake()
+	c := New(f, Options{})
+	defer c.Close()
+	c.Track("dev")
+	b, err := json.Marshal(c.Get("dev", false))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("snapshot = %s", b)
 	}
 }
 

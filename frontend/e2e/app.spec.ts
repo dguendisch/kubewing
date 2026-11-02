@@ -4809,21 +4809,43 @@ test.describe("⌘P: open a cluster", () => {
     await expect(options(page).filter({ hasText: "tape-missing" })).toHaveAttribute("aria-disabled", "true");
 
     await page.getByRole("combobox", { name: "cluster" }).fill("https://dashboard.tape.example/namespace/garden-foo/shoots/bar");
-    await expect(options(page)).toHaveCount(2);
+    // a shoot is one line: ⇥ toggles it to its control plane and back
+    await expect(options(page)).toHaveCount(1);
     await expect(options(page).nth(0)).toHaveText(/^bar.*foo · tape-garden/);
-    await expect(options(page).nth(1)).toContainText("bar · control plane");
+    await page.keyboard.press("Tab");
+    await expect(options(page).nth(0)).toContainText("bar · control plane");
+    await expect(dialog(page).getByRole("radio", { name: "control plane" })).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("Tab");
     await expect(options(page).nth(0)).toHaveAttribute("aria-selected", "true");
+    // where it opens: a new tab at first; ⇧⇥ cycles here → new pane → new tab, so a click picks here
+    const where = dialog(page).getByRole("radiogroup", { name: "open in" });
+    await expect(where.getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
+    await page.keyboard.press("Shift+Tab");
+    await expect(where.getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("combobox", { name: "cluster" })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog(page)).toHaveCount(0);
-    // the pane keeps its resource, now on the shoot's cluster, named <garden>/<technical id>
-    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/^@\d+\/tape-garden\/shoot--foo--bar$/) });
+    // the pane on the shoot's cluster (named <garden>/<technical id>) lists nothing yet: ⌘O is open over it
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/^@\d+\/tape-garden\/shoot--foo--bar$/) });
+    expect((await inspect(page)).overlays).toEqual(["open"]);
     const pane = page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`);
     await expect(pane).toHaveAttribute("data-context", "tape-garden/shoot--foo--bar");
     await expect(pane.getByLabel("context label")).toHaveText("GARDEN");
+    // Esc leaves it empty; its button opens ⌘O again, which lists what's picked
+    await page.keyboard.press("Escape");
     expect((await inspect(page)).focus).toBe("table");
+    await pane.getByRole("button", { name: "pick what to list" }).click();
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
+    // ⌘⇧P: its control plane, whose seed isn't in the test garden: the error shows in the pane, which stays
+    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await expect(pane.getByRole("status", { name: "pane status" }).getByLabel("message")).toContainText("soil");
+    await expect(pane).toHaveAttribute("data-context", "tape-garden/shoot--foo--bar");
 
-    // remembered: first in the list next time, with a ✕ to forget it
+    // remembered: first in the list next time, with a ✕ to forget it; where it opens too
     await page.keyboard.press("ControlOrMeta+P");
+    await expect(dialog(page).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
     await expect(options(page).first()).toContainText("bar");
     await expect(options(page).first()).toContainText("just now");
     await options(page).first().getByRole("button", { name: "forget bar" }).dispatchEvent("mousedown");
@@ -4836,23 +4858,47 @@ test.describe("⌘P: open a cluster", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("⌘⏎ opens in a new tab on pods; errors stay in the dialog", async ({ page }) => {
+  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌘⇧P only on what ⌘P opened", async ({ page }) => {
     await openStatic(page);
     await page.keyboard.press("ControlOrMeta+P");
     const field = page.getByRole("combobox", { name: "cluster" });
+    // where it opens is kept while kubewing runs (an earlier test may have changed it): new tab
+    await dialog(page).getByRole("radio", { name: "new tab" }).dispatchEvent("mousedown");
     // the control plane's seed isn't in the test garden: the error shows, the dialog stays
     await field.fill("tg/shoot--foo--bar");
-    await expect(options(page)).toHaveCount(2);
-    await page.keyboard.press("ArrowDown");
+    await expect(options(page)).toHaveCount(1);
+    await dialog(page).getByRole("radio", { name: "control plane" }).dispatchEvent("mousedown");
     await page.keyboard.press("Enter");
     await expect(dialog(page).getByRole("status", { name: "cluster status" })).toContainText("soil");
     await expect(dialog(page)).toBeVisible();
-    await page.keyboard.press("ArrowUp");
-    await page.keyboard.press("ControlOrMeta+Enter");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Enter");
     await expect(dialog(page)).toHaveCount(0);
-    const s = await inspect(page);
+    let s = await inspect(page);
     expect(s.tabs).toHaveLength(2);
     expect(s.activeTab).toBe(1);
-    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "pods", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
+    expect(s.overlays).toEqual(["open"]);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
+    await page.keyboard.press("Escape");
+
+    // back in the first tab: ⌘⇧P on a cluster ⌘P didn't open says so
+    await page.keyboard.press("ControlOrMeta+1");
+    const from = (await inspect(page)).focusedPane;
+    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await expect(page.locator(`section[data-pane="${from}"]`).getByLabel("message")).toContainText("⌘P");
+    // ⌃⇧⏎: a new pane below the focused one, the toggle unchanged
+    await page.keyboard.press("ControlOrMeta+P");
+    await field.fill("tg/shoot--foo--bar");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Control+Shift+Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    s = await inspect(page);
+    expect(s.tabs).toHaveLength(2);
+    expect(s.focusedPane).not.toBe(from);
+    expect(s.overlays).toEqual(["open"]);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+P");
+    await expect(dialog(page).getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
   });
 });

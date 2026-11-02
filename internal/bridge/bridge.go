@@ -18,6 +18,7 @@ import (
 
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/gardener"
 	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
@@ -102,6 +103,8 @@ type Service struct {
 	useq  uint64
 	// feeds feed the metric columns (usage polls, allocation sums)
 	feeds map[feedKey]*feed
+	// opened: the Gardener targets OpenCluster resolved, by where their panes are (openedKey)
+	opened map[string]gardener.Target
 }
 
 // New creates a service.
@@ -112,7 +115,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}}
+	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}, opened: map[string]gardener.Target{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")

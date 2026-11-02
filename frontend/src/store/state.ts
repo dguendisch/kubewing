@@ -725,21 +725,26 @@ export function failedPanes(s: UIState, cluster: string): string[] {
     .map((p) => p.id);
 }
 
+/** Where ⌘P opens a cluster: in the focused pane, a new pane next to it, a new tab. */
+export type ClusterTarget = "here" | "pane" | "tab";
+
 /**
- * ⌘P ⏎: the pane on another cluster, in the namespace it starts in, as a
- * context switch in ⌘O: the resource stays, selectors and a jump's filter go.
- * A pane that isn't a table (a shell, a log tail) shows pods there.
+ * ⌘P ⏎: a pane on another cluster, in the namespace it starts in, listing
+ * nothing yet: ⌘O (opened over it) picks what. A ⌘O context switch, as it
+ * keeps nothing of the pane's view.
  */
-export function clusterSpec(p: PaneState, cluster: string, namespace = ""): PaneSpec {
-  const table = !p.term && !p.logs;
-  return { ...initialSpec(cluster, namespace), resource: table ? p.spec.resource : "pods" };
+export function clusterSpec(cluster: string, namespace = ""): PaneSpec {
+  return { ...initialSpec(cluster, namespace), resource: "" };
 }
 
+/** A pane listing nothing (opened by ⌘P, before ⌘O picked a resource). */
+export const emptySpec = (spec: PaneSpec) => !spec.resource;
+
 /** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
-export function launchTab(s: UIState, cluster: string, namespace = ""): UIState {
+export function launchTab(s: UIState, cluster: string, namespace = "", spec = initialSpec(cluster, namespace)): UIState {
   const next = newTab(s);
   const id = next.tabs[next.activeTab]!.focused;
-  return { ...next, panes: { ...next.panes, [id]: { id, spec: initialSpec(cluster, namespace), selected: 0 } } };
+  return { ...next, panes: { ...next.panes, [id]: { id, spec, selected: 0 } } };
 }
 
 export function newTab(s: UIState): UIState {

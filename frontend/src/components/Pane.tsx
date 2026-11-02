@@ -47,7 +47,7 @@ export function Pane({ id }: { id: string }) {
 
   // open on mount / spec change of a table pane without server pane
   useEffect(() => {
-    if (pane && !pane.term && !pane.logs && !pane.serverId && !pane.opening && !pane.error) void applySpec(id, pane.spec);
+    if (pane && !pane.term && !pane.logs && !pane.serverId && !pane.opening && !pane.error && !S.emptySpec(pane.spec)) void applySpec(id, pane.spec);
   }, [id, pane?.serverId, pane?.opening, pane?.error]);
 
   // a split following its table's selection: the row selected there, as it moves
@@ -341,6 +341,7 @@ function TablePane({
   filterField?: S.FilterField;
   tableFocused: boolean;
 }) {
+  if (S.emptySpec(pane.spec)) return <EmptyPane pane={pane} rule={rule} />;
   return (
     <>
       <Header pane={pane} rule={rule} filterField={filterField} />
@@ -365,6 +366,27 @@ function TablePane({
           />
         ) : null}
         {pane.error ? <div role="alert" className="absolute inset-x-0 top-0 p-3 text-deleted">{pane.error}</div> : null}
+      </div>
+      <PaneFooter pane={pane} />
+    </>
+  );
+}
+
+/** ⌘P's pane before ⌘O picked what it lists: its cluster, and the key to pick (a click opens ⌘O too). */
+function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "source.open")?.key);
+  return (
+    <>
+      <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
+        <Badges rule={rule} />
+        <PaneName pane={pane} />
+        <span className="text-fg-muted">{S.clusterLabel(pane.spec.context)}</span>
+        <NameGap paneId={pane.id} />
+      </header>
+      <div className="flex min-h-0 flex-1 items-center justify-center">
+        <button type="button" aria-label="pick what to list" onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "open", pane: pane.id }))} className="text-fg-muted hover:text-fg">
+          nothing listed yet{key ? `: ${prettyKey(key)}` : ""} picks a resource
+        </button>
       </div>
       <PaneFooter pane={pane} />
     </>

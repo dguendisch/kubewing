@@ -50,12 +50,16 @@ func TestClusters(t *testing.T) {
 	if len(l.Recent) != 1 || l.Recent[0].From != "gardenctl" || l.Recent[0].Shoot != "old" || l.Recent[0].Name != "tape-garden/shoot--foo--old" || l.Recent[0].Rule.Label != "TG" {
 		t.Fatalf("recent: %+v", l.Recent)
 	}
+	// a shoot is one entry: its control plane, never used, is its alt
+	if a := l.Recent[0].Alt; a == nil || !a.ControlPlane || a.Shoot != "old" || !a.Used.IsZero() || a.From != "gardenctl" {
+		t.Fatalf("recent alt: %+v", a)
+	}
 
 	m, err := svc.MatchTarget("https://dashboard.tape.example/namespace/garden-foo/shoots/bar")
-	if err != nil || len(m) != 2 || m[0].Name != "tape-garden/shoot--foo--bar" || !m[1].ControlPlane || m[0].Rule.Label != "TG" {
+	if err != nil || len(m) != 1 || m[0].Name != "tape-garden/shoot--foo--bar" || m[0].Alt == nil || !m[0].Alt.ControlPlane || m[0].Rule.Label != "TG" {
 		t.Fatalf("match: %+v %v", m, err)
 	}
-	if m, _ := svc.MatchTarget("missing/x"); len(m) != 2 || !strings.Contains(m[0].Disabled, "not found") {
+	if m, _ := svc.MatchTarget("missing/x"); len(m) != 1 || !strings.Contains(m[0].Disabled, "not found") || m[0].Alt == nil || m[0].Alt.Disabled == "" {
 		t.Errorf("missing kubeconfig: %+v", m)
 	}
 	o, err := svc.OpenCluster(m[0])
@@ -73,10 +77,23 @@ func TestClusters(t *testing.T) {
 		t.Errorf("clusters.yaml: %s", b)
 	}
 	// a shoot's control plane: its seed isn't in the tapes
-	if _, err := svc.OpenCluster(m[1]); err == nil || !strings.Contains(err.Error(), "soil") {
+	if _, err := svc.OpenCluster(*m[0].Alt); err == nil || !strings.Contains(err.Error(), "soil") {
 		t.Errorf("control plane: %v", err)
 	}
-	if err := svc.ForgetCluster(l.Recent[0]); err != nil || len(svc.Clusters().Recent) != 1 {
+	// ⌘⇧P on the shoot's pane: its control plane, resolved as a pick (the seed isn't in the tapes either)
+	if _, err := svc.OtherPlane(o.Cluster, "kube-system"); err == nil || !strings.Contains(err.Error(), "soil") {
+		t.Errorf("other plane: %v", err)
+	}
+	if _, err := svc.OtherPlane("@99/elsewhere", ""); err == nil || !strings.Contains(err.Error(), "⌘P") {
+		t.Errorf("other plane of a cluster ⌘P didn't open: %v", err)
+	}
+	// both planes opened: one entry at the latest one's place, the other its alt; forgotten together
+	_ = svc.opts.Clusters.Add(config.Cluster{Garden: "tape-garden", Namespace: "garden-foo", Shoot: "bar", ControlPlane: true, Used: at.Add(-time.Hour)})
+	l = svc.Clusters()
+	if len(l.Recent) != 2 || l.Recent[0].ControlPlane || l.Recent[0].Alt == nil || !l.Recent[0].Alt.ControlPlane || !l.Recent[0].Alt.Used.Equal(at.Add(-time.Hour)) {
+		t.Fatalf("paired: %+v", l.Recent)
+	}
+	if err := svc.ForgetCluster(l.Recent[0]); err != nil || len(svc.Clusters().Recent) != 1 || len(svc.opts.Clusters.List()) != 0 {
 		t.Errorf("forget: %v %+v", err, svc.Clusters().Recent)
 	}
 

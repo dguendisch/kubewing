@@ -83,6 +83,7 @@ export function wsTransport(url: string): Transport {
     matchTarget: (t) => call("MatchTarget", t),
     openCluster: (e) => call("OpenCluster", e),
     forgetCluster: (e) => call("ForgetCluster", e),
+    otherPlane: (c, ns) => call("OtherPlane", c, ns),
     contextRule: (c) => call("ContextRule", c),
     prepare: (k, p, key) => call("Prepare", k, p, key),
     delete: (t) => call("Delete", t),

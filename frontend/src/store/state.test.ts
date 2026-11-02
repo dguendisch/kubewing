@@ -1208,9 +1208,12 @@ describe("decode (⏎ in an object view)", () => {
 });
 
 describe("clusterSpec", () => {
-  it("keeps the resource of a table, pods for a shell; selectors go", () => {
-    const p = { id: "v1", selected: 0, spec: { ...S.initialSpec("old", "ns"), resource: "deployments", labelSelector: "app=x", filter: "o.x", grep: "y" } };
-    expect(S.clusterSpec(p, "@2/live/shoot--foo--bar")).toEqual({ ...S.initialSpec("@2/live/shoot--foo--bar"), resource: "deployments" });
-    expect(S.clusterSpec({ ...p, term: { session: "s" } } as S.PaneState, "@3/x", "kube-system")).toEqual(S.initialSpec("@3/x", "kube-system"));
+  it("lists nothing yet, in the cluster's namespace; a launched tab takes it", () => {
+    const spec = S.clusterSpec("@2/live/shoot--foo--bar", "kube-system");
+    expect(spec).toEqual({ ...S.initialSpec("@2/live/shoot--foo--bar", "kube-system"), resource: "" });
+    expect(S.emptySpec(spec)).toBe(true);
+    expect(S.emptySpec(S.initialSpec())).toBe(false);
+    const s = S.launchTab(S.initialState(), "@2/live/shoot--foo--bar", "kube-system", spec);
+    expect(S.focusedPane(s).spec).toBe(spec);
   });
 });

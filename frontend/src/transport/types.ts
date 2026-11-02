@@ -231,6 +231,8 @@ export interface ClusterEntry {
   rule: SafetyRule;
   /** Why it can't be opened. */
   disabled?: string;
+  /** A shoot's other plane (its control plane, or the shoot of a control plane): one line, toggled. */
+  alt?: ClusterEntry;
 }
 
 /** Mirrors bridge.ClusterList. */
@@ -742,6 +744,8 @@ export interface Transport {
   openCluster(e: ClusterEntry): Promise<ClusterOpen>;
   /** Removes a cluster from the recent ones. */
   forgetCluster(e: ClusterEntry): Promise<void>;
+  /** ⌘⇧P: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘P opened); may ask to log in. */
+  otherPlane(cluster: string, namespace: string): Promise<ClusterOpen>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;
   /** Checks a mutation against the safety policy (Go decides); throws if refused. */

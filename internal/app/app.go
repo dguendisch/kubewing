@@ -85,6 +85,9 @@ func (a *App) OpenCluster(e bridge.ClusterEntry) (bridge.ClusterOpen, error) {
 	return a.svc.OpenCluster(e)
 }
 func (a *App) ForgetCluster(e bridge.ClusterEntry) error { return a.svc.ForgetCluster(e) }
+func (a *App) OtherPlane(cluster, namespace string) (bridge.ClusterOpen, error) {
+	return a.svc.OtherPlane(cluster, namespace)
+}
 func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }

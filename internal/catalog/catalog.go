@@ -268,8 +268,9 @@ func (c *Catalog) fetch(ctx context.Context, cluster string, e *entry, what sour
 
 func (s Snapshot) clone() Snapshot {
 	out := s
-	out.Resources = append([]source.ResourceType(nil), s.Resources...)
-	out.Namespaces = append([]string(nil), s.Namespaces...)
+	// never nil: JSON's null would reach the dialog as no list at all
+	out.Resources = append([]source.ResourceType{}, s.Resources...)
+	out.Namespaces = append([]string{}, s.Namespaces...)
 	if s.Errors != nil {
 		out.Errors = make(map[string]string, len(s.Errors))
 		for k, v := range s.Errors {

@@ -289,6 +289,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
     case "cluster.open":
       return setUI((x) => (x.overlay?.kind === "clusters" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "clusters", pane: pane.id })));
+    case "cluster.otherPlane":
+      return void switchPlane(pane);
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
     case "source.reconnect":
@@ -968,19 +970,39 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
 
 /**
  * ⌘P ⏎: a cluster opened (Go resolved it: a kubeconfig's context, a
- * Gardener target's kubeconfig) in the pane, as a ⌘O context switch is; in
- * a new tab on pods (⌘⏎).
+ * Gardener target's kubeconfig) where the dialog says: in a new tab, in a
+ * new pane below the pane (⌘D) or in the pane, as a ⌘O context switch is.
+ * It lists nothing yet: ⌘O opens over it, to pick what.
  */
-export async function openCluster(paneId: string, cluster: string, namespace: string, newTab: boolean) {
-  if (newTab) return setUI((x) => S.launchTab(x, cluster, namespace));
+export async function openCluster(paneId: string, cluster: string, namespace: string, where: S.ClusterTarget) {
+  const spec = S.clusterSpec(cluster, namespace);
   const pane = useUI.getState().panes[paneId];
-  if (!pane) return;
+  if (where === "here" && pane && S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
+  // a shell or log tail isn't a source to switch: a new tab keeps it
+  if (where === "tab" || !pane || (where === "here" && (pane.term || pane.logs))) setUI((x) => S.launchTab(x, cluster, namespace, spec));
+  else if (where === "pane") setUI((x) => S.splitWith(S.focusPane(x, paneId), spec));
+  else await openSource(paneId, spec);
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "open", pane: S.focusedPane(x).id }));
+}
+
+/**
+ * ⌘⇧P: the focused pane from a shoot to its control plane or back (Go
+ * knows which target the pane's cluster is, once ⌘P resolved it). The pane
+ * stays as it is (the resource, its view) on the other cluster.
+ */
+async function switchPlane(pane: S.PaneState) {
+  if (pane.term || pane.logs) return flash(pane.id, "⌘⇧P switches a table pane between shoot and control plane", true);
   if (S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
-  if (pane.term || pane.logs) {
-    // a shell or log tail isn't a source to switch: a new tab keeps it
-    return setUI((x) => S.launchTab(x, cluster, namespace));
+  flash(pane.id, "resolving the other plane… (the garden may ask to log in)");
+  try {
+    const o = await bridge().otherPlane(pane.spec.context, pane.spec.namespace);
+    const p = useUI.getState().panes[pane.id];
+    if (!p) return;
+    const spec = { ...S.openSpec(p.spec), context: o.cluster, namespace: o.namespace ?? "" };
+    await openSource(p.id, spec);
+  } catch (e) {
+    flash(pane.id, String((e as Error)?.message ?? e), true);
   }
-  await openSource(paneId, S.clusterSpec(pane, cluster, namespace));
 }
 
 /**
@@ -1066,6 +1088,8 @@ const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect = false) {
   const p = useUI.getState().panes[paneId];
   if (!p) return;
+  // nothing to list yet (⌘P's new pane): the pane only holds the cluster, for ⌘O
+  if (S.emptySpec(spec)) return setUI((x) => S.updatePane(x, paneId, ({ object: _, ...q }) => ({ ...q, spec, error: undefined, selected: 0, serverId: undefined, leased: undefined, context: S.splitCluster(spec.context).context || undefined, kind: undefined, type: undefined, opening: false })));
   // a borrowed server pane (a split object view's) is the table's: never changed from here
   const keep = !!p.serverId && !p.leased && S.sameSource(p.spec, spec);
   // a new source detaches the old server pane right away (the store closes it),
