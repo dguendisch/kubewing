@@ -117,3 +117,105 @@ func TestClusters(t *testing.T) {
 		t.Error("relative path opened")
 	}
 }
+
+// ⌘J's clusters: a shoot row of a garden ⌘P opened leads to the shoot and
+// its control plane, a seed row to the seed (a managed one: its shoot's
+// kubeconfig, which is also the control planes' connection there), a managed
+// seed row also to its shoot's control plane. Rows of other clusters and
+// kinds have none.
+func TestClusterJumps(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	t.Chdir(root)
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{}}
+	for _, n := range []string{"garden-shoots", "garden-projects", "garden-cas", "garden-seeds", "garden-managedseeds", "e2e-static"} {
+		tp, err := tape.Load("testdata/tapes/" + n + ".yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		op.Tapes[n] = tp
+		op.Tapes[tp.Pipeline.Source.Resource] = tp
+	}
+	cfg := config.Defaults("")
+	cfg.Config.Contexts = []config.ContextRule{{Match: "tape-garden/*", Label: "TG"}}
+	svc := New(source.NewRegistry(op), &eventLog{events: map[string][]any{}}, Options{
+		Actor: op, Config: &cfg, Clock: fixedClock{time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)},
+		Clusters: config.OpenClusters(""),
+		Gardener: &Gardener{Paths: gardener.Paths{Config: "testdata/garden/gardenctl-v2.yaml"}, Lookup: op},
+	})
+	g, err := svc.OpenCluster(ClusterEntry{Cluster: config.Cluster{Garden: "tape-garden"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	jumps := func(resource, key string, n int) []ClusterJump {
+		t.Helper()
+		res := openSynced(t, svc, "source: {cluster: \""+g.Cluster+"\", resource: "+resource+"}", n)
+		rel, err := svc.Relations(res.Pane, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rel.Clusters
+	}
+
+	shoot := jumps("shoots", "shoot-baz", 3)
+	if len(shoot) != 2 || shoot[0].Label != "shoot baz" || shoot[0].Entry.Name != "tape-garden/shoot--foo--baz" || shoot[0].Entry.Rule.Label != "TG" || shoot[0].Entry.From != "jump" ||
+		shoot[1].Label != "control plane of baz" || !shoot[1].Entry.ControlPlane || shoot[1].Entry.Namespace != "garden-foo" {
+		t.Fatalf("shoot: %+v", shoot)
+	}
+	cp, err := svc.OpenCluster(shoot[1].Entry)
+	if _, ctx := source.SplitCluster(cp.Cluster); err != nil || ctx != "tape-garden/seed--loam" || cp.Namespace != "shoot--foo--baz" {
+		t.Fatalf("control plane: %+v %v", cp, err)
+	}
+	// ⌘⇧P works on what ⌘J opened, as on a ⌘P pick
+	if o, err := svc.OtherPlane(cp.Cluster, cp.Namespace); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+		t.Errorf("other plane: %+v %v", o, err)
+	}
+
+	seed := jumps("seeds", "seed-loam", 2)
+	if len(seed) != 1 || seed[0].Label != "seed loam" || seed[0].Entry.Seed != "loam" || seed[0].Entry.Name != "tape-garden/seed--loam" {
+		t.Fatalf("seed: %+v", seed)
+	}
+	o, err := svc.OpenCluster(seed[0].Entry)
+	if err != nil || o.Cluster != cp.Cluster || o.Namespace != "" {
+		t.Fatalf("seed opened: %+v %v (control plane %s)", o, err, cp.Cluster)
+	}
+	// remembered, and ⌘P lists it by its name
+	if l := svc.Clusters(); len(l.Recent) == 0 || l.Recent[0].Seed != "loam" || l.Recent[0].Name != "tape-garden/seed--loam" {
+		t.Errorf("recent: %+v", l.Recent)
+	}
+	// a seed's pane is no shoot or control plane; a control plane on it still is
+	if _, err := svc.OtherPlane(o.Cluster, ""); err == nil || !strings.Contains(err.Error(), "seed loam") {
+		t.Errorf("other plane of a seed: %v", err)
+	}
+	if _, err := svc.OtherPlane(o.Cluster, "shoot--foo--baz"); err != nil {
+		t.Errorf("other plane on the seed's cluster: %v", err)
+	}
+	if _, err := svc.OpenCluster(jumps("seeds", "seed-soil", 2)[0].Entry); err == nil || !strings.Contains(err.Error(), "no login secret") {
+		t.Errorf("seed soil: %v", err)
+	}
+
+	ms := jumps("managedseeds", "ms-loam", 1)
+	if len(ms) != 2 || ms[0].Entry.Seed != "loam" || ms[1].Label != "control plane of shoot loam" || ms[1].Entry.Shoot != "loam" || ms[1].Entry.Namespace != "garden" || !ms[1].Entry.ControlPlane {
+		t.Fatalf("managed seed: %+v", ms)
+	}
+
+	// not a garden: nothing (tape's own cluster), nor other kinds
+	res := openSynced(t, svc, "source: {resource: shoots}", 3)
+	if rel, _ := svc.Relations(res.Pane, "shoot-baz"); rel.Clusters != nil {
+		t.Errorf("not a garden: %+v", rel.Clusters)
+	}
+	res = openSynced(t, svc, "source: {cluster: \""+g.Cluster+"\", resource: projects}", 1)
+	if rel, _ := svc.Relations(res.Pane, "project-foo"); rel.Clusters != nil {
+		t.Errorf("a project: %+v", rel.Clusters)
+	}
+}
+
+func TestSameServer(t *testing.T) {
+	for _, c := range [][2]string{{"https://api.x", "https://API.x/"}, {"https://api.x:443", "https://api.x"}} {
+		if !sameServer(c[0], c[1]) {
+			t.Errorf("%s ≠ %s", c[0], c[1])
+		}
+	}
+	if sameServer("https://api.x", "https://api.y") {
+		t.Error("api.x = api.y")
+	}
+}

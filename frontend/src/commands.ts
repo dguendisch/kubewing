@@ -1,8 +1,8 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, ColumnSpec, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, ClusterEntry, ColumnSpec, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
-import { jumpable, useJump } from "./actions/jump";
+import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
@@ -137,9 +137,15 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return openJump();
     case "object.events":
       return void openEvents();
+    case "menu.runTab": {
+      // a jump menu's cluster entry in a new tab; other menu entries have no tab of their own
+      const o = s.overlay;
+      if (o?.kind === "jump" && useJump.getState().items[o.index ?? 0]?.cluster) return void runJump(o.index ?? 0, "tab");
+      return;
+    }
     case "menu.runSplit": {
       const o = s.overlay;
-      if (o?.kind === "jump") return void runJump(o.index ?? 0, true);
+      if (o?.kind === "jump") return void runJump(o.index ?? 0, "pane");
       // the row menu: a view entry (YAML, diff, describe) opens in a split instead of in place, edit YAML its editor
       if (o?.kind !== "menu") return;
       const item = useMenu.getState().items[o.index ?? 0];
@@ -153,7 +159,7 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void moveHistory(cmd === "history.back" ? "back" : "forward");
     case "menu.run": {
       const o = s.overlay;
-      if (o?.kind === "jump") return void runJump(o.index ?? 0, false);
+      if (o?.kind === "jump") return void runJump(o.index ?? 0, "here");
       if (o?.kind === "history") return void pickHistory(o.index ?? 0);
       if (o?.kind === "container") return void pickContainer(o.containers?.[o.index ?? 0]?.name);
       if (o?.kind === "cells") return void copyCell(o.index ?? 0);
@@ -925,16 +931,47 @@ async function openEvents() {
  * the target opens in a split below. Entries without a target (a gone
  * owner) and the scan entry are handled by the menu itself.
  */
-export async function runJump(index: number, inSplit: boolean) {
+export async function runJump(index: number, where: S.ClusterTarget) {
   const o = useUI.getState().overlay;
   if (o?.kind !== "jump") return;
   const item = useJump.getState().items[index];
   if (!item || !jumpable(item)) return;
   if (item.scan) return void useJump.getState().scan?.();
   const pane = useUI.getState().panes[o.pane];
-  if (!pane || !item.target) return;
+  if (!pane) return;
+  if (item.cluster) return void jumpToCluster(pane.id, item.id, item.cluster, where);
+  if (!item.target) return;
   setUI(S.closeOverlay);
-  await jumpTo(pane.id, item.target, inSplit, o.key);
+  await jumpTo(pane.id, item.target, where === "pane", o.key);
+}
+
+/**
+ * ⌘J on a Gardener row: its shoot, control plane or seed, resolved as a ⌘P
+ * pick (the garden may ask to log in: the menu says resolving… meanwhile,
+ * errors stay on the entry) and opened as one: here (⌘← goes back), in a
+ * split below or a new tab, listing nothing yet with ⌘O over it.
+ */
+async function jumpToCluster(paneId: string, id: string, entry: ClusterEntry, where: S.ClusterTarget) {
+  const st = useJump.getState();
+  if (st.resolving || !st.rel) return;
+  const rel = st.rel;
+  const update = (patch: Pick<JumpState, "resolving" | "clusterError">) => {
+    const cur = { ...useJump.getState(), ...patch };
+    useJump.setState({ ...patch, items: jumpItems(rel, cur) });
+  };
+  update({ resolving: id, clusterError: undefined });
+  const still = () => useJump.getState().rel === rel && useUI.getState().overlay?.kind === "jump";
+  try {
+    const o = await bridge().openCluster(entry);
+    if (!still()) return; // closed or moved on meanwhile
+    // a jump knows the shoot's project: several choices can't happen, but say so if they do
+    if (o.choices?.length) return update({ resolving: undefined, clusterError: { id, message: `${entry.shoot} exists in several projects: pick it in ⌘P` } });
+    update({ resolving: undefined });
+    setUI(S.closeOverlay);
+    await openCluster(paneId, o.cluster, o.namespace ?? "", where);
+  } catch (e) {
+    if (still()) update({ resolving: undefined, clusterError: { id, message: String((e as Error)?.message ?? e) } });
+  }
 }
 
 /**

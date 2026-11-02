@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"strings"
 
+	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/yaml"
 )
 
@@ -111,6 +112,24 @@ func (c Config) Garden(name string) (Garden, bool) {
 	return Garden{}, false
 }
 
+// Server is the API server of the garden's kubeconfig context.
+func (g Garden) Server() (string, error) {
+	raw, err := clientcmd.LoadFromFile(g.Kubeconfig)
+	if err != nil {
+		return "", err
+	}
+	ctx := g.Context
+	if ctx == "" {
+		ctx = raw.CurrentContext
+	}
+	if c, ok := raw.Contexts[ctx]; ok && c != nil {
+		if cl, ok := raw.Clusters[c.Cluster]; ok && cl != nil {
+			return cl.Server, nil
+		}
+	}
+	return "", fmt.Errorf("garden %s: no cluster for context %q in %s", g.Identity, ctx, g.Kubeconfig)
+}
+
 // Problem says why a garden can't be used ("" = it can).
 func (g Garden) Problem() string {
 	if g.Kubeconfig == "" {
@@ -122,8 +141,8 @@ func (g Garden) Problem() string {
 	return ""
 }
 
-// Target is a Gardener cluster to open: a garden, a project in it, a shoot
-// or a shoot's control plane (on its seed).
+// Target is a Gardener cluster to open: a garden, a project in it, a shoot,
+// a shoot's control plane (on its seed) or a seed.
 type Target struct {
 	Garden string `json:"garden"`
 	// Project or Namespace (its namespace) narrow a garden to a project, and find a shoot.
@@ -132,7 +151,7 @@ type Target struct {
 	Shoot     string `json:"shoot,omitempty"`
 	// ControlPlane: the shoot's control plane, its namespace on the seed.
 	ControlPlane bool `json:"controlPlane,omitempty"`
-	// Seed a pattern matched; seed targets aren't supported (yet).
+	// Seed is a seed target without Shoot; a resolved control plane's seed.
 	Seed string `json:"seed,omitempty"`
 }
 

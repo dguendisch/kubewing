@@ -103,7 +103,7 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 Entries that can't be opened (a garden whose kubeconfig is missing) are greyed out, with the reason. Safety labels show next to the entries already, as far as the name is known. `✕` on a shoot forgets both its shoot and its control plane.
 
-**Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘P`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘P` while kubewing runs; elsewhere it says so in the status line.
+**Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘P`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘P` (or `⌘J` on a garden's shoot row) while kubewing runs; elsewhere it says so in the status line.
 
 **Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on kubewing's `PATH`.
 
@@ -111,13 +111,15 @@ Entries that can't be opened (a garden whose kubeconfig is missing) are greyed o
 |---|---|---|---|
 | shoot | the shoot, authenticated by gardenlogin | `<garden>/shoot--<project>--<name>` | all |
 | shoot's control plane | its seed (a managed seed through its shoot, otherwise the seed's login secret) | `<garden>/seed--<seed>` | the shoot's, on the seed |
+| seed | the seed, as for a control plane | `<garden>/seed--<seed>` | all |
 | project | the garden | `<garden>` | the project's |
 | garden | the garden | `<garden>` | all |
 
 - Picking one looks it up in the garden, which may ask you to log in (the garden kubeconfig's exec plugin, e.g. a browser for OIDC). The dialog stays open with **resolving…** until it's done; errors (no access, no such shoot) show in it.
 - A shoot name without a project is searched in all projects. If it exists in more than one, the dialog lists them to pick from (`Esc` goes back).
 - A value that several gardens' patterns match (`shoot--foo--bar` without a garden prefix, two gardens with the same patterns) is listed once per garden, where gardenctl would refuse it.
-- The garden is one connection however many of its projects and lookups you open, so you log in once. A shoot's kubeconfig is built in memory and lives as long as kubewing runs: nothing is written to disk. Seeds as targets of their own aren't supported yet.
+- The garden is one connection however many of its projects and lookups you open, so you log in once. A shoot's kubeconfig is built in memory and lives as long as kubewing runs: nothing is written to disk.
+- A seed is a target of its own when a pattern names one (a `seed` group), a gardenctl session targets one, or `⌘J` opened it from a seed row. A seed and the control planes on it are one connection.
 
 ### The status line
 
@@ -435,6 +437,7 @@ Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a co
 
 | Section | Entries |
 |---|---|
+| **clusters** | on a garden's Gardener rows (see below): a shoot → "shoot bar" and "control plane of bar"; a seed → "seed soil"; a managed seed → its seed and the control plane of its shoot |
 | **namespace** | "pods in shop" (the same resource narrowed to the row's namespace, filters kept; from an all-namespaces pane), "namespace object shop", "everything in shop" (every type, see [`all`](#everything-in-a-namespace-all)); a namespace row has "everything in" it too |
 | **owners** | the `ownerReferences` chain up (pod → replica set → deployment, and on through Gardener and other CRD owners); each checked by UID, so a deleted or recreated owner is listed disabled with why |
 | **owned** | what the row runs, counted: deployments → replica sets and pods; replica sets, stateful sets, daemon sets, jobs → pods; cron jobs → jobs; nodes → their pods; namespaces → their pods; a custom resource with a scale subresource → the pods its selector selects. **scan for owned…** finds anything else (e.g. a CRD owning config maps) by listing every resource type's metadata in the namespace; it runs only on request |
@@ -442,6 +445,13 @@ Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a co
 | **events** | the row's events (see below) |
 
 `j`/`k` move (wrapping around), `⏎` jumps in place, `⇧⏎` opens the target in a split below, `Esc` closes.
+
+**Clusters of a shoot or seed.** In a pane on a garden, `⌘J` on a shoot, seed or managed seed row lists its clusters first, highlighted, each with the context name it will get (and its safety label). It opens like a pick in `⌘P` (see [Opening a cluster](#opening-a-cluster-p)): with nothing listed and `⌘O` over it, the shoot in all namespaces, the control plane in the shoot's namespace on its seed, a seed in all namespaces.
+
+- `⏎` opens it in the pane (`⌘←` goes back to the rows), `⇧⏎` in a split below, `⌘⏎` in a new tab.
+- Only picking an entry looks it up in the garden, which may ask you to log in; the entry says **resolving…** meanwhile. An error (no access, a seed without a login secret) shows on the entry, and the menu stays open.
+- The garden is one of gardenctl's (see [Gardener targets](#opening-a-cluster-p)): opened with `⌘P`, or from any kubeconfig whose context points at the same API server.
+- `⌘⇧P` switches a shoot or control plane opened this way, as one opened with `⌘P`. Opened clusters are remembered in `⌘P`'s list.
 
 ### Jumping from a field in the YAML
 

@@ -22,6 +22,10 @@ describe("cluster list", () => {
     expect(entryDetail(cp, now)).toBe("foo · live · gardenctl · just now");
     expect(entryDetail(kc, now)).toBe("~/.kube/config · 3d ago");
     expect(entryDetail(garden, now)).toBe("garden");
+    const seed = e({ garden: "live", seed: "soil", name: "live/seed--soil" });
+    expect([entryLabel(seed), entryDetail(seed, now)]).toEqual(["seed soil", "live"]);
+    // found by its context name's part too
+    expect(items({ recent: [seed], gardens: [] }, [], "seed--soil", now).map((i) => i.entry)).toEqual([seed]);
     expect(since("0001-01-01T00:00:00Z", now)).toBe("");
     expect(since("2026-11-02T11:55:00Z", now)).toBe("5m ago");
   });

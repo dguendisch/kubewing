@@ -168,3 +168,17 @@ func clientConfig(cluster string) (clientcmd.ClientConfig, error) {
 	}
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: ctx}), nil
 }
+
+// Server is the API server a cluster's kubeconfig points at. Reads the
+// kubeconfig only: connects nowhere.
+func Server(cluster string) (string, error) {
+	cc, err := clientConfig(cluster)
+	if err != nil {
+		return "", err
+	}
+	cfg, err := cc.ClientConfig()
+	if err != nil {
+		return "", err
+	}
+	return cfg.Host, nil
+}

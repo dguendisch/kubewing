@@ -17,7 +17,7 @@ const ClustersFile = "clusters.yaml"
 const MaxClusters = 100
 
 // Cluster is a cluster opened before: a kubeconfig's context, or a Gardener
-// target (Garden set).
+// target (Garden set): a garden, project, shoot, control plane or seed.
 type Cluster struct {
 	// Kubeconfig are the files of a kubeconfig ("" entries none: ~/.kube/config); Context its context.
 	Kubeconfig []string `json:"kubeconfig,omitempty"`
@@ -28,6 +28,8 @@ type Cluster struct {
 	Namespace    string `json:"namespace,omitempty"`
 	Shoot        string `json:"shoot,omitempty"`
 	ControlPlane bool   `json:"controlPlane,omitempty"`
+	// Seed is a seed of its own (no Shoot): its cluster, all namespaces.
+	Seed string `json:"seed,omitempty"`
 
 	Used time.Time `json:"used"`
 }
@@ -38,7 +40,7 @@ func (c Cluster) Same(o Cluster) bool {
 		// a project's namespace or its name: either names it
 		sameProject := c.Project == o.Project && (c.Project != "" || c.Namespace == o.Namespace) ||
 			c.Namespace != "" && c.Namespace == o.Namespace
-		return c.Garden == o.Garden && c.Shoot == o.Shoot && c.ControlPlane == o.ControlPlane && sameProject
+		return c.Garden == o.Garden && c.Seed == o.Seed && c.Shoot == o.Shoot && c.ControlPlane == o.ControlPlane && sameProject
 	}
 	return c.Context == o.Context && slices.Equal(c.Kubeconfig, o.Kubeconfig)
 }

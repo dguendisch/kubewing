@@ -17,8 +17,8 @@ type SessionTarget struct {
 }
 
 // Sessions reads the targets of gardenctl's sessions (dir/<session>/target.yaml),
-// the latest first, without repeats. Targets kubewing can't open (a seed,
-// no garden) are left out.
+// the latest first, without repeats. Targets kubewing can't open (no
+// garden) are left out.
 func Sessions(dir string) []SessionTarget {
 	if dir == "" {
 		return nil
@@ -35,11 +35,13 @@ func Sessions(dir string) []SessionTarget {
 			continue
 		}
 		var t Target
-		if yaml.Unmarshal(b, &t) != nil || t.Garden == "" || t.Shoot == "" && t.Seed != "" {
+		if yaml.Unmarshal(b, &t) != nil || t.Garden == "" {
 			continue
 		}
 		// gardenctl notes a shoot's seed too; kubewing finds it again
-		t.Seed = ""
+		if t.Shoot != "" {
+			t.Seed = ""
+		}
 		out = append(out, SessionTarget{Target: t, Set: fi.ModTime()})
 	}
 	slices.SortStableFunc(out, func(a, b SessionTarget) int { return b.Set.Compare(a.Set) })

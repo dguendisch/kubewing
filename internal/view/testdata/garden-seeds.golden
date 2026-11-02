@@ -1,0 +1,38 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "seed-loam",
+    "seed-soil"
+  ],
+  "rows": [
+    {
+      "key": "seed-loam",
+      "cells": [
+        "",
+        "loam"
+      ]
+    },
+    {
+      "key": "seed-soil",
+      "cells": [
+        "",
+        "soil"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

@@ -35,10 +35,11 @@ function lineDetail(row: ClusterEntry, shown: ClusterEntry, now: Date): string {
   return entryDetail({ ...shown, used, from }, now);
 }
 
-/** What an entry is called in the list: a shoot (or its control plane), a project, a garden, a context. */
+/** What an entry is called in the list: a shoot (or its control plane), a seed, a project, a garden, a context. */
 export function entryLabel(e: ClusterEntry): string {
   if (!e.garden) return e.context || "(current context)";
   if (e.shoot) return `${e.shoot}${e.controlPlane ? " · control plane" : ""}`;
+  if (e.seed) return `seed ${e.seed}`;
   if (e.project || e.namespace) return `project ${projectOf(e)}`;
   return e.garden;
 }
@@ -50,7 +51,7 @@ export function entryDetail(e: ClusterEntry, now: Date): string {
   const parts: string[] = [];
   if (e.garden) {
     if (e.shoot && projectOf(e)) parts.push(projectOf(e));
-    if (e.shoot || e.project || e.namespace) parts.push(e.garden);
+    if (e.shoot || e.seed || e.project || e.namespace) parts.push(e.garden);
     else parts.push("garden");
   } else {
     parts.push(e.kubeconfig?.length ? e.kubeconfig.map(shortPath).join(", ") : "kubeconfig");
@@ -74,10 +75,11 @@ export function since(used: string, now: Date): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-/** The words an entry is found by: shoot, project, garden (and its alias), context, files. */
+/** The words an entry is found by: shoot, seed, project, garden (and its alias), context, files. */
 function aliases(e: ClusterEntry): string[] {
-  const out = [e.name, e.context, e.shoot, e.project, e.namespace, e.garden, projectOf(e), ...(e.kubeconfig ?? [])];
+  const out = [e.name, e.context, e.shoot, e.seed, e.project, e.namespace, e.garden, projectOf(e), ...(e.kubeconfig ?? [])];
   if (e.shoot) out.push(`shoot--${projectOf(e)}--${e.shoot}`);
+  if (e.seed) out.push(`seed--${e.seed}`);
   return out.filter((x): x is string => !!x);
 }
 
@@ -141,6 +143,7 @@ export function sameEntry(a: ClusterEntry, b: ClusterEntry): boolean {
     (a.namespace ?? "") === (b.namespace ?? "") &&
     (a.shoot ?? "") === (b.shoot ?? "") &&
     !!a.controlPlane === !!b.controlPlane &&
+    (a.seed ?? "") === (b.seed ?? "") &&
     (a.context ?? "") === (b.context ?? "") &&
     (a.kubeconfig ?? []).join("\n") === (b.kubeconfig ?? []).join("\n")
   );

@@ -1,0 +1,15 @@
+# The test garden's managed seeds (⌘P, ⌘J's clusters): loam is shoot
+# garden/loam (garden-shoots). soil has none, and no login secret either.
+lookupOnly: true
+pipeline:
+  source: {resource: managedseeds}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Shoot, type: string, priority: 0}
+initial:
+  - object:
+      apiVersion: seedmanagement.gardener.cloud/v1alpha1
+      kind: ManagedSeed
+      metadata: {name: loam, namespace: garden, uid: ms-loam, creationTimestamp: "2026-01-01T10:00:00Z"}
+      spec: {shoot: {name: loam}}
+    cells: [loam, loam]

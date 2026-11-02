@@ -1,5 +1,7 @@
-# Gardener objects for the clusters dialog (⌘P): a garden's shoots, its
-# projects and the shoots' CA config maps, looked up by gardener.Resolver.
+# Gardener objects for the clusters dialog (⌘P) and ⌘J's clusters: a
+# garden's shoots, its projects and the shoots' CA config maps, looked up by
+# gardener.Resolver. bar's seed soil isn't in the garden (its control plane
+# fails); baz's seed loam is the managed seed of shoot garden/loam.
 lookupOnly: true
 pipeline:
   source: {resource: shoots}
@@ -15,3 +17,21 @@ initial:
         technicalID: shoot--foo--bar
         advertisedAddresses: [{name: external, url: "https://api.bar.foo.tape.example"}]
     cells: [bar]
+  - object:
+      apiVersion: core.gardener.cloud/v1beta1
+      kind: Shoot
+      metadata: {name: baz, namespace: garden-foo, uid: shoot-baz, creationTimestamp: "2026-01-01T10:00:00Z"}
+      spec: {seedName: loam, kubernetes: {version: "1.33.1"}}
+      status:
+        technicalID: shoot--foo--baz
+        advertisedAddresses: [{name: external, url: "https://api.baz.foo.tape.example"}]
+    cells: [baz]
+  - object:
+      apiVersion: core.gardener.cloud/v1beta1
+      kind: Shoot
+      metadata: {name: loam, namespace: garden, uid: shoot-loam, creationTimestamp: "2026-01-01T10:00:00Z"}
+      spec: {seedName: soil, kubernetes: {version: "1.33.1"}}
+      status:
+        technicalID: shoot--garden--loam
+        advertisedAddresses: [{name: external, url: "https://api.loam.garden.tape.example"}]
+    cells: [loam]

@@ -231,16 +231,17 @@ export interface ClusterEntry {
   /** A kubeconfig's files (none: ~/.kube/config) and context ("" = its current one). */
   kubeconfig?: string[];
   context?: string;
-  /** Gardener target: garden identity, project (or its namespace), shoot, its control plane. */
+  /** Gardener target: garden identity, project (or its namespace), shoot, its control plane; or a seed (no shoot). */
   garden?: string;
   project?: string;
   namespace?: string;
   shoot?: string;
   controlPlane?: boolean;
+  seed?: string;
   /** RFC 3339; zero for gardens and matches. */
   used: string;
-  /** recent: opened before; gardenctl: a gardenctl session's target; match: a pattern matched the text; garden: a garden. */
-  from: "recent" | "gardenctl" | "match" | "garden";
+  /** recent: opened before; gardenctl: a gardenctl session's target; match: a pattern matched the text; garden: a garden; jump: ⌘J's clusters. */
+  from: "recent" | "gardenctl" | "match" | "garden" | "jump";
   /** The context name kubewing gives it (safety rules match on it), if known before it's opened. */
   name?: string;
   rule: SafetyRule;
@@ -474,6 +475,15 @@ export interface Relations {
   scan?: boolean;
   /** The scan spans all namespaces and cluster-scoped types (asks first). */
   scanAll?: boolean;
+  /** A Gardener shoot's or seed's clusters (rows of a garden). */
+  clusters?: ClusterJump[];
+}
+
+/** Mirrors bridge.ClusterJump: ⌘J to a shoot, its control plane or a seed, opened as a ⌘P pick (resolved only when chosen). */
+export interface ClusterJump {
+  id: string;
+  label: string;
+  entry: ClusterEntry;
 }
 
 /** Mirrors bridge.OwnedScanResult. */

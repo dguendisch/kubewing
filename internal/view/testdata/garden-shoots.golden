@@ -9,22 +9,38 @@
       "name": "NAME"
     }
   ],
-  "total": 1,
+  "total": 3,
   "offset": 0,
   "order": [
-    "shoot-bar"
+    "shoot-loam",
+    "shoot-bar",
+    "shoot-baz"
   ],
   "rows": [
+    {
+      "key": "shoot-loam",
+      "cells": [
+        "garden",
+        "loam"
+      ]
+    },
     {
       "key": "shoot-bar",
       "cells": [
         "garden-foo",
         "bar"
       ]
+    },
+    {
+      "key": "shoot-baz",
+      "cells": [
+        "garden-foo",
+        "baz"
+      ]
     }
   ],
   "status": {
     "synced": true,
-    "objects": 1
+    "objects": 3
   }
 }

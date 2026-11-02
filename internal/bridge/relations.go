@@ -38,6 +38,8 @@ type Relations struct {
 	// ScanAll: the scan covers all namespaces and cluster-scoped types
 	// (a cluster-scoped owner), so the menu asks before running it.
 	ScanAll bool `json:"scanAll,omitempty"`
+	// Clusters: a Gardener shoot's or seed's clusters (a garden's rows).
+	Clusters []ClusterJump `json:"clusters,omitempty"`
 }
 
 // relationTypes is implemented by openers that know the resource types the
@@ -125,6 +127,7 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 		out.Scan = true
 		out.ScanAll = obj.GetNamespace() == ""
 	}
+	out.Clusters = s.clusterJumps(cluster, obj, kind, res.GVR.Group)
 	return out, nil
 }
 

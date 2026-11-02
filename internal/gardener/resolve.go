@@ -99,7 +99,13 @@ func (r *Resolver) Resolve(ctx context.Context, t Target) (Opened, error) {
 	}
 	t.Garden = g.Identity
 	if t.Seed != "" && t.Shoot == "" {
-		return Opened{}, fmt.Errorf("seed targets aren't supported yet (seed %s)", t.Seed)
+		// a seed: its cluster, all namespaces (a project's namespace means nothing there)
+		t.Project, t.Namespace, t.ControlPlane = "", "", false
+		cluster, err := r.seed(ctx, garden, g, t.Seed)
+		if err != nil {
+			return Opened{}, err
+		}
+		return Opened{Cluster: cluster, Target: t}, nil
 	}
 	if t.Project != "" && t.Namespace == "" {
 		p, err := r.Lookup.GetObject(ctx, garden, projects, "", t.Project)
@@ -180,9 +186,7 @@ func (r *Resolver) shootKubeconfig(ctx context.Context, garden string, g Garden,
 	return shootKubeconfig(ctxName, ns, name, g.Identity, accessLevel, addresses(shoot), []byte(ca))
 }
 
-// controlPlane opens the shoot's seed in the shoot's namespace there: a
-// managed seed by its shoot's kubeconfig (project garden), another one by
-// its login secret, as gardenctl does.
+// controlPlane opens the shoot's seed in the shoot's namespace there.
 func (r *Resolver) controlPlane(ctx context.Context, garden string, g Garden, shoot *unstructured.Unstructured, t Target) (Opened, error) {
 	seed, _, _ := unstructured.NestedString(shoot.Object, "spec", "seedName")
 	tid, _, _ := unstructured.NestedString(shoot.Object, "status", "technicalID")
@@ -190,6 +194,18 @@ func (r *Resolver) controlPlane(ctx context.Context, garden string, g Garden, sh
 		return Opened{}, fmt.Errorf("shoot %s/%s isn't scheduled to a seed yet", shoot.GetNamespace(), shoot.GetName())
 	}
 	t.Seed = seed
+	cluster, err := r.seed(ctx, garden, g, seed)
+	if err != nil {
+		return Opened{}, err
+	}
+	return Opened{Cluster: cluster, Namespace: tid, Target: t}, nil
+}
+
+// seed is a seed's cluster: a managed seed by its shoot's kubeconfig
+// (project garden), another one by its login secret, as gardenctl does.
+// Named <garden>/seed--<seed>, so its control planes and the seed itself
+// share one connection.
+func (r *Resolver) seed(ctx context.Context, garden string, g Garden, seed string) (string, error) {
 	ctxName := g.Identity + "/seed--" + seed
 	ms, err := r.Lookup.GetObject(ctx, garden, managedSeeds, "garden", seed)
 	switch {
@@ -200,28 +216,26 @@ func (r *Resolver) controlPlane(ctx context.Context, garden string, g Garden, sh
 		}
 		s, err := r.Lookup.GetObject(ctx, garden, shoots, "garden", name)
 		if err != nil {
-			return Opened{}, fmt.Errorf("shoot garden/%s of managed seed %s: %w", name, seed, err)
+			return "", fmt.Errorf("shoot garden/%s of managed seed %s: %w", name, seed, err)
 		}
 		// named for the seed, not its shoot: safety rules can tell seeds apart
 		raw, err := r.shootKubeconfig(ctx, garden, g, s, ctxName, g.accessLevel(true))
 		if err != nil {
-			return Opened{}, err
+			return "", err
 		}
-		ref := r.register("seed:"+g.Identity+"/"+seed, raw)
-		return Opened{Cluster: source.JoinCluster(ref, ctxName), Namespace: tid, Target: t}, nil
+		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, raw), ctxName), nil
 	case apierrors.IsNotFound(err):
 		raw, err := r.seedLogin(ctx, garden, seed)
 		if err != nil {
-			return Opened{}, err
+			return "", err
 		}
 		c, err := single(raw, "", ctxName)
 		if err != nil {
-			return Opened{}, fmt.Errorf("seed %s: %w", seed, err)
+			return "", fmt.Errorf("seed %s: %w", seed, err)
 		}
-		ref := r.register("seed:"+g.Identity+"/"+seed, c)
-		return Opened{Cluster: source.JoinCluster(ref, ctxName), Namespace: tid, Target: t}, nil
+		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, c), ctxName), nil
 	default:
-		return Opened{}, fmt.Errorf("managed seed %s: %w", seed, err)
+		return "", fmt.Errorf("managed seed %s: %w", seed, err)
 	}
 }
 

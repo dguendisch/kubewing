@@ -266,6 +266,7 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     expect(resolve("Escape", "table")).toBe("table.clearSelection"); // a cell's text selection
     expect(resolve("Escape", "menu")).toBe("detail.close"); // the jump menu closes like the ⌘⏎ menu
     expect(resolve("Shift+Enter", "menu")).toBe("menu.runSplit");
+    expect(resolve("Meta+Enter", "menu")).toBe("menu.runTab");
     expect(resolve("Enter", "menu")).toBe("menu.run");
     expect(resolve("J", "table")).toBe("row.down");
   });

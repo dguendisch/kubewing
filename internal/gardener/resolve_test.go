@@ -257,7 +257,34 @@ func TestResolveGardenAndProject(t *testing.T) {
 	if _, err := r.Resolve(context.Background(), Target{Garden: "nope"}); err == nil {
 		t.Error("unknown garden")
 	}
-	if _, err := r.Resolve(context.Background(), Target{Garden: "live", Seed: "soil"}); err == nil || !strings.Contains(err.Error(), "seed targets") {
-		t.Errorf("seed: %v", err)
+}
+
+func TestResolveSeed(t *testing.T) {
+	r, f, reg := testResolver(t)
+	f.add(shoots, "garden", "soil-shoot", shootObj("shoot--garden--soil-shoot", "root"))
+	f.add("configmaps", "garden", "soil-shoot.ca-cluster", ca())
+	f.add(managedSeeds, "garden", "soil", map[string]any{"spec": map[string]any{"shoot": map[string]any{"name": "soil-shoot"}}})
+
+	// a managed seed: its shoot's kubeconfig, all namespaces; a project's namespace is dropped
+	o, err := r.Resolve(context.Background(), Target{Garden: "live", Namespace: "garden-foo", Seed: "soil"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Cluster != "@2/live/seed--soil" || o.Namespace != "" || o.Target != (Target{Garden: "live", Seed: "soil"}) {
+		t.Errorf("%+v", o)
+	}
+	if raw := reg["seed:live/soil"]; raw == nil || raw.AuthInfos["garden--soil-shoot"].Exec.Args[1] != "--access-level=admin" {
+		t.Fatalf("registered: %v", reg)
+	}
+	// the seed and a control plane on it are one connection
+	f.add(shoots, "garden-foo", "bar", shootObj("shoot--foo--bar", "soil"))
+	cp, err := r.Resolve(context.Background(), Target{Garden: "live", Namespace: "garden-foo", Shoot: "bar", ControlPlane: true})
+	if err != nil || cp.Cluster != o.Cluster || cp.Namespace != "shoot--foo--bar" {
+		t.Errorf("control plane on it: %+v %v", cp, err)
+	}
+
+	// an unmanaged seed without a login secret
+	if _, err := r.Resolve(context.Background(), Target{Garden: "live", Seed: "gke"}); err == nil || !strings.Contains(err.Error(), "no login secret") {
+		t.Errorf("no login: %v", err)
 	}
 }

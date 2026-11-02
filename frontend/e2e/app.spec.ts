@@ -4968,4 +4968,90 @@ test.describe("⌘P: open a cluster", () => {
     await page.keyboard.press("ControlOrMeta+P");
     await expect(dialog(page).getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
   });
+
+  test("⌘J on a garden's shoot and seed rows: its clusters, opened here, in a split or (⌘⏎) a new tab; errors stay in the menu", async ({ page }) => {
+    const jump = page.getByRole("menu", { name: /^jump from/ });
+    const list = async (resource: string, n: number) => {
+      await page.keyboard.press("ControlOrMeta+O");
+      await page.getByRole("combobox", { name: "resource" }).fill(resource);
+      await page.keyboard.press("Enter");
+      await expect.poll(async () => { const p = await focused(page); return p.spec.resource === resource && p.status?.synced ? p.total : -1; }).toBe(n);
+    };
+    const select = async (key: string) => {
+      const rows = (await focused(page)).rows;
+      await page.keyboard.press("g");
+      for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+    };
+    await ready(page);
+    // the test garden, here (the toggle is kept: an earlier test may have changed it)
+    await page.keyboard.press("ControlOrMeta+P");
+    await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
+    await dialog(page).getByRole("radio", { name: "here" }).dispatchEvent("mousedown");
+    // the garden's own line (its shoots, remembered by earlier tests, match the text too)
+    await options(page).filter({ hasText: /^tape-garden/ }).first().click();
+    await expect(page.getByRole("combobox", { name: "resource" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    const garden = ((await focused(page)).spec as { context?: string }).context;
+    expect(garden).toMatch(/^@\d+\/tape-garden$/);
+    await list("shoots", 3);
+
+    // a shoot row: its shoot and control plane first, highlighted, with their context names
+    await select("shoot-baz");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump.getByRole("separator").first()).toHaveAccessibleName("clusters");
+    await expect(jump).toContainText("⌘⏎ tab");
+    await expect(jump.getByRole("menuitem").nth(0)).toHaveText(/^shoot baz.*tape-garden\/shoot--foo--baz$/);
+    await expect(jump.getByRole("menuitem").nth(1)).toHaveText(/^control plane of baz/);
+    await expect(jump.locator("[data-active]")).toContainText("shoot baz");
+    // ⏎: the shoot here, listing nothing yet (⌘O over it); ⌘← goes back to the shoots
+    await page.keyboard.press("Enter");
+    await expect(jump).toHaveCount(0);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/^@\d+\/tape-garden\/shoot--foo--baz$/) });
+    expect((await inspect(page)).overlays).toEqual(["open"]);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "shoots", context: garden });
+
+    // ⇧⏎: its control plane in a split below, on the managed seed loam, in the shoot's namespace there
+    await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
+    await select("shoot-baz");
+    const from = (await inspect(page)).focusedPane;
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump.locator("[data-active]")).toContainText("shoot baz");
+    await page.keyboard.press("j");
+    await expect(jump.locator("[data-active]")).toContainText("control plane of baz");
+    await page.keyboard.press("Shift+Enter");
+    await expect(jump).toHaveCount(0);
+    let s = await inspect(page);
+    expect(s.focusedPane).not.toBe(from);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe(from);
+
+    // a seed row: the seed; one that can't be resolved says why on its entry, the menu stays
+    await list("seeds", 2);
+    await select("seed-soil");
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump.getByRole("menuitem").nth(0)).toHaveText(/^seed soil.*tape-garden\/seed--soil$/);
+    await page.keyboard.press("Enter");
+    await expect(jump.getByRole("menuitem").nth(0)).toContainText("no login secret");
+    await page.keyboard.press("Escape");
+    // ⌘⏎: loam (a managed seed) in a new tab, all namespaces
+    await select("seed-loam");
+    const tabs = (await inspect(page)).tabs.length;
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump.getByRole("menuitem").nth(0)).toHaveText(/^seed loam/);
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(jump).toHaveCount(0);
+    s = await inspect(page);
+    expect(s.tabs).toHaveLength(tabs + 1);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", namespace: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/) });
+    await page.keyboard.press("Escape");
+    // remembered: ⌘P lists the seed
+    await page.keyboard.press("ControlOrMeta+P");
+    await page.getByRole("combobox", { name: "cluster" }).fill("seed--loam");
+    await expect(options(page).first()).toHaveText(/^seed loam.*tape-garden/);
+    await page.keyboard.press("Escape");
+  });
 });

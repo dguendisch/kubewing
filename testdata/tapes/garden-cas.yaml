@@ -8,3 +8,7 @@ columns:
 initial:
   - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: bar.ca-cluster, namespace: garden-foo, uid: ca-bar, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {ca.crt: "-----BEGIN CERTIFICATE-----\ntape\n-----END CERTIFICATE-----\n"}}
     cells: [bar.ca-cluster]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: baz.ca-cluster, namespace: garden-foo, uid: ca-baz, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {ca.crt: "-----BEGIN CERTIFICATE-----\ntape\n-----END CERTIFICATE-----\n"}}
+    cells: [baz.ca-cluster]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: loam.ca-cluster, namespace: garden, uid: ca-loam, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {ca.crt: "-----BEGIN CERTIFICATE-----\ntape\n-----END CERTIFICATE-----\n"}}
+    cells: [loam.ca-cluster]

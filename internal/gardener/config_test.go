@@ -122,7 +122,7 @@ func TestSessions(t *testing.T) {
 	}
 	write("a", "garden: g\nproject: p\nshoot: s\nseed: soil\n", 3)
 	write("b", "garden: g\nproject: p\nshoot: s\nseed: soil\ncontrolPlane: true\n", 1)
-	write("c", "garden: g\nseed: soil\n", 0)           // a seed: not supported
+	write("c", "garden: g\nseed: soil\n", 0)           // a seed
 	write("d", "garden: g\nproject: p\nshoot: s\n", 2) // a repeat of a (older one dropped)
 	write("e", "{{{", 0)
 	got := Sessions(dir)
@@ -130,7 +130,7 @@ func TestSessions(t *testing.T) {
 	for _, s := range got {
 		ts = append(ts, s.Target)
 	}
-	want := []Target{{Garden: "g", Project: "p", Shoot: "s", ControlPlane: true}, {Garden: "g", Project: "p", Shoot: "s"}}
+	want := []Target{{Garden: "g", Seed: "soil"}, {Garden: "g", Project: "p", Shoot: "s", ControlPlane: true}, {Garden: "g", Project: "p", Shoot: "s"}}
 	if !reflect.DeepEqual(ts, want) {
 		t.Errorf("Sessions = %+v, want %+v", ts, want)
 	}

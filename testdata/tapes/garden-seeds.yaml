@@ -1,0 +1,12 @@
+# The test garden's seeds (⌘J's clusters on a seed row): loam is a managed
+# seed (garden-managedseeds), soil can't be opened (no login secret).
+lookupOnly: true
+pipeline:
+  source: {resource: seeds}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: core.gardener.cloud/v1beta1, kind: Seed, metadata: {name: loam, uid: seed-loam, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [loam]
+  - object: {apiVersion: core.gardener.cloud/v1beta1, kind: Seed, metadata: {name: soil, uid: seed-soil, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [soil]

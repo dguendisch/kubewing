@@ -9,22 +9,38 @@
       "name": "NAME"
     }
   ],
-  "total": 1,
+  "total": 3,
   "offset": 0,
   "order": [
-    "ca-bar"
+    "ca-loam",
+    "ca-bar",
+    "ca-baz"
   ],
   "rows": [
+    {
+      "key": "ca-loam",
+      "cells": [
+        "garden",
+        "loam.ca-cluster"
+      ]
+    },
     {
       "key": "ca-bar",
       "cells": [
         "garden-foo",
         "bar.ca-cluster"
       ]
+    },
+    {
+      "key": "ca-baz",
+      "cells": [
+        "garden-foo",
+        "baz.ca-cluster"
+      ]
     }
   ],
   "status": {
     "synced": true,
-    "objects": 1
+    "objects": 3
   }
 }

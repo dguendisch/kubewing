@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Relations } from "../transport/types";
+import type { ClusterEntry, Relations } from "../transport/types";
 import { firstJumpable, jumpItems } from "./jump";
 
 const pod: Relations = {
@@ -132,5 +132,28 @@ describe("jump menu field section", () => {
     expect(firstJumpable(items)).toBe(1);
     // nothing at the cursor: as from the table
     expect(firstJumpable(jumpItems(pod, { field: [] }))).toBe(2);
+  });
+});
+
+describe("jump menu clusters", () => {
+  const entry = (x: Partial<ClusterEntry>): ClusterEntry => ({ used: "", from: "jump", rule: { context: "", confirm: [] }, garden: "live", ...x });
+  const shoot: Relations = {
+    kind: "Shoot", name: "bar", namespace: "garden-foo", scan: true,
+    items: [{ id: "ns:object", section: "namespace", label: "namespace object garden-foo", target: { resource: "namespaces" } }],
+    clusters: [
+      { id: "cluster:shoot", label: "shoot bar", entry: entry({ namespace: "garden-foo", shoot: "bar", name: "live/shoot--foo--bar" }) },
+      { id: "cluster:controlPlane", label: "control plane of bar", entry: entry({ namespace: "garden-foo", shoot: "bar", controlPlane: true, disabled: "garden live: kubeconfig gone" }) },
+    ],
+  };
+
+  it("come first, after the field's references; the highlight starts on them; disabled ones say why", () => {
+    const items = jumpItems(shoot);
+    expect(items.map((i) => i.section).slice(0, 3)).toEqual(["clusters", "clusters", "namespace"]);
+    expect(view(items).slice(0, 2)).toEqual(["shoot bar | live/shoot--foo--bar |  | 0", "control plane of bar |  | garden live: kubeconfig gone | 0"]);
+    expect(items[0]!.cluster?.shoot).toBe("bar");
+    expect(items[0]!.target).toBeUndefined();
+    expect(firstJumpable(items)).toBe(0);
+    const field = [{ id: "f", section: "field" as const, label: "seed soil", target: { resource: "seeds" } }];
+    expect(jumpItems(shoot, { field }).map((i) => i.section).slice(0, 2)).toEqual(["field", "clusters"]);
   });
 });

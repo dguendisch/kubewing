@@ -12,6 +12,8 @@ import { prettyKey } from "../keys/keymap";
  * cursor refers to. Go computes every entry as a pipeline (internal/relations);
  * ⏎ shows it in this pane (Esc in the table goes back), ⇧⏎ in a split
  * below. The owned scan (any kind owned by this UID) runs only on request.
+ * A Gardener row of a garden first lists its clusters (shoot, control plane,
+ * seed), opened as a ⌘P pick: resolved only when chosen, ⌘⏎ in a new tab.
  */
 export function JumpMenu() {
   const overlay = useUI((s) => s.overlay);
@@ -27,7 +29,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
   // opened from an object's YAML: the text and cursor line, read once (the menu is for that moment)
   const [field] = useState(() => useUI.getState().overlay?.yaml);
   const el = useRef<HTMLDivElement>(null);
-  const { rel, items, scanning } = useJump();
+  const { rel, items, scanning, resolving } = useJump();
   const [error, setError] = useState<string>();
   const bindings = useConfig((s) => s.bindings);
   const keyOf = (cmd: string) => {
@@ -91,7 +93,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
       ref={el}
       role="menu"
       aria-label={`jump from ${rel?.name ?? "…"}`}
-      aria-busy={!rel || scanning || undefined}
+      aria-busy={!rel || scanning || !!resolving || undefined}
       className={`absolute z-40 flex w-96 flex-col border border-accent bg-bg-elev py-1 shadow-2xl ${pos ? "" : "top-24 left-1/2 -translate-x-1/2"}`}
       style={pos ? { left: pos.x, top: pos.y } : undefined}
     >
@@ -101,6 +103,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
         </span>
         <span className="ml-auto shrink-0 pl-2">
           ⏎ here · {keyOf("menu.runSplit") ?? "⇧⏎"} split
+          {rel?.clusters?.length ? ` · ${keyOf("menu.runTab") ?? "⌘⏎"} tab` : ""}
         </span>
       </div>
       {error ? <div role="alert" className="px-3 py-0.5 text-deleted">{error}</div> : null}
@@ -120,7 +123,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
             className={`flex w-full items-baseline gap-2 py-0.5 pr-3 text-left ${i === index ? "bg-bg-hover" : ""} ${it.disabled ? "text-fg-muted" : "text-fg"}`}
             style={{ paddingLeft: `${0.75 + (it.indent ?? 0) * 0.75}rem` }}
             onMouseMove={() => !it.disabled && setUI((s) => (s.overlay?.kind === "jump" && s.overlay.index !== i ? { ...s, overlay: { ...s.overlay, index: i } } : s))}
-            onClick={(e) => void runJump(i, e.shiftKey)}
+            onClick={(e) => void runJump(i, e.shiftKey ? "pane" : e.metaKey && it.cluster ? "tab" : "here")}
           >
             <span className="truncate">{it.indent ? `↑ ${it.label}` : it.label}</span>
             {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}

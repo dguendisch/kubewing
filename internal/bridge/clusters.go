@@ -112,11 +112,7 @@ func (s *Service) MatchTarget(text string) ([]ClusterEntry, error) {
 	ts, err := cfg.Match(text)
 	out := []ClusterEntry{}
 	for _, t := range ts {
-		e := s.entry(cfg, targetCluster(t), "match")
-		if t.Seed != "" && t.Shoot == "" && e.Disabled == "" {
-			e.Disabled = "seed targets aren't supported yet"
-		}
-		out = append(out, e)
+		out = append(out, s.entry(cfg, targetCluster(t), "match"))
 	}
 	// a broken pattern of one garden doesn't keep the others' matches back
 	if len(out) > 0 {
@@ -142,7 +138,7 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 	r := gardener.Resolver{Config: cfg, Lookup: s.opts.Gardener.Lookup}
 	ctx, cancel := context.WithTimeout(context.Background(), resolveTimeout)
 	defer cancel()
-	t := gardener.Target{Garden: e.Garden, Project: e.Project, Namespace: e.Namespace, Shoot: e.Shoot, ControlPlane: e.ControlPlane}
+	t := gardener.Target{Garden: e.Garden, Project: e.Project, Namespace: e.Namespace, Shoot: e.Shoot, ControlPlane: e.ControlPlane, Seed: e.Seed}
 	o, err := r.Resolve(ctx, t)
 	var amb *gardener.Ambiguous
 	if errors.As(err, &amb) {
@@ -175,13 +171,17 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 // OpenCluster resolved before, opened as one picked in the dialog is.
 func (s *Service) OtherPlane(cluster, namespace string) (ClusterOpen, error) {
 	s.mu.Lock()
-	t, ok := s.opened[openedKey(cluster, "", false)]
+	// a control plane first: its seed's cluster may be opened as the seed too
+	t, ok := s.opened[openedKey(cluster, namespace, true)]
 	if !ok {
-		t, ok = s.opened[openedKey(cluster, namespace, true)]
+		t, ok = s.opened[openedKey(cluster, "", false)]
 	}
 	s.mu.Unlock()
 	if !ok {
-		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane opened with ⌘P")
+		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane opened with ⌘P or ⌘J")
+	}
+	if t.Shoot == "" {
+		return ClusterOpen{}, errors.New("seed " + t.Seed + " is no shoot or control plane: ⌘J on a shoot opens its planes")
 	}
 	t.ControlPlane = !t.ControlPlane
 	t.Seed = ""
@@ -328,6 +328,8 @@ func (s *Service) pair(cfg gardener.Config, list []ClusterEntry) []ClusterEntry 
 // but very old shoots); a control plane's seed isn't known yet.
 func predictedName(c config.Cluster) string {
 	switch {
+	case c.Shoot == "" && c.Seed != "":
+		return c.Garden + "/seed--" + c.Seed
 	case c.Shoot == "":
 		return c.Garden
 	case c.ControlPlane:
@@ -340,8 +342,14 @@ func predictedName(c config.Cluster) string {
 	return c.Garden + "/shoot--" + p + "--" + c.Shoot
 }
 
+// targetCluster is a target as remembered: a control plane's seed is
+// looked up anew, only a seed target keeps it.
 func targetCluster(t gardener.Target) config.Cluster {
-	return config.Cluster{Garden: t.Garden, Project: t.Project, Namespace: t.Namespace, Shoot: t.Shoot, ControlPlane: t.ControlPlane}
+	c := config.Cluster{Garden: t.Garden, Project: t.Project, Namespace: t.Namespace, Shoot: t.Shoot, ControlPlane: t.ControlPlane}
+	if t.Shoot == "" {
+		c.Seed = t.Seed
+	}
+	return c
 }
 
 func expandHome(p string) string {

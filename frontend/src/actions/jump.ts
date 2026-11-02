@@ -1,14 +1,18 @@
 import { create } from "zustand";
-import type { OwnedScan, Relation, Relations } from "../transport/types";
+import type { ClusterEntry, OwnedScan, Relation, Relations } from "../transport/types";
 
 /**
  * The jump menu (⌘J): where a row leads, as Go computed it (see
  * internal/relations). Each entry carries a pipeline target; the dispatcher
- * applies it in place (Esc goes back) or in a split (⇧⏎).
+ * applies it in place (Esc goes back) or in a split (⇧⏎). A cluster entry
+ * (a Gardener shoot's, control plane's, seed's) carries a ⌘P entry instead,
+ * opened as a pick there: here, in a split or (⌘⏎) in a new tab.
  */
+export type JumpSection = Relation["section"] | "clusters";
+
 export interface JumpItem {
   id: string;
-  section: Relation["section"];
+  section: JumpSection;
   label: string;
   /** Right-aligned: owner depth, count, "scan…". */
   detail?: string;
@@ -21,9 +25,11 @@ export interface JumpItem {
   scan?: boolean;
   /** An owner further up the chain (indented). */
   indent?: number;
+  /** A cluster to open (resolved only when chosen: the garden may ask to log in). */
+  cluster?: ClusterEntry;
 }
 
-export const sectionTitle: Record<Relation["section"], string> = { field: "at the cursor", namespace: "namespace", owner: "owners", owned: "owned", reference: "references", events: "events" };
+export const sectionTitle: Record<JumpSection, string> = { field: "at the cursor", clusters: "clusters", namespace: "namespace", owner: "owners", owned: "owned", reference: "references", events: "events" };
 
 /** State of the open jump menu (read by the dispatcher for ⏎ / j / k). */
 export interface JumpState {
@@ -39,6 +45,9 @@ export interface JumpState {
   scanAsked?: boolean;
   /** Runs (or asks for) the scan; set by the open menu. */
   scan?: () => void;
+  /** A cluster entry being resolved (its id), or why one couldn't be. */
+  resolving?: string;
+  clusterError?: { id: string; message: string };
 }
 
 export const useJump = create<JumpState>(() => ({ items: [] }));
@@ -49,12 +58,13 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 /**
  * Menu rows for a row's relations, plus the owned scan's state. Pure.
- * From an object's YAML, the references at its cursor come first (field).
+ * From an object's YAML, the references at its cursor come first (field),
+ * then a Gardener object's clusters (what one opens a shoot row for).
  * Owned entries list the known kinds; the scan entry is replaced by what
  * the scan found (kinds already listed aren't repeated). References and
  * events follow the owned section, scan entries included.
  */
-export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "scanned" | "scanError" | "scanAsked" | "field"> = {}): JumpItem[] {
+export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "scanned" | "scanError" | "scanAsked" | "field" | "resolving" | "clusterError"> = {}): JumpItem[] {
   const field: JumpItem[] = (scan.field ?? []).map((r) => ({
     id: r.id,
     section: "field",
@@ -63,6 +73,16 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     note: r.note,
     detail: r.places ? `${r.places}×` : undefined,
     disabled: r.gone ?? (r.target ? undefined : "nowhere to go"),
+  }));
+  // a pick resolves in the garden: resolving… meanwhile, an error stays on its entry (it can be tried again)
+  const clusters: JumpItem[] = (rel.clusters ?? []).map((c) => ({
+    id: c.id,
+    section: "clusters",
+    label: c.label,
+    cluster: c.entry,
+    detail: scan.resolving === c.id ? "resolving…" : c.entry.name,
+    disabled: c.entry.disabled,
+    note: scan.clusterError?.id === c.id ? scan.clusterError.message : undefined,
   }));
   const out: JumpItem[] = [];
   const refs: JumpItem[] = [];
@@ -114,12 +134,12 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     out.push({ id: "owned:none", section: "owned", label: "nothing known", disabled: "no uid to look for" });
   }
   // after the owned scan's entries
-  return [...field, ...out, ...refs, ...events];
+  return [...field, ...clusters, ...out, ...refs, ...events];
 }
 
-/** The first entry that can be run (the highlight's start: the field section's, else past the namespace), or 0. */
+/** The first entry that can be run (the highlight's start: the field section's, a cluster, else past the namespace), or 0. */
 export function firstJumpable(items: JumpItem[]): number {
-  const f = items.findIndex((x) => jumpable(x) && x.section === "field");
+  const f = items.findIndex((x) => jumpable(x) && (x.section === "field" || x.section === "clusters"));
   if (f >= 0) return f;
   const i = items.findIndex((x) => jumpable(x) && !x.scan && x.section !== "namespace");
   if (i >= 0) return i;
