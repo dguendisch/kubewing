@@ -27,6 +27,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 - **Moving panes:** a keyboard equivalent to move/swap the focused pane (e.g. `⌘⇧⌥` arrows).
 - **Resizing panes:** a keyboard equivalent to resize the focused pane (e.g. `⌘+ctrl` arrows up/down).
 - **Names:** persisted with the layout, once there is layout persistence.
+- **Clusters dialog (`⌘P`):** seed targets (managed seed via its shoot, else the `<seed>.login` secret; gardenctl's session targets of seeds are skipped today); `⌘⇧P` for the recent list alone (or a dialog of its own); the login shell's `PATH` for exec plugins when launched from the Dock/Finder (today `kubectl-gardenlogin`/`kubectl oidc-login` must be on kubewing's `PATH`); a reconnect rebuilding a Gardener target's kubeconfig (rotated CA, changed addresses: today a new pick); listing a garden's projects and shoots on request (connects: explicit only); shoots older than Kubernetes 1.20 (gardenlogin's legacy flag form); clipboard kubeconfig import.
 - **Metrics:** per-container breakdown (`top --containers`) in the object view or the row menu; metrics in CEL filters (e.g. `m.cpu > 500`); sparklines of recent values (needs kept samples, which could then also feed time travel); metric columns rendered as `cpu-gauge` once that type exists (P1). Allocation: absolute request/limit columns on pods (`CPU REQ`, `MEM REQ`, …, to see who reserves the most on a node after `⌘J`); the unfinished-pods watch is cluster-wide, so a per-node watch for single-node panes on very large clusters. metrics.k8s.io serves only CPU and memory, so more needs other sources (optional):
   - *Kubelet Summary API, a separate opt-in group:* `nodes/<n>/proxy/stats/summary` (through the API server) for usage metrics.k8s.io doesn't have. Nodes: root/image filesystem used/capacity and inodes (`%DISK`: DiskPressure evictions), network rx/tx (rates from two polls) and errors, PIDs of the max (PIDPressure), memory available/RSS/swap. Pods: ephemeral-storage usage and volume stats, i.e. used/capacity per PVC (a fill level column on PVCs, like `kubectl df-pv`). Costs: needs `nodes/proxy` RBAC (powerful, often not granted: Forbidden shown in the status line like `ErrNoMetrics`), one request per node per poll (a concurrency cap and a slower interval on big clusters), polled since it can't be watched.
 
@@ -55,9 +56,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 1. **Persistent history** — on-disk history buffer (hours, survives restarts); requires secret encryption/exclusion first.
 1. **Stuck-resource forensics** — finalizers, `deletionTimestamp`, owner-ref orphan sweep.
 1. **Scratch apply** from files.
-1. **Cluster navigator** — kubeconfig/context tree, clipboard-kubeconfig import.
-   - Auth: exec credential plugins (gardenlogin, kubelogin/OIDC), token refresh.
-   - Gardener: garden → project → seed/shoot tree; shoot kubeconfigs on demand via `shoots/adminkubeconfig` (default) / `viewerkubeconfig` subresources; read-only per context comes from the safety model.
+1. **Cluster navigator** — a browsable garden → project → seed/shoot tree on top of `⌘P` (which already resolves gardenctl targets, dashboard URLs and recent clusters); `shoots/adminkubeconfig` / `viewerkubeconfig` as an alternative to gardenlogin.
 1. Cross-cluster compare/diff
 1. **Multi-cluster operations** — replaces nested `for ns … for shoot …` loops. Builds on Gardener shoot-kubeconfig access + safety model (dry-run across targets first, then confirm).
 

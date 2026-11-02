@@ -55,6 +55,7 @@ export type CommandId =
   | "diff.older"
   | "diff.newer"
   | "source.open"
+  | "cluster.open"
   | "config.reload"
   | "source.reconnect"
   | "object.delete"
@@ -128,7 +129,7 @@ export const commandIds: readonly CommandId[] = [
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
-  "source.open", "config.reload", "source.reconnect",
+  "source.open", "cluster.open", "config.reload", "source.reconnect",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
@@ -183,6 +184,8 @@ export const defaultBindings: Binding[] = [
   { key: "Enter", command: "tab.switcherCommit", when: ["switcher"] },
   { key: "Ctrl+Enter", command: "tab.switcherCommit", when: ["switcher"] },
   { key: "Meta+O", command: "source.open" },
+  // ⌘P: the webview's print otherwise (suppressed); a cluster from recent ones, gardenctl, a dashboard URL
+  { key: "Meta+P", command: "cluster.open" },
   { key: "Meta+Shift+,", command: "config.reload" },
   // the focused pane's context: a fresh connection and fresh lists (after the network was down, a stuck watch);
   // global, as the browser's hard reload (and ⌘R is the webview's, suppressed)

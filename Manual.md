@@ -39,7 +39,7 @@ make deps   # once
 make run    # builds bin/kubewing.app and starts it in the foreground
 ```
 
-The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces.
+The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces. Other clusters, Gardener shoots included, are a `⌘P` away (see [Opening a cluster](#opening-a-cluster-p)).
 
 ### Launching from a terminal
 
@@ -64,7 +64,8 @@ Launching kubewing again while one is running **opens a new tab in the running o
 | `-wait` | Stay in the foreground, logging to the terminal. |
 | `-new-process` | Start a separate kubewing instead of opening a tab in the running one. |
 | `-config <dir>` | Config directory (default `$KUBEWING_HOME`, else `~/.kubewing`). |
-| `-state <dir>` | Where kubewing writes `history.yaml`, `columns.yaml` and `kubewing.log` (default: the config directory). |
+| `-state <dir>` | Where kubewing writes `history.yaml`, `columns.yaml`, `clusters.yaml` and `kubewing.log` (default: the config directory). |
+| `-garden <dir>` | The directory of the `gardenctl-v2.yaml` to read (default `$GCTL_HOME`, else `~/.garden`). |
 | `-headless <addr>` | No window: serve the UI's backend over WebSocket (for development and tests). |
 
 ---
@@ -85,6 +86,31 @@ Under the hood each pane is a *pipeline* (`source → stages → render`), which
 - A jump's field selector and CEL filter (see [Navigating](#10-navigating-between-resources)) aren't carried into `⌘O`, since they wouldn't apply to another resource.
 
 Completion comes from a per-context **catalog** (resource types and namespaces), fetched in the background once a pane is open on that context. kubewing never connects to a context on its own, so it never triggers an exec-plugin login you didn't ask for. The catalog follows CRD and namespace changes and refreshes every 5 minutes. A partly broken discovery (an aggregated API down) or a forbidden namespace list shows a hint instead of failing.
+
+### Opening a cluster: `⌘P`
+
+`⌘P` (File → Open Cluster…) switches the focused pane to another cluster, or opens one in a new tab, without going through a terminal. It has one field and a list:
+
+- **Empty field:** the clusters you opened recently (up to 100, the latest first), then your gardens. A cluster counts as opened once a pane showed it, whichever way it got there (launch, `⌘O`, `⌘P`). The targets of your gardenctl sessions (each terminal's `gardenctl target`) are listed too, marked `gardenctl`, so the list isn't empty on the first day. `✕` forgets a cluster.
+- **Typing** ranks the list by shoot, project, garden, context name and kubeconfig file (`shoot--foo--bar` finds the shoot `bar` of project `foo`).
+- **Pasting a Gardener dashboard URL** (or an API server host, or `garden/shoot--project--name`) shows what gardenctl's patterns make of it: the shoot, and its control plane. A dashboard URL of a project (no shoot) is the project in its garden.
+- **A path** (`/…`, `~/…`) opens that kubeconfig file at its current context; `⌘O` then lists its other contexts.
+
+`↑`/`↓` move, `⌥↑`/`⌥↓` first/last, `⏎` opens it in the pane (which keeps its resource, as a context switch in `⌘O`, and starts in the cluster's namespace), `⌘⏎` in a new tab on pods, `Esc` closes. A shell or log pane opens a new tab instead. Entries that can't be opened (a garden whose kubeconfig is missing) are greyed out, with the reason. Safety labels show next to the entries already, as far as the name is known.
+
+**Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on kubewing's `PATH`.
+
+| Target | Opens | Context name | Namespace |
+|---|---|---|---|
+| shoot | the shoot, authenticated by gardenlogin | `<garden>/shoot--<project>--<name>` | all |
+| shoot's control plane | its seed (a managed seed through its shoot, otherwise the seed's login secret) | `<garden>/seed--<seed>` | the shoot's, on the seed |
+| project | the garden | `<garden>` | the project's |
+| garden | the garden | `<garden>` | all |
+
+- Picking one looks it up in the garden, which may ask you to log in (the garden kubeconfig's exec plugin, e.g. a browser for OIDC). The dialog stays open with **resolving…** until it's done; errors (no access, no such shoot) show in it.
+- A shoot name without a project is searched in all projects. If it exists in more than one, the dialog lists them to pick from (`Esc` goes back).
+- A value that several gardens' patterns match (`shoot--foo--bar` without a garden prefix, two gardens with the same patterns) is listed once per garden, where gardenctl would refuse it.
+- The garden is one connection however many of its projects and lookups you open, so you log in once. A shoot's kubeconfig is built in memory and lives as long as kubewing runs: nothing is written to disk. Seeds as targets of their own aren't supported yet.
 
 ### The status line
 
@@ -629,6 +655,7 @@ contexts:
 A context no rule matches is writable, and only delete asks.
 
 - Rules match the context name only, whichever kubeconfig it comes from.
+- Gardener clusters picked in `⌘P` are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-p)). A glob's `*` doesn't match `/`, so a rule for a landscape is `{match: "sap-landscape-live/*", …}`, one for every control plane `{match: "*/seed--*", …}`, and the garden itself is matched by its name.
 - A rule with an error (no `match`, a broken glob, an unknown color or action) shows in the config banner and is skipped, so its contexts fall through to the next rule. Check the banner after editing.
 - The rules are enforced in the backend, not the UI. Every mutation needs a single-use token, valid for 60 s and bound to that exact action and object (including its UID), so no path (key, menu, context menu) gets around a rule, and a confirmation can't act on another object than the one it showed. Reloading the config drops outstanding tokens.
 
@@ -646,6 +673,7 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 | `themes/<name>.yaml` | theme token overrides |
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
 | `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
+| `clusters.yaml` | written by kubewing: the recently opened clusters (`⌘P`), the latest first, at most 100 |
 
 ### `config.yaml`
 
@@ -739,7 +767,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘P` cluster · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
@@ -757,4 +785,6 @@ The most used keys:
 - **Completion doesn't know a resource.** The catalog loads once a pane is open on that context and follows CRD changes; unknown text in `⌘O` still opens as typed.
 - **A config change has no effect.** Press `⌘⇧,` and check the banner: invalid parts are reported and skipped.
 - **Launching kubewing again only brought the window to the front.** That's the single-instance behavior: it opened a tab there. Use `-new-process` for a separate one.
+- **A Gardener shoot fails with `kubectl-gardenlogin` (or `kubectl`) not found.** kubewing runs the exec plugins of the kubeconfigs it uses with its own `PATH`. Launched from a terminal that's the terminal's; from the Dock or Finder, macOS's minimal one. Launch it from a terminal, or install the plugins where that `PATH` finds them.
+- **A pasted dashboard URL matches nothing.** The patterns come from `~/.garden/gardenctl-v2.yaml` (each garden's `patterns`); the dashboard's host must be in one of them. `gardenctl config set-garden … --pattern` adds one.
 - **A node shell is rejected by PodSecurity.** The namespace enforces `baseline` or stricter (like `default`); pick a privileged one such as `kube-system`.

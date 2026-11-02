@@ -64,6 +64,10 @@ type Options struct {
 	History *config.HistoryStore
 	// Columns are the column settings per resource type; nil = in memory only.
 	Columns *config.ColumnStore
+	// Clusters are the recently opened clusters; nil = in memory only.
+	Clusters *config.ClusterStore
+	// Gardener: gardenctl's config, sessions and garden lookups; nil = no Gardener targets.
+	Gardener *Gardener
 	// Actor performs object actions (delete …); nil disables them. If it
 	// implements source.Metrics, it feeds the metric columns.
 	Actor source.Actor
@@ -115,6 +119,9 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	}
 	if s.opts.Columns == nil {
 		s.opts.Columns = config.OpenColumns("")
+	}
+	if s.opts.Clusters == nil {
+		s.opts.Clusters = config.OpenClusters("")
 	}
 	if opts.Config != nil {
 		s.setConfig(*opts.Config)
@@ -294,6 +301,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	go s.pump(ctx, pn)
 	s.syncMetrics(pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
+	s.recordCluster(p.Source.Cluster, ctxName)
 	return OpenResult{Pane: id, Context: ctxName, Kind: sub.Resolved.Kind, Resource: sub.Resolved.GVR.Resource, Namespaced: sub.Resolved.Namespaced, Type: typ, Ambiguous: sub.Resolved.Ambiguous, Sort: sortBy}, nil
 }
 

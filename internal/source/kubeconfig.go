@@ -10,17 +10,27 @@ import (
 	"sync"
 
 	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 // A cluster names a kubeconfig context. A plain name ("dev"; "" for the
 // current context) is one of kubewing's own kubeconfig ($KUBECONFIG, else
 // ~/.kube/config, read anew each time as kubectl does). "@1/dev" is one of
 // another kubeconfig, registered while kubewing runs (a terminal with its own
-// $KUBECONFIG launched kubewing again), "@1/" its current context. The
-// references are process-local: another kubewing doesn't know them.
+// $KUBECONFIG launched kubewing again, a file or Gardener target picked in
+// the clusters dialog), "@1/" its current context. The references are
+// process-local: another kubewing doesn't know them.
 var kubeconfigs struct {
-	mu    sync.Mutex
-	files [][]string // files[i] is "@i+1"
+	mu      sync.Mutex
+	entries []kubeconfigEntry // entries[i] is "@i+1"
+}
+
+// kubeconfigEntry is a registered kubeconfig: files read anew each time, or
+// one built in memory (a Gardener target's), known by its key.
+type kubeconfigEntry struct {
+	files []string
+	key   string
+	raw   *clientcmdapi.Config
 }
 
 // KubeconfigFiles lists the files kubectl reads with $KUBECONFIG = env in
@@ -58,12 +68,52 @@ func RegisterKubeconfig(files []string) string {
 	}
 	kubeconfigs.mu.Lock()
 	defer kubeconfigs.mu.Unlock()
-	i := slices.IndexFunc(kubeconfigs.files, func(f []string) bool { return slices.Equal(f, files) })
+	i := slices.IndexFunc(kubeconfigs.entries, func(e kubeconfigEntry) bool { return e.raw == nil && slices.Equal(e.files, files) })
 	if i < 0 {
-		kubeconfigs.files = append(kubeconfigs.files, slices.Clone(files))
-		i = len(kubeconfigs.files) - 1
+		kubeconfigs.entries = append(kubeconfigs.entries, kubeconfigEntry{files: slices.Clone(files)})
+		i = len(kubeconfigs.entries) - 1
 	}
 	return "@" + strconv.Itoa(i+1)
+}
+
+// RegisterConfig returns the reference of a kubeconfig built in memory,
+// known by key: the same "@n" for the same key, its config replaced by raw
+// (a target picked again gets fresh addresses and CA, its open connections
+// stay as they are until a reconnect).
+func RegisterConfig(key string, raw *clientcmdapi.Config) string {
+	kubeconfigs.mu.Lock()
+	defer kubeconfigs.mu.Unlock()
+	i := slices.IndexFunc(kubeconfigs.entries, func(e kubeconfigEntry) bool { return e.raw != nil && e.key == key })
+	if i < 0 {
+		kubeconfigs.entries = append(kubeconfigs.entries, kubeconfigEntry{key: key})
+		i = len(kubeconfigs.entries) - 1
+	}
+	kubeconfigs.entries[i].raw = raw.DeepCopy()
+	return "@" + strconv.Itoa(i+1)
+}
+
+// ConfigKey returns the key of a cluster's in-memory kubeconfig ("" for
+// one of files, or kubewing's own).
+func ConfigKey(cluster string) string {
+	e, ok := entry(cluster)
+	if !ok || e.raw == nil {
+		return ""
+	}
+	return e.key
+}
+
+func entry(cluster string) (kubeconfigEntry, bool) {
+	ref, _ := SplitCluster(cluster)
+	if ref == "" {
+		return kubeconfigEntry{}, false
+	}
+	n, _ := strconv.Atoi(ref[1:])
+	kubeconfigs.mu.Lock()
+	defer kubeconfigs.mu.Unlock()
+	if n < 1 || n > len(kubeconfigs.entries) {
+		return kubeconfigEntry{}, false
+	}
+	return kubeconfigs.entries[n-1], true
 }
 
 // SplitCluster returns a cluster's kubeconfig reference ("" = kubewing's
@@ -85,19 +135,18 @@ func JoinCluster(kubeconfig, context string) string {
 	return kubeconfig + "/" + context
 }
 
-// Kubeconfig returns the files of a cluster's kubeconfig.
+// Kubeconfig returns the files of a cluster's kubeconfig (none for one built
+// in memory).
 func Kubeconfig(cluster string) (ref string, files []string, err error) {
 	ref, _ = SplitCluster(cluster)
 	if ref == "" {
 		return "", ownKubeconfig(), nil
 	}
-	n, _ := strconv.Atoi(ref[1:])
-	kubeconfigs.mu.Lock()
-	defer kubeconfigs.mu.Unlock()
-	if n < 1 || n > len(kubeconfigs.files) {
+	e, ok := entry(cluster)
+	if !ok {
 		return ref, nil, fmt.Errorf("unknown kubeconfig %s", ref)
 	}
-	return ref, slices.Clone(kubeconfigs.files[n-1]), nil
+	return ref, slices.Clone(e.files), nil
 }
 
 // clientConfig loads a cluster's kubeconfig with its context as the current one.
@@ -105,11 +154,17 @@ func clientConfig(cluster string) (clientcmd.ClientConfig, error) {
 	ref, ctx := SplitCluster(cluster)
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if ref != "" {
-		_, files, err := Kubeconfig(cluster)
-		if err != nil {
-			return nil, err
+		e, ok := entry(cluster)
+		if !ok {
+			return nil, fmt.Errorf("unknown kubeconfig %s", ref)
 		}
-		rules = &clientcmd.ClientConfigLoadingRules{Precedence: files, WarnIfAllMissing: true}
+		if e.raw != nil {
+			if ctx == "" {
+				ctx = e.raw.CurrentContext
+			}
+			return clientcmd.NewNonInteractiveClientConfig(*e.raw, ctx, &clientcmd.ConfigOverrides{}, nil), nil
+		}
+		rules = &clientcmd.ClientConfigLoadingRules{Precedence: e.files, WarnIfAllMissing: true}
 	}
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: ctx}), nil
 }

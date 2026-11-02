@@ -33,7 +33,7 @@ func (o *Opener) kindTapes() map[string]string {
 		return len(name) < len(cur) || len(name) == len(cur) && name < cur
 	}
 	for name, t := range o.Tapes {
-		if len(t.Initial) == 0 {
+		if len(t.Initial) == 0 || t.LookupOnly {
 			continue
 		}
 		obj := t.Initial[0].Item().Object
@@ -273,4 +273,46 @@ func (m matcher) filter(ev source.Event) (source.Event, bool) {
 		return ev, m.match(ev.Item.Object)
 	}
 	return ev, true
+}
+
+// GetObject implements gardener.Lookup: a full object of a tape, by the
+// tape's name or its pipeline resource (a qualified name's resource part
+// too: "shoots.core.gardener.cloud" is tape "shoots"); config maps are
+// garden-cas' (a ConfigMap tape of its own would change which tape serves
+// the kind for relations).
+func (o *Opener) GetObject(_ context.Context, _, resource, namespace, name string) (*unstructured.Unstructured, error) {
+	resource = o.tapeName(resource)
+	for _, it := range o.state(resource) {
+		if it.GetName() == name && it.GetNamespace() == namespace {
+			return it, nil
+		}
+	}
+	return nil, apierrors.NewNotFound(schema.GroupResource{Resource: resource}, name)
+}
+
+// ListObjects implements gardener.Lookup.
+func (o *Opener) ListObjects(_ context.Context, _, resource, namespace, fieldSel string) ([]*unstructured.Unstructured, error) {
+	resource = o.tapeName(resource)
+	m, err := newMatcher(namespace, "", fieldSel)
+	if err != nil {
+		return nil, err
+	}
+	var out []*unstructured.Unstructured
+	for _, it := range o.state(resource) {
+		if m.match(it) {
+			out = append(out, it)
+		}
+	}
+	return out, nil
+}
+
+func (o *Opener) tapeName(resource string) string {
+	if resource == "configmaps" {
+		return "garden-cas"
+	}
+	if _, ok := o.Tapes[resource]; ok {
+		return resource
+	}
+	plural, _, _ := strings.Cut(resource, ".")
+	return plural
 }

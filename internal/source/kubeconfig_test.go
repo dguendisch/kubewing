@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 func writeKubeconfig(t *testing.T, path, current string, contexts ...string) {
@@ -90,5 +92,43 @@ func TestRegisterKubeconfig(t *testing.T) {
 	}
 	if _, err := Connect("@999/x"); err == nil {
 		t.Error("unknown reference connected")
+	}
+}
+
+// A kubeconfig built in memory (a Gardener target's) is a reference too: the
+// same one for the same key, its config replaced; its contexts list and
+// connect from memory, it has no files.
+func TestRegisterConfig(t *testing.T) {
+	raw := clientcmdapi.NewConfig()
+	raw.Clusters["c"] = &clientcmdapi.Cluster{Server: "https://127.0.0.1:1"}
+	raw.AuthInfos["u"] = &clientcmdapi.AuthInfo{}
+	raw.Contexts["g/shoot--p--s"] = &clientcmdapi.Context{Cluster: "c", AuthInfo: "u"}
+	raw.CurrentContext = "g/shoot--p--s"
+	ref := RegisterConfig("shoot:g/p/s", raw)
+	if again := RegisterConfig("shoot:g/p/s", raw); again != ref {
+		t.Fatalf("same key: %q, %q", ref, again)
+	}
+	if other := RegisterConfig("shoot:g/p/t", raw); other == ref {
+		t.Fatalf("other key: %q", other)
+	}
+	raw.CurrentContext = "changed after registering"
+	if ConfigKey(ref+"/x") != "shoot:g/p/s" || ConfigKey("dev") != "" {
+		t.Errorf("ConfigKey: %q", ConfigKey(ref+"/x"))
+	}
+	if _, files, err := Kubeconfig(ref + "/"); err != nil || len(files) != 0 {
+		t.Errorf("Kubeconfig: %v %v", files, err)
+	}
+	names, cur, _, err := Contexts(JoinCluster(ref, ""))
+	if err != nil || cur != "g/shoot--p--s" || !slices.Equal(names, []string{"g/shoot--p--s"}) {
+		t.Errorf("Contexts: %v %q %v", names, cur, err)
+	}
+	for _, cl := range []string{ref + "/g/shoot--p--s", ref + "/"} {
+		c, err := Connect(cl)
+		if err != nil || c.Context != "g/shoot--p--s" || c.Kubeconfig != ref || c.Config.Host != "https://127.0.0.1:1" {
+			t.Errorf("Connect(%q): %+v, %v", cl, c, err)
+		}
+	}
+	if _, err := Connect(ref + "/nope"); err == nil {
+		t.Error("unknown context connected")
 	}
 }

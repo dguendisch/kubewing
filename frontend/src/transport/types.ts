@@ -211,6 +211,44 @@ export interface ContextList {
   kubeconfig?: string[];
 }
 
+/** Mirrors bridge.ClusterEntry: a cluster the ⌘P dialog offers, a kubeconfig's context or a Gardener target. */
+export interface ClusterEntry {
+  /** A kubeconfig's files (none: ~/.kube/config) and context ("" = its current one). */
+  kubeconfig?: string[];
+  context?: string;
+  /** Gardener target: garden identity, project (or its namespace), shoot, its control plane. */
+  garden?: string;
+  project?: string;
+  namespace?: string;
+  shoot?: string;
+  controlPlane?: boolean;
+  /** RFC 3339; zero for gardens and matches. */
+  used: string;
+  /** recent: opened before; gardenctl: a gardenctl session's target; match: a pattern matched the text; garden: a garden. */
+  from: "recent" | "gardenctl" | "match" | "garden";
+  /** The context name kubewing gives it (safety rules match on it), if known before it's opened. */
+  name?: string;
+  rule: SafetyRule;
+  /** Why it can't be opened. */
+  disabled?: string;
+}
+
+/** Mirrors bridge.ClusterList. */
+export interface ClusterList {
+  /** Opened before and gardenctl sessions' targets, the latest first. */
+  recent: ClusterEntry[];
+  gardens: ClusterEntry[];
+  /** gardenctl-v2.yaml unreadable, a broken pattern. */
+  errors?: string[];
+}
+
+/** Mirrors bridge.ClusterOpen: where an opened cluster starts, or the targets to choose from. */
+export interface ClusterOpen {
+  cluster: string;
+  namespace?: string;
+  choices?: ClusterEntry[];
+}
+
 /** Mirrors app.Launch: a later launch from a terminal, opened as a tab on its kubeconfig. */
 export interface Launch {
   cluster: string;
@@ -696,6 +734,14 @@ export interface Transport {
   contexts(cluster: string): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */
   catalog(context: string): Promise<Catalog>;
+  /** ⌘P: recently opened clusters (and gardenctl sessions' targets) and gardens; connects nowhere. */
+  clusters(): Promise<ClusterList>;
+  /** The Gardener targets gardenctl's patterns make of a text (dashboard URL, API host, shoot--p--s); connects nowhere. */
+  matchTarget(text: string): Promise<ClusterEntry[]>;
+  /** Makes an entry a cluster to open; a Gardener target is looked up in its garden (may ask to log in). */
+  openCluster(e: ClusterEntry): Promise<ClusterOpen>;
+  /** Removes a cluster from the recent ones. */
+  forgetCluster(e: ClusterEntry): Promise<void>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;
   /** Checks a mutation against the safety policy (Go decides); throws if refused. */

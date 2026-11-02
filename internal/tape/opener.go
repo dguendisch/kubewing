@@ -173,10 +173,12 @@ func (o *Opener) withoutDeleted(ev source.Event) source.Event {
 // so tests can open the same tape on differently configured contexts;
 // the current context ("") is "tape".
 func (o *Opener) ContextName(cluster string) (string, error) {
-	if cluster == "" {
+	// a kubeconfig of its own ("@2/garden/shoot--p--s", a cluster picked in ⌘P): its context, as a real one
+	_, ctx := source.SplitCluster(cluster)
+	if ctx == "" {
 		return "tape", nil
 	}
-	return cluster, nil
+	return ctx, nil
 }
 
 // Delete implements source.Actor: running replays of the tape that holds

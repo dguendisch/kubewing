@@ -1206,3 +1206,11 @@ describe("decode (⏎ in an object view)", () => {
     expect(t.panes.v2!.object!.decode?.levels).toEqual(resolved);
   });
 });
+
+describe("clusterSpec", () => {
+  it("keeps the resource of a table, pods for a shell; selectors go", () => {
+    const p = { id: "v1", selected: 0, spec: { ...S.initialSpec("old", "ns"), resource: "deployments", labelSelector: "app=x", filter: "o.x", grep: "y" } };
+    expect(S.clusterSpec(p, "@2/live/shoot--foo--bar")).toEqual({ ...S.initialSpec("@2/live/shoot--foo--bar"), resource: "deployments" });
+    expect(S.clusterSpec({ ...p, term: { session: "s" } } as S.PaneState, "@3/x", "kube-system")).toEqual(S.initialSpec("@3/x", "kube-system"));
+  });
+});

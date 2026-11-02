@@ -1,0 +1,13 @@
+# gardenctl's config for tests (-garden testdata/garden): a garden whose
+# lookups go to the tapes (shoots, projects, ca-cluster config maps).
+gardens:
+- identity: tape-garden
+  name: tg
+  kubeconfig: testdata/garden/kubeconfig.yaml
+  patterns:
+  - "^((tg|tape-garden)/)?shoot--(?P<project>[^.]+)--(?P<shoot>[^.]+)$"
+  - "(dashboard\\.tape\\.example)(/namespace/(?P<namespace>[^/]+))?(/shoots/(?P<shoot>[^/]+))?"
+- identity: tape-missing
+  kubeconfig: testdata/garden/missing.yaml
+  patterns:
+  - "^missing/(?P<shoot>.+)$"

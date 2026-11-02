@@ -210,7 +210,7 @@ export interface Tab {
 }
 
 export interface Overlay {
-  /** open: ⌘O; confirm: a prepared action;
+  /** open: ⌘O; clusters: ⌘P (a cluster for the pane or a new tab); confirm: a prepared action;
    *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes, or unsaved edits;
    *  closePane: closing a pane with unsaved edits;
@@ -225,7 +225,7 @@ export interface Overlay {
    *  field: a field's values over time (⇧H in an object view);
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
    *  logs: containers, history and follow of a log tail, before it starts. */
-  kind: "open" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
+  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
   /** error: which error (the source's or the CEL filter's). */
@@ -725,6 +725,16 @@ export function failedPanes(s: UIState, cluster: string): string[] {
     .map((p) => p.id);
 }
 
+/**
+ * ⌘P ⏎: the pane on another cluster, in the namespace it starts in, as a
+ * context switch in ⌘O: the resource stays, selectors and a jump's filter go.
+ * A pane that isn't a table (a shell, a log tail) shows pods there.
+ */
+export function clusterSpec(p: PaneState, cluster: string, namespace = ""): PaneSpec {
+  const table = !p.term && !p.logs;
+  return { ...initialSpec(cluster, namespace), resource: table ? p.spec.resource : "pods" };
+}
+
 /** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
 export function launchTab(s: UIState, cluster: string, namespace = ""): UIState {
   const next = newTab(s);
@@ -924,6 +934,7 @@ export function moveSelection(s: UIState, delta: number | "first" | "last", tota
 /** The focus context an overlay holds while it is open. */
 const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   open: "dialog",
+  clusters: "dialog",
   confirm: "confirm",
   closeTab: "confirm",
   closePane: "confirm",

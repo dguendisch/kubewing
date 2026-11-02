@@ -4777,3 +4777,82 @@ test.describe("logs", () => {
     }).toBe(true);
   });
 });
+
+test.describe("⌘P: open a cluster", () => {
+  const dialog = (page: Page) => page.getByRole("dialog", { name: "open cluster" });
+  const options = (page: Page) => dialog(page).getByRole("option");
+  // e2e-static's object count depends on the delete tests before: synced is enough
+  async function openStatic(page: Page) {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "e2e-static" && p.status?.synced && p.rows.length > 0;
+    }).toBe(true);
+  }
+
+  test("lists gardenctl's session targets and gardens; a dashboard URL resolves to its shoot, opened in the pane and remembered", async ({ page }) => {
+    await openStatic(page);
+    await page.keyboard.press("ControlOrMeta+P");
+    await expect(dialog(page)).toBeVisible();
+    expect((await inspect(page)).overlays).toEqual(["clusters"]);
+    await expect(page.getByRole("combobox", { name: "cluster" })).toBeFocused();
+    // empty: the clusters panes opened on (this one: kubewing's own kubeconfig) first, then the
+    // gardenctl session's target (its predicted name gets the rule's badge), then the gardens
+    await expect(options(page).first()).toContainText("tape");
+    await expect(options(page).first()).toContainText("just now");
+    const old = options(page).filter({ hasText: /^old/ });
+    await expect(old).toContainText("gardenctl");
+    await expect(old).toContainText("GARDEN");
+    await expect(options(page).filter({ hasText: "tape-missing" })).toHaveAttribute("aria-disabled", "true");
+
+    await page.getByRole("combobox", { name: "cluster" }).fill("https://dashboard.tape.example/namespace/garden-foo/shoots/bar");
+    await expect(options(page)).toHaveCount(2);
+    await expect(options(page).nth(0)).toHaveText(/^bar.*foo · tape-garden/);
+    await expect(options(page).nth(1)).toContainText("bar · control plane");
+    await expect(options(page).nth(0)).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    // the pane keeps its resource, now on the shoot's cluster, named <garden>/<technical id>
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/^@\d+\/tape-garden\/shoot--foo--bar$/) });
+    const pane = page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`);
+    await expect(pane).toHaveAttribute("data-context", "tape-garden/shoot--foo--bar");
+    await expect(pane.getByLabel("context label")).toHaveText("GARDEN");
+    expect((await inspect(page)).focus).toBe("table");
+
+    // remembered: first in the list next time, with a ✕ to forget it
+    await page.keyboard.press("ControlOrMeta+P");
+    await expect(options(page).first()).toContainText("bar");
+    await expect(options(page).first()).toContainText("just now");
+    await options(page).first().getByRole("button", { name: "forget bar" }).dispatchEvent("mousedown");
+    await expect(options(page).filter({ hasText: /^bar/ })).toHaveCount(0);
+    // typing ranks: a session target by its shoot's technical id
+    await page.getByRole("combobox", { name: "cluster" }).fill("shoot--foo--old");
+    await expect(options(page).first()).toContainText("old");
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test("⌘⏎ opens in a new tab on pods; errors stay in the dialog", async ({ page }) => {
+    await openStatic(page);
+    await page.keyboard.press("ControlOrMeta+P");
+    const field = page.getByRole("combobox", { name: "cluster" });
+    // the control plane's seed isn't in the test garden: the error shows, the dialog stays
+    await field.fill("tg/shoot--foo--bar");
+    await expect(options(page)).toHaveCount(2);
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(dialog(page).getByRole("status", { name: "cluster status" })).toContainText("soil");
+    await expect(dialog(page)).toBeVisible();
+    await page.keyboard.press("ArrowUp");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    const s = await inspect(page);
+    expect(s.tabs).toHaveLength(2);
+    expect(s.activeTab).toBe(1);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "pods", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
+  });
+});

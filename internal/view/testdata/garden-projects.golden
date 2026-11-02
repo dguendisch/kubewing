@@ -1,0 +1,30 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "project-foo"
+  ],
+  "rows": [
+    {
+      "key": "project-foo",
+      "cells": [
+        "",
+        "foo"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}

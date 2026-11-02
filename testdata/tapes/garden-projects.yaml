@@ -1,0 +1,9 @@
+# Gardener projects for the clusters dialog (⌘P).
+lookupOnly: true
+pipeline:
+  source: {resource: projects}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: core.gardener.cloud/v1beta1, kind: Project, metadata: {name: foo, uid: project-foo, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {namespace: garden-foo}}
+    cells: [foo]

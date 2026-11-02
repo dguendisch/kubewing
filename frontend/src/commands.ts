@@ -287,6 +287,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.setObject(x, pane.id, (o) => (o.view === "describe" ? { ...o, describeGen: (o.describeGen ?? 0) + 1 } : o)));
     case "source.open":
       return setUI((x) => S.openOverlay(x, { kind: "open", pane: pane.id }));
+    case "cluster.open":
+      return setUI((x) => (x.overlay?.kind === "clusters" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "clusters", pane: pane.id })));
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
     case "source.reconnect":
@@ -962,6 +964,23 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
   else setUI((x) => S.openHistory(x, paneId, spec, selectedKey(pane)));
   setUI((x) => S.updatePane(x, paneId, ({ object: _, ...p }) => p));
   await applySpec(paneId, spec);
+}
+
+/**
+ * ⌘P ⏎: a cluster opened (Go resolved it: a kubeconfig's context, a
+ * Gardener target's kubeconfig) in the pane, as a ⌘O context switch is; in
+ * a new tab on pods (⌘⏎).
+ */
+export async function openCluster(paneId: string, cluster: string, namespace: string, newTab: boolean) {
+  if (newTab) return setUI((x) => S.launchTab(x, cluster, namespace));
+  const pane = useUI.getState().panes[paneId];
+  if (!pane) return;
+  if (S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
+  if (pane.term || pane.logs) {
+    // a shell or log tail isn't a source to switch: a new tab keeps it
+    return setUI((x) => S.launchTab(x, cluster, namespace));
+  }
+  await openSource(paneId, S.clusterSpec(pane, cluster, namespace));
 }
 
 /**

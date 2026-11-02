@@ -180,6 +180,7 @@ const sections: { title: string; rows: Row[] }[] = [
     title: "app",
     rows: [
       row("open context / resource / ns", "source.open"),
+      row("open a cluster: recent, gardenctl, dashboard URL, kubeconfig file", "cluster.open"),
       row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
       row("reload the config", "config.reload"),
       row("this cheat sheet", "help.toggle"),

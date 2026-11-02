@@ -179,10 +179,10 @@ describe("default keymap", () => {
     expect(collisions([...defaultBindings, { key: "J", command: "row.up", when: ["table"] }])).toHaveLength(1);
   });
   it("suppressed webview defaults are either bound or explicitly unbound", () => {
-    // Meta+F is ours (Monaco's find in the detail view), Meta+Shift+R the reconnect, Meta+S the editor's
-    // preview/apply; the rest must not be bound to a command by accident (that would make suppression depend on focus).
+    // Meta+P is the clusters dialog, Meta+F ours (Monaco's find in the detail view), Meta+Shift+R the reconnect, Meta+S the
+    // editor's preview/apply; the rest must not be bound to a command by accident (that would make suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
-    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+Shift+R", "Meta+S"]);
+    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+P", "Meta+F", "Meta+Shift+R", "Meta+S"]);
   });
   it("pretty-prints chords", () => {
     expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");

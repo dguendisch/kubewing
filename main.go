@@ -17,6 +17,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
+	"github.com/dguendisch/kubewing/internal/gardener"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/tape"
 )
@@ -41,6 +42,7 @@ func main() {
 	configDir := flag.String("config", "", "config directory (default: $KUBEWING_HOME or ~/.kubewing; headless: none)")
 	stateDir := flag.String("state", "", "where history.yaml (recent debug images) is written (default: the config directory; headless: none, kept in memory)")
 	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
+	gardenHome := flag.String("garden", "", "gardenctl's directory with gardenctl-v2.yaml (default: $GCTL_HOME, else ~/.garden); headless: none unless given, and session targets from its sessions/")
 	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
 	flag.Parse()
 
@@ -84,6 +86,19 @@ func main() {
 	}
 	opts.History = config.OpenHistory(*stateDir)
 	opts.Columns = config.OpenColumns(*stateDir)
+	opts.Clusters = config.OpenClusters(*stateDir)
+	if *headless == "" || *gardenHome != "" {
+		paths := gardener.DefaultPaths()
+		if *gardenHome != "" {
+			paths.Config = filepath.Join(*gardenHome, "gardenctl-v2.yaml")
+		}
+		if *headless != "" {
+			// tests: never the sessions of the user's terminals, the given directory's
+			paths.Sessions = filepath.Join(*gardenHome, "sessions")
+		}
+		lookup, _ := opener.(gardener.Lookup)
+		opts.Gardener = &bridge.Gardener{Paths: paths, Lookup: lookup}
+	}
 	// ops pods are named after the user, as ops-toolbelt's $(whoami); tapes: a fixed one (e2e)
 	if *tapes != "" {
 		opts.User = "e2e"

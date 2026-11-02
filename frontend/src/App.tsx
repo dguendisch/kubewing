@@ -16,6 +16,7 @@ import { Dock } from "./components/Dock";
 import { DragPreview } from "./components/PaneDrag";
 import { Help } from "./components/Help";
 import { OpenSource } from "./components/OpenSource";
+import { ClusterPicker } from "./components/ClusterPicker";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
 import { NameField } from "./components/NameField";
@@ -112,6 +113,7 @@ export function App() {
       </main>
       <FieldList />
       <OpenSource />
+      <ClusterPicker />
       <Confirm />
       <ConfirmCloseTab />
       <ConfirmClosePane />

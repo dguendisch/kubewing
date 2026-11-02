@@ -1,0 +1,30 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "ca-bar"
+  ],
+  "rows": [
+    {
+      "key": "ca-bar",
+      "cells": [
+        "garden-foo",
+        "bar.ca-cluster"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}

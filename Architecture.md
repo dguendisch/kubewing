@@ -75,7 +75,7 @@ client-go/informers, `k8s.io/kubectl` packages (apply, diff, printers, exec, por
 
 ### User config: `~/.kubewing/`
 
-Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing only reads `config.yaml`, `keybindings.yaml`, `refs.yaml` and `themes/`; it writes its own `history.yaml` and `columns.yaml` (into the state directory, by default the same). Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
+Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing only reads `config.yaml`, `keybindings.yaml`, `refs.yaml` and `themes/`; it writes its own `history.yaml`, `columns.yaml` and `clusters.yaml` (into the state directory, by default the same). Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
 
 ## Watches and the source layer
 
@@ -85,6 +85,15 @@ Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). ku
 - **Cluster catalog:** per-context discovery snapshot (resource types incl. short names, group, scope; namespaces), fetched only for contexts with an open pane — never triggers exec-plugin logins in the background. Refreshed by metadata-only CRD/namespace watches, on resolve misses and every 5 minutes. Partial discovery and forbidden namespace lists degrade to a hint.
 - **Reconnect:** each context's connection has a dialer of its own (`rest.Config.Dial`), so client-go builds a transport for it rather than sharing one from its TLS/exec-plugin cache. A reconnect drops the connection (`ClusterOpener.Reconnect`, under every name it was reached by), restarts the context's shared watches in place (`Registry.Restart`: subscribers, objects and history stay; the new list reaches them as a relist; the old watch's fanout stops delivering) and restarts the catalog's watches. Sessions, port-forwards and log streams keep the old transport until they end. "Disconnected" is derived, not tracked: a synced view with a source error (cleared by the next successful list).
 - **Kubeconfigs from other terminals:** a launch that hands over to a running kubewing passes the `$KUBECONFIG` path encrypted with `instance.key`. Such a cluster is addressed as `@n/<context>` (`internal/source/kubeconfig.go`); kubewing's own kubeconfig uses plain context names. The references live as long as the process.
+- **Kubeconfigs in memory:** a `@n` reference is either a list of files (read anew each time, as kubectl does) or a kubeconfig built in memory under a key (`RegisterConfig`: the same key gets the same `@n`, its config replaced). The clusters dialog (`⌘P`) registers Gardener targets that way, so everything downstream (the opener's connection cache, reconnect, the catalog, splits and `⌘T` staying on `@n`) works unchanged. Nothing is written to disk; a reconnect reuses the registered config (a rotated CA needs a new pick).
+
+## Clusters dialog and Gardener
+
+- **gardenctl compatibility without gardenctl:** `internal/gardener` reads `gardenctl-v2.yaml` (identity, alias, kubeconfig, context, patterns, access-level defaults) and matches patterns as gardenctl does (Go regexps, unanchored, named groups `project`/`namespace`/`shoot`/`seed`, first matching pattern per garden). gardenctl's resolver, kubeconfig generator and session logic are under its `internal/`, and its module pulls in gardener/gardener, so the needed parts are reimplemented (~400 lines) against unstructured objects. No Gardener Go types.
+- **Matching never connects:** `MatchTarget` runs on every keystroke and is pure; only `OpenCluster` (an explicit pick) connects, through kubewing's own connection to the garden (`Lookup`: `GetObject`/`ListObjects` on the `ClusterOpener`, status errors kept so NotFound is still recognized), so lookups and garden panes share one login. Where gardenctl errors on a value several gardens match, kubewing lists one target per garden.
+- **Shoot kubeconfig:** gardenctl's: per advertised address (external first) a cluster with the CA from `<shoot>.ca-cluster`, the cluster extension `client.authentication.k8s.io/exec` = `{shootRef, gardenClusterIdentity}` (client-go hands it to the plugin as `spec.cluster.config`, hence `ProvideClusterInfo`), user exec `kubectl-gardenlogin get-client-certificate [--access-level]`. The first context is named `<garden>/<technicalID>` (safety rules match on it). Shoots older than Kubernetes 1.20 (the legacy flag form) aren't supported.
+- **Control plane:** the seed of `spec.seedName`, in namespace `status.technicalID`: a managed seed (`garden/<seed>`) through its shoot's gardenlogin kubeconfig (access level from `kubeconfigAccessLevelDefaults.seeds`), else the `garden/<seed>.login` (or `.oidc`) secret's kubeconfig as is. Named `<garden>/seed--<seed>`, so all control planes on one seed share a connection.
+- **Recent clusters:** `config.ClusterStore` (`clusters.yaml`, ≤ 100, same-cluster dedupe, not rewritten within a minute). Kubeconfig contexts are recorded by `OpenPipeline` (whatever opened the pane), Gardener targets when they're resolved: their pane's cluster is an in-memory kubeconfig that can't be reopened from files, and two control planes on one seed are one connection. gardenctl's session targets (`$TMPDIR/garden/sessions/*/target.yaml`, by mtime) are merged into the list read-only.
 
 ## Metrics
 
@@ -198,7 +207,8 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, exec, debug containers, node shells, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
-| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml` |
+| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
+| `internal/gardener` | gardenctl-v2 config and patterns, target resolution in the garden (shoot, control plane, project), gardenlogin kubeconfigs, gardenctl session targets; no Gardener Go deps |
 | `internal/safety` | per-context rules, two-phase mutations (prepare → single-use token → execute) |
 | `internal/view` | pipeline over events → keyed diff → viewport frames |
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |

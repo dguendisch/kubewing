@@ -77,6 +77,14 @@ func (a *App) Config() config.Effective                            { return a.sv
 func (a *App) ReloadConfig() config.Effective                      { return a.svc.ReloadConfig() }
 func (a *App) Reconnect(cluster string) int                        { return a.svc.Reconnect(cluster) }
 func (a *App) ContextRule(context string) safety.Rule              { return a.svc.ContextRule(context) }
+func (a *App) Clusters() bridge.ClusterList                        { return a.svc.Clusters() }
+func (a *App) MatchTarget(text string) ([]bridge.ClusterEntry, error) {
+	return a.svc.MatchTarget(text)
+}
+func (a *App) OpenCluster(e bridge.ClusterEntry) (bridge.ClusterOpen, error) {
+	return a.svc.OpenCluster(e)
+}
+func (a *App) ForgetCluster(e bridge.ClusterEntry) error { return a.svc.ForgetCluster(e) }
 func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }

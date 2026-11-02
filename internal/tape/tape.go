@@ -35,6 +35,10 @@ type Tape struct {
 	// namespace/name ("/name" for nodes). A tape without is a cluster
 	// without metrics-server.
 	Metrics map[string]Usage `json:"metrics,omitempty"`
+	// LookupOnly keeps the tape out of the relation kinds (the jump menu's
+	// owned scan, ResolveKind): it only serves gardener lookups (the ⌘P
+	// test garden), so relation tests don't depend on it.
+	LookupOnly bool `json:"lookupOnly,omitempty"`
 	// ListDelay delays the initial list (e.g. "1s"), as a large cluster's
 	// list takes a while (replays only; not scaled by speed).
 	ListDelay string `json:"listDelay,omitempty"`

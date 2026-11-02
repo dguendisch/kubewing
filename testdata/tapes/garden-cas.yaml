@@ -1,0 +1,10 @@
+# The CA config maps of garden-shoots' shoots (<shoot>.ca-cluster), for
+# gardener.Resolver's lookups: tape.Opener serves configmaps lookups from here.
+lookupOnly: true
+pipeline:
+  source: {resource: garden-cas}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: bar.ca-cluster, namespace: garden-foo, uid: ca-bar, creationTimestamp: "2026-01-01T10:00:00Z"}, data: {ca.crt: "-----BEGIN CERTIFICATE-----\ntape\n-----END CERTIFICATE-----\n"}}
+    cells: [bar.ca-cluster]
