@@ -12,6 +12,16 @@ import (
 var stampColumns = map[string]map[string]func(*unstructured.Unstructured) string{
 	// core/v1 and events.k8s.io/v1 (whose names are deprecated*)
 	"Event": {"LAST SEEN": eventLastSeen, "FIRST SEEN": eventFirstSeen},
+	// a namespace's snapshot (source.AllKind)
+	"*": {"DELETING": deletionStamp},
+}
+
+// deletionStamp is when an object's deletion was requested; "" if it wasn't.
+func deletionStamp(obj *unstructured.Unstructured) string {
+	if t := obj.GetDeletionTimestamp(); t != nil {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return ""
 }
 
 func creationStamp(obj *unstructured.Unstructured) string {

@@ -79,6 +79,8 @@ type shared struct {
 	items   map[string]Item
 	columns []metav1.TableColumnDefinition
 	lastErr string
+	// listing: a snapshot's last progress (nil for watches)
+	listing *Listing
 }
 
 // Subscription receives events for one subscriber.
@@ -87,6 +89,7 @@ type Subscription struct {
 	Resolved Resolved
 	History  *History
 	close    func()
+	restart  func()
 }
 
 // History reads a shared watch's versions and switches its recording;
@@ -261,9 +264,9 @@ func (r *Registry) Subscribe(k Key) (*Subscription, error) { return r.SubscribeW
 // rules) only applies when this call starts the watch; joining one keeps
 // its rules.
 func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscription, error) {
-	res, err := r.opener.Resolve(k.Cluster, k.Resource)
+	res, err := r.resolve(k)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %q: %w", k.Resource, err)
+		return nil, err
 	}
 	id := shareKey(k, res)
 	r.mu.Lock()
@@ -288,20 +291,63 @@ func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscripti
 	if sh.lastErr != "" {
 		ch <- Event{Type: Error, Err: sh.lastErr}
 	}
+	if sh.listing != nil {
+		ch <- Event{Type: Listed, Listing: sh.listing}
+	}
 	sh.subs[sub] = ch
 	var once sync.Once
 	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, now: r.Now}, close: func() {
 		once.Do(func() { r.unsubscribe(sh, sub) })
-	}}, nil
+	}, restart: func() { r.restart(sh) }}, nil
 }
 
-// start runs the opener's watch for sh; r.mu held (or sh not shared yet).
+// resolve resolves k's resource: the snapshot of a namespace (AllResources)
+// is the registry's own and needs a namespace; anything else the opener's.
+func (r *Registry) resolve(k Key) (Resolved, error) {
+	if IsAll(k.Resource) {
+		if k.Namespace == "" || k.Namespace == "*" {
+			return Resolved{}, fmt.Errorf("%q needs a namespace", AllResources)
+		}
+		if k.LabelSelector != "" || k.FieldSelector != "" {
+			return Resolved{}, fmt.Errorf("%q takes no selectors", AllResources)
+		}
+		return Resolved{Kind: AllKind, Namespaced: true}, nil
+	}
+	res, err := r.opener.Resolve(k.Cluster, k.Resource)
+	if err != nil {
+		return Resolved{}, fmt.Errorf("resolve %q: %w", k.Resource, err)
+	}
+	return res, nil
+}
+
+// start runs the opener's watch for sh (a snapshot: the registry's own);
+// r.mu held (or sh not shared yet).
 func (r *Registry) start(sh *shared, k Key) {
 	ctx, cancel := context.WithCancel(context.Background())
 	sh.cancel = cancel
 	in := make(chan Event, 256)
-	go r.opener.Watch(ctx, k.Cluster, sh.res, k, in)
+	if sh.res.Kind == AllKind {
+		go r.snapshotWatch(ctx, k, in)
+	} else {
+		go r.opener.Watch(ctx, k.Cluster, sh.res, k, in)
+	}
 	go r.fanout(ctx, sh, in)
+}
+
+// Restart starts the subscription's shared source anew: a snapshot lists
+// again (see Registry.Restart for what subscribers see).
+func (s *Subscription) Restart() { s.restart() }
+
+func (r *Registry) restart(sh *shared) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.shared[sh.key] != sh {
+		return // stopped meanwhile
+	}
+	sh.cancel()
+	k := sh.key
+	k.Cluster = sh.cluster
+	r.start(sh, k)
 }
 
 // Restart starts the running watches on the given clusters anew (after a
@@ -329,6 +375,10 @@ func (r *Registry) Restart(clusters ...string) int {
 // shareKey identifies the watch k resolves to. Openers without GVRs (tapes)
 // share by the name as given.
 func shareKey(k Key, res Resolved) Key {
+	if res.Kind == AllKind {
+		k.Resource = AllResources
+		return k
+	}
 	if res.GVR.Resource == "" {
 		return k
 	}
@@ -412,6 +462,8 @@ func (r *Registry) fanout(ctx context.Context, sh *shared, in <-chan Event) {
 				delete(sh.items, itemKey(ev.Item))
 			case Error:
 				sh.lastErr = ev.Err
+			case Listed:
+				sh.listing = ev.Listing
 			}
 			for _, ch := range sh.subs {
 				select {

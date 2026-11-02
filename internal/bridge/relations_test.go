@@ -109,7 +109,7 @@ func TestRelationsOwnerChain(t *testing.T) {
 	for _, r := range got.Items {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, " ") != "ns:here ns:object owner:rr-web-7d9f owner:rd-web ref:v1/Node//node-1 events" {
+	if strings.Join(ids, " ") != "ns:here ns:object ns:all owner:rr-web-7d9f owner:rd-web ref:v1/Node//node-1 events" {
 		t.Errorf("items = %v", ids)
 	}
 }
@@ -313,7 +313,7 @@ func TestRelationsStorageReferences(t *testing.T) {
 	for _, r := range got.Items {
 		ids = append(ids, r.ID)
 	}
-	if strings.Join(ids, " ") != "ns:here ns:object ref:v1/PersistentVolume//pv-data-0 ref:storage.k8s.io/v1/VolumeAttachment events" {
+	if strings.Join(ids, " ") != "ns:here ns:object ns:all ref:v1/PersistentVolume//pv-data-0 ref:storage.k8s.io/v1/VolumeAttachment events" {
 		t.Errorf("items = %v", ids)
 	}
 

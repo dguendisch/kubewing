@@ -237,6 +237,7 @@ func (s *Service) EditApply(token, session, yaml string) error {
 		return err
 	}
 	s.EditClose(session)
+	s.refreshAfter(e.r)
 	return nil
 }
 

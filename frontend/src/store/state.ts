@@ -80,6 +80,8 @@ export interface PaneState {
    * it holds it open, but never changes it (a new spec opens one of its own).
    */
   leased?: boolean;
+  /** A listing lists again every this many seconds (the status line's auto refresh); unset = only on ⌘R. */
+  autoRefresh?: number;
 }
 
 /**
@@ -229,7 +231,7 @@ export interface Overlay {
   /** history: which one. */
   dir?: "back" | "forward";
   /** error: which error (the source's or the CEL filter's). */
-  view?: "source" | "filter";
+  view?: "source" | "filter" | "skipped";
   /** error: its full text. */
   text?: string;
   /** forwards, menu, container, jump, history, cells: highlighted entry. */
@@ -739,6 +741,10 @@ export function clusterSpec(cluster: string, namespace = ""): PaneSpec {
 
 /** A pane listing nothing (opened by ⌘P, before ⌘O picked a resource). */
 export const emptySpec = (spec: PaneSpec) => !spec.resource;
+
+/** The resource of a listing: everything in a namespace, listed once (not kubectl's `all` category). */
+export const allResources = "all";
+export const isAll = (resource: string) => resource.trim().toLowerCase() === allResources;
 
 /** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
 export function launchTab(s: UIState, cluster: string, namespace = "", spec = initialSpec(cluster, namespace)): UIState {

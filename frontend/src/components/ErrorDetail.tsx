@@ -6,13 +6,13 @@ import * as S from "../store/state";
  * An error in the status line: its first line, clickable. The rest (what the
  * server actually answered, see source.errText) is in the popover above it.
  */
-export function StatusError({ paneId, which, text, prefix = "" }: { paneId: string; which: "source" | "filter"; text: string; prefix?: string }) {
+export function StatusError({ paneId, which, text, prefix = "" }: { paneId: string; which: "source" | "filter" | "skipped"; text: string; prefix?: string }) {
   const first = text.split("\n", 1)[0];
   const open = useUI((s) => s.overlay?.kind === "error" && s.overlay.pane === paneId && s.overlay.view === which);
   return (
     <button
       type="button"
-      aria-label={which === "source" ? "pane error" : "filter errors"}
+      aria-label={which === "source" ? "pane error" : which === "filter" ? "filter errors" : "skipped types"}
       aria-haspopup="dialog"
       aria-expanded={open}
       data-error-anchor={`${paneId}:${which}`}
@@ -80,7 +80,7 @@ export function ErrorDetail() {
       }}
     >
       <div className="flex items-center border-b border-border px-2 py-0.5 text-fg-muted">
-        <span>{o.view === "filter" ? "filter error" : "error"} · select and ⌘C, or</span>
+        <span>{o.view === "filter" ? "filter error" : o.view === "skipped" ? "not listed" : "error"} · select and ⌘C, or</span>
         <button
           type="button"
           className="ml-1 text-accent hover:underline"

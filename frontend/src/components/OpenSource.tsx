@@ -32,11 +32,19 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
     bridge().contexts(kubeconfig ? `${kubeconfig}/` : "").then((list) => useContexts.setState({ list }), () => {});
   }, [kubeconfig]);
 
+  const [needNs, setNeedNs] = useState(false);
+  const all = S.isAll(spec.resource);
   const submit = (next = spec) => {
     // a cluster-scoped type has no namespace (the field is hidden for it)
     if (findResource(cat.resources, next.resource)?.namespaced === false) next = { ...next, namespace: "" };
+    // everything in all namespaces would list every type cluster-wide: one namespace only
+    if (S.isAll(next.resource) && !next.namespace.trim()) {
+      setNeedNs(true);
+      document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="open source"] [aria-label="namespace"]')?.focus();
+      return;
+    }
     setUI(S.closeOverlay);
-    void openSource(pane.id, next);
+    void openSource(pane.id, { ...next, resource: S.isAll(next.resource) ? S.allResources : next.resource });
   };
   const field = "rounded border border-border bg-bg px-2 py-1 text-fg outline-none focus:border-accent";
   return (
@@ -86,14 +94,18 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
       {/* cluster-scoped types ignore the namespace; known only once the catalog has them */}
       {findResource(cat.resources, spec.resource)?.namespaced !== false && (
         <label className="flex flex-col gap-1 text-fg-muted">
-          namespace (empty = all)
+          {all ? (
+            <span className={needNs ? "text-deleted" : undefined}>namespace (required: everything is listed in one namespace)</span>
+          ) : (
+            "namespace (empty = all)"
+          )}
           <Combobox
             label="namespace"
             className={`w-full ${field}`}
             value={spec.namespace}
             onChange={(namespace) => setSpec({ ...spec, namespace })}
-          onSubmit={(namespace) => submit({ ...spec, namespace })}
-            candidates={namespaceCandidates(cat.namespaces)}
+            onSubmit={(namespace) => submit({ ...spec, namespace })}
+            candidates={all ? namespaceCandidates(cat.namespaces).slice(1) : namespaceCandidates(cat.namespaces)}
             hint={hint(cat, "namespaces")}
           />
         </label>

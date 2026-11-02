@@ -117,15 +117,28 @@ func Namespace(obj *unstructured.Unstructured, p pipeline.Pipeline, plural, nsRe
 		return nil
 	}
 	var out []Relation
-	if p.Source.AllNamespaces() {
+	if p.Source.AllNamespaces() && !strings.EqualFold(p.Source.Resource, allResources) {
 		t := FromPipeline(p)
 		t.Namespace = ns
 		out = append(out, Relation{ID: "ns:here", Section: SectionNamespace, Label: plural + " in " + ns, Name: ns, Target: &t})
 	}
-	return append(out, Relation{
+	out = append(out, Relation{
 		ID: "ns:object", Section: SectionNamespace, Label: "namespace object " + ns, Kind: "Namespace", Name: ns,
 		Target: &Target{Resource: nsResource, Filter: NameFilter(ns)},
 	})
+	if p.Source.Namespace == ns && strings.EqualFold(p.Source.Resource, allResources) {
+		return out // the pane already is everything in ns
+	}
+	return append(out, AllIn(ns))
+}
+
+// allResources is source.AllResources (relations doesn't import source).
+const allResources = "all"
+
+// AllIn is the jump to everything in a namespace: a listing of every
+// namespaced type there (see source.AllResources).
+func AllIn(ns string) Relation {
+	return Relation{ID: "ns:all", Section: SectionNamespace, Label: "everything in " + ns, Name: ns, Target: &Target{Resource: allResources, Namespace: ns}}
 }
 
 // Owner is one ownerReference.

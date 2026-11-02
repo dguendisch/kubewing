@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec, moveColumn, openColumns, reconnect } from "../commands";
+import { applySpec, moveColumn, openColumns, reconnect, refresh } from "../commands";
 import { RecordButton, TravelBadge, TravelBar, useKey, usePaneStatus } from "./Travel";
 import { Table } from "../grid/Table";
 import type { PaneData } from "../grid/rowcache";
@@ -7,6 +7,7 @@ import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useUI } from "../store/store";
 import { useConfig } from "../store/config";
+import { formatAge } from "../grid/cells";
 import { prettyKey } from "../keys/keymap";
 import { bottomCorners, paneIds } from "../store/layout";
 import * as S from "../store/state";
@@ -616,6 +617,97 @@ function Connection({ paneId, down }: { paneId: string; down: boolean }) {
   );
 }
 
+/**
+ * A listing's state in place of the connection: listing (n of m types), then when it was listed
+ * (ticking); a click lists again, as ⌘R.
+ */
+function Listed({ paneId, st }: { paneId: string; st: NonNullable<PaneData["status"]> }) {
+  const key = useKey("source.refresh");
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const running = !!st.listTypes;
+  return (
+    <button
+      type="button"
+      aria-label="refresh listing"
+      title={`listed once, not watched: changes show on the next listing, marked. Click to list again${key ? ` (${prettyKey(key)})` : ""}`}
+      className="shrink-0 cursor-pointer hover:text-fg"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => void refresh(paneId)}
+    >
+      {running ? (
+        <>
+          <span className="text-accent motion-safe:animate-pulse">●</span> listing {st.listing ?? 0}/{st.listTypes} types
+        </>
+      ) : (
+        <>
+          <span className={st.error ? "text-deleted" : "text-connected"}>●</span> listed {st.listedAt ? `${formatAge(st.listedAt, now)} ago` : "…"} ⟳
+        </>
+      )}
+    </button>
+  );
+}
+
+/** The types a listing couldn't list: a click shows which and why (in the error popover). */
+function Skipped({ pane, n }: { pane: S.PaneState; n: number }) {
+  const open = useUI((s) => s.overlay?.kind === "error" && s.overlay.pane === pane.id && s.overlay.view === "skipped");
+  return (
+    <button
+      type="button"
+      aria-label="skipped types"
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      data-error-anchor={`${pane.id}:skipped`}
+      title="types that couldn't be listed (forbidden, an API down): click for which and why"
+      className="shrink-0 cursor-pointer text-deleted underline decoration-dotted underline-offset-2"
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={(e) => {
+        if (open) return setUI(S.closeOverlay);
+        const b = e.currentTarget.getBoundingClientRect();
+        void bridge()
+          .skipped(pane.serverId!)
+          .then((list) => {
+            const text = list.map((t) => `${t.resource}: ${t.reason}`).join("\n");
+            setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "error", pane: pane.id, view: "skipped", text, at: { x: b.left, y: b.top } }));
+          }, () => {});
+      }}
+    >
+      {n} not listed
+    </button>
+  );
+}
+
+/** Auto refresh choices of a listing, in seconds (0 = off: only ⌘R). */
+const autoRefreshes = [0, 10, 30, 60, 300];
+
+/** A listing's auto refresh: off by default; a click cycles through the intervals. Runs while the pane is shown. */
+function AutoRefresh({ pane }: { pane: S.PaneState }) {
+  const every = pane.autoRefresh ?? 0;
+  useEffect(() => {
+    if (!every) return;
+    const t = setInterval(() => void refresh(pane.id), every * 1000);
+    return () => clearInterval(t);
+  }, [every, pane.id]);
+  const next = autoRefreshes[(autoRefreshes.indexOf(every) + 1) % autoRefreshes.length]!;
+  const label = (s: number) => (s >= 60 ? `${s / 60}m` : `${s}s`);
+  return (
+    <button
+      type="button"
+      aria-label="auto refresh"
+      aria-pressed={every > 0}
+      title={`list again on its own: click for ${next ? `every ${label(next)}` : "off (⌘R only)"}`}
+      className={`shrink-0 ${every ? "text-fg" : "hover:text-fg"}`}
+      onMouseDown={(e) => e.preventDefault()}
+      onClick={() => setUI((s) => S.updatePane(s, pane.id, (p) => ({ ...p, autoRefresh: next || undefined })))}
+    >
+      {every ? `every ${label(every)}` : "auto refresh off"}
+    </button>
+  );
+}
+
 /** While the pane shows the past the timeline replaces the status line. */
 function PaneFooter({ pane }: { pane: S.PaneState }) {
   const st = usePaneStatus(pane.serverId);
@@ -633,10 +725,12 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
   const st = d?.status;
   return (
     <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
-      {st?.synced ? <Connection paneId={pane.id} down={!!st.error} /> : <Syncing stalled={!!st?.error} />}
+      {st?.snapshot ? <Listed paneId={pane.id} st={st} /> : st?.synced ? <Connection paneId={pane.id} down={!!st.error} /> : <Syncing stalled={!!st?.error} />}
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
+      {st?.skipped ? <Skipped pane={pane} n={st.skipped} /> : null}
+      {st?.snapshot ? <AutoRefresh pane={pane} /> : null}
       {st?.error ? <StatusError paneId={pane.id} which="source" text={st.error} /> : null}
       {st?.filterErrors ? <StatusError paneId={pane.id} which="filter" text={st.filterError ?? ""} prefix={`filter failed on ${st.filterErrors}: `} /> : null}
       {st?.metricsError ? (

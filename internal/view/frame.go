@@ -70,4 +70,14 @@ type Status struct {
 	// their pods are still being listed; AllocError: they can't be
 	AllocLoading bool   `json:"allocLoading,omitempty"`
 	AllocError   string `json:"allocError,omitempty"`
+	// Snapshot: the source is listed once, not watched (a namespace's
+	// snapshot); ListedAt is when the last listing finished (RFC 3339; ""
+	// while the first runs), Listing/ListTypes the progress of one running
+	// (Listing < ListTypes), Skipped the types the last one couldn't list
+	// (Listing(): which and why).
+	Snapshot  bool   `json:"snapshot,omitempty"`
+	ListedAt  string `json:"listedAt,omitempty"`
+	Listing   int    `json:"listing,omitempty"`
+	ListTypes int    `json:"listTypes,omitempty"`
+	Skipped   int    `json:"skipped,omitempty"`
 }

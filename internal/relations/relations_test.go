@@ -337,7 +337,7 @@ func TestNamespace(t *testing.T) {
 	pod := md("Pod", "v1", "shop", "p", "u", nil)
 	all := pipeline.Pipeline{Source: pipeline.Source{Resource: "pods", LabelSelector: "app=web"}, Stages: []pipeline.Stage{{Grep: "x"}, {Filter: "a"}, {Filter: "b"}, {HideHealthy: true}}}
 	got := Namespace(pod, all, "pods", "namespaces")
-	if len(got) != 2 {
+	if len(got) != 3 {
 		t.Fatalf("got %+v", got)
 	}
 	here := Target{Resource: "pods", Namespace: "shop", LabelSelector: "app=web", Filter: "(a) && (b)", Grep: "x", HideHealthy: true}
@@ -350,10 +350,19 @@ func TestNamespace(t *testing.T) {
 	if want := (Target{Resource: "namespaces", Filter: `o.metadata.name == "shop"`}); *got[1].Target != want {
 		t.Errorf("namespace object: %+v", *got[1].Target)
 	}
-	// already in that namespace: only the namespace object
+	// everything in shop: a listing of every type there, no filters
+	if got[2].Label != "everything in shop" || *got[2].Target != (Target{Resource: "all", Namespace: "shop"}) {
+		t.Errorf("everything: %q %+v", got[2].Label, *got[2].Target)
+	}
+	// already in that namespace: no "pods in shop"
 	in := pipeline.Pipeline{Source: pipeline.Source{Resource: "pods", Namespace: "shop"}}
-	if got := Namespace(pod, in, "pods", "namespaces"); len(got) != 1 || got[0].ID != "ns:object" {
+	if got := Namespace(pod, in, "pods", "namespaces"); len(got) != 2 || got[0].ID != "ns:object" || got[1].ID != "ns:all" {
 		t.Errorf("namespaced pane: %+v", got)
+	}
+	// from everything in shop: neither "all in shop" nor itself again
+	everything := pipeline.Pipeline{Source: pipeline.Source{Resource: "all", Namespace: "shop"}}
+	if got := Namespace(pod, everything, "all", "namespaces"); len(got) != 1 || got[0].ID != "ns:object" {
+		t.Errorf("listing: %+v", got)
 	}
 	if got := Namespace(md("Node", "v1", "", "n", "n", nil), all, "nodes", "namespaces"); got != nil {
 		t.Errorf("cluster-scoped: %+v", got)

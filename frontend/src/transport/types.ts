@@ -36,6 +36,21 @@ export interface Status {
   allocLoading?: boolean;
   /** Why the requests/limits columns are empty (the pods can't be listed). */
   allocError?: string;
+  /** A listing (everything in a namespace): listed once, not watched; ⌘R lists again. */
+  snapshot?: boolean;
+  /** When the last listing finished (RFC 3339); unset while the first runs. */
+  listedAt?: string;
+  /** A listing running: listing of listTypes resource types answered. */
+  listing?: number;
+  listTypes?: number;
+  /** Resource types the last listing couldn't list (see Transport.skipped). */
+  skipped?: number;
+}
+
+/** A resource type a listing couldn't list, and why (forbidden, an aggregated API down). */
+export interface SkippedType {
+  resource: string;
+  reason: string;
 }
 
 /** Mirrors view.Timeline: what a pane can travel over (RFC 3339 times). */
@@ -816,6 +831,10 @@ export interface Transport {
   reloadConfig(): Promise<Config>;
   /** Drops the connection to a cluster ("" = current) and restarts its watches; resolves to how many restarted. */
   reconnect(cluster: string): Promise<number>;
+  /** Lists a listing pane's source again (refused for live panes). */
+  refresh(pane: string): Promise<void>;
+  /** The types the last listing of a pane couldn't list. */
+  skipped(pane: string): Promise<SkippedType[]>;
   /** Installs the native menu's command menus (macOS app; a no-op headless). */
   setMenu(menus: AppMenu[]): Promise<void>;
   onFrame(cb: (p: FramePayload) => void): () => void;

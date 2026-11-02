@@ -124,6 +124,8 @@ export function wsTransport(url: string): Transport {
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
     reconnect: (c) => call("Reconnect", c),
+    refresh: (p) => call("Refresh", p),
+    skipped: (p) => call("Skipped", p),
     setMenu: (m) => call("SetMenu", m),
     onFrame: (cb) => {
       frameListeners.add(cb);

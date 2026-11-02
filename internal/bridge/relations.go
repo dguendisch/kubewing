@@ -48,6 +48,7 @@ type relationTypes interface {
 
 // rowObject is a row's last known object, tombstones included (relations
 // read metadata only, so the last state of a deleted object still works).
+// A listing's row is read in full: its references are in its spec.
 func (s *Service) rowObject(paneID, key string) (*pane, *unstructured.Unstructured, error) {
 	pn, err := s.pane(paneID)
 	if err != nil {
@@ -55,9 +56,13 @@ func (s *Service) rowObject(paneID, key string) (*pane, *unstructured.Unstructur
 	}
 	pn.mu.Lock()
 	it, ok := pn.view.Item(key)
+	deleted := pn.view.Deleted(key)
 	pn.mu.Unlock()
 	if !ok {
 		return nil, nil, fmt.Errorf("object %s not found", key)
+	}
+	if pn.snapshot() && !deleted && s.fetchFull(pn, key) == nil {
+		return pn, pn.full.get(key), nil
 	}
 	return pn, it.Object, nil
 }
@@ -105,6 +110,9 @@ func (s *Service) Relations(paneID, key string) (Relations, error) {
 		plural = p.Source.Resource
 	}
 	out.Items = append(out.Items, relations.Namespace(obj, p, plural, nsRes)...)
+	if kind == "Namespace" {
+		out.Items = append(out.Items, relations.AllIn(obj.GetName()))
+	}
 	out.Items = append(out.Items, s.owners(ctx, rel, cluster, obj)...)
 	out.Items = append(out.Items, s.owned(ctx, rel, cluster, obj)...)
 	refs, listed := refsOf(ctx, rel, cluster, withKind(obj, kind))
@@ -474,7 +482,7 @@ func (s *Service) EventsTarget(paneID, key string) (relations.Target, error) {
 	pn.mu.Lock()
 	cluster, kind := pn.p.Source.Cluster, pn.res.Kind
 	pn.mu.Unlock()
-	obj = withKind(obj, kind)
+	obj = withKind(obj, kind) // a snapshot's rows have theirs
 	if obj.GetKind() == "Event" {
 		return relations.Target{}, errors.New("an event has no events of its own")
 	}
@@ -572,7 +580,7 @@ func (s *Service) fieldRefs(paneID, text string) (*pane, []relations.FieldRef, *
 	res := pn.res
 	pn.mu.Unlock()
 	group, kind := relations.GroupOf(head.APIVersion), head.Kind
-	if kind == "" {
+	if kind == "" && !pn.snapshot() {
 		group, kind = res.GVR.Group, res.Kind
 	}
 	return pn, s.Config().Rules().Match(root, group, kind, head.Metadata.Namespace), root, nil

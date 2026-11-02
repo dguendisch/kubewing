@@ -73,6 +73,8 @@ export function wailsTransport(): Transport {
     config: () => call("Config"),
     reloadConfig: () => call("ReloadConfig"),
     reconnect: (c) => call("Reconnect", c),
+    refresh: (p) => call("Refresh", p),
+    skipped: (p) => call("Skipped", p),
     setMenu: (m) => call("SetMenu", m),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),
     onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),

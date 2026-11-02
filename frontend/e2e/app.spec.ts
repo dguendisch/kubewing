@@ -3973,6 +3973,7 @@ test.describe("jump to (⌘J)", () => {
         - separator "namespace"
         - menuitem "rel-pods in shop"
         - menuitem "namespace object shop"
+        - menuitem "everything in shop"
         - separator "owners"
         - menuitem "replicaset web-7d9f controller"
         - menuitem "↑ deployment web controller"
@@ -4358,6 +4359,7 @@ test.describe("jump to (⌘J)", () => {
         - separator "namespace"
         - menuitem "rel-pvcs in shop"
         - menuitem "namespace object shop"
+        - menuitem "everything in shop"
         - separator "owners"
         - menuitem "no owner · no ownerReferences" [disabled]
         - separator "owned"
@@ -4404,6 +4406,7 @@ test.describe("jump to (⌘J)", () => {
         - separator "namespace"
         - menuitem "rel-pods in shop"
         - menuitem "namespace object shop"
+        - menuitem "everything in shop"
         - separator "owners"
         - menuitem "widget gizmo controller"
         - separator "owned"
@@ -4524,6 +4527,7 @@ test.describe("jump to (⌘J)", () => {
         - separator "namespace"
         - menuitem "rel-statefulsets in shop"
         - menuitem "namespace object shop"
+        - menuitem "everything in shop"
         - separator "owners"
         - menuitem "no owner · no ownerReferences" [disabled]
         - separator "owned"
@@ -4553,6 +4557,69 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("ControlOrMeta+J");
     await jump(page).getByRole("menuitem", { name: "rel-volumeattachments 1" }).click();
     await expect.poll(shown).toBe("rel-volumeattachments  rva-db-1");
+  });
+
+  test("everything in a namespace: ⌘O all (needs a namespace), rows of every type with their own actions, ⌘R lists again", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    const dialog = page.getByRole("dialog", { name: "open source" });
+    await page.getByRole("combobox", { name: "resource" }).fill("all");
+    await expect(page.getByRole("listbox", { name: "resource suggestions" }).getByRole("option").first()).toContainText("every namespaced type");
+    await page.getByRole("combobox", { name: "namespace" }).fill("");
+    await page.getByRole("combobox", { name: "resource" }).focus();
+    await page.keyboard.press("Enter");
+    // all namespaces would be every type cluster-wide: refused, the dialog stays
+    await expect(dialog).toContainText("namespace (required");
+    await page.getByRole("combobox", { name: "namespace" }).fill("shop");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    // the relation tapes in shop, events left out
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "all" && p.status?.synced ? p.total : -1;
+    }).toBe(28);
+    const p = await focused(page);
+    expect(p.columns).toEqual(["KIND", "NAME", "OWNER", "AGE", "DELETING", "FINALIZERS"]);
+    expect(p.spec.sort).toBe("KIND");
+    const gizmo = p.rows.find((r) => r.cells[0] === "Pod" && r.cells[1] === "gizmo-0")!;
+    expect(gizmo.cells[2]).toBe("Widget/gizmo");
+    expect(p.rows.filter((r) => r.cells[0] === "Event")).toEqual([]);
+    const status = page.getByRole("status", { name: "pane status" });
+    await expect(status.getByRole("button", { name: "refresh listing" })).toContainText(/listed \d+s ago/);
+    await expect(status.getByRole("button", { name: "auto refresh" })).toHaveText("auto refresh off");
+
+    // a pod row is a pod: its jump menu has its references (from its spec, read in full)
+    await select(page, gizmo.key);
+    await page.keyboard.press("ControlOrMeta+J");
+    await expect(jump(page).getByRole("menuitem", { name: "secret db 2×" })).toBeVisible();
+    await expect(jump(page).getByRole("menuitem", { name: "everything in shop" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    // its YAML is the whole object, not the listed metadata
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".monaco-editor").first()).toContainText("secretKeyRef");
+    await page.keyboard.press("Escape");
+
+    // ⌘R lists again
+    await page.keyboard.press("ControlOrMeta+R");
+    await expect(status.getByRole("button", { name: "refresh listing" })).toContainText(/listed [0-2]s ago/);
+    expect((await focused(page)).total).toBe(28);
+    // a live pane says it needs none
+    await openRel(page, "rel-pods", 6);
+    await page.keyboard.press("ControlOrMeta+R");
+    await expect(status.getByLabel("message")).toContainText("this pane is live");
+  });
+
+  test("a namespace, and any row in one, jump to everything in it", async ({ page }) => {
+    await openRel(page, "rel-namespaces", 2);
+    await select(page, "rn-shop");
+    await page.keyboard.press("ControlOrMeta+J");
+    await jump(page).getByRole("menuitem", { name: "everything in shop" }).click();
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace} ${p.total}` : "";
+    }).toBe("all shop 28");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-namespaces");
   });
 
   test("the ⌘⏎ menu's jump to… opens the jump menu in its place", async ({ page }) => {

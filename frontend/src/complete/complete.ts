@@ -94,13 +94,20 @@ function aliasInDetail(detail: string | undefined, alias: string): number {
 }
 
 /**
+ * The listing of everything in a namespace (every namespaced type, listed
+ * once); offered first, as kubectl's `all` but complete.
+ */
+export const allCandidate: Candidate = { value: "all", label: "all", detail: "every namespaced type · listed once · needs a namespace", aliases: ["everything"] };
+
+/**
  * Resource type candidates. A plural that exists in several groups (e.g.
  * "machines") completes to its qualified name so the pick resolves uniquely.
+ * The listing of everything comes first once there are types to list.
  */
 export function resourceCandidates(types: ResourceType[]): Candidate[] {
   const byName = new Map<string, number>();
   for (const t of types) byName.set(t.name, (byName.get(t.name) ?? 0) + 1);
-  return types.map((t) => {
+  return [...(types.length ? [allCandidate] : []), ...types.map((t) => {
     const qualified = t.group ? `${t.name}.${t.group}` : t.name;
     const ambiguous = (byName.get(t.name) ?? 0) > 1;
     const short = t.shortNames?.length ? t.shortNames.join(",") : "";
@@ -111,7 +118,7 @@ export function resourceCandidates(types: ResourceType[]): Candidate[] {
       detail: [ambiguous ? "" : t.group || "core", t.namespaced ? "namespaced" : "cluster", short].filter(Boolean).join(" · "),
       aliases: [...(t.shortNames ?? []), ...(t.singular ? [t.singular] : []), t.kind, ...(ambiguous ? [] : [qualified])].filter(Boolean),
     };
-  });
+  })];
 }
 
 /** Namespace candidates; "" (all namespaces) comes first so it is never hidden. */

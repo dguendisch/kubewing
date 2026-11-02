@@ -165,6 +165,12 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 	if !ok {
 		return RowInfo{}, fmt.Errorf("object %s not found", key)
 	}
+	if pn.snapshot() && !deleted {
+		// a pod's containers and ports, a workload's selector: the list has metadata only
+		if err := s.fetchFull(pn, key); err == nil {
+			r.item = source.Item{Object: pn.full.get(key)}
+		}
+	}
 	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod()}
 	info.Logs = info.Pod || podChild(r.item.Object) != nil
 	if info.Pod {

@@ -9,6 +9,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/safety"
+	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/view"
 )
 
@@ -76,6 +77,8 @@ func (a *App) Catalog(context string) catalog.Snapshot             { return a.sv
 func (a *App) Config() config.Effective                            { return a.svc.Config() }
 func (a *App) ReloadConfig() config.Effective                      { return a.svc.ReloadConfig() }
 func (a *App) Reconnect(cluster string) int                        { return a.svc.Reconnect(cluster) }
+func (a *App) Refresh(pane string) error                           { return a.svc.Refresh(pane) }
+func (a *App) Skipped(pane string) ([]source.SkippedType, error)   { return a.svc.Skipped(pane) }
 func (a *App) ContextRule(context string) safety.Rule              { return a.svc.ContextRule(context) }
 func (a *App) Clusters() bridge.ClusterList                        { return a.svc.Clusters() }
 func (a *App) MatchTarget(text string) ([]bridge.ClusterEntry, error) {

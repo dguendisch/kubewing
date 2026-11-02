@@ -183,6 +183,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("open a cluster: recent, gardenctl, dashboard URL, kubeconfig file", "cluster.open"),
       row("switch the pane between a Gardener shoot and its control plane", "cluster.otherPlane"),
       row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
+      row("list everything in a namespace again (open it as resource all)", "source.refresh"),
       row("reload the config", "config.reload"),
       row("this cheat sheet", "help.toggle"),
       row("run the prepared action", "confirm.accept"),

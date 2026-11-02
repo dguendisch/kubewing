@@ -31,6 +31,8 @@ const (
 	Relist EventType = "relist"
 	// Error reports a source problem (e.g. forbidden); state is unchanged.
 	Error EventType = "error"
+	// Listed reports a snapshot's progress (Listing); state is unchanged.
+	Listed EventType = "listed"
 )
 
 // Event is delivered to subscribers in order.
@@ -42,6 +44,8 @@ type Event struct {
 	// resource has no Table support).
 	Columns []metav1.TableColumnDefinition
 	Err     string // Error
+	// Listing is a snapshot's progress (Listed only).
+	Listing *Listing
 }
 
 // StripManagedFields removes metadata.managedFields in place; it is noise

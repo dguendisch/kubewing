@@ -295,6 +295,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
     case "source.reconnect":
       return void reconnect(pane.id);
+    case "source.refresh":
+      return void refresh(pane.id);
     case "help.toggle":
       // from an open menu or port-forward list: that overlay closes, the sheet replaces it
       return setUI((x) => (x.overlay?.kind === "help" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "help", pane: pane.id })));
@@ -1125,6 +1127,22 @@ export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect =
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, spec: sort === spec.sort ? q.spec : { ...q.spec, sort }, serverId: res.pane, context: res.context, kind: res.kind, type: res.type, ambiguous: res.ambiguous, opening: false })));
   } catch (e) {
     setUI((x) => S.updatePane(x, paneId, (q) => ({ ...q, error: String((e as Error).message ?? e), serverId: undefined, opening: false })));
+  }
+}
+
+/**
+ * ⌘R (or a click on the status line's "listed …"): a listing (everything in a
+ * namespace) lists again. It isn't watched, so this is how it moves on; the new
+ * listing marks what was added, removed and changed since. Live panes say so.
+ */
+export async function refresh(paneId: string) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane?.serverId || pane.term || pane.logs) return;
+  if (!S.isAll(pane.spec.resource)) return flash(pane.id, "⌘R lists a listing again (everything in a namespace: resource all); this pane is live");
+  try {
+    await bridge().refresh(pane.serverId);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
   }
 }
 

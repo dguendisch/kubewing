@@ -216,6 +216,8 @@ type pane struct {
 	// closed: Close ran, so no feed may take it on any more
 	metrics paneMetrics
 	closed  bool
+	// full: a snapshot's full objects of opened rows (see fullCache)
+	full fullCache
 	// seq numbers frames per pane, monotonic across view rebuilds (Update),
 	// so clients can drop stale frames.
 	seq uint64
@@ -248,7 +250,7 @@ type OpenResult struct {
 // defaultSorts are the sort a pane of a kind starts with when its pipeline
 // has none (a column name, "-" = descending). Events: the latest first (an
 // age column ascending is the youngest first).
-var defaultSorts = map[string]string{"Event": "LAST SEEN"}
+var defaultSorts = map[string]string{"Event": "LAST SEEN", source.AllKind: "KIND"}
 
 func hasSort(stages []pipeline.Stage) bool {
 	return slices.ContainsFunc(stages, func(s pipeline.Stage) bool { return len(s.Sort) > 0 })
@@ -289,7 +291,12 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 		sortBy = def
 		p.Stages = append(slices.Clip(p.Stages), pipeline.Stage{Sort: []string{def}})
 	}
-	v, err := view.New(p, s.viewOptions(sub, sub.Resolved.Namespaced && p.Source.AllNamespaces()))
+	pn := &pane{p: p, res: sub.Resolved, typ: typ, explicit: explicit, sub: sub, kick: make(chan struct{}, 1)}
+	vo := s.viewOptions(sub, sub.Resolved.Namespaced && p.Source.AllNamespaces())
+	if pn.snapshot() {
+		vo.Full = pn.full.get
+	}
+	v, err := view.New(p, vo)
 	if err != nil {
 		sub.Close()
 		return OpenResult{}, err
@@ -298,7 +305,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	s.next++
 	id := fmt.Sprintf("p%d", s.next)
 	ctx, cancel := context.WithCancel(context.Background())
-	pn := &pane{id: id, view: v, sub: sub, cancel: cancel, kick: make(chan struct{}, 1), p: p, res: sub.Resolved, typ: typ, explicit: explicit}
+	pn.id, pn.view, pn.cancel = id, v, cancel
 	s.panes[id] = pn
 	s.mu.Unlock()
 	go s.pump(ctx, pn)
@@ -434,6 +441,11 @@ func (s *Service) ObjectAt(paneID, key string, to int) (view.Detail, error) {
 	pn, err := s.pane(paneID)
 	if err != nil {
 		return view.Detail{}, err
+	}
+	if pn.snapshot() && !pn.deleted(key) {
+		// the list has metadata only: the YAML is the object as it is now
+		// (a failed read keeps the metadata, which is what the list had)
+		_ = s.fetchFull(pn, key)
 	}
 	pn.mu.Lock()
 	defer pn.mu.Unlock()
@@ -641,6 +653,7 @@ func (s *Service) ContextRule(context string) safety.Rule {
 
 // row is one object of a pane, resolved for an action.
 type row struct {
+	pane    *pane
 	cluster string // as the pipeline names it ("" = current)
 	context string // resolved context name (safety rules match on it)
 	res     source.Resolved
@@ -667,15 +680,31 @@ func (s *Service) row(paneID, key string) (row, error) {
 	pn.mu.Lock()
 	it, ok := pn.view.Item(key)
 	deleted := pn.view.Deleted(key)
-	r := row{cluster: pn.p.Source.Cluster, res: pn.res, typed: pn.p.Source.Resource, item: it}
+	r := row{pane: pn, cluster: pn.p.Source.Cluster, res: pn.res, typed: pn.p.Source.Resource, item: it}
 	pn.mu.Unlock()
 	if !ok || deleted {
 		return row{}, fmt.Errorf("object %s is gone", key)
+	}
+	if pn.snapshot() {
+		// a row of its own type, and the whole object (the list has metadata)
+		if r.res, r.typed, err = s.rowType(r.cluster, it.Object); err != nil {
+			return row{}, err
+		}
+		if err := s.fetchFull(pn, key); err == nil {
+			r.item = source.Item{Object: pn.full.get(key)}
+		}
 	}
 	if r.context, err = s.contextName(r.cluster); err != nil {
 		return row{}, err
 	}
 	return r, nil
+}
+
+// deleted reports whether a row is a tombstone.
+func (pn *pane) deleted(key string) bool {
+	pn.mu.Lock()
+	defer pn.mu.Unlock()
+	return pn.view.Deleted(key)
 }
 
 // Prepare checks a mutating action on one row against the safety policy
@@ -699,7 +728,8 @@ func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
 	return s.guard.Prepare(a, r)
 }
 
-// Delete executes a prepared delete. The open watch shows the deletion.
+// Delete executes a prepared delete. The open watch shows the deletion (a
+// listing is listed again).
 func (s *Service) Delete(token string) error {
 	a, target, err := s.guard.Redeem(token, safety.Delete)
 	if err != nil {
@@ -708,7 +738,11 @@ func (s *Service) Delete(token string) error {
 	r := target.(row)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	return s.opts.Actor.Delete(ctx, r.cluster, r.res, a.Namespace, a.Name, k8stypes.UID(a.UID))
+	if err := s.opts.Actor.Delete(ctx, r.cluster, r.res, a.Namespace, a.Name, k8stypes.UID(a.UID)); err != nil {
+		return err
+	}
+	s.refreshAfter(r)
+	return nil
 }
 
 // resourceName is the qualified resource (deployments.apps), or the

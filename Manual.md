@@ -133,6 +133,20 @@ Errors (a failed list or watch, a CEL filter failing on some objects) show their
 
 Every source is one watch (`as=Table;includeObject=Object`), so cells and objects always come from the same resourceVersion. Panes on the same source share that watch; it stops when the last pane using it closes.
 
+### Everything in a namespace: `all`
+
+The resource **`all`** lists every object of a namespace, of every type: config maps, secrets, claims, service accounts, roles and bindings, leases, custom resources … This is what `kubectl api-resources --namespaced -o name | xargs kubectl get` shows, not `kubectl get all` (which only covers pods, services, workloads, jobs and autoscalers). Events are left out: there are many, and they are about the other objects (`v` on a row shows its own).
+
+- **Opening it:** `all` in `⌘O` (the first suggestion), with a namespace, which it needs. Or `⌘J` → **everything in shop**, from any row in a namespace or from a namespace row; `⌘←` goes back.
+- **The table:** KIND (with its group where two groups serve the same kind), NAME, OWNER (the controller, else the first owner; `+2` more), AGE, DELETING (since its deletion was requested) and FINALIZERS, sorted by kind. Grep, CEL (on the metadata), sort, columns and splits work as anywhere: `/^Secret$` shows the secrets, `!^ConfigMap$` everything but the config maps, a sort on DELETING what's stuck in deletion longest.
+- **Each row is its own type.** `⏎` shows the whole object, read when opened (so secrets are read only when you look at one), describe, edit, delete, events and `⌘J` work as in a pane of that type, logs and exec on pods.
+
+**Listed, not watched.** A watch per type would be a hundred or more per namespace on clusters with many custom resources, so `all` is listed once: every type, at most 8 at a time. The status line says **listing 57/143 types** while it runs, then **listed 2m ago**.
+
+- **Refresh: `⌘R`** (View → Refresh Listing, or a click on **listed …**) lists again, with the types the cluster serves now (a new custom resource is listed too). The rows stay until the new listing is complete, and what was added, removed or changed since the last listing is marked as in any pane. With **record changes** on, every listing is a moment to travel back to. A delete or an edit from the pane lists again on its own. **Reconnect** (`⌘⇧R`) lists again too.
+- **Auto refresh:** a click on **auto refresh off** cycles through every 10s, 30s, 1m and 5m (and back to off). It runs while the pane is open.
+- **Types it couldn't list** (forbidden, an aggregated API down) are counted in the status line (**3 not listed**); a click shows which and why. The rest is shown.
+
 ---
 
 ## 3. The table
@@ -421,7 +435,7 @@ Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a co
 
 | Section | Entries |
 |---|---|
-| **namespace** | "pods in shop" (the same resource narrowed to the row's namespace, filters kept; from an all-namespaces pane), "namespace object shop" |
+| **namespace** | "pods in shop" (the same resource narrowed to the row's namespace, filters kept; from an all-namespaces pane), "namespace object shop", "everything in shop" (every type, see [`all`](#everything-in-a-namespace-all)); a namespace row has "everything in" it too |
 | **owners** | the `ownerReferences` chain up (pod → replica set → deployment, and on through Gardener and other CRD owners); each checked by UID, so a deleted or recreated owner is listed disabled with why |
 | **owned** | what the row runs, counted: deployments → replica sets and pods; replica sets, stateful sets, daemon sets, jobs → pods; cron jobs → jobs; nodes → their pods; namespaces → their pods; a custom resource with a scale subresource → the pods its selector selects. **scan for owned…** finds anything else (e.g. a CRD owning config maps) by listing every resource type's metadata in the namespace; it runs only on request |
 | **references** | pod → the claims its volumes use, each followed by its bound volume, and their volume attachments; stateful set → its claims (every ordinal, so claims left by a scale-down count too), their volumes and attachments; claim → volume ("not bound" while pending) → attachments; volume → claim and attachments; volume attachment → volume and node. Then every other object the row names in a field (see [Jumping from a field](#jumping-from-a-field-in-the-yaml)): a pod's node, service account, secrets and config maps, a binding's role, a shoot's seed … Each is looked up: one that doesn't exist is listed as **missing**; the same object named in several fields is listed once, with how often (`secret db 2×`) |
@@ -774,7 +788,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |

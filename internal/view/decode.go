@@ -87,7 +87,7 @@ func (v *View) Decode(req DecodeRequest) (Decoded, error) {
 		return Decoded{}, errors.New("no field to decode")
 	}
 	cur, prev, info := v.versions(e, req.To)
-	obj := e.item.Object
+	obj := v.full(e)
 	if req.Diff || req.Which == "norm" {
 		obj = cur
 	}

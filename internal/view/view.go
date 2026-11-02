@@ -48,6 +48,10 @@ type Options struct {
 	// Kind is the resource's kind ("Event"): some server columns of a kind
 	// are re-derived from the object (see stampColumns).
 	Kind string
+	// Full, if set, is a row's full object where the source has metadata
+	// only (a namespace's snapshot): the detail's YAML, and decoding and the
+	// field history on it, read it. nil = the row's object as it is.
+	Full func(key string) *unstructured.Unstructured
 }
 
 // Versions reads an object's recorded versions (source.History).
@@ -155,6 +159,11 @@ type View struct {
 	live   map[string]*entry
 	behind int
 	err    string
+	// listing: a snapshot's progress and last outcome (nil: watched)
+	listing *source.Listing
+	// listedAt, skipped: the last complete listing's (kept while the next runs)
+	listedAt string
+	skipped  []source.SkippedType
 
 	sorted []*entry // cached display order; nil when dirty
 
@@ -501,7 +510,7 @@ func (v *View) Apply(ev source.Event, now time.Time) {
 		v.entries = v.live
 		v.apply(ev, now)
 		v.live, v.entries = v.entries, past
-		if ev.Type != source.Error {
+		if ev.Type != source.Error && ev.Type != source.Listed {
 			v.behind++
 		}
 		if v.colsDirty && !dirty {
@@ -514,12 +523,18 @@ func (v *View) Apply(ev source.Event, now time.Time) {
 }
 
 func (v *View) apply(ev source.Event, now time.Time) {
-	if ev.Type != source.Error {
+	if ev.Type != source.Error && ev.Type != source.Listed {
 		v.sorted = nil
 	}
 	switch ev.Type {
 	case source.Error:
 		v.err = ev.Err
+		return
+	case source.Listed:
+		v.listing = ev.Listing
+		if l := ev.Listing; l.At != "" {
+			v.listedAt, v.skipped = l.At, l.Skipped
+		}
 		return
 	case source.Relist:
 		v.err = ""
@@ -965,6 +980,12 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 	if v.ShowsAllocation() && v.at.IsZero() {
 		status.AllocError, status.AllocLoading = v.metrics.AllocErr, v.metrics.AllocLoading
 	}
+	if l := v.listing; l != nil {
+		status.Snapshot, status.ListedAt, status.Skipped = true, v.listedAt, len(v.skipped)
+		if l.At == "" {
+			status.Listing, status.ListTypes = l.Done, l.Types
+		}
+	}
 
 	changed := !v.everFramed || v.colsDirty || len(f.Rows) > 0 ||
 		!slices.Equal(order, v.lastOrder) || len(rows) != v.lastTotal ||
@@ -1051,7 +1072,7 @@ func (v *View) ObjectAt(key string, to int) (Detail, bool) {
 		return Detail{}, false
 	}
 	d := Detail{Key: key, Name: e.item.Object.GetName(), Deleted: !e.deletedAt.IsZero()}
-	d.YAML = toYAML(e.item.Object)
+	d.YAML = toYAML(v.full(e))
 	cur, prev, info := v.versions(e, to)
 	d.CurNorm = toYAML(cur)
 	if prev != nil {
@@ -1059,6 +1080,16 @@ func (v *View) ObjectAt(key string, to int) (Detail, bool) {
 	}
 	d.Diff = info
 	return d, true
+}
+
+// full is a row's full object: Options.Full's (once fetched), else its own.
+func (v *View) full(e *entry) *unstructured.Unstructured {
+	if v.opts.Full != nil {
+		if u := v.opts.Full(e.key); u != nil {
+			return u
+		}
+	}
+	return e.item.Object
 }
 
 // versions returns the normalized version to of a row and the one before
@@ -1432,6 +1463,9 @@ func (v *View) MatchedItems() []source.Item {
 	}
 	return out
 }
+
+// Skipped is what the last complete listing of a snapshot couldn't list.
+func (v *View) Skipped() []source.SkippedType { return v.skipped }
 
 // Item returns the source item for a row key (for actions).
 func (v *View) Item(key string) (source.Item, bool) {

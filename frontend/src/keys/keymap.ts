@@ -59,6 +59,7 @@ export type CommandId =
   | "cluster.otherPlane"
   | "config.reload"
   | "source.reconnect"
+  | "source.refresh"
   | "object.delete"
   | "object.diff"
   | "object.copyName"
@@ -130,7 +131,7 @@ export const commandIds: readonly CommandId[] = [
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
-  "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "source.reconnect",
+  "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "source.reconnect", "source.refresh",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
@@ -193,6 +194,8 @@ export const defaultBindings: Binding[] = [
   // the focused pane's context: a fresh connection and fresh lists (after the network was down, a stuck watch);
   // global, as the browser's hard reload (and ⌘R is the webview's, suppressed)
   { key: "Meta+Shift+R", command: "source.reconnect" },
+  // a listing (everything in a namespace) lists again: it isn't watched; what changed since is marked
+  { key: "Meta+R", command: "source.refresh", when: ["table", "detail"] },
   { key: "/", command: "filter.focus", when: ["table"] },
   { key: "L", command: "filter.focusLabels", when: ["table"] },
   { key: "C", command: "filter.focusCel", when: ["table"] },
