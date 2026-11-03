@@ -210,7 +210,8 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
 /** A multi-pod log tail pane: header with a live filter, the log view, a status line. */
 function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs: S.Logs; rule?: SafetyRule }) {
   const focused = useUI((s) => S.activeTab(s).focused === id && !s.overlay);
-  const viewFocused = useUI((s) => focused && (s.focus === "logs" || s.focus === "logsfind"));
+  // not while finding: the find field has the focus (the view would take it back from there)
+  const viewFocused = useUI((s) => focused && s.focus === "logs");
   const filterFocused = useUI((s) => focused && s.focus === "logsfilter");
   const [findResult, setFindResult] = useState<{ index: number; count: number }>();
   const st = useLogStatus(logs.session, logs.filter);

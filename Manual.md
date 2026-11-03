@@ -543,10 +543,10 @@ The log pane opens below.
 
 | Key | Action |
 |---|---|
-| `/` | live filter: fzf-like as the table's grep, matched against pod, container and text; hides non-matching lines (past ones too) and highlights matches |
+| `/` | live filter: fzf-like as the table's grep, matched against pod, container and text; hides non-matching lines (past ones too) and highlights matches; `⏎` or `Esc` goes back to the lines |
 | `t` | RFC 3339 timestamps on / off |
 | `⌘K` | clear the buffer (kept to `logs.buffer` lines, default 50 000) |
-| `⌘F` | find (next/previous, case, whole word, regex) |
+| `⌘F` | find (next/previous, case, whole word, regex) in the lines shown, also straight from the filter field |
 | `↑` / `↓`, `PgUp` / `PgDn` | scroll a line / a page |
 | `Home` / `End`, `⌥↑` / `⌥↓` | first / latest line |
 | `⏎` | back to the latest line |

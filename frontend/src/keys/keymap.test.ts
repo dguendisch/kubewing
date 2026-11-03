@@ -94,6 +94,8 @@ describe("resolve", () => {
     expect(resolve("Enter", "logs")).toBe("logs.bottom");
     expect(resolve("Enter", "logsfind")).toBe("logs.findNext"); // not while finding
     expect(resolve("Home", "logsfilter")).toBeUndefined(); // caret movement in the grep field
+    expect(resolve("Meta+F", "logsfilter")).toBe("logs.find"); // find within what the grep shows
+    expect(resolve("Enter", "logsfilter")).toBe("logs.blurFilter"); // ⏎ goes back to the lines, as Esc
     expect(resolve("Meta+W", "ended")).toBe("tab.close");
     expect(resolve("J", "ended")).toBeUndefined(); // no table to move in
     expect(resolve("Meta+Shift+]", "table")).toBe("tab.next");
