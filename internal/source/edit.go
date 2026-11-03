@@ -66,6 +66,34 @@ func (c *Cluster) Patch(ctx context.Context, res Resolved, namespace, name strin
 	return decodeObject(b)
 }
 
+// Scale implements Actor.
+func (o *ClusterOpener) Scale(ctx context.Context, cluster string, res Resolved, namespace, name string, replicas int64) error {
+	c, err := o.cluster(cluster)
+	if err != nil {
+		return err
+	}
+	return c.Scale(ctx, res, namespace, name, replicas)
+}
+
+// Scale merge-patches spec.replicas of the scale subresource, which any
+// workload with one (deployments, stateful sets, custom resources) serves
+// as an autoscaling/v1 Scale, whatever its own schema.
+func (c *Cluster) Scale(ctx context.Context, res Resolved, namespace, name string, replicas int64) error {
+	rc, err := c.restClient(res.GVR.GroupVersion())
+	if err != nil {
+		return err
+	}
+	patch := fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas)
+	req := rc.Patch("application/merge-patch+json").Resource(res.GVR.Resource).Name(name).SubResource("scale").Body(patch).Param("fieldManager", "kubewing")
+	if res.Namespaced {
+		req = req.Namespace(namespace)
+	}
+	if b, err := req.DoRaw(ctx); err != nil {
+		return fmt.Errorf("scale %s/%s: %w", res.GVR.Resource, name, statusError(b, err))
+	}
+	return nil
+}
+
 func decodeObject(b []byte) (*unstructured.Unstructured, error) {
 	u := &unstructured.Unstructured{}
 	if err := kjson.Unmarshal(b, &u.Object); err != nil {

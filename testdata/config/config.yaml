@@ -13,13 +13,13 @@ diff:
 
 # Per-context safety rules (glob on the kubeconfig context name), first match wins.
 #   label/color: shown on the pane frame, header and tab; color is a theme token or a color
-#   readOnly:    every mutation (delete, exec, debug, opspod, edit, terminal) is refused
+#   readOnly:    every mutation (delete, exec, debug, opspod, edit, terminal, label, annotate, scale) is refused
 #   confirm:     actions that need confirmation; delete always does
 #   strict:      confirmation requires typing the object name
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
-  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal]}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal, label, annotate, scale]}
   # clusters picked in ⌘P from the test garden (testdata/garden): <garden>/shoot--<project>--<name>
   - {match: "tape-garden/*", label: GARDEN, color: changed}
 

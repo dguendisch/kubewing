@@ -3558,6 +3558,112 @@ test.describe("object actions", () => {
     expect((await inspect(page)).tabs[0]!.layout).toMatchObject({ type: "split", dir: "row" });
   });
 
+  test.describe("label, annotate, scale", () => {
+    // e2e-meta: api (labels app, tier; annotation owner) is labeled and annotated, web (3 replicas) is scaled
+    async function openMeta(page: Page, context = "") {
+      await ready(page);
+      await page.keyboard.press("ControlOrMeta+O");
+      if (context) await page.getByRole("combobox", { name: "context" }).selectOption(context);
+      await page.getByRole("combobox", { name: "resource" }).fill("e2e-meta");
+      await page.keyboard.press("Enter");
+      await expect.poll(async () => {
+        const p = await focused(page);
+        return p.spec.resource === "e2e-meta" && p.status?.synced && p.rows.length === 2;
+      }).toBe(true);
+    }
+    const yamlOf = async (page: Page, key: string) => {
+      await select(page, key);
+      await page.keyboard.press("y");
+      const text = await page.getByRole("region", { name: "object detail" }).locator(".view-lines").innerText();
+      await page.keyboard.press("Escape");
+      return text.replace(/\u00a0/g, " ");
+    };
+
+    test("⇧L lists the labels and previews the typed changes; ⏎ applies them, a bad value stays in the dialog", async ({ page }) => {
+      await openMeta(page);
+      await select(page, "m-api");
+      await page.keyboard.press("Shift+L");
+      const dialog = page.getByRole("dialog", { name: "label" });
+      const list = dialog.getByRole("list", { name: "labels" });
+      await expect(list).toContainText("app=api");
+      await expect(list).toContainText("tier=back");
+      const input = dialog.getByRole("textbox", { name: "changes" });
+      await expect(input).toBeFocused();
+      // a label value can't have spaces: Go refuses it, the text stays
+      await input.fill(`env="two words"`);
+      await input.press("Enter");
+      await expect(dialog.getByRole("alert")).toContainText(`label value "two words"`);
+      await expect(input).toHaveValue(`env="two words"`);
+      await input.fill("env=prod tier=front app- ");
+      await expect(list.locator("[data-op=add]")).toHaveText(/env=prod/);
+      await expect(list.locator("[data-op=change]")).toHaveText(/tier=back front/);
+      await expect(list.locator("[data-op=remove]")).toHaveText(/app=api/);
+      await input.press("Enter");
+      await expect(dialog).toHaveCount(0);
+      await expect(page.getByLabel("message")).toHaveText("labeled e2e-meta/api");
+      expect((await inspect(page)).focus).toBe("table");
+      await expect.poll(async () => {
+        const y = await yamlOf(page, "m-api");
+        return y.includes("env: prod") && y.includes("tier: front") && !y.includes("app: api");
+      }).toBe(true);
+    });
+
+    test("⇧A annotates; a click on a key takes it into the field; esc cancels", async ({ page }) => {
+      await openMeta(page);
+      await select(page, "m-api");
+      await page.keyboard.press("Shift+A");
+      const dialog = page.getByRole("dialog", { name: "annotate" });
+      await dialog.getByRole("list", { name: "annotations" }).getByText("owner").click();
+      const input = dialog.getByRole("textbox", { name: "changes" });
+      await expect(input).toHaveValue("owner=team-a");
+      await input.fill(`owner=team-b note="drained, back at 14:00"`);
+      await input.press("Enter");
+      await expect(page.getByLabel("message")).toHaveText("annotated e2e-meta/api");
+      await expect.poll(async () => {
+        const y = await yamlOf(page, "m-api");
+        return y.includes("owner: team-b") && y.includes("note: drained, back at 14:00");
+      }).toBe(true);
+      await page.keyboard.press("Shift+A");
+      await expect(dialog).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      expect((await inspect(page)).focus).toBe("table");
+    });
+
+    test("s scales from the row menu's count; the dev context confirms with from and to", async ({ page }) => {
+      await openMeta(page, "tape-dev");
+      await select(page, "m-web");
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await page.getByRole("menuitem", { name: /scale… \(3\)/ }).click();
+      const dialog = page.getByRole("dialog", { name: "scale" });
+      const input = dialog.getByRole("textbox", { name: "replicas" });
+      await expect(input).toHaveValue("3");
+      await page.keyboard.type("x"); // the prefilled count is selected: typing replaces it
+      await input.press("Enter");
+      await expect(dialog.getByRole("alert")).toHaveText(`"x" isn't a number of replicas (0 or more)`);
+      await input.fill("0");
+      await input.press("Enter");
+      const confirm = page.getByRole("alertdialog", { name: "confirm scale" });
+      await expect(confirm).toContainText("scale e2e-meta/web -n meta on tape-dev to 0 (from 3)");
+      await page.keyboard.press("Enter");
+      await expect(page.getByLabel("message")).toHaveText("scaled e2e-meta/web to 0");
+      await expect.poll(async () => (await yamlOf(page, "m-web")).includes("replicas: 0")).toBe(true);
+    });
+
+    test("read-only context refuses all three without a dialog; the row menu says why", async ({ page }) => {
+      await openMeta(page, "tape-prod");
+      await select(page, "m-web");
+      for (const key of ["Shift+L", "Shift+A", "s"]) {
+        await page.keyboard.press(key);
+        await expect(page.getByLabel("message")).toContainText("read-only context");
+        expect((await inspect(page)).overlays).toEqual([]);
+      }
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(page.getByRole("menuitem", { name: /^label…/ })).toHaveAttribute("aria-disabled", "true");
+      await expect(page.getByRole("menuitem", { name: /^scale…/ })).toContainText("read-only context");
+    });
+  });
+
   test("read-only context: exec refused; describe still works", async ({ page }) => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-1");
@@ -3925,7 +4031,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {
     await openSettled(page);
     // stack a split below so the table's last row sits low in the window, with room above it
-    await page.setViewportSize({ width: 1400, height: 560 });
+    await page.setViewportSize({ width: 1400, height: 640 });
     await page.keyboard.press("ControlOrMeta+D"); // split: the new (bottom) pane is focused
     // the split's fresh relist has no tombstone for the recreated pod, so it may have one row less
     await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);

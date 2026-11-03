@@ -29,6 +29,9 @@ type Actor interface {
 	// Patch sends a JSON merge patch and returns the object as stored; with
 	// dryRun the server only reports what it would store.
 	Patch(ctx context.Context, cluster string, res Resolved, namespace, name string, patch []byte, dryRun bool) (*unstructured.Unstructured, error)
+	// Scale sets an object's replicas through its scale subresource (as
+	// kubectl scale does); NotFound if the resource has none.
+	Scale(ctx context.Context, cluster string, res Resolved, namespace, name string, replicas int64) error
 	// Exec runs cmd in a pod container with a TTY until it exits or ctx ends.
 	Exec(ctx context.Context, cluster, namespace, pod, container string, cmd []string, s ExecStreams) error
 	// Debug adds an ephemeral container to a pod, like `kubectl debug -it`,

@@ -95,6 +95,12 @@ func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }
 func (a *App) Delete(token string) error { return a.svc.Delete(token) }
+func (a *App) RowMeta(pane, key string) (bridge.RowMeta, error) {
+	return a.svc.RowMeta(pane, key)
+}
+func (a *App) Label(token string, c bridge.MetaChanges) error    { return a.svc.Label(token, c) }
+func (a *App) Annotate(token string, c bridge.MetaChanges) error { return a.svc.Annotate(token, c) }
+func (a *App) Scale(token string, replicas int64) error          { return a.svc.Scale(token, replicas) }
 func (a *App) EditOpen(pane, key string) (bridge.EditSession, error) {
 	return a.svc.EditOpen(pane, key)
 }

@@ -6,7 +6,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 - **Reverse references ("used by"):** the field reference rules (`refs.yaml`) read backwards: pods using this secret/configmap/claim, bindings granting this role, attachments of this volume. A `⌘J` section run on request (like the owned scan): a reverse step lists the referring kinds in full unless the field is metadata. `**` patterns expand to concrete paths per listed kind (pod, workload templates, cron job), which also build the target pane's CEL filter.
 - **Chains:** transitive jumps as configured sequences of rule ids, `~` reversing a step, e.g. `via: [pod-volume-pvc, pvc-volumename, ~va-pv]`, `show: each | set`. Bounded depth (~3) and lookups; no syntax beyond `via` + `show`. Port today's hand-written storage paths to built-in chains (the bridge tests prove it). Selector- and naming-convention-based relations (deployment → pods, stateful set claims) stay in Go.
-- dedicated annotate/label/scale commands
 - multi-select (with shift+up/down or shift+click or cmd+click), some commands need to adapt (e.g. delete), while others should remain on one item as they don't really make sense for multiple rows
 - nit: remember window position across restarts
 - nit: shadow below dialogs (themeable on/off)
@@ -19,6 +18,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 - **Time travel:** pinning objects or views against eviction (within budget); linking the moment of splits (pods and nodes at the same time).
 - **Logs:** a whole-pane tail for non-pod panes (the union of their pods); previous-container logs (`--previous`); saving a tail to a file; an optional timestamp column.
 - **Decode:** a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
+- **Label, annotate, scale:** completion of known keys and values in the label/annotate field (from the pane's rows, as the label filter has it); scale for many rows at once (with multi-select); `kubectl rollout restart` as a row action.
 - **Edit:** server-side apply (field manager `kubewing`, conflicts listed with their owners, force); recreate for immutable fields (delete + create, confirmed as delete); applying from files (see Scratch apply).
 - **Jump menu references:** svc → pods (by selector: not a field rule); a dependency tree view.
 - **Jump menu clusters:** a garden recognized when not opened by `⌘P` nor matching a gardenctl garden's API server (e.g. `Shoot` rows of a virtual garden reached through a port-forward); a shoot's or seed's other clusters from inside the cluster (a shoot's `kube-system/shoot-info` config map, a seed's `garden` namespace); `⌘J` on a project row → the project in the garden.
@@ -62,7 +62,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 ## P4 — "Nice to have" (v2.0)
 
 1. Native tooltips into a copy-able/colored pop-over
-1. **Focus follows mouse**
+1. **Focus follows mouse (configurable, default off)**
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **AI chat** — e.g. via an Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
 1. **Replace xterm** with ghostty(-web)?

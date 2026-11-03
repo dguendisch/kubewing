@@ -58,3 +58,21 @@ func TestDeleteSendsUIDPrecondition(t *testing.T) {
 		t.Errorf("cluster-scoped: %s %+v", path, got)
 	}
 }
+
+func TestScalePatchesTheScaleSubresource(t *testing.T) {
+	var path, method, ctype, body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		method, path, ctype, body = r.Method, r.URL.Path, r.Header.Get("Content-Type"), string(b)
+		io.WriteString(w, `{"kind":"Scale","apiVersion":"autoscaling/v1","spec":{"replicas":5}}`)
+	}))
+	defer srv.Close()
+	c := &Cluster{Config: &rest.Config{Host: srv.URL}, http: srv.Client()}
+	res := Resolved{GVR: schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}, Namespaced: true}
+	if err := c.Scale(context.Background(), res, "ns", "web", 5); err != nil {
+		t.Fatal(err)
+	}
+	if method != http.MethodPatch || path != "/apis/apps/v1/namespaces/ns/deployments/web/scale" || ctype != "application/merge-patch+json" || body != `{"spec":{"replicas":5}}` {
+		t.Errorf("%s %s (%s) %s", method, path, ctype, body)
+	}
+}

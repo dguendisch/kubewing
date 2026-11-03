@@ -12,9 +12,11 @@ const ro: SafetyRule = { context: "prod", label: "PROD", readOnly: true, confirm
 const byCmd = (items: ReturnType<typeof menuFor>) => Object.fromEntries(items.map((i) => [i.command, i]));
 
 describe("row actions menu", () => {
-  it("a pod offers everything, with its table shortcuts", () => {
+  it("a pod offers everything but scale, with its table shortcuts", () => {
     const m = byCmd(menuFor(pod, undefined));
-    expect(Object.values(m).filter((i) => i.disabled)).toEqual([]);
+    expect(Object.values(m).filter((i) => i.disabled).map((i) => i.command)).toEqual(["object.scale"]);
+    expect(m["object.label"]!.shortcut).toBe("⇧L");
+    expect(m["object.annotate"]!.shortcut).toBe("⇧A");
     expect(m["object.describe"]!.shortcut).toBe("d");
     expect(m["object.exec"]!.shortcut).toBe("x");
     expect(m["object.edit"]!.shortcut).toBe("e");
@@ -42,8 +44,15 @@ describe("row actions menu", () => {
     expect(gone["object.exec"]!.disabled).toBe("deleted");
     expect(gone["detail.open"]!.disabled).toBeUndefined(); // the last state is still viewable
 
+    expect(m["object.scale"]!).toMatchObject({ label: "scale…", disabled: "configmap has no replicas" });
+    const deploy = byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web", namespace: "shop", replicas: 3 }, undefined));
+    expect(deploy["object.scale"]).toMatchObject({ label: "scale… (3)", shortcut: "s", disabled: undefined });
+    expect(byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web", replicas: 0 }, ro))["object.scale"]!.disabled).toBe("read-only context");
+
     const prod = byCmd(menuFor(pod, ro));
     expect(prod["object.delete"]!.disabled).toBe("read-only context");
+    expect(prod["object.label"]!.disabled).toBe("read-only context");
+    expect(prod["object.annotate"]!.disabled).toBe("read-only context");
     expect(prod["object.exec"]!.disabled).toBe("read-only context");
     expect(prod["object.opsPod"]!.disabled).toBe("read-only context");
     expect(prod["object.portForward"]!.disabled).toBeUndefined(); // doesn't change the cluster

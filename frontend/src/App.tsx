@@ -8,6 +8,7 @@ import { HistoryList } from "./components/HistoryNav";
 import { FieldList } from "./components/Travel";
 import { ErrorDetail } from "./components/ErrorDetail";
 import { DebugDialog } from "./components/Debug";
+import { MetaDialog } from "./components/Meta";
 import { ColumnsDialog } from "./components/Columns";
 import { OpsPodDialog } from "./components/OpsPod";
 import { LogsDialog } from "./logs/LogsDialog";
@@ -143,6 +144,7 @@ export function App() {
       <ContainerPicker />
       <CellPicker />
       <DebugDialog />
+      <MetaDialog />
       <OpsPodDialog />
       <LogsDialog />
       <ColumnsDialog />

@@ -184,7 +184,7 @@ Which fields name another object (`secretName`, `roleRef`, a shoot's `seedName`)
 
 ## Safety model
 
-Rules are decided in Go (`internal/safety`); the frontend only shows what Go decided. Every mutation is two-phase: Go checks the rule and issues a single-use token, valid for 60 s and bound to that exact action and object (kind, context, resource, namespace, name, UID); the mutating call only runs when it redeems that token. So no path (keys, menu, context menu, palette) gets around a rule, and a confirmation can't act on another object than the one it showed. A config reload drops outstanding tokens. Deletes carry a UID precondition; edits a resourceVersion precondition.
+Rules are decided in Go (`internal/safety`); the frontend only shows what Go decided. Every mutation is two-phase: Go checks the rule and issues a single-use token, valid for 60 s and bound to that exact action and object (kind, context, resource, namespace, name, UID); the mutating call only runs when it redeems that token. So no path (keys, menu, context menu, palette) gets around a rule, and a confirmation can't act on another object than the one it showed. A config reload drops outstanding tokens. Deletes carry a UID precondition; edits a resourceVersion precondition; label and annotate a merge patch of only the given keys (`null` removes one) with `metadata.uid` in it, which the server refuses for a recreated object (uid is immutable). Scale patches the `scale` subresource's `spec.replicas` (autoscaling/v1, the same for every workload kind), so it needs no knowledge of the kind's schema; the row menu offers it where the object has `spec.replicas`.
 
 ## Frontend
 
@@ -230,7 +230,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/fieldpath` | field-path diff of two objects (lists matched by `name`/`type`/…), applied forward or in reverse; a YAML line → its field path; pure |
 | `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; pure |
 | `internal/history` | per-object versions: newest object + reverse deltas; global memory budget; the table at a moment, changes over time, a field's values |
-| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, exec, debug containers, node shells, local terminals, port-forward, logs) |
+| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, edit, label/annotate patches, scale, exec, debug containers, node shells, local terminals, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
 | `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |

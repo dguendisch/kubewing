@@ -21,6 +21,8 @@ function ConfirmDialog() {
   const container = useUI((s) => s.overlay!.container);
   const debug = useUI((s) => s.overlay!.debug);
   const ops = useUI((s) => s.overlay!.ops);
+  const meta = useUI((s) => s.overlay!.meta);
+  const scale = useUI((s) => s.overlay!.scale);
   const [typed, setTyped] = useState("");
   const ok = !p.typeToConfirm || typed === p.typeToConfirm;
   const color = ruleColor(p.rule);
@@ -49,6 +51,8 @@ function ConfirmDialog() {
         {container ? ` (container ${container})` : null}
         {ops ? ` (image ${ops.image}, namespace ${ops.namespace || "default"}${ops.chroot ? ", chroot /host" : ops.hostRoot ? ", host root at /host" : ""}${ops.hostNetwork ? ", host network" : ""}${ops.pv ? `, ${ops.pv} at ${ops.mountPath}${ops.readOnly ? " (ro)" : ""}` : ""}${ops.yaml ? ", edited YAML" : ""})` : null}
         {debug ? ` (image ${debug.image}, profile ${debug.profile || "general"}${debug.target && debug.target !== "-" ? `, target ${debug.target}` : ""})` : null}
+        {meta ? `: ${meta.text}` : null}
+        {scale ? ` to ${scale.replicas}${scale.from !== undefined ? ` (from ${scale.from})` : ""}` : null}
       </p>
       {p.typeToConfirm ? (
         <label className="flex flex-col gap-1 text-fg-muted">

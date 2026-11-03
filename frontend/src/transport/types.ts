@@ -396,7 +396,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal";
+export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal" | "label" | "annotate" | "scale";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -513,6 +513,20 @@ export interface RowInfo {
   ports?: number[];
   /** The declared container ports in spec order (port-forward completion). */
   portInfo?: PortInfo[];
+  /** spec.replicas of a scalable row (deployments, stateful sets, custom resources with a scale subresource). */
+  replicas?: number;
+}
+
+/** Mirrors bridge.MetaChanges: labels or annotations to set, keys to remove. */
+export interface MetaChanges {
+  set?: Record<string, string>;
+  remove?: string[];
+}
+
+/** Mirrors bridge.RowMeta. */
+export interface RowMeta {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
 }
 
 /** Mirrors bridge.ContainerInfo. */
@@ -785,6 +799,13 @@ export interface Transport {
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */
   delete(token: string): Promise<void>;
+  /** A row's labels and annotations (label / annotate dialogs). */
+  rowMeta(pane: string, key: string): Promise<RowMeta>;
+  /** Executes a prepared label / annotate: sets and removes keys. */
+  label(token: string, changes: MetaChanges): Promise<void>;
+  annotate(token: string, changes: MetaChanges): Promise<void>;
+  /** Executes a prepared scale (the scale subresource's spec.replicas). */
+  scale(token: string, replicas: number): Promise<void>;
   /** Reads a row's object fresh from the server into a new edit session; refused on read-only contexts. */
   editOpen(pane: string, key: string): Promise<EditSession>;
   /** Checks an edit and dry-runs it on the server; writes nothing. */

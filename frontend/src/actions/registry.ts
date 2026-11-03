@@ -28,6 +28,7 @@ export interface RowAction {
 const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
 const onNode = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.kind === "Node" ? true : `needs a node or pod, not ${r.kind.toLowerCase()}`);
 const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod, not ${r.kind.toLowerCase()}`);
+const scalable = (r: RowInfo) => (r.deleted ? "deleted" : r.replicas !== undefined ? true : `${r.kind.toLowerCase()} has no replicas`);
 
 export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true, split: "detail.openSplit" },
@@ -49,6 +50,9 @@ export const rowActions: RowAction[] = [
   { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true },
   { command: "object.opsPod", label: "node shell…", group: "act", available: onNode, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
+  { command: "object.label", label: "label…", group: "act", available: live, mutates: true },
+  { command: "object.annotate", label: "annotate…", group: "act", available: live, mutates: true },
+  { command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "act", available: scalable, mutates: true },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },
 ];
 

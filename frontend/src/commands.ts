@@ -191,6 +191,12 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     }
     case "object.debug":
       return void prepareAction("debug");
+    case "object.label":
+      return void prepareAction("label");
+    case "object.annotate":
+      return void prepareAction("annotate");
+    case "object.scale":
+      return void prepareAction("scale");
     case "terminal.splitDown":
     case "terminal.splitRight":
       return void openLocalTerminal(cmd === "terminal.splitDown" ? "column" : "row");
@@ -550,22 +556,26 @@ async function prepareAction(kind: ActionKind) {
   try {
     const pending = await bridge().prepare(kind, pane.serverId, key);
     if (kind === "debug") return setUI((x) => S.openOverlay(x, { kind: "debug", pane: pane.id, key, pending }));
+    if (kind === "label" || kind === "annotate" || kind === "scale") return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "meta", pane: pane.id, key, pending }));
     if (kind === "exec") {
       const containers = containerChoices((await bridge().rowInfo(pane.serverId, key)).containerInfo ?? []);
       if (needsPicker(containers)) {
         return setUI((x) => S.openOverlay(x, { kind: "container", pane: pane.id, key, pending, containers, index: initialChoice(containers) }));
       }
     }
-    await proceed(pane.id, key, pending);
+    await proceed(pane.id, key, pending, {});
   } catch (e) {
     flash(pane.id, errorText(e), true);
   }
 }
 
-/** A prepared action, its container (exec) or options (debug, ops pod, edit) picked: confirm if the rule asks for it, else run. */
-async function proceed(paneId: string, key: string | undefined, pending: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState) {
-  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, container, debug, ops, edit }));
-  else await execute(paneId, pending, container, debug, ops, edit);
+/** What a prepared action runs with, picked in its dialog (the confirmation shows it). */
+type ActionInput = Pick<S.Overlay, "container" | "debug" | "ops" | "edit" | "split" | "meta" | "scale">;
+
+/** A prepared action, its container (exec) or options (debug, ops pod, edit, label, scale …) picked: confirm if the rule asks for it, else run. */
+async function proceed(paneId: string, key: string | undefined, pending: Pending, input: ActionInput) {
+  if (pending.needsConfirm) setUI((x) => S.openOverlay(x, { kind: "confirm", pane: paneId, key, pending, ...input }));
+  else await execute(paneId, pending, input);
 }
 
 /**
@@ -636,7 +646,7 @@ async function submitEdit() {
     return fail(err);
   }
   if (!same(useUI.getState())) return;
-  await proceed(paneId, e.key, pending, "", undefined, undefined, e);
+  await proceed(paneId, e.key, pending, { edit: e });
 }
 
 /**
@@ -745,7 +755,7 @@ async function openLocalTerminal(split: "row" | "column") {
   try {
     const pending = await bridge().prepareTerminal(pane.spec.context, pane.spec.namespace);
     if (pending.needsConfirm) return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "confirm", pane: pane.id, pending, split }));
-    await execute(pane.id, pending, "", undefined, undefined, undefined, split);
+    await execute(pane.id, pending, { split });
   } catch (e) {
     flash(pane.id, errorText(e), true);
   }
@@ -770,7 +780,7 @@ export async function submitOpsPod(cluster: string, node: string, opts: OpsPodOp
   if (useUI.getState().overlay !== o) return; // cancelled meanwhile
   setUI(S.closeOverlay);
   try {
-    await proceed(o.pane, undefined, pending, "", undefined, opts);
+    await proceed(o.pane, undefined, pending, { ops: opts });
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
@@ -786,10 +796,38 @@ export async function submitDebug(opts: DebugOptions): Promise<string | undefine
   if (!opts.image.trim()) return "an image is needed, e.g. busybox";
   setUI(S.closeOverlay);
   try {
-    await proceed(o.pane, o.key, o.pending, "", opts);
+    await proceed(o.pane, o.key, o.pending, { debug: opts });
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
+}
+
+/**
+ * The label / annotate / scale dialog's ⏎ (checked there). The changes go
+ * to the confirmation, if the rule asks for one, else straight to Go, which
+ * validates keys and values; a refusal is returned so the dialog stays open
+ * with it, the text kept.
+ */
+export async function submitMeta(input: Pick<ActionInput, "meta" | "scale">): Promise<string | undefined> {
+  const o = useUI.getState().overlay;
+  if (o?.kind !== "meta" || !o.pending || !o.key) return;
+  if (o.pending.needsConfirm) {
+    setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "confirm", pane: o.pane, key: o.key, pending: o.pending, ...input }));
+    return;
+  }
+  try {
+    await execute(o.pane, o.pending, input);
+  } catch (e) {
+    // the token is spent: a fresh one for the next try
+    try {
+      const pending = await bridge().prepare(o.pending.action.kind, useUI.getState().panes[o.pane]?.serverId ?? "", o.key);
+      setUI((x) => (x.overlay === o ? { ...x, overlay: { ...o, pending } } : x));
+    } catch {
+      setUI((x) => (x.overlay === o ? S.closeOverlay(x) : x));
+    }
+    return errorText(e);
+  }
+  setUI((x) => (x.overlay === o ? S.closeOverlay(x) : x));
 }
 
 /** ⏎ or a click in the container picker. */
@@ -799,7 +837,7 @@ export async function pickContainer(name: string | undefined) {
   if (o?.kind !== "container" || !o.pending || !o.key || !c || c.disabled) return;
   setUI(S.closeOverlay);
   try {
-    await proceed(o.pane, o.key, o.pending, c.name);
+    await proceed(o.pane, o.key, o.pending, { container: c.name });
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
@@ -810,13 +848,13 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o.container, o.debug, o.ops, o.edit, o.split);
+    await execute(o.pane, o.pending, o);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState, split: "row" | "column" = "column") {
+async function execute(paneId: string, p: Pending, { container = "", debug, ops, edit, split = "column", meta, scale }: ActionInput) {
   switch (p.action.kind) {
     case "edit": {
       if (!edit) return;
@@ -833,6 +871,15 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
     case "delete":
       await bridge().delete(p.token);
       return flash(paneId, `deleted ${p.action.resource}/${p.action.name}`);
+    case "label":
+    case "annotate":
+      if (!meta) return;
+      await (p.action.kind === "label" ? bridge().label(p.token, meta.changes) : bridge().annotate(p.token, meta.changes));
+      return flash(paneId, `${p.action.kind === "label" ? "labeled" : "annotated"} ${p.action.resource}/${p.action.name}`);
+    case "scale":
+      if (!scale) return;
+      await bridge().scale(p.token, scale.replicas);
+      return flash(paneId, `scaled ${p.action.resource}/${p.action.name} to ${scale.replicas}`);
     case "exec": {
       const r = await bridge().execStart(p.token, container, 80, 24);
       const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context };

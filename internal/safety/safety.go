@@ -34,10 +34,17 @@ const (
 	// Terminal opens a local shell with the context's kubeconfig: whatever
 	// it runs (kubectl delete …) is beyond kubewing's checks.
 	Terminal = "terminal"
+	// Label and Annotate set or remove labels / annotations (kubectl label,
+	// kubectl annotate). A label change can move pods in or out of a
+	// service or a workload's selector.
+	Label    = "label"
+	Annotate = "annotate"
+	// Scale sets a workload's replicas through its scale subresource.
+	Scale = "scale"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec, Debug, OpsPod, Edit, Terminal}
+var mutating = []string{Delete, Exec, Debug, OpsPod, Edit, Terminal, Label, Annotate, Scale}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {

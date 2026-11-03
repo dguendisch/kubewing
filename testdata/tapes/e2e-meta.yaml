@@ -1,0 +1,14 @@
+# E2E tape for label, annotate and scale: no scripted steps, so the actions
+# are the only changes. They persist for the backend's lifetime, so each test
+# changes its own object (api: label and annotate, web: scale). Namespace
+# "meta": tape actions find objects by namespace and name across tapes.
+lookupOnly: true
+pipeline:
+  source: {resource: deployments}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: api, namespace: meta, uid: m-api, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: api, tier: back}, annotations: {owner: team-a}}, spec: {replicas: 2}}
+    cells: [api]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: web, namespace: meta, uid: m-web, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: web}}, spec: {replicas: 3}}
+    cells: [web]

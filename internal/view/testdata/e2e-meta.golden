@@ -1,0 +1,38 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "m-api",
+    "m-web"
+  ],
+  "rows": [
+    {
+      "key": "m-api",
+      "cells": [
+        "meta",
+        "api"
+      ]
+    },
+    {
+      "key": "m-web",
+      "cells": [
+        "meta",
+        "web"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

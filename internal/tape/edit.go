@@ -107,3 +107,17 @@ func (o *Opener) Patch(_ context.Context, _ string, res source.Resolved, namespa
 	}
 	return u, nil
 }
+
+// Scale implements source.Actor on spec.replicas, as the scale subresource
+// of a workload does; objects without spec.replicas have none.
+func (o *Opener) Scale(ctx context.Context, cluster string, res source.Resolved, namespace, name string, replicas int64) error {
+	cur, _, ok := o.current(namespace, name)
+	if !ok {
+		return fmt.Errorf("%s %q not found", strings.ToLower(res.Kind), name)
+	}
+	if _, found, _ := unstructured.NestedFieldNoCopy(cur.Object, "spec", "replicas"); !found {
+		return fmt.Errorf("the server could not find the requested resource (%s %s has no scale subresource)", strings.ToLower(cur.GetKind()), name)
+	}
+	_, err := o.Patch(ctx, cluster, res, namespace, name, fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas), false)
+	return err
+}

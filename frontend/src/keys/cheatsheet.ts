@@ -102,6 +102,8 @@ const sections: { title: string; rows: Row[] }[] = [
       row("debug container…", "object.debug"),
       row("node shell… (the row's node, or any)", "object.opsPod"),
       row("port-forward…", "object.portForward"),
+      row("label… / annotate… (key=value sets, key- removes)", "object.label", "object.annotate"),
+      row("scale…", "object.scale"),
       row("delete…", "object.delete"),
       row("all actions for the row", "object.menu"),
       row("run the highlighted action", "menu.run"),

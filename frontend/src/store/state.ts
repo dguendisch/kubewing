@@ -1,5 +1,5 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
@@ -220,6 +220,7 @@ export interface Overlay {
    *  closePane: closing a pane with unsaved edits;
    *  container: which container a prepared exec enters;
    *  debug: image, target and profile of a prepared debug container;
+   *  meta: the labels or annotations of a prepared label / annotate, or the replicas of a prepared scale;
    *  opspod: node, image and host access of an ops pod (prepared on submit);
    *  jump: where the pane can go from a row (namespace, owners, owned);
    *  history: a pane's back or forward history (holding its ← / → button);
@@ -229,7 +230,7 @@ export interface Overlay {
    *  field: a field's values over time (⇧H in an object view);
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
    *  logs: containers, history and follow of a log tail, before it starts. */
-  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
+  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
   /** error: which error (the source's or the CEL filter's). */
@@ -260,6 +261,10 @@ export interface Overlay {
   container?: string;
   /** confirm: the options of a prepared debug. */
   debug?: DebugOptions;
+  /** confirm: the changes of a prepared label / annotate (and the dialog's text, for the summary). */
+  meta?: { changes: MetaChanges; text: string };
+  /** confirm: the replicas of a prepared scale (and the current ones). */
+  scale?: { replicas: number; from?: number };
   /** opspod: the node prefilled from the selected row; confirm: the options of a prepared ops pod. */
   node?: string;
   ops?: OpsPodOptions;
@@ -968,6 +973,7 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   closePane: "confirm",
   portforward: "dialog",
   debug: "dialog",
+  meta: "dialog",
   opspod: "dialog",
   forwards: "forwards",
   menu: "menu",

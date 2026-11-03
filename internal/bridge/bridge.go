@@ -721,6 +721,9 @@ func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
 	if (kind == safety.Exec || kind == safety.Debug) && !r.isPod() {
 		return safety.Pending{}, fmt.Errorf("%s needs a pod, not %s", kind, strings.ToLower(r.kind()))
 	}
+	if kind == safety.Scale && replicas(r.item.Object) == nil {
+		return safety.Pending{}, fmt.Errorf("%s has no replicas to scale", strings.ToLower(r.kind()))
+	}
 	a := safety.Action{
 		Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),
 		Namespace: r.namespace(), Name: r.name(), UID: string(r.item.Object.GetUID()),

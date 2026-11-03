@@ -514,7 +514,24 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `b` | debug container… |
 | `⌥⌘O` | node shell… |
 | `f` | port-forward… |
+| `⇧L` | label… |
+| `⇧A` | annotate… |
+| `s` | scale… (the entry shows the current replicas) |
 | `⌘⌫` / `Del` | delete… |
+
+### Label, annotate
+
+`⇧L` labels the row's object, `⇧A` annotates it, as `kubectl label` / `kubectl annotate --overwrite` do. The dialog lists the current labels (or annotations) and takes changes in kubectl's syntax, separated by spaces:
+
+- `key=value` sets a key (a new one, or a new value), `key-` removes one. `env=prod tier=front app-` does all three.
+- Annotation values with spaces go in quotes: `note="drained, back at 14:00"`. Label values can't have spaces (Kubernetes' rule).
+- The list previews what the text does: `+` added, `~` changed (old value struck through), `−` removed. A click on a key takes it into the field with its value, to change it.
+
+`⏎` applies, `Esc` cancels. Anything refused (an invalid key or value, a removed key that isn't set, a webhook) stays in the dialog with your text kept. Only the keys given are sent, with the object's UID, so a recreated object with the same name is never hit.
+
+### Scale
+
+`s` scales a workload (deployment, stateful set, replica set, a custom resource with a scale subresource), as `kubectl scale --replicas` does. The dialog is prefilled with the current replicas, selected, so typing replaces them. Rows without replicas have the entry disabled.
 
 ### Delete
 
@@ -687,7 +704,7 @@ Safety rules guard clusters against mistakes. They're per kubeconfig context and
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
-  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal]}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal, label, annotate, scale]}
 ```
 
 | Field | Effect |
@@ -695,8 +712,8 @@ contexts:
 | `match` | Required. A glob (`*`, `?`, `[a-z]`) on the context name. The first matching rule wins, so put specific rules before broad ones. |
 | `label` | A badge on the pane frame, header and tab, e.g. `PROD`. |
 | `color` | Colors frame, header and tab: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
-| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit and local terminals (`terminal`: a shell can run anything). Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
-| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`. Delete always asks. An edit asks after its diff preview. |
+| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit, local terminals (`terminal`: a shell can run anything), `label`, `annotate` and `scale`. Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
+| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`, `label`, `annotate`, `scale`. Delete always asks. An edit asks after its diff preview; label, annotate and scale after their dialog, naming the changes. |
 | `strict` | A confirmation needs the object's name typed, not just `⏎`. |
 
 A context no rule matches is writable, and only delete asks.
@@ -816,7 +833,7 @@ The most used keys:
 |---|---|
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
-| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
+| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |
