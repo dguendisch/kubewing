@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { dispatch, toggleRecording, travel } from "../commands";
 import { useConfig } from "../store/config";
+import { StatusMessage } from "./ErrorDetail";
 import { prettyKey, type CommandId } from "../keys/keymap";
 import { bridge, paneData, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
@@ -121,9 +122,7 @@ export function TravelBar({ pane, at, behind }: { pane: S.PaneState; at: string;
       ) : null}
       {pane.flash ? (
         // messages show here while the timeline replaces the status line
-        <span aria-label="message" className={`truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
-          {pane.flash.text}
-        </span>
+        <StatusMessage pane={pane} />
       ) : (
         <span className="shrink-0">{hint}</span>
       )}

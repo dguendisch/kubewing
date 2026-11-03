@@ -6,6 +6,7 @@ import { setDiffRange, useDiffNavOf, viewSlot, Viewer, type ContextAction, type 
 import { prettyKey } from "../keys/keymap";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
+import { StatusMessage } from "./ErrorDetail";
 import { HistoryButtons } from "./HistoryNav";
 import { PaneName } from "./NameField";
 import { Badges, ResourceName } from "./Pane";
@@ -76,9 +77,7 @@ function ObjectStatus({ pane }: { pane: S.PaneState }) {
   if (!pane.flash) return null;
   return (
     <footer role="status" aria-label="object status" className="border-t border-border bg-bg-elev px-2 py-0.5">
-      <span aria-label="message" className={`block truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`} title={pane.flash.text}>
-        {pane.flash.text}
-      </span>
+      <StatusMessage pane={pane} className="block" />
     </footer>
   );
 }

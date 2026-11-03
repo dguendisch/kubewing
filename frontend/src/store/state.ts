@@ -233,8 +233,8 @@ export interface Overlay {
   kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
-  /** error: which error (the source's or the CEL filter's). */
-  view?: "source" | "filter" | "skipped";
+  /** error: which error (the source's, the CEL filter's, the pane's message). */
+  view?: "source" | "filter" | "skipped" | "flash";
   /** error: its full text. */
   text?: string;
   /** forwards, menu, container, jump, history, cells: highlighted entry. */

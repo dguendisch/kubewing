@@ -129,7 +129,7 @@ When a synced watch starts failing (the network is down, the API server is unrea
 
 **Reconnect** (`⌘⇧R`, a click on **connected**/**disconnected**, or File → Reconnect) doesn't wait for the retry: it drops the connection to the focused pane's context and lists every resource shown from that context again, over a fresh connection. Use it after the network comes back, or when a pane looks stuck while still saying connected. Panes keep their rows, filters and recorded history; whatever changed in the meantime shows as changes. Panes on that context whose open had failed open again. Shells, port-forwards and log tails keep their own connection.
 
-Errors (a failed list or watch, a CEL filter failing on some objects) show their first line. A click opens the full message, selectable (`⌘C`) or with **copy all**; `Esc` or a click elsewhere closes it. When client-go only says "the server rejected our request for an unknown reason", kubewing adds what the server actually answered and its HTTP status.
+Errors (a failed list or watch, a CEL filter failing on some objects, an action refused, such as a delete denied by an admission webhook) show their first line, wrapped to at most two lines. A click opens the full message, selectable (`⌘C`) or with **copy all**; `Esc` or a click elsewhere closes it. When client-go only says "the server rejected our request for an unknown reason", kubewing adds what the server actually answered and its HTTP status.
 
 ### Watches are shared
 

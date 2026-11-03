@@ -19,7 +19,7 @@ import { useLogStatus } from "../logs/useLogStatus";
 import { DraftField } from "./DraftField";
 import { HistoryButtons } from "./HistoryNav";
 import { Grip } from "./PaneDrag";
-import { StatusError } from "./ErrorDetail";
+import { StatusError, StatusMessage } from "./ErrorDetail";
 import { liveGrep } from "./grep";
 import { ruleColor } from "./safetyStyle";
 import { PaneName } from "./NameField";
@@ -414,11 +414,7 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
       {/* nothing is watched: no sync state or counts, only messages (⌘⇧P's) */}
       <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
         <span>nothing listed</span>
-        {pane.flash ? (
-          <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
-            {pane.flash.text}
-          </span>
-        ) : null}
+        <StatusMessage pane={pane} className="ml-auto" />
       </footer>
     </>
   );
@@ -774,11 +770,7 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
           {st.allocError}
         </span>
       ) : null}
-      {pane.flash ? (
-        <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
-          {pane.flash.text}
-        </span>
-      ) : null}
+      <StatusMessage pane={pane} className="ml-auto" />
       <RecordButton paneId={pane.id} on={!!st?.recording} pushRight={!pane.flash} />
       {pane.type ? <ColumnsButton paneId={pane.id} pushRight={false} /> : null}
     </footer>

@@ -3,21 +3,34 @@ import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 
 /**
- * An error in the status line: its first line, clickable. The rest (what the
- * server actually answered, see source.errText) is in the popover above it.
+ * An error in the status line: its first line (up to two lines of it, wrapped),
+ * clickable. The rest (what the server actually answered, see source.errText)
+ * is in the popover above it.
  */
-export function StatusError({ paneId, which, text, prefix = "" }: { paneId: string; which: "source" | "filter" | "skipped"; text: string; prefix?: string }) {
+export function StatusError({
+  paneId,
+  which,
+  text,
+  prefix = "",
+  className = "",
+}: {
+  paneId: string;
+  which: NonNullable<S.Overlay["view"]>;
+  text: string;
+  prefix?: string;
+  className?: string;
+}) {
   const first = text.split("\n", 1)[0];
   const open = useUI((s) => s.overlay?.kind === "error" && s.overlay.pane === paneId && s.overlay.view === which);
   return (
     <button
       type="button"
-      aria-label={which === "source" ? "pane error" : which === "filter" ? "filter errors" : "skipped types"}
+      aria-label={which === "source" ? "pane error" : which === "filter" ? "filter errors" : which === "flash" ? "message" : "skipped types"}
       aria-haspopup="dialog"
       aria-expanded={open}
       data-error-anchor={`${paneId}:${which}`}
       title="click for the full message"
-      className="min-w-0 cursor-pointer truncate text-left text-deleted underline decoration-dotted underline-offset-2"
+      className={`min-w-0 cursor-pointer text-left text-deleted underline decoration-dotted underline-offset-2 ${className}`}
       // the table keeps the keyboard focus until the popover takes it
       onMouseDown={(e) => e.preventDefault()}
       onClick={(e) => {
@@ -26,9 +39,26 @@ export function StatusError({ paneId, which, text, prefix = "" }: { paneId: stri
         setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, paneId)), { kind: "error", pane: paneId, view: which, text, at: { x: b.left, y: b.top } }));
       }}
     >
-      {prefix}
-      {first}
+      <span className="line-clamp-2 break-words">
+        {prefix}
+        {first}
+      </span>
     </button>
+  );
+}
+
+/**
+ * The pane's message (an action's result, see flash) in a status line: up to
+ * two lines; an error is a StatusError, a click shows all of it.
+ */
+export function StatusMessage({ pane, className = "" }: { pane: S.PaneState; className?: string }) {
+  const f = pane.flash;
+  if (!f) return null;
+  if (f.error) return <StatusError paneId={pane.id} which="flash" text={f.text} className={className} />;
+  return (
+    <span aria-label="message" title={f.text} className={`line-clamp-2 min-w-0 break-words text-fg ${className}`}>
+      {f.text}
+    </span>
   );
 }
 
@@ -51,10 +81,15 @@ export function ErrorDetail() {
     setPos({ left: Math.max(4, Math.min(o.at.x, window.innerWidth - m.offsetWidth - 4)), bottom: window.innerHeight - o.at.y + 2 });
   }, [open, o?.at?.x, o?.at?.y, o?.text]);
 
+  // once placed: a hidden element doesn't take the focus
+  const placed = !!pos;
+  useEffect(() => {
+    if (open && placed) el.current?.focus();
+  }, [open, placed, o?.text]);
+
   useEffect(() => {
     if (!open) return;
     setCopied(false);
-    el.current?.focus();
     const away = (e: MouseEvent) => {
       const t = e.target instanceof Element ? e.target : null;
       if (t && (el.current?.contains(t) || t.closest("[data-error-anchor]"))) return;

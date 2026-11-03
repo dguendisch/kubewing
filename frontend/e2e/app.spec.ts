@@ -1732,6 +1732,15 @@ test.describe("safety model", () => {
     await expect(page.getByRole("alertdialog")).toHaveCount(0);
     expect((await inspect(page)).overlays).toEqual([]);
     expect(await marks(page)).toEqual(before);
+    // an error message is clickable: all of it, above the status line
+    const msg = pane(page).getByRole("button", { name: "message" });
+    await msg.click();
+    const pop = page.getByRole("dialog", { name: "error detail" });
+    await expect(pop.getByLabel("error text")).toContainText("read-only context");
+    const [p, e] = [await pop.boundingBox(), await msg.boundingBox()];
+    expect(p!.y + p!.height).toBeLessThanOrEqual(e!.y);
+    await page.keyboard.press("Escape");
+    await expect(pop).toHaveCount(0);
   });
 });
 
