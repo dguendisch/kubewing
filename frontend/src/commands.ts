@@ -296,7 +296,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "cluster.open":
       return setUI((x) => (x.overlay?.kind === "clusters" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "clusters", pane: pane.id })));
     case "cluster.otherPlane":
-      return void switchPlane(pane);
+      // of the dialogs only ⌘O, over the pane it opens for (a cluster just opened lists nothing yet)
+      if (s.focus === "dialog" && s.overlay?.kind !== "open") return;
+      return void switchPlane(s.overlay?.kind === "open" ? (s.panes[s.overlay.pane] ?? pane) : pane);
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
     case "source.reconnect":
@@ -1026,8 +1028,9 @@ export async function openCluster(paneId: string, cluster: string, namespace: st
 
 /**
  * ⌘⇧P: the focused pane from a shoot to its control plane or back (Go
- * knows which target the pane's cluster is, once ⌘P resolved it). The pane
- * stays as it is (the resource, its view) on the other cluster.
+ * knows which target the pane's cluster is, once ⌘P or ⌘J resolved it). The
+ * pane stays as it is (the resource, its view) on the other cluster; ⌘O open
+ * over it (it lists nothing yet) is open over the other plane then.
  */
 async function switchPlane(pane: S.PaneState) {
   if (pane.term || pane.logs) return flash(pane.id, "⌘⇧P switches a table pane between shoot and control plane", true);
@@ -1037,8 +1040,11 @@ async function switchPlane(pane: S.PaneState) {
     const o = await bridge().otherPlane(pane.spec.context, pane.spec.namespace);
     const p = useUI.getState().panes[pane.id];
     if (!p) return;
+    const picking = useUI.getState().overlay?.kind === "open";
     const spec = { ...S.openSpec(p.spec), context: o.cluster, namespace: o.namespace ?? "" };
+    if (picking) setUI(S.closeOverlay);
     await openSource(p.id, spec);
+    if (picking) setUI((x) => S.openOverlay(S.focusPane(x, p.id), { kind: "open", pane: p.id }));
   } catch (e) {
     flash(pane.id, String((e as Error)?.message ?? e), true);
   }

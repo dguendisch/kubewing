@@ -11,8 +11,9 @@ export function OpenSource() {
   const overlay = useUI((s) => s.overlay);
   const pane = useUI((s) => (s.overlay ? s.panes[s.overlay.pane] : undefined));
   if (overlay?.kind !== "open" || !pane) return null;
-  // mounted per open: the fields start from the pane's spec, never from an abandoned edit
-  return <OpenDialog key={pane.id} pane={pane} />;
+  // mounted per open: the fields start from the pane's spec, never from an abandoned edit;
+  // anew once the pane's cluster changed under it (⌘⇧P with ⌘O open)
+  return <OpenDialog key={`${pane.id}\0${pane.spec.context}\0${pane.spec.namespace}`} pane={pane} />;
 }
 
 function OpenDialog({ pane }: { pane: S.PaneState }) {

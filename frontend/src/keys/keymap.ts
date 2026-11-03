@@ -189,8 +189,9 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+O", command: "source.open" },
   // ⌘P: the webview's print otherwise (suppressed); a cluster from recent ones, gardenctl, a dashboard URL
   { key: "Meta+P", command: "cluster.open" },
-  // the focused pane from a shoot to its control plane (the seed, in the shoot's namespace) and back
-  { key: "Meta+Shift+P", command: "cluster.otherPlane", when: ["table", "detail"] },
+  // the focused pane from a shoot to its control plane (the seed, in the shoot's namespace) and back;
+  // in ⌘O too (only there of the dialogs): a cluster just opened has it open over it
+  { key: "Meta+Shift+P", command: "cluster.otherPlane", when: ["table", "detail", "dialog"] },
   { key: "Meta+Shift+,", command: "config.reload" },
   // the focused pane's context: a fresh connection and fresh lists (after the network was down, a stuck watch);
   // global, as the browser's hard reload (and ⌘R is the webview's, suppressed)

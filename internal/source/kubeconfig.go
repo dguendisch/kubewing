@@ -1,6 +1,7 @@
 package source
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
@@ -181,4 +183,64 @@ func Server(cluster string) (string, error) {
 		return "", err
 	}
 	return cfg.Host, nil
+}
+
+// Gardenlogin is what a gardenlogin kubeconfig's context says about its
+// cluster: the shoot gardenlogin authenticates for (a seed's shoot, for a
+// control plane), the garden's identity, and the context's namespace.
+type Gardenlogin struct {
+	Garden         string
+	ShootNamespace string
+	Shoot          string
+	Namespace      string
+}
+
+// GardenloginOf reads a cluster's context: its cluster's
+// client.authentication.k8s.io/exec extension (gardenctl's and kubewing's
+// gardenlogin kubeconfigs have it) and its namespace. Reads the kubeconfig
+// only. ok false: no such extension.
+func GardenloginOf(cluster string) (Gardenlogin, bool) {
+	cc, err := clientConfig(cluster)
+	if err != nil {
+		return Gardenlogin{}, false
+	}
+	raw, err := cc.RawConfig()
+	if err != nil {
+		return Gardenlogin{}, false
+	}
+	_, name := SplitCluster(cluster)
+	if name == "" {
+		name = raw.CurrentContext
+	}
+	ctx, ok := raw.Contexts[name]
+	if !ok || ctx == nil {
+		return Gardenlogin{}, false
+	}
+	cl, ok := raw.Clusters[ctx.Cluster]
+	if !ok || cl == nil {
+		return Gardenlogin{}, false
+	}
+	ext, ok := cl.Extensions["client.authentication.k8s.io/exec"]
+	if !ok || ext == nil {
+		return Gardenlogin{}, false
+	}
+	// loaded from a file: runtime.Unknown (raw JSON); built in memory: kubewing's own type
+	b, err := json.Marshal(ext)
+	if u, isUnknown := ext.(*runtime.Unknown); isUnknown {
+		b, err = u.Raw, nil
+	}
+	if err != nil {
+		return Gardenlogin{}, false
+	}
+	var e struct {
+		ShootRef struct {
+			Namespace string `json:"namespace"`
+			Name      string `json:"name"`
+		} `json:"shootRef"`
+		GardenClusterIdentity string `json:"gardenClusterIdentity"`
+	}
+	if json.Unmarshal(b, &e) != nil || e.GardenClusterIdentity == "" || e.ShootRef.Name == "" {
+		return Gardenlogin{}, false
+	}
+	return Gardenlogin{Garden: e.GardenClusterIdentity, ShootNamespace: e.ShootRef.Namespace, Shoot: e.ShootRef.Name, Namespace: ctx.Namespace}, true
 }

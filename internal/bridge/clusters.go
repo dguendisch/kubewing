@@ -158,6 +158,11 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 	_ = s.opts.Clusters.Add(c)
 	s.mu.Lock()
 	s.opened[openedKey(o.Cluster, o.Namespace, o.Target.ControlPlane)] = o.Target
+	if o.Target.ControlPlane {
+		// its seed's cluster: ⌘⇧P from any shoot's namespace there finds that shoot,
+		// from another namespace (nodes, all namespaces) this one, the last opened there
+		s.opened[openedKey(o.Cluster, "", false)] = gardener.Target{Garden: o.Target.Garden, Seed: o.Target.Seed, Project: o.Target.Project, Namespace: o.Target.Namespace, Shoot: o.Target.Shoot}
+	}
 	s.mu.Unlock()
 	// picked explicitly: the connection is wanted, so ⌘O completes on it before a pane lists anything
 	if s.opts.Catalog != nil {
@@ -168,22 +173,45 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 
 // OtherPlane is the shoot of a control plane, or the control plane of a
 // shoot, a pane shows (cluster and namespace as its spec has them): a target
-// OpenCluster resolved before, opened as one picked in the dialog is.
+// OpenCluster resolved before, opened as one picked in the dialog is. On a
+// seed's cluster (a seed opened, or the seed of a control plane opened) a
+// shoot's namespace there names the shoot (its technical id).
 func (s *Service) OtherPlane(cluster, namespace string) (ClusterOpen, error) {
 	s.mu.Lock()
-	// a control plane first: its seed's cluster may be opened as the seed too
+	// a control plane first: its seed's cluster is known by the cluster alone too
 	t, ok := s.opened[openedKey(cluster, namespace, true)]
 	if !ok {
 		t, ok = s.opened[openedKey(cluster, "", false)]
 	}
 	s.mu.Unlock()
 	if !ok {
-		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane opened with ⌘P or ⌘J")
+		// opened otherwise (from a terminal: gardenctl's kubeconfig): what the kubeconfig says
+		t, ok = targetOfKubeconfig(cluster)
 	}
-	if t.Shoot == "" {
-		return ClusterOpen{}, errors.New("seed " + t.Seed + " is no shoot or control plane: ⌘J on a shoot opens its planes")
+	if !ok {
+		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane: neither opened with ⌘P or ⌘J nor a gardenlogin kubeconfig")
 	}
-	t.ControlPlane = !t.ControlPlane
+	switch {
+	case t.Seed == "" || t.ControlPlane:
+		// a shoot, or the control plane remembered for this namespace
+		t.ControlPlane = !t.ControlPlane
+	default:
+		// a seed's cluster: the shoot of the pane's namespace, else of the context's (gardenctl's),
+		// else the control plane opened there last
+		_, _, ok := gardener.ShootOfNamespace(namespace)
+		if gl, isGl := source.GardenloginOf(cluster); !ok && isGl {
+			namespace = gl.Namespace
+			_, _, ok = gardener.ShootOfNamespace(namespace)
+		}
+		switch project, shoot, _ := gardener.ShootOfNamespace(namespace); {
+		case ok:
+			t = gardener.Target{Garden: t.Garden, Project: project, Shoot: shoot}
+		case t.Shoot != "":
+			t = gardener.Target{Garden: t.Garden, Project: t.Project, Namespace: t.Namespace, Shoot: t.Shoot}
+		default:
+			return ClusterOpen{}, errors.New("seed " + t.Seed + ": ⌘⇧P switches from a shoot's namespace here (shoot--<project>--<name>) to the shoot")
+		}
+	}
 	t.Seed = ""
 	o, err := s.OpenCluster(ClusterEntry{Cluster: targetCluster(t)})
 	if err == nil && len(o.Choices) > 0 {
@@ -191,6 +219,27 @@ func (s *Service) OtherPlane(cluster, namespace string) (ClusterOpen, error) {
 		err = errors.New("shoot " + t.Shoot + " exists in several projects")
 	}
 	return o, err
+}
+
+// targetOfKubeconfig is the Gardener target a cluster kubewing didn't
+// resolve is, by its kubeconfig: a gardenlogin context whose namespace is a
+// shoot's control plane (gardenctl's control plane kubeconfig) is that
+// shoot's seed (a seed target: ⌘⇧P goes to the shoot of the pane's
+// namespace), one without a shoot whose own it is; else a context named as
+// kubewing names seeds (<garden>/seed--<seed>, a seed's login kubeconfig).
+func targetOfKubeconfig(cluster string) (gardener.Target, bool) {
+	// kubewing's seeds first: a managed seed's has gardenlogin for its shoot, but is the seed
+	_, ctx := source.SplitCluster(cluster)
+	if garden, seed, ok := strings.Cut(ctx, "/seed--"); ok && garden != "" && seed != "" && !strings.Contains(seed, "/") {
+		return gardener.Target{Garden: garden, Seed: seed}, true
+	}
+	if gl, ok := source.GardenloginOf(cluster); ok {
+		if _, _, cp := gardener.ShootOfNamespace(gl.Namespace); cp {
+			return gardener.Target{Garden: gl.Garden, Seed: gl.Shoot}, true
+		}
+		return gardener.Target{Garden: gl.Garden, Namespace: gl.ShootNamespace, Shoot: gl.Shoot}, true
+	}
+	return gardener.Target{}, false
 }
 
 // openedKey is where a resolved target is found again: a shoot by its

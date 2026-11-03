@@ -288,3 +288,16 @@ func TestResolveSeed(t *testing.T) {
 		t.Errorf("no login: %v", err)
 	}
 }
+
+func TestShootOfNamespace(t *testing.T) {
+	for ns, want := range map[string][2]string{"shoot--foo--bar": {"foo", "bar"}, "shoot--garden--a--b": {"garden", "a--b"}} {
+		if p, s, ok := ShootOfNamespace(ns); !ok || p != want[0] || s != want[1] {
+			t.Errorf("%s: %s %s %v", ns, p, s, ok)
+		}
+	}
+	for _, ns := range []string{"kube-system", "shoot--foo", "shoot----bar", "garden-foo"} {
+		if _, _, ok := ShootOfNamespace(ns); ok {
+			t.Errorf("%s is a shoot's", ns)
+		}
+	}
+}

@@ -389,7 +389,15 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
           nothing listed yet{key ? `: ${prettyKey(key)}` : ""} picks a resource
         </button>
       </div>
-      <PaneFooter pane={pane} />
+      {/* nothing is watched: no sync state or counts, only messages (⌘⇧P's) */}
+      <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
+        <span>nothing listed</span>
+        {pane.flash ? (
+          <span aria-label="message" className={`ml-auto truncate ${pane.flash.error ? "text-deleted" : "text-fg"}`}>
+            {pane.flash.text}
+          </span>
+        ) : null}
+      </footer>
     </>
   );
 }

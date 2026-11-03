@@ -169,6 +169,16 @@ func TestClusterJumps(t *testing.T) {
 	if o, err := svc.OtherPlane(cp.Cluster, cp.Namespace); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
 		t.Errorf("other plane: %+v %v", o, err)
 	}
+	// the control plane's pane moved to another shoot's namespace on the seed: that shoot
+	if _, err := svc.OtherPlane(cp.Cluster, "shoot--foo--bar"); err != nil {
+		t.Errorf("other plane of another namespace: %v", err)
+	}
+	// no shoot's namespace (nodes, all namespaces): the control plane opened there last
+	for _, ns := range []string{"", "kube-system"} {
+		if o, err := svc.OtherPlane(cp.Cluster, ns); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+			t.Errorf("other plane in %q: %+v %v", ns, o, err)
+		}
+	}
 
 	seed := jumps("seeds", "seed-loam", 2)
 	if len(seed) != 1 || seed[0].Label != "seed loam" || seed[0].Entry.Seed != "loam" || seed[0].Entry.Name != "tape-garden/seed--loam" {
@@ -182,12 +192,12 @@ func TestClusterJumps(t *testing.T) {
 	if l := svc.Clusters(); len(l.Recent) == 0 || l.Recent[0].Seed != "loam" || l.Recent[0].Name != "tape-garden/seed--loam" {
 		t.Errorf("recent: %+v", l.Recent)
 	}
-	// a seed's pane is no shoot or control plane; a control plane on it still is
+	// on a seed's cluster, a shoot's namespace names its shoot; other namespaces none
 	if _, err := svc.OtherPlane(o.Cluster, ""); err == nil || !strings.Contains(err.Error(), "seed loam") {
 		t.Errorf("other plane of a seed: %v", err)
 	}
-	if _, err := svc.OtherPlane(o.Cluster, "shoot--foo--baz"); err != nil {
-		t.Errorf("other plane on the seed's cluster: %v", err)
+	if o, err := svc.OtherPlane(o.Cluster, "shoot--foo--baz"); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+		t.Errorf("other plane on the seed's cluster: %+v %v", o, err)
 	}
 	if _, err := svc.OpenCluster(jumps("seeds", "seed-soil", 2)[0].Entry); err == nil || !strings.Contains(err.Error(), "no login secret") {
 		t.Errorf("seed soil: %v", err)
@@ -217,5 +227,90 @@ func TestSameServer(t *testing.T) {
 	}
 	if sameServer("https://api.x", "https://api.y") {
 		t.Error("api.x = api.y")
+	}
+}
+
+// ⌘⇧P on clusters kubewing didn't resolve (a terminal's gardenctl
+// kubeconfig, handed over at launch): the kubeconfig says what it is. A
+// control plane's context (gardenlogin for the seed's shoot, the shoot's
+// namespace) goes to the shoot of the pane's namespace, else the context's;
+// a shoot's context to its control plane.
+func TestOtherPlaneFromKubeconfig(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	t.Chdir(root)
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{}}
+	for _, n := range []string{"garden-shoots", "garden-projects", "garden-cas", "garden-managedseeds", "e2e-static"} {
+		tp, err := tape.Load("testdata/tapes/" + n + ".yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		op.Tapes[n] = tp
+		op.Tapes[tp.Pipeline.Source.Resource] = tp
+	}
+	cfg := config.Defaults("")
+	svc := New(source.NewRegistry(op), &eventLog{events: map[string][]any{}}, Options{
+		Actor: op, Config: &cfg, Clock: fixedClock{time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)},
+		Clusters: config.OpenClusters(""),
+		Gardener: &Gardener{Paths: gardener.Paths{Config: "testdata/garden/gardenctl-v2.yaml"}, Lookup: op},
+	})
+	// as gardenctl writes them: gardenlogin with the cluster extension
+	kubeconfig := func(ctx, ns, shootNs, shoot string) string {
+		kc := filepath.Join(t.TempDir(), "kubeconfig.yaml")
+		nsLine := ""
+		if ns != "" {
+			nsLine = ", namespace: " + ns
+		}
+		body := `apiVersion: v1
+kind: Config
+current-context: ` + ctx + `
+clusters:
+- name: c
+  cluster:
+    server: https://api.example
+    extensions:
+    - name: client.authentication.k8s.io/exec
+      extension: {shootRef: {namespace: ` + shootNs + `, name: ` + shoot + `}, gardenClusterIdentity: tape-garden}
+users: [{name: u, user: {exec: {command: kubectl-gardenlogin, args: [get-client-certificate], apiVersion: client.authentication.k8s.io/v1, provideClusterInfo: true}}}]
+contexts: [{name: ` + ctx + `, context: {cluster: c, user: u` + nsLine + `}}]
+`
+		if err := os.WriteFile(kc, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		return source.JoinCluster(source.RegisterKubeconfig([]string{kc}), ctx)
+	}
+
+	// in any namespace (the seed's kube-system, all, a cluster-scoped list): the context's is the shoot's
+	cp := kubeconfig("garden--loam-external", "shoot--foo--baz", "garden", "loam")
+	for _, ns := range []string{"shoot--foo--baz", "", "kube-system"} {
+		o, err := svc.OtherPlane(cp, ns)
+		if err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+			t.Errorf("control plane in %q: %+v %v", ns, o, err)
+		}
+	}
+
+	shoot := kubeconfig("shoot--foo--baz", "", "garden-foo", "baz")
+	if o, err := svc.OtherPlane(shoot, "kube-system"); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/seed--loam") || o.Namespace != "shoot--foo--baz" {
+		t.Errorf("shoot: %+v %v", o, err)
+	}
+
+	// a seed by kubewing's name for it (a login secret's kubeconfig has no gardenlogin)
+	plain := filepath.Join(t.TempDir(), "kc")
+	if err := os.WriteFile(plain, []byte("apiVersion: v1\nkind: Config\ncurrent-context: tape-garden/seed--soil\nclusters: [{name: c, cluster: {server: \"https://127.0.0.1:1\"}}]\nusers: [{name: u, user: {}}]\ncontexts: [{name: tape-garden/seed--soil, context: {cluster: c, user: u}}, {name: other, context: {cluster: c, user: u}}]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref := source.RegisterKubeconfig([]string{plain})
+	if o, err := svc.OtherPlane(source.JoinCluster(ref, "tape-garden/seed--soil"), "shoot--foo--bar"); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--bar") {
+		t.Errorf("seed by name: %+v %v", o, err)
+	}
+	if _, err := svc.OtherPlane(source.JoinCluster(ref, "tape-garden/seed--soil"), "kube-system"); err == nil || !strings.Contains(err.Error(), "shoot's namespace") {
+		t.Errorf("seed, no shoot's namespace: %v", err)
+	}
+	// a managed seed as kubewing builds it: gardenlogin for its shoot garden/loam, named for the seed
+	ms := kubeconfig("tape-garden/seed--loam", "", "garden", "loam")
+	if o, err := svc.OtherPlane(ms, "shoot--foo--baz"); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+		t.Errorf("managed seed by name: %+v %v", o, err)
+	}
+	if _, err := svc.OtherPlane(source.JoinCluster(ref, "other"), "shoot--foo--bar"); err == nil || !strings.Contains(err.Error(), "gardenlogin") {
+		t.Errorf("not Gardener: %v", err)
 	}
 }

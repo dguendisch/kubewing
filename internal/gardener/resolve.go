@@ -263,6 +263,21 @@ func (r *Resolver) seedLogin(ctx context.Context, garden, seed string) (*clientc
 	return nil, fmt.Errorf("seed %s: no login secret: %w", seed, errors.Join(errs...))
 }
 
+// ShootOfNamespace is the project and name of the shoot a control plane
+// namespace on a seed belongs to: its technical id shoot--<project>--<name>
+// (project names have no "--"). Not one: ok false.
+func ShootOfNamespace(namespace string) (project, shoot string, ok bool) {
+	rest, ok := strings.CutPrefix(namespace, "shoot--")
+	if !ok {
+		return "", "", false
+	}
+	project, shoot, ok = strings.Cut(rest, "--")
+	if !ok || project == "" || shoot == "" {
+		return "", "", false
+	}
+	return project, shoot, true
+}
+
 func technicalID(shoot *unstructured.Unstructured) string {
 	if tid, _, _ := unstructured.NestedString(shoot.Object, "status", "technicalID"); tid != "" {
 		return tid

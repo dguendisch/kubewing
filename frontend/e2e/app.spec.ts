@@ -4901,6 +4901,8 @@ test.describe("⌘P: open a cluster", () => {
     // Esc leaves it empty; its button opens ⌘O again, which lists what's picked
     await page.keyboard.press("Escape");
     expect((await inspect(page)).focus).toBe("table");
+    // nothing is watched: the status line says so, no syncing
+    await expect(pane.getByRole("status", { name: "pane status" })).toHaveText("nothing listed");
     await pane.getByRole("button", { name: "pick what to list" }).click();
     await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
     await page.keyboard.press("Enter");
@@ -5025,7 +5027,18 @@ test.describe("⌘P: open a cluster", () => {
     let s = await inspect(page);
     expect(s.focusedPane).not.toBe(from);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
-    await page.keyboard.press("Escape");
+    // ⌘⇧P right away, ⌘O still open over it: the shoot, ⌘O open over that
+    expect((await inspect(page)).overlays).toEqual(["open"]);
+    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
+    await expect.poll(async () => (await inspect(page)).overlays).toEqual(["open"]);
+    // ⌘O is the shoot's now (not the control plane's it was opened over): what it picks lists there
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", namespace: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
+    // and back from the table
+    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
     await page.keyboard.press("Control+D");
     await expect.poll(async () => (await inspect(page)).focusedPane).toBe(from);
 
