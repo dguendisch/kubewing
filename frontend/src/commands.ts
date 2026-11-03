@@ -4,7 +4,8 @@ import type { ActionKind, ClusterEntry, ColumnSpec, MetricsPlace, DebugOptions, 
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
-import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
+import { cursorOf, diffNavOf, useDiffRange, viewSlot, type Place } from "./editor/Viewer";
+import { sameLine } from "./editor/carry";
 import * as S from "./store/state";
 import { setTimeline, shifted, useTimelines } from "./store/travel";
 import { containerChoices, initialChoice, moveChoice, needsPicker } from "./components/containers";
@@ -612,7 +613,7 @@ async function openEdit(inSplit = false) {
     // something else meanwhile (another row, another view; its title loading in doesn't count)
     const moved = before ? now?.object?.key !== key || !!now.object.edit || (!!now.object.decode && !inSplit) : !!now?.object || (now && selectedKey(now)) !== key;
     if (!now || moved) return void bridge().editClose(es.session).catch(() => {});
-    const edit: S.EditState = { session: es.session, key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml };
+    const edit: S.EditState = { session: es.session, key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml, at: carriedPlace(now, es.yaml) };
     // ⇧E: a split of its own, opened in the editor (closing the editor closes the split, as e's goes back to the table)
     if (inSplit) return setUI((x) => S.withEdit(S.openObjectSplit(S.closeOverlay(x), { key, view: "yaml", title: info.name, viaEdit: true }, pane.id), edit));
     if (before) return setUI((x) => S.setObject(x, pane.id, (o) => ({ ...o, edit, title: o.title ?? info.name })));
@@ -620,6 +621,17 @@ async function openEdit(inSplit = false) {
   } catch (e) {
     flash(pane.id, errorText(e), true);
   }
+}
+
+/** The object view's cursor (its YAML or diff), on the same line of the YAML opened for editing; none from the table, a decoded value or describe. */
+function carriedPlace(pane: S.PaneState, yaml: string): Place | undefined {
+  const o = pane.object;
+  if (!o || o.decode || o.view === "describe") return undefined;
+  const cur = cursorOf(pane.id);
+  const at = cur.place?.();
+  if (!cur.text || !at) return undefined;
+  const line = sameLine(cur.text, at.line, yaml);
+  return { ...at, line, col: line === at.line && cur.text === yaml ? at.col : 0 };
 }
 
 /** A failed write: back in the pane's editor (not its preview), with why. */

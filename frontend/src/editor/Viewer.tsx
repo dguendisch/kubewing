@@ -57,7 +57,25 @@ export const common: Monaco.editor.IEditorOptions = {
  * (0-based) there, for commands that act on "the line under the cursor"
  * (= / ! filters, ⏎ decode, ⇧H field history).
  */
-export type Cursor = { text?: string; line: number; at?: () => { x: number; y: number } | undefined };
+export type Cursor = { text?: string; line: number; at?: () => { x: number; y: number } | undefined; place?: () => Place | undefined };
+
+/** Where an editor's cursor is: its line and column (0-based) and, while in view, how far its line is from the top (px). */
+export type Place = { line: number; col: number; top?: number };
+
+export function placeOf(ed: Monaco.editor.ICodeEditor): Place | undefined {
+  const pos = ed.getPosition();
+  if (!pos) return undefined;
+  const top = ed.getTopForLineNumber(pos.lineNumber) - ed.getScrollTop();
+  return { line: pos.lineNumber - 1, col: pos.column - 1, top: top >= 0 && top < ed.getLayoutInfo().height ? top : undefined };
+}
+
+/** Puts an editor's cursor at place, its line as far from the top as it was (centered if it wasn't in view). */
+export function goTo(ed: Monaco.editor.ICodeEditor, place: Place) {
+  const pos = { lineNumber: place.line + 1, column: place.col + 1 };
+  ed.setPosition(pos);
+  if (place.top === undefined) ed.revealPositionInCenter(pos);
+  else ed.setScrollTop(ed.getTopForLineNumber(pos.lineNumber) - place.top);
+}
 
 /** Where an editor's cursor is on screen: the bottom left of its line (undefined while scrolled out of view). */
 export function cursorPoint(ed: Monaco.editor.ICodeEditor): { x: number; y: number } | undefined {
@@ -241,6 +259,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           cur.text = live.current.value;
           cur.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
           cur.at = () => cursorPoint(ed);
+          cur.place = () => placeOf(ed);
         }
         const subs = [
           ed.onDidChangeCursorPosition((e) => {
@@ -269,7 +288,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         dispose = () => {
           marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === model.getValue()) cur.text = cur.at = undefined;
+          if (cur.text === model.getValue()) cur.text = cur.at = cur.place = undefined;
           acts.forEach((a) => a.dispose());
           subs.forEach((d) => d.dispose());
           ed.dispose();
@@ -290,6 +309,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           cur.text = live.current.value;
           cur.line = 0;
           cur.at = () => cursorPoint(mod);
+          cur.place = () => placeOf(mod);
         }
         const acts = addActions(mod, contextActions);
         // first line of each change on the modified side (a pure deletion: the line after it)
@@ -336,7 +356,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         dispose = () => {
           marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === b.getValue()) cur.text = cur.at = undefined;
+          if (cur.text === b.getValue()) cur.text = cur.at = cur.place = undefined;
           acts.forEach((x) => x.dispose());
           subs.forEach((d) => d.dispose());
           setNav(slot, undefined);

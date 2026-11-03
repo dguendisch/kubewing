@@ -411,9 +411,9 @@ Nothing to decode on a line (a map, a number, plain text) says why in the status
 
 `e` on a row (or in its YAML view; `⇧E` opens the editor in a split to the right) edits the object, as `kubectl edit` does:
 
-1. The object is read **fresh from the API server** (not the watch) into an editable editor.
+1. The object is read **fresh from the API server** (not the watch) into an editable editor. Opened from the YAML view (or its diff), the cursor stays on the line it was on, at the same height on screen.
 2. `⌘S` (or `⌘⏎`) checks the edit and has the server **dry-run** it, then shows a side-by-side diff of the object now vs. as the server would store it (defaults and admission webhooks applied). `j`/`k` step through the changes.
-3. `⏎` writes it; `Esc` goes back to editing.
+3. `⏎` writes it; `Esc` goes back to editing, with the cursor where it was.
 
 What's sent:
 

@@ -43,6 +43,7 @@ export function inspect() {
     decoded: S.focusedPane(s).object?.decode ? shownDecode.get(tab.focused) : undefined,
     cursor: cursors.get(tab.focused)?.line ?? 0,
     decodeCursor: cursors.get(`${tab.focused}/decode`)?.line ?? 0,
+    editCursor: cursors.get(`${tab.focused}/edit`)?.line ?? 0,
     // per session: scrollback setting, lines held (screen + scrollback) and the oldest line's text
     terminals: Object.fromEntries(
       [...openTerminals].map(([id, t]) => {

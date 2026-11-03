@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
+import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
 import { claimFocus } from "./focus";
 import { loadMonaco } from "./load";
-import { common, cursorOf, cursorPoint, defineTheme, markRefs, type FieldRefs } from "./Viewer";
+import { common, cursorOf, cursorPoint, defineTheme, goTo, markRefs, type FieldRefs, type Place, type ViewState } from "./Viewer";
 
 interface Props {
   /** The text it opens with; later changes of the prop don't reset what was typed. */
@@ -19,6 +20,10 @@ interface Props {
   slot?: string;
   /** An object's YAML: its references marked as typed, ⌘-clickable. */
   refs?: FieldRefs;
+  /** Where the cursor starts (the line the YAML viewer's cursor was on). */
+  at?: Place;
+  /** The cursor and scroll position, kept across remounts (back from the edit's preview): restored when it opens, saved when it closes. */
+  viewState?: ViewState;
 }
 
 /**
@@ -27,7 +32,7 @@ interface Props {
  * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
  * ⌥↑/⌥↓ move it.
  */
-export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, onFocus, slot, refs }: Props) {
+export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, onFocus, slot, refs, at, viewState }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const cb = useRef({ onChange, onSubmit, onFocus, refs });
@@ -43,11 +48,13 @@ export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, o
       const model = m.editor.createModel(initial, "yaml");
       const ed = m.editor.create(host.current, { ...common, readOnly: false, domReadOnly: false, renderLineHighlight: "line", stickyScroll: { enabled: false }, tabSize: 2, model, ariaLabel: label });
       editor.current = ed;
+      if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
+      else if (at) goTo(ed, at);
       if (autoFocus) ed.focus();
       const cur = slot ? cursorOf(slot) : undefined;
       if (cur) {
         cur.text = initial;
-        cur.line = 0;
+        cur.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
         cur.at = () => cursorPoint(ed);
       }
       // the marks follow the text as typed, a moment after the last key
@@ -68,6 +75,7 @@ export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, o
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => cb.current.onSubmit?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
       dispose = () => {
+        if (viewState) viewState.state = ed.saveViewState();
         clearTimeout(typing);
         marked?.dispose();
         if (cur && cur.text === model.getValue()) cur.text = cur.at = undefined;

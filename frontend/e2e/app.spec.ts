@@ -8,6 +8,7 @@ type Inspect = {
   objects: Record<string, { key: string; view: string; diff: boolean; split: boolean; from?: string; follow: boolean; followOff?: string; decoded: number; editing: boolean; title?: string }>;
   cursor: number;
   decodeCursor: number;
+  editCursor: number;
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
   panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
@@ -3803,6 +3804,31 @@ test.describe("object actions", () => {
       expect(await viewing(page)).toBe(true);
       await page.keyboard.press("Escape");
       expect((await inspect(page)).objects).toEqual({});
+    });
+
+    test("e from the YAML keeps the cursor's line, at the same height; back from the preview, the editor is where it was", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-settings");
+      await page.keyboard.press("Enter");
+      const yaml = page.getByRole("region", { name: "object detail" });
+      await yaml.locator(".view-line", { hasText: "stage:" }).click();
+      const line = (await inspect(page)).cursor;
+      expect(line).toBeGreaterThan(0);
+      const y = (await yaml.locator(".view-line", { hasText: "stage:" }).boundingBox())!.y;
+      await page.keyboard.press("e");
+      const editor = dialog(page).locator("[data-editor=yaml]");
+      await expect(editor.locator(".view-lines")).toContainText("stage:");
+      await expect.poll(async () => (await inspect(page)).editCursor).toBe(line);
+      expect(Math.abs((await editor.locator(".view-line", { hasText: "stage:" }).boundingBox())!.y - y)).toBeLessThan(4);
+      // typed on another line, previewed (not written: replicas is never sent, see below), back: the cursor is on that line still
+      await retype(page, 'replicas: "3"', 'replicas: "5"');
+      const typed = (await inspect(page)).editCursor;
+      expect(typed).not.toBe(line);
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(dialog(page)).toContainText("preview (server dry run");
+      await page.keyboard.press("Escape");
+      await expect(editor.locator(".view-lines")).toContainText('replicas: "5"');
+      await expect.poll(async () => (await inspect(page)).editCursor).toBe(typed);
     });
 
     test("⇧E edits in a split to the right; the table stays; esc closes it", async ({ page }) => {

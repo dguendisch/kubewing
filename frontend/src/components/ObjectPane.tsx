@@ -586,6 +586,9 @@ function Chain({ paneId, data, toggled }: { paneId: string; data: Decoded; toggl
  */
 function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; focused: boolean }) {
   const preview = e.preview;
+  // the editor's cursor and scroll, back from the preview
+  const view = useRef<{ session: string; state: ViewState }>(undefined);
+  if (view.current?.session !== e.session) view.current = { session: e.session, state: {} };
   const focus = () => setUI((s) => S.focusPane(s, pane.id));
   const refs = useFieldRefs(pane);
   return (
@@ -605,6 +608,8 @@ function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; foc
             key={`edit-${e.session}`}
             label="edit YAML"
             initial={e.yaml}
+            at={e.at}
+            viewState={view.current.state}
             autoFocus={focused}
             onFocus={focus}
             slot={`${pane.id}/edit`}

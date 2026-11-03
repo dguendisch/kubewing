@@ -2,6 +2,7 @@ import type { CommandId, FocusContext } from "../keys/keymap";
 import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
+import type { Place } from "../editor/Viewer";
 import { insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
@@ -309,6 +310,8 @@ export interface EditState {
   title: string;
   /** As opened, for "discard changes?". */
   opened: string;
+  /** Where the editor's cursor starts: on the line the object's YAML had it. */
+  at?: Place;
   yaml: string;
   /** Set once the dry run passed: the editor shows its diff instead (focus editpreview). */
   preview?: EditPreview;
