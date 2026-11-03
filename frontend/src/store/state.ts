@@ -797,6 +797,19 @@ export function closeTab(s: UIState, index = s.activeTab, dropPanes = true): UIS
   return { ...s, tabs, panes, activeTab: Math.min(index, tabs.length - 1), focus: "table", overlay: undefined };
 }
 
+/**
+ * ⌘W, or a tab's × button: closes the tab, unless it holds splits or an edit not
+ * written (work a stray click shouldn't lose); then a dialog asks first.
+ */
+export function requestCloseTab(s: UIState, tabId = activeTab(s).id): UIState {
+  const index = s.tabs.findIndex((t) => t.id === tabId);
+  if (index < 0) return s;
+  const tab = s.tabs[index]!;
+  const ids = paneIds(tab.layout);
+  if (ids.length < 2 && !ids.some((id) => unsaved(s.panes[id]))) return closeTab(s, index);
+  return openOverlay(closeOverlay(s), { kind: "closeTab", pane: tab.focused, tabId });
+}
+
 export function cycleTab(s: UIState, delta: number): UIState {
   const n = s.tabs.length;
   return { ...s, activeTab: (s.activeTab + delta + n) % n, overlay: undefined, focus: "table" };

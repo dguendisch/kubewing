@@ -1294,6 +1294,32 @@ test("dragging a tab reorders the tabs (the active one stays active); esc puts t
   expect((await inspect(page)).activeTab).toBe(0);
 });
 
+test("a tab's ✕ shows on hover at its left: clicking on the same spot closes tab after tab; splits ask first", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("ControlOrMeta+Shift+D"); // t1 holds two panes
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ControlOrMeta+T");
+  const order = async () => (await inspect(page)).tabs.map((t) => t.id);
+  const [t1, t2, t3, t4] = await order();
+  const close = (id: string) => page.locator(`[role=tablist] :has(> [data-tab=${id}]) > button[aria-label^="close tab"]`);
+  await expect(close(t2!)).toBeHidden();
+  await page.locator(`[role=tablist] [data-tab=${t2}]`).hover();
+  await expect(close(t2!)).toBeVisible();
+  const r = (await close(t2!).boundingBox())!;
+  const tab = (await page.locator(`[role=tablist] [data-tab=${t2}]`).boundingBox())!;
+  expect(r.x - tab.x).toBeLessThan(tab.width / 3); // on the left
+  // the pointer stays put: the next tab moves under it
+  await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
+  expect(await order()).toEqual([t1, t3, t4]);
+  await page.mouse.click(r.x + r.width / 2, r.y + r.height / 2);
+  expect(await order()).toEqual([t1, t4]);
+  // the tab with splits asks, as ⌘W does
+  await page.locator(`[role=tablist] [data-tab=${t1}]`).hover();
+  await close(t1!).click();
+  await expect(page.getByRole("alertdialog", { name: "confirm close tab" })).toBeVisible();
+  await page.keyboard.press("Enter");
+  expect(await order()).toEqual([t4]);
+});
+
 test("switching tabs keeps each tab's live table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");

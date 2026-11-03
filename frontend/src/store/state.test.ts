@@ -382,6 +382,18 @@ describe("naming tabs and panes", () => {
     invariants(s);
   });
 
+  it("closing a tab by ⌘W or its ×: a single pane goes at once, splits ask first (any tab, not just the active one)", () => {
+    let s = apply(apply(S.initialState(), S.newTab), (x) => S.splitPane(x, "row")); // t1: v1; t2: v2 | v3
+    s = apply(s, (x) => S.requestCloseTab(x, "t2"));
+    expect(s.overlay).toMatchObject({ kind: "closeTab", tabId: "t2" });
+    expect(s.tabs).toHaveLength(2);
+    s = apply(S.closeOverlay(s), (x) => S.requestCloseTab(x, "t1")); // the other tab, from its ×
+    expect(s.overlay).toBeUndefined();
+    expect(s.tabs.map((t) => t.id)).toEqual(["t2"]);
+    expect(S.requestCloseTab(s, "gone")).toBe(s);
+    invariants(s);
+  });
+
   it("splits and new tabs don't take the name along", () => {
     let s = S.namePane(S.nameTab(S.initialState(), "t1", "mine"), "v1", "web");
     s = apply(s, (x) => S.splitPane(x, "row"));

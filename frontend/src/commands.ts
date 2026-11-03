@@ -3,7 +3,6 @@ import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./s
 import type { ActionKind, ClusterEntry, ColumnSpec, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
-import { paneIds } from "./store/layout";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
 import { cursorOf, diffNavOf, useDiffRange, viewSlot } from "./editor/Viewer";
 import * as S from "./store/state";
@@ -54,13 +53,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.renameTab(x));
     case "tab.new":
       return setUI(S.newTab);
-    case "tab.close": {
-      // a tab with splits is work: losing it to a stray ⌘W would be expensive; so is an edit not written
-      const tab = S.activeTab(s);
-      const edits = paneIds(tab.layout).some((id) => S.unsaved(s.panes[id]));
-      if (paneIds(tab.layout).length < 2 && !edits) return setUI((x) => S.closeTab(x));
-      return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "closeTab", pane: pane.id, tabId: tab.id }));
-    }
+    case "tab.close":
+      return setUI((x) => S.requestCloseTab(x));
     case "tab.next":
       return setUI((x) => S.cycleTab(x, 1));
     case "tab.prev":

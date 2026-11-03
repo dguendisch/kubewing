@@ -56,35 +56,51 @@ export function App() {
               ⌘{n}
             </span>
           );
-          const className = `flex items-baseline gap-2 px-3 py-1 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"} ${t.id === dragged ? "opacity-70" : ""}`;
+          const className = `flex items-baseline gap-2 py-1 pr-3 pl-6 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"} ${t.id === dragged ? "opacity-70" : ""}`;
+          // on the tab's left, not its right: closing tab after tab, the next one slides under the pointer, × included
+          const close = (
+            <button
+              type="button"
+              aria-label={`close tab ${title}`}
+              title="close tab (⌘W)"
+              className="absolute top-1/2 left-1.5 hidden size-4 -translate-y-1/2 items-center justify-center rounded text-[11px] leading-none text-fg-muted group-hover:flex hover:bg-fg/15 hover:text-fg"
+              onClick={() => setUI((s) => S.requestCloseTab(s, t.id))}
+            >
+              ✕
+            </button>
+          );
           // a field can't sit in a button: while named, the tab is a plain element around it
           if (renaming === t.id)
             return (
-              <div key={t.id} role="tab" data-tab={t.id} aria-selected={i === active} className={className} style={noDrag}>
-                <NameField label="tab name" initial={t.name ?? ""} onName={(name) => (s) => S.nameTab(s, t.id, name)} />
-                {shortcut}
+              <div key={t.id} className="group relative flex" style={noDrag}>
+                <div role="tab" data-tab={t.id} aria-selected={i === active} className={className}>
+                  <NameField label="tab name" initial={t.name ?? ""} onName={(name) => (s) => S.nameTab(s, t.id, name)} />
+                  {shortcut}
+                </div>
+                {close}
               </div>
             );
           return (
-            <button
-              key={t.id}
-              role="tab"
-              data-tab={t.id}
-              aria-selected={i === active}
-              aria-keyshortcuts={n ? `Meta+${n}` : undefined}
-              title={t.name ? undefined : "double-click to name the tab (⌘⇧I)"}
-              onClick={() => setUI((s) => ({ ...s, activeTab: i }))}
-              onPointerDown={(e) => {
-                if (e.button === 0) startTabDrag(t.id, e.nativeEvent);
-              }}
-              onDoubleClick={() => setUI((s) => S.renameTab({ ...s, activeTab: i }, t.id))}
-              className={className}
-              // not a window drag handle: dragging reorders the tabs, and Wails would take a double-click to zoom the window
-              style={noDrag}
-            >
-              {title}
-              {shortcut}
-            </button>
+            // not a window drag handle: dragging reorders the tabs, and Wails would take a double-click to zoom the window
+            <div key={t.id} className="group relative flex" style={noDrag}>
+              <button
+                role="tab"
+                data-tab={t.id}
+                aria-selected={i === active}
+                aria-keyshortcuts={n ? `Meta+${n}` : undefined}
+                title={t.name ? undefined : "double-click to name the tab (⌘⇧I)"}
+                onClick={() => setUI((s) => ({ ...s, activeTab: i }))}
+                onPointerDown={(e) => {
+                  if (e.button === 0) startTabDrag(t.id, e.nativeEvent);
+                }}
+                onDoubleClick={() => setUI((s) => S.renameTab({ ...s, activeTab: i }, t.id))}
+                className={className}
+              >
+                {title}
+                {shortcut}
+              </button>
+              {close}
+            </div>
           );
         })}
         <button aria-label="new tab" data-new-tab className="px-2 py-1 text-fg-muted" onClick={() => setUI(S.newTab)}>
