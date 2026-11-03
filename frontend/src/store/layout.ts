@@ -207,10 +207,10 @@ export const MIN_PANE_PX = 100;
 
 /**
  * ⌘⌃arrows (as tmux's resize-pane): moves a divider of pane `id` by `step`
- * in `dir`. That's the divider on the pane's `dir` side, or the opposite one
- * at the tab's edge: ⌘⌃→ grows a pane on the left and shrinks one on the
- * right. `step` and `min` (a pane's smallest extent) are fractions of the
- * tab along that axis. The divider stops where a pane would get smaller than
+ * in `dir`. That's the pane's top (left) divider, its anchor, so ⌘⌃↑ grows
+ * a middle pane upwards; the bottom (right) one only for a pane at the tab's
+ * top (left) edge. `step` and `min` (a pane's smallest extent) are fractions
+ * of the tab along that axis. The divider stops where a pane would get smaller than
  * `min`; the same layout when it can't move at all.
  */
 export function resize(l: Layout, id: string, dir: Direction, step: number, min: number): Layout {
@@ -229,11 +229,10 @@ export function resize(l: Layout, id: string, dir: Direction, step: number, min:
     });
   };
   walk(l, { x: 0, y: 0, w: 1, h: 1 });
-  const after = path.find((p) => p.i < p.node.children.length - 1);
-  const before = after ? undefined : path.find((p) => p.i > 0);
-  const at = after ?? before;
+  const before = path.find((p) => p.i > 0);
+  const at = before ?? path.find((p) => p.i < p.node.children.length - 1);
   if (!at) return l;
-  const k = after ? at.i : at.i - 1; // the divider between children k and k+1
+  const k = before ? at.i - 1 : at.i; // the divider between children k and k+1
   const f = shares(at.node);
   // a child's smallest extent: a split along the axis shrinks its children by their shares
   const minOf = (n: Layout): number =>

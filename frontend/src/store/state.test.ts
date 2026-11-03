@@ -546,7 +546,7 @@ describe("resizing panes (⌘⌃arrows)", () => {
     return { x: +b.x.toFixed(3), y: +b.y.toFixed(3), w: +b.w.toFixed(3), h: +b.h.toFixed(3) };
   };
 
-  it("moves the divider on the arrow's side, or the opposite one at the tab's edge", () => {
+  it("moves the pane's top (left) divider, the bottom (right) one only at the tab's top (left) edge", () => {
     expect(r(resize(l, "v1", "right", 0.1, 0.05), "v1").w).toBe(0.6); // v1 grows to the right
     expect(r(resize(l, "v1", "left", 0.1, 0.05), "v1").w).toBe(0.4); // left edge is the tab's: its right divider moves left
     expect(r(resize(l, "v2", "left", 0.1, 0.05), "v2")).toEqual({ x: 0.4, y: 0, w: 0.6, h: 0.5 }); // the outer divider
@@ -554,6 +554,14 @@ describe("resizing panes (⌘⌃arrows)", () => {
     expect(r(resize(l, "v2", "down", 0.1, 0.05), "v2").h).toBe(0.6);
     expect(r(resize(l, "v3", "down", 0.1, 0.05), "v3")).toEqual({ x: 0.5, y: 0.6, w: 0.5, h: 0.4 }); // at the bottom: the divider above it
     expect(r(resize(l, "v3", "up", 0.1, 0.05), "v3").h).toBe(0.6);
+  });
+  it("a middle pane is anchored at its top (left) divider", () => {
+    const col: Layout = { type: "split", dir: "column", children: [leaf("a"), leaf("b"), leaf("c")], sizes: [0.3, 0.4, 0.3] };
+    expect(r(resize(col, "b", "up", 0.1, 0.05), "b")).toEqual({ x: 0, y: 0.2, w: 1, h: 0.5 }); // grows upwards
+    expect(r(resize(col, "b", "down", 0.1, 0.05), "b")).toEqual({ x: 0, y: 0.4, w: 1, h: 0.3 }); // its bottom stays
+    expect(r(resize(col, "b", "down", 0.1, 0.05), "c").h).toBe(0.3); // the pane below untouched
+    const row: Layout = { type: "split", dir: "row", children: [leaf("a"), leaf("b"), leaf("c")], sizes: [0.3, 0.4, 0.3] };
+    expect(r(resize(row, "b", "left", 0.1, 0.05), "b")).toEqual({ x: 0.2, y: 0, w: 0.5, h: 1 });
   });
   it("keeps the tree valid and the other splits' sizes", () => {
     const x = resize(resize(l, "v3", "up", 0.1, 0.05), "v1", "right", 0.2, 0.05);
