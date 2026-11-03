@@ -293,14 +293,14 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     for (const ctx of ["filter", "terminal", "edit", "menu"] as const) expect(resolve("V", ctx)).toBeUndefined();
   });
 
-  it("⌘← / ⌘→ move through the jump history in the table and an object view; elsewhere they're the field's or nothing", () => {
+  it("⌘← / ⌘→ move through the jump history in the table; elsewhere they're the field's or nothing", () => {
     expect(resolve("Meta+ArrowLeft", "table")).toBe("history.back");
     expect(resolve("Meta+ArrowRight", "table")).toBe("history.forward");
-    // an object view over the table is a step in its history
-    expect(resolve("Meta+ArrowLeft", "detail")).toBe("history.back");
-    expect(resolve("Meta+ArrowRight", "detail")).toBe("history.forward");
-    expect(resolve("Meta+ArrowLeft", "filter")).toBeUndefined(); // start of line
-    for (const ctx of ["edit", "menu", "terminal"] as const) expect(resolve("Meta+ArrowLeft", ctx)).toBeUndefined();
+    // start/end of line, in the YAML viewer (Monaco's), the editor and fields
+    for (const ctx of ["detail", "filter", "edit", "menu", "terminal"] as const) {
+      expect(resolve("Meta+ArrowLeft", ctx)).toBeUndefined();
+      expect(resolve("Meta+ArrowRight", ctx)).toBeUndefined();
+    }
   });
 
   it("⏎ shows the row's object in place, ⇧⏎ in a split; in an object view ⇧⏎ splits what it shows", () => {

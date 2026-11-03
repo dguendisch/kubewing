@@ -44,6 +44,9 @@ export function inspect() {
     cursor: cursors.get(tab.focused)?.line ?? 0,
     decodeCursor: cursors.get(`${tab.focused}/decode`)?.line ?? 0,
     editCursor: cursors.get(`${tab.focused}/edit`)?.line ?? 0,
+    // the object view's cursor (0-based) and selection, as Monaco has them
+    place: cursors.get(tab.focused)?.place?.(),
+    selected: cursors.get(tab.focused)?.selected?.(),
     // per session: scrollback setting, lines held (screen + scrollback) and the oldest line's text
     terminals: Object.fromEntries(
       [...openTerminals].map(([id, t]) => {

@@ -342,14 +342,14 @@ A click on the timeline goes to that moment.
 
 ### YAML view
 
-`⏎` (or `y`) shows the row's YAML in place of the table, in a read-only editor. It's a step in the pane's history: `Esc` or `⌘←` goes back to the table, with its row and scroll as they were; `⌘→` forward again.
+`⏎` (or `y`) shows the row's YAML in place of the table, in a read-only editor. It's a step in the pane's history: `Esc` goes back to the table, with its row and scroll as they were (`⌘→` there comes forward again).
 
 `⇧⏎` opens the YAML **in a split to the right** instead, to compare (another `⇧⏎` from the table adds another one). `Esc` at its top closes it.
 
 - A split is pinned to its object. Its **follow** checkbox makes it show whichever row is selected in its table.
 - It shares the table's watch, so it stays and keeps updating when the table closes or shows something else (following then stops; the header says why).
 
-In the object view: `⌘F` finds, `w` toggles wrapping of long lines (on by default; holds for the session). A held `Esc` (key repeat) stops at the top of an object view; only a fresh press leaves it.
+In the object view: `⌘F` finds, `w` toggles wrapping of long lines (on by default; holds for the session). The cursor moves as in VS Code: `⌥←`/`⌥→` a word (`⇧` selects), `⌘←`/`⌘→` start/end of line, and `⌃←`/`⌃→` fold/unfold the section at the cursor (in the editor too). A held `Esc` (key repeat) stops at the top of an object view; only a fresh press leaves it.
 
 ### Object diff: `d`
 
@@ -423,7 +423,7 @@ What's sent:
 
 Anything refused (invalid YAML, a webhook, a conflict, "no changes") shows below the editor with your text kept.
 
-The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent). Only `Esc`, `⌘S` and `⌘⏎` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
+The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent, `⌥←`/`⌥→` a word, `⌃←`/`⌃→` fold/unfold). Only `Esc`, `⌘S` and `⌘⏎` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
 
 Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a context rule asks after the preview.
 
@@ -488,7 +488,7 @@ The jump menu reads metadata only: it works on read-only contexts and on deleted
 
 Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source are steps; filter edits belong to the view they're on and come back with it.
 
-- `⌘←` goes back, `⌘→` forward, each time with the row that view had selected. (In text fields they stay start/end of line.)
+- `⌘←` goes back, `⌘→` forward, each time with the row that view had selected. (In the YAML view, the editor and text fields they stay start/end of line: `Esc` leaves the YAML view first.)
 - The header's `←` / `→` buttons do the same; holding one (or a right-click) lists that history, nearest first, with its filters. `j`/`k` move, `⏎` or a click goes there at once.
 - A new jump or `⌘O` after going back drops the forward history. Splits and new tabs start without history.
 
@@ -840,7 +840,7 @@ The most used keys:
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `⌘⌫` delete · `⌘⏎` all actions |
-| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |
+| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |
 | History | `⌘←` back · `⌘→` forward |

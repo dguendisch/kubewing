@@ -9,6 +9,8 @@ type Inspect = {
   cursor: number;
   decodeCursor: number;
   editCursor: number;
+  place?: { line: number; col: number };
+  selected?: string;
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
   panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
@@ -1051,13 +1053,14 @@ test("j/k move selection, enter shows the object in place, d toggles diff, esc b
   await expect(grid).toBeVisible();
 });
 
-test("⏎ in place is a history step: ⌘← back to the table, ⌘→ forward to the object again", async ({ page }) => {
+test("⏎ in place is a history step: Esc back to the table, ⌘→ forward to the object again", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("region", { name: "object detail" })).toContainText("kind: Pod");
   await expect(page.getByRole("button", { name: "back" })).toBeEnabled();
-  await page.keyboard.press("ControlOrMeta+ArrowLeft");
+  // (⌘← is the start of the line in the YAML view, as in VS Code)
+  await page.keyboard.press("Escape");
   await expect.poll(async () => Object.keys((await inspect(page)).objects)).toEqual([]);
   expect((await focused(page)).selected).toBe(1);
   await page.keyboard.press("ControlOrMeta+ArrowRight");
@@ -2016,6 +2019,47 @@ test.describe("detail view (Monaco)", () => {
     await expect(dialog.locator('[data-viewer="diff"]').locator(".line-insert, .char-insert, .gutter-insert").first()).toBeAttached();
     await page.keyboard.press("d");
     await expect(dialog.locator('[data-viewer="single"]')).toBeVisible();
+  });
+
+  test("the YAML viewer's keys as in VS Code: ⌥←/⌥→ a word (⇧ selects), ⌘←/⌘→ start/end of line, ⌃←/⌃→ fold/unfold", async ({ page }) => {
+    await openApi1(page);
+    const view = page.getByRole("region", { name: "object detail" });
+    const line = view.locator(".view-line", { hasText: "name: api-1" }).first();
+    await line.click();
+    const at = async () => (await inspect(page)).place!;
+    const row = (await at()).line;
+    const text = (await line.textContent())!.replace(/\u00a0/g, " ");
+    const indent = text.length - text.trimStart().length;
+    expect(indent).toBeGreaterThan(0);
+    // as VS Code: the line's first non-blank, then its start
+    await page.keyboard.press("Meta+ArrowLeft");
+    expect(await at()).toMatchObject({ line: row, col: indent });
+    await page.keyboard.press("Meta+ArrowLeft");
+    expect(await at()).toMatchObject({ line: row, col: 0 });
+    // still the YAML view: ⌘← isn't the history's back here
+    await expect(view).toBeVisible();
+    await page.keyboard.press("Meta+ArrowRight");
+    expect(await at()).toMatchObject({ line: row, col: text.length });
+    await page.keyboard.press("Meta+ArrowLeft");
+    expect((await at()).col).toBe(indent);
+    await page.keyboard.press("Alt+ArrowRight");
+    expect((await at()).col).toBe(text.indexOf("name") + "name".length);
+    // ":" is a word of its own, as in VS Code
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    await expect.poll(async () => (await inspect(page)).selected).toBe(": api");
+    // back a word, from the selection's end: the start of "api"
+    await page.keyboard.press("Alt+ArrowLeft");
+    expect((await at()).col).toBe(text.indexOf("api"));
+    expect((await inspect(page)).selected).toBe("");
+
+    // ⌃← folds the section at the cursor (its lines hidden), ⌃→ unfolds it
+    await view.locator(".view-line", { hasText: /^metadata:/ }).click();
+    await expect(view.locator(".view-lines")).toContainText("name: api-1");
+    await page.keyboard.press("Control+ArrowLeft");
+    await expect(view.locator(".view-lines")).not.toContainText("name: api-1");
+    await page.keyboard.press("Control+ArrowRight");
+    await expect(view.locator(".view-lines")).toContainText("name: api-1");
   });
 
   test("diff: ↑/↓ buttons and j/k step through the changes; the cursor starts on the first", async ({ page }) => {
@@ -4382,12 +4426,13 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("v");
     await expect(page.getByRole("region", { name: "object detail" })).toHaveCount(0);
     await expect.poll(shown).toBe("rel-events shop re-1,re-2");
-    // as in a browser: ⌘← goes back to the object the jump started from, ⌘← again to the table
+    // as in a browser: ⌘← goes back to the object the jump started from, Esc there to the table (⌘← is the line's start in the YAML)
     await leads(page, "back", "rel-pods");
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect(page.getByRole("region", { name: "object detail" })).toBeVisible();
     await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-7d9f-b");
-    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("region", { name: "object detail" })).toHaveCount(0);
     await expect.poll(backOnPod).toBe("rp-web-b");
     await page.keyboard.press("ControlOrMeta+J");
     await jump(page).getByRole("menuitem", { name: "events 2" }).click();

@@ -57,7 +57,7 @@ export const common: Monaco.editor.IEditorOptions = {
  * (0-based) there, for commands that act on "the line under the cursor"
  * (= / ! filters, ⏎ decode, ⇧H field history).
  */
-export type Cursor = { text?: string; line: number; at?: () => { x: number; y: number } | undefined; place?: () => Place | undefined };
+export type Cursor = { text?: string; line: number; at?: () => { x: number; y: number } | undefined; place?: () => Place | undefined; selected?: () => string };
 
 /** Where an editor's cursor is: its line and column (0-based) and, while in view, how far its line is from the top (px). */
 export type Place = { line: number; col: number; top?: number };
@@ -260,6 +260,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
           cur.line = (ed.getPosition()?.lineNumber ?? 1) - 1;
           cur.at = () => cursorPoint(ed);
           cur.place = () => placeOf(ed);
+          cur.selected = () => ed.getModel()?.getValueInRange(ed.getSelection()!) ?? "";
         }
         const subs = [
           ed.onDidChangeCursorPosition((e) => {
@@ -288,7 +289,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         dispose = () => {
           marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === model.getValue()) cur.text = cur.at = cur.place = undefined;
+          if (cur.text === model.getValue()) cur.text = cur.at = cur.place = cur.selected = undefined;
           acts.forEach((a) => a.dispose());
           subs.forEach((d) => d.dispose());
           ed.dispose();
@@ -356,7 +357,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         dispose = () => {
           marked?.dispose();
           if (viewState) viewState.state = ed.saveViewState();
-          if (cur.text === b.getValue()) cur.text = cur.at = cur.place = undefined;
+          if (cur.text === b.getValue()) cur.text = cur.at = cur.place = cur.selected = undefined;
           acts.forEach((x) => x.dispose());
           subs.forEach((d) => d.dispose());
           setNav(slot, undefined);
