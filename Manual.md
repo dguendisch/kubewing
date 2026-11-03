@@ -226,7 +226,7 @@ A double-click doesn't open the YAML; `⏎` or `y` does.
 
 ### Marking rows
 
-Some actions work on many rows at once: copy name, label, annotate, scale, delete, and debug container. Mark the rows first:
+Some actions work on many rows at once: copy name, label, annotate, scale, rollout restart, delete, and debug container. Mark the rows first:
 
 | Key | Marks |
 |---|---|
@@ -239,11 +239,12 @@ Some actions work on many rows at once: copy name, label, annotate, scale, delet
 
 Marked rows have a blue tint and a bar on their left edge, and the status line counts them (**3 marked**). Only live rows that are shown can be marked: a mark goes away when a filter hides its row or the object is deleted, so an action never hits a row you can't see. Opening another resource or namespace starts with no marks.
 
-With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, logs, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
+With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, logs, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; rollout restart: deployments, stateful sets, daemon sets; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
 
 - **Copy name** copies the names, separated by spaces, so they paste into `kubectl get pod web-0 web-1`.
 - **Label / annotate**: one dialog for all. It lists every key of the marked rows, with how many rows have it (`app=web 3/3`) and its value if they all share it (else how many values). The changes go to each row. Setting a key to the value all rows already have is no change. A key that differs, or that only some rows have, can be set or removed (`key-`).
 - **Scale**: one number for all, each row's current replicas listed.
+- **Rollout restart**: always confirmed, listing the workloads.
 - **Delete**: always confirmed, listing the objects.
 - **Debug container**: one dialog for all pods, at most 8. The target is empty for each pod's own default container, `-` for none, or a container every marked pod has. Each pod gets its debug container in a pane of its own, all in a new tab named **debug ×N**, stacked one below the other (more than 3: in two columns).
 
@@ -542,9 +543,10 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `⇧L` | label… |
 | `⇧A` | annotate… |
 | `s` | scale… (the entry shows the current replicas) |
+| `r` | rollout restart… |
 | `⌘⌫` / `Del` | delete… |
 
-With rows marked, copy name, label, annotate, scale, delete and debug act on them (see [Marking rows](#marking-rows)).
+With rows marked, copy name, label, annotate, scale, rollout restart, delete and debug act on them (see [Marking rows](#marking-rows)).
 
 ### Label, annotate
 
@@ -559,6 +561,10 @@ With rows marked, copy name, label, annotate, scale, delete and debug act on the
 ### Scale
 
 `s` scales a workload (deployment, stateful set, replica set, a custom resource with a scale subresource), as `kubectl scale --replicas` does. The dialog is prefilled with the current replicas, selected, so typing replaces them. Rows without replicas have the entry disabled.
+
+### Rollout restart
+
+`r` restarts a deployment, stateful set or daemon set, as `kubectl rollout restart` does: it stamps the pod template with the current time (the `kubectl.kubernetes.io/restartedAt` annotation), so the workload replaces its pods one by one, following its update strategy. It always asks first, since every pod is replaced. A paused deployment can't be restarted (resume it first), and other kinds have the entry disabled.
 
 ### Delete
 
@@ -745,11 +751,11 @@ contexts:
 | `match` | Required. A glob (`*`, `?`, `[a-z]`) on the context name. The first matching rule wins, so put specific rules before broad ones. |
 | `label` | A badge on the pane frame, header and tab, e.g. `PROD`. |
 | `color` | Colors frame, header and tab: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
-| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit, local terminals (`terminal`: a shell can run anything), `label`, `annotate` and `scale`. Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
-| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`, `label`, `annotate`, `scale`. Delete always asks. An edit asks after its diff preview; label, annotate and scale after their dialog, naming the changes. |
+| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit, local terminals (`terminal`: a shell can run anything), `label`, `annotate`, `scale` and rollout restart (`restart`). Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
+| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`, `label`, `annotate`, `scale`, `restart`. Delete and restart always ask. An edit asks after its diff preview; label, annotate and scale after their dialog, naming the changes. |
 | `strict` | A confirmation needs the object's name typed, not just `⏎`. |
 
-A context no rule matches is writable, and only delete asks.
+A context no rule matches is writable, and only delete and rollout restart ask.
 
 - Rules match the context name only, whichever kubeconfig it comes from.
 - Gardener clusters picked in `⌘P` are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-p)). A glob's `*` doesn't match `/`, so a rule for a landscape is `{match: "sap-landscape-live/*", …}`, one for every control plane `{match: "*/seed--*", …}`, and the garden itself is matched by its name.
@@ -868,7 +874,7 @@ The most used keys:
 |---|---|
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
-| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `⌘⌫` delete · `⌘⏎` all actions |
+| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |

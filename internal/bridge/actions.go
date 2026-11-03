@@ -130,6 +130,9 @@ type RowInfo struct {
 	// Replicas is spec.replicas of a scalable row (deployments, stateful
 	// sets, custom resources with a scale subresource), else nil.
 	Replicas *int64 `json:"replicas,omitempty"`
+	// Restart: why kubectl rollout restart doesn't apply ("" = it does:
+	// an unpaused deployment, a stateful set or a daemon set).
+	Restart string `json:"restart,omitempty"`
 }
 
 // PortInfo is one declared container port.
@@ -177,6 +180,7 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod()}
 	info.Logs = info.Pod || podChild(r.item.Object) != nil
 	info.Replicas = replicas(r.item.Object)
+	info.Restart = restartable(r)
 	if info.Pod {
 		info.Containers = containers(r)
 		info.ContainerInfo = podContainers(r)

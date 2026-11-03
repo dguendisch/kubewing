@@ -5,16 +5,16 @@ import { menuFor, rowActions } from "./registry";
 // the dispatcher's source, to check every menu command is handled
 import commandsSrc from "../commands.ts?raw";
 
-const pod: RowInfo = { key: "u1", kind: "Pod", name: "web-0", namespace: "shop", pod: true, logs: true, hasPrev: true, containers: ["app"], ports: [8080] };
-const cm: RowInfo = { key: "u2", kind: "ConfigMap", name: "cfg", namespace: "shop" };
+const pod: RowInfo = { key: "u1", kind: "Pod", name: "web-0", namespace: "shop", pod: true, logs: true, hasPrev: true, containers: ["app"], ports: [8080], restart: "pod can't be restarted" };
+const cm: RowInfo = { key: "u2", kind: "ConfigMap", name: "cfg", namespace: "shop", restart: "configmap can't be restarted" };
 const ro: SafetyRule = { context: "prod", label: "PROD", readOnly: true, confirm: ["delete"] };
 
 const byCmd = (items: ReturnType<typeof menuFor>) => Object.fromEntries(items.map((i) => [i.command, i]));
 
 describe("row actions menu", () => {
-  it("a pod offers everything but scale, with its table shortcuts", () => {
+  it("a pod offers everything but scale and restart, with its table shortcuts", () => {
     const m = byCmd(menuFor(pod, undefined));
-    expect(Object.values(m).filter((i) => i.disabled).map((i) => i.command)).toEqual(["object.scale"]);
+    expect(Object.values(m).filter((i) => i.disabled).map((i) => i.command)).toEqual(["object.scale", "object.restart"]);
     expect(m["object.label"]!.shortcut).toBe("⇧L");
     expect(m["object.annotate"]!.shortcut).toBe("⇧A");
     expect(m["object.describe"]!.shortcut).toBe("d");
@@ -48,6 +48,12 @@ describe("row actions menu", () => {
     const deploy = byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web", namespace: "shop", replicas: 3 }, undefined));
     expect(deploy["object.scale"]).toMatchObject({ label: "scale… (3)", shortcut: "s", disabled: undefined });
     expect(byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web", replicas: 0 }, ro))["object.scale"]!.disabled).toBe("read-only context");
+
+    // Go says why a row can't be restarted (kind, paused); without a reason it can
+    expect(m["object.restart"]!.disabled).toBe("configmap can't be restarted");
+    expect(deploy["object.restart"]).toMatchObject({ label: "rollout restart…", shortcut: "r", disabled: undefined });
+    expect(byCmd(menuFor({ key: "d2", kind: "Deployment", name: "web", restart: "deployment is paused" }, undefined))["object.restart"]!.disabled).toBe("deployment is paused");
+    expect(byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web" }, ro))["object.restart"]!.disabled).toBe("read-only context");
 
     const prod = byCmd(menuFor(pod, ro));
     expect(prod["object.delete"]!.disabled).toBe("read-only context");
@@ -103,9 +109,9 @@ describe("diff entry", () => {
 
 describe("row actions menu with marked rows", () => {
   const marked: MarkedRow[] = [
-    { key: "u1", kind: "Pod", name: "web-0" },
-    { key: "u3", kind: "Pod", name: "web-1" },
-    { key: "u2", kind: "ConfigMap", name: "cfg" },
+    { key: "u1", kind: "Pod", name: "web-0", restart: "pod can't be restarted" },
+    { key: "u3", kind: "Pod", name: "web-1", restart: "pod can't be restarted" },
+    { key: "u2", kind: "ConfigMap", name: "cfg", restart: "configmap can't be restarted" },
   ];
 
   it("multi actions act on the marked rows they fit, the rest on the cursor row", () => {
@@ -116,6 +122,9 @@ describe("row actions menu with marked rows", () => {
     // the cursor row is a config map, but two marked rows are pods
     expect(m["object.debug"]).toMatchObject({ label: "debug containers in 2 pods…", disabled: undefined });
     expect(m["object.scale"]!.disabled).toBe("none of the 3 marked fits");
+    expect(m["object.restart"]!.disabled).toBe("none of the 3 marked fits");
+    const workloads = byCmd(menuFor(cm, undefined, defaultBindings, [...marked, { key: "d1", kind: "Deployment", name: "web" }, { key: "s1", kind: "StatefulSet", name: "db" }]));
+    expect(workloads["object.restart"]).toMatchObject({ label: "rollout restart 2…", multi: true, disabled: undefined });
     // single-row actions keep the cursor row's availability
     expect(m["object.exec"]).toMatchObject({ multi: false, disabled: "needs a pod, not configmap" });
     expect(m["object.describe"]).toMatchObject({ multi: false, disabled: undefined });

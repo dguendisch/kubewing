@@ -400,7 +400,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal" | "label" | "annotate" | "scale";
+export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal" | "label" | "annotate" | "scale" | "restart";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -426,6 +426,8 @@ export interface MarkedRow {
   containers?: ContainerInfo[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
+  /** Why it can't be restarted; undefined = it can (as RowInfo.restart). */
+  restart?: string;
 }
 
 /** Mirrors safety.Batch + bridge.MarkedBatch: one action prepared for the marked rows, a token each (pending[i] for rows[i]). */
@@ -439,7 +441,7 @@ export interface Batch {
   /** The count of objects to type (strict mode, big deletes). */
   typeToConfirm?: string;
   rows: MarkedRow[];
-  /** Marked rows the action doesn't apply to (scale: no replicas; debug: not a pod). */
+  /** Marked rows the action doesn't apply to (scale: no replicas; debug: not a pod; restart: not a deployment, stateful set or daemon set). */
   skipped?: string[];
 }
 
@@ -549,6 +551,8 @@ export interface RowInfo {
   portInfo?: PortInfo[];
   /** spec.replicas of a scalable row (deployments, stateful sets, custom resources with a scale subresource). */
   replicas?: number;
+  /** Why kubectl rollout restart doesn't apply; undefined = it does (an unpaused deployment, a stateful set, a daemon set). */
+  restart?: string;
 }
 
 /** Mirrors bridge.MetaChanges: labels or annotations to set, keys to remove. */
@@ -846,6 +850,8 @@ export interface Transport {
   annotate(token: string, changes: MetaChanges): Promise<void>;
   /** Executes a prepared scale (the scale subresource's spec.replicas). */
   scale(token: string, replicas: number): Promise<void>;
+  /** Executes a prepared restart (kubectl rollout restart: the pod template's restartedAt annotation). */
+  restart(token: string): Promise<void>;
   /** Reads a row's object fresh from the server into a new edit session; refused on read-only contexts. */
   editOpen(pane: string, key: string): Promise<EditSession>;
   /** Checks an edit and dry-runs it on the server; writes nothing. */

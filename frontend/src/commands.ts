@@ -222,6 +222,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void prepareAction("annotate");
     case "object.scale":
       return void prepareAction("scale");
+    case "object.restart":
+      return void prepareAction("restart");
     case "terminal.splitDown":
     case "terminal.splitRight":
       return void openLocalTerminal(cmd === "terminal.splitDown" ? "column" : "row");
@@ -603,7 +605,7 @@ async function prepareAction(kind: ActionKind) {
 }
 
 /** Actions that act on the marked rows, when there are any (else on the cursor row). */
-const batchKinds = new Set<ActionKind>(["delete", "label", "annotate", "scale", "debug"]);
+const batchKinds = new Set<ActionKind>(["delete", "label", "annotate", "scale", "restart", "debug"]);
 
 /** At most this many pods get a debug container at once (a pane each, in a tab of their own). */
 export const maxDebugPods = 8;
@@ -658,7 +660,7 @@ async function pooled<T, R>(items: T[], limit: number, fn: (t: T, i: number) => 
   return out;
 }
 
-const pastTense: Partial<Record<ActionKind, string>> = { delete: "deleted", label: "labeled", annotate: "annotated", scale: "scaled", debug: "started debug containers in" };
+const pastTense: Partial<Record<ActionKind, string>> = { delete: "deleted", label: "labeled", annotate: "annotated", scale: "scaled", restart: "restarted", debug: "started debug containers in" };
 
 /**
  * Executes a batch, each row with its own token (≤ 8 at once). The status
@@ -687,6 +689,8 @@ async function executeBatch(paneId: string, b: Batch, { debug, meta, scale }: Ac
         return bridge().annotate(p.token, meta!.changes);
       case "scale":
         return bridge().scale(p.token, scale!.replicas);
+      case "restart":
+        return bridge().restart(p.token);
     }
     return Promise.reject(new Error(`${b.kind} acts on one row only`));
   };
@@ -1052,6 +1056,9 @@ async function execute(paneId: string, p: Pending, { container = "", debug, ops,
       if (!scale) return;
       await bridge().scale(p.token, scale.replicas);
       return flash(paneId, `scaled ${p.action.resource}/${p.action.name} to ${scale.replicas}`);
+    case "restart":
+      await bridge().restart(p.token);
+      return flash(paneId, `restarted ${p.action.resource}/${p.action.name}`);
     case "exec": {
       const r = await bridge().execStart(p.token, container, 80, 24);
       const term: S.Term = { session: r.session, pod: r.pod, container: r.container, context: r.context };

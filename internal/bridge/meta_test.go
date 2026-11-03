@@ -3,6 +3,9 @@ package bridge
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/dguendisch/kubewing/internal/config"
 	"github.com/dguendisch/kubewing/internal/safety"
@@ -148,5 +151,88 @@ func TestReadOnlyContextRefusesMetaAndScale(t *testing.T) {
 		if _, err := svc.Prepare(k, res.Pane, "s-web-1"); err == nil || !strings.Contains(err.Error(), "read-only") {
 			t.Errorf("%s on read-only: %v", k, err)
 		}
+	}
+}
+
+func TestRestart(t *testing.T) {
+	tp, err := tape.Load("../../testdata/tapes/e2e-deploys.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{"e2e-deploys": tp}}
+	cfg := config.Defaults("")
+	log := &eventLog{events: map[string][]any{}}
+	at := time.Date(2026, 11, 3, 14, 30, 0, 0, time.UTC)
+	svc := New(source.NewRegistry(op), log, Options{Actor: op, Config: &cfg, Clock: fixedClock{at}})
+	res, err := svc.Open("source: {resource: e2e-deploys}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close(res.Pane)
+	svc.SetViewport(res.Pane, 0, 10)
+	waitRow(t, log, res.Pane, "d-web", func(view.RowData) bool { return true })
+
+	if info, err := svc.RowInfo(res.Pane, "d-web"); err != nil || info.Restart != "" {
+		t.Fatalf("a deployment can be restarted: %+v %v", info, err)
+	}
+	if err := svc.Restart("forged"); err == nil {
+		t.Fatal("restart without a prepared token must be refused")
+	}
+	p, err := svc.Prepare(safety.Restart, res.Pane, "d-web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// no rule lists it: it asks anyway, like delete
+	if !p.NeedsConfirm || p.Summary != "restart e2e-deploys/web -n shop on tape" {
+		t.Errorf("pending: %+v", p)
+	}
+	if err := svc.Restart(p.Token); err != nil {
+		t.Fatal(err)
+	}
+	waitRow(t, log, res.Pane, "d-web", func(view.RowData) bool {
+		d, err := svc.Object(res.Pane, "d-web")
+		return err == nil && strings.Contains(d.YAML, "kubectl.kubernetes.io/restartedAt: \"2026-11-03T14:30:00Z\"")
+	})
+	if err := svc.Restart(p.Token); err == nil {
+		t.Error("token reuse must be refused")
+	}
+}
+
+func TestRestartable(t *testing.T) {
+	obj := func(apiVersion, kind string, spec map[string]any) row {
+		return row{item: source.Item{Object: &unstructured.Unstructured{Object: map[string]any{"apiVersion": apiVersion, "kind": kind, "spec": spec}}}}
+	}
+	for _, c := range []struct {
+		r    row
+		want string
+	}{
+		{obj("apps/v1", "Deployment", map[string]any{"replicas": int64(1)}), ""},
+		{obj("apps/v1", "StatefulSet", nil), ""},
+		{obj("apps/v1", "DaemonSet", nil), ""},
+		{obj("apps/v1", "Deployment", map[string]any{"paused": true}), "deployment is paused"},
+		{obj("apps/v1", "ReplicaSet", nil), "replicaset can't be restarted"},
+		{obj("v1", "Pod", nil), "pod can't be restarted"},
+		// a custom resource of the same kind name isn't kubectl's
+		{obj("example.com/v1", "Deployment", nil), "deployment can't be restarted"},
+	} {
+		if got := restartable(c.r); got != c.want {
+			t.Errorf("%s %s: %q, want %q", c.r.item.Object.GetAPIVersion(), c.r.kind(), got, c.want)
+		}
+	}
+}
+
+func TestRestartNeedsAWorkload(t *testing.T) {
+	svc, log, res := deleteSetup(t, nil)
+	waitRow(t, log, res.Pane, "s-web-1", func(view.RowData) bool { return true })
+	if _, err := svc.Prepare(safety.Restart, res.Pane, "s-web-1"); err == nil || err.Error() != "restart: pod can't be restarted" {
+		t.Errorf("prepare restart on a pod: %v", err)
+	}
+}
+
+func TestRestartPatch(t *testing.T) {
+	b, err := restartPatch(time.Date(2026, 11, 3, 14, 30, 0, 0, time.UTC), "u1")
+	want := `{"metadata":{"uid":"u1"},"spec":{"template":{"metadata":{"annotations":{"kubectl.kubernetes.io/restartedAt":"2026-11-03T14:30:00Z"}}}}}`
+	if err != nil || string(b) != want {
+		t.Errorf("patch = %s, %v; want %s", b, err, want)
 	}
 }

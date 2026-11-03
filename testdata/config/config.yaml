@@ -13,8 +13,8 @@ diff:
 
 # Per-context safety rules (glob on the kubeconfig context name), first match wins.
 #   label/color: shown on the pane frame, header and tab; color is a theme token or a color
-#   readOnly:    every mutation (delete, exec, debug, opspod, edit, terminal, label, annotate, scale) is refused
-#   confirm:     actions that need confirmation; delete always does
+#   readOnly:    every mutation (delete, exec, debug, opspod, edit, terminal, label, annotate, scale, restart) is refused
+#   confirm:     actions that need confirmation; delete and restart always do
 #   strict:      confirmation requires typing the object name
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}

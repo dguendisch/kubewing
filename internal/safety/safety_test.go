@@ -24,16 +24,16 @@ func TestPolicyFor(t *testing.T) {
 		ctx  string
 		want Rule
 	}{
-		{"garden-prod-eu", Rule{Context: "garden-prod-eu", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete"}}},
-		// delete always confirms, even if a rule lists only other actions
-		{"live-1", Rule{Context: "live-1", Label: "LIVE", Confirm: []string{"exec", "delete"}, Strict: true}},
-		{"kind", Rule{Context: "kind", Label: "any", Confirm: []string{"delete"}}},
+		{"garden-prod-eu", Rule{Context: "garden-prod-eu", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "restart"}}},
+		// delete and restart always confirm, even if a rule lists only other actions
+		{"live-1", Rule{Context: "live-1", Label: "LIVE", Confirm: []string{"exec", "delete", "restart"}, Strict: true}},
+		{"kind", Rule{Context: "kind", Label: "any", Confirm: []string{"delete", "restart"}}},
 	} {
 		if diff := cmp.Diff(tc.want, p.For(tc.ctx)); diff != "" {
 			t.Errorf("%s: %s", tc.ctx, diff)
 		}
 	}
-	if diff := cmp.Diff(Rule{Context: "x", Confirm: []string{"delete"}}, NewPolicy(nil).For("x")); diff != "" {
+	if diff := cmp.Diff(Rule{Context: "x", Confirm: []string{"delete", "restart"}}, NewPolicy(nil).For("x")); diff != "" {
 		t.Errorf("no rules: %s", diff)
 	}
 }
@@ -48,7 +48,7 @@ func del(ctx, name string) Action {
 
 func TestReadOnlyRefusesMutations(t *testing.T) {
 	g := NewGuard(NewPolicy(rules), time.Now)
-	for _, kind := range []string{Delete, Exec, Edit, Terminal} {
+	for _, kind := range []string{Delete, Exec, Edit, Terminal, Restart} {
 		_, err := g.Prepare(Action{Kind: kind, Context: "garden-prod-eu", Resource: "pods", Name: "a"}, nil)
 		if !errors.Is(err, ErrReadOnly) || !strings.Contains(err.Error(), "PROD") {
 			t.Errorf("%s: %v", kind, err)

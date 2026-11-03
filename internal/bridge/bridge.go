@@ -725,6 +725,11 @@ func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
 	if kind == safety.Scale && replicas(r.item.Object) == nil {
 		return safety.Pending{}, fmt.Errorf("%s has no replicas to scale", strings.ToLower(r.kind()))
 	}
+	if kind == safety.Restart {
+		if why := restartable(r); why != "" {
+			return safety.Pending{}, fmt.Errorf("restart: %s", why)
+		}
+	}
 	a := safety.Action{
 		Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),
 		Namespace: r.namespace(), Name: r.name(), UID: string(r.item.Object.GetUID()),

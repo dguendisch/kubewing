@@ -3764,10 +3764,28 @@ test.describe("object actions", () => {
       await expect.poll(async () => (await yamlOf(page, "m-web")).includes("replicas: 0")).toBe(true);
     });
 
+    test("r restarts after a confirmation (always, as delete); a config-less context too", async ({ page }) => {
+      // restart only patches the pod template: api's labels and annotations (the tests above) are untouched
+      await openMeta(page);
+      await select(page, "m-api");
+      await page.keyboard.press("r");
+      const confirm = page.getByRole("alertdialog", { name: "confirm restart" });
+      await expect(confirm).toContainText("restart e2e-meta/api -n meta on tape");
+      await page.keyboard.press("Enter");
+      await expect(page.getByLabel("message")).toHaveText("restarted e2e-meta/api");
+      await expect.poll(async () => (await yamlOf(page, "m-api")).includes("kubectl.kubernetes.io/restartedAt:")).toBe(true);
+      // esc on the confirmation restarts nothing
+      await page.keyboard.press("r");
+      await expect(confirm).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(confirm).toHaveCount(0);
+      expect((await inspect(page)).focus).toBe("table");
+    });
+
     test("read-only context refuses all three without a dialog; the row menu says why", async ({ page }) => {
       await openMeta(page, "tape-prod");
       await select(page, "m-web");
-      for (const key of ["Shift+L", "Shift+A", "s"]) {
+      for (const key of ["Shift+L", "Shift+A", "s", "r"]) {
         await page.keyboard.press(key);
         await expect(page.getByLabel("message")).toContainText("read-only context");
         expect((await inspect(page)).overlays).toEqual([]);
@@ -3775,6 +3793,7 @@ test.describe("object actions", () => {
       await page.keyboard.press("ControlOrMeta+Enter");
       await expect(page.getByRole("menuitem", { name: /^label…/ })).toHaveAttribute("aria-disabled", "true");
       await expect(page.getByRole("menuitem", { name: /^scale…/ })).toContainText("read-only context");
+      await expect(page.getByRole("menuitem", { name: /^rollout restart…/ })).toContainText("read-only context");
     });
   });
 
@@ -4169,8 +4188,8 @@ test.describe("context menu (⌘⏎, right-click)", () => {
 
   test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {
     await openSettled(page);
-    // stack a split below so the table's last row sits low in the window, with room above it
-    await page.setViewportSize({ width: 1400, height: 640 });
+    // stack a split below so the table's last row sits low in the window, with room above it (for the whole menu)
+    await page.setViewportSize({ width: 1400, height: 700 });
     await page.keyboard.press("ControlOrMeta+D"); // split: the new (bottom) pane is focused
     // the split's fresh relist has no tombstone for the recreated pod, so it may have one row less
     await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
@@ -5545,6 +5564,25 @@ test.describe("marked rows", () => {
     await page.keyboard.press("Enter");
     await expect(scale).toHaveCount(0);
     await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("scaled 2 e2e-batch to 0");
+  });
+
+  test("rollout restart of marked rows: one confirmation naming the workloads, pods skipped", async ({ page }) => {
+    await openBatch(page);
+    await goTo(page, "b-pod-1");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-1", "b-scale-0", "b-scale-1"]);
+    await page.keyboard.press("ControlOrMeta+Enter");
+    await page.getByRole("menuitem", { name: /^rollout restart 2…/ }).click();
+    const confirm = page.getByRole("alertdialog", { name: "confirm restart" });
+    await expect(confirm).toContainText("restart 2 e2e-batch -n batch on tape");
+    await expect(confirm.getByRole("list", { name: "objects" })).toHaveText(/b-scale-0.*b-scale-1/s);
+    await expect(confirm).toContainText("skipped: b-pod-1");
+    await page.keyboard.press("Enter");
+    await expect(confirm).toHaveCount(0);
+    await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("restarted 2 e2e-batch");
+    // the marks stay (only a delete clears them)
+    expect(await marked(page)).toEqual(["b-pod-1", "b-scale-0", "b-scale-1"]);
   });
 
   test("debug containers in marked pods: one dialog, a pane each in a new tab", async ({ page }) => {

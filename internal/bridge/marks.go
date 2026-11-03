@@ -30,7 +30,7 @@ var ErrNoMarks = errors.New("no rows marked")
 
 // MarkedRow is one marked row, with what the dialogs of an action on many
 // rows show: names (copy name, confirmation), replicas (scale), containers
-// (debug), labels and annotations (label, annotate).
+// (debug), labels and annotations (label, annotate), restartability.
 type MarkedRow struct {
 	Key         string            `json:"key"`
 	Kind        string            `json:"kind"`
@@ -40,6 +40,8 @@ type MarkedRow struct {
 	Containers  []ContainerInfo   `json:"containers,omitempty"`
 	Labels      map[string]string `json:"labels,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
+	// Restart: why it can't be restarted ("" = it can), as RowInfo.Restart.
+	Restart string `json:"restart,omitempty"`
 }
 
 // Marked lists a pane's marked rows in display order.
@@ -85,14 +87,16 @@ func markedRow(r row) MarkedRow {
 		}
 	}
 	m.Labels, m.Annotations = r.item.Object.GetLabels(), r.item.Object.GetAnnotations()
+	m.Restart = restartable(r)
 	return m
 }
 
 // MarkedBatch is an action prepared for a pane's marked rows: a token per
 // row (Batch.Pending, in the order of Rows), redeemed one by one by the
-// single-object calls (Delete, Label, Scale, DebugStart …). Skipped are
-// marked rows the action doesn't apply to (scale: no replicas; debug: not
-// a pod), left out of the batch.
+// single-object calls (Delete, Label, Scale, Restart, DebugStart …).
+// Skipped are marked rows the action doesn't apply to (scale: no replicas;
+// debug: not a pod; restart: not a deployment, stateful set or daemon
+// set, or paused), left out of the batch.
 type MarkedBatch struct {
 	safety.Batch
 	Rows    []MarkedRow `json:"rows"`
@@ -107,7 +111,7 @@ func (s *Service) PrepareMarked(kind, paneID string) (MarkedBatch, error) {
 		return MarkedBatch{}, fmt.Errorf("%s is not available", kind)
 	}
 	switch kind {
-	case safety.Delete, safety.Label, safety.Annotate, safety.Scale, safety.Debug:
+	case safety.Delete, safety.Label, safety.Annotate, safety.Scale, safety.Restart, safety.Debug:
 	default:
 		return MarkedBatch{}, fmt.Errorf("%s acts on one row only", kind)
 	}
@@ -119,7 +123,7 @@ func (s *Service) PrepareMarked(kind, paneID string) (MarkedBatch, error) {
 	var as []safety.Action
 	var targets []any
 	for _, r := range rows {
-		if kind == safety.Debug && !r.isPod() || kind == safety.Scale && replicas(r.item.Object) == nil {
+		if kind == safety.Debug && !r.isPod() || kind == safety.Scale && replicas(r.item.Object) == nil || kind == safety.Restart && restartable(r) != "" {
 			b.Skipped = append(b.Skipped, r.name())
 			continue
 		}
@@ -133,6 +137,9 @@ func (s *Service) PrepareMarked(kind, paneID string) (MarkedBatch, error) {
 	if len(as) == 0 {
 		if len(rows) == 0 {
 			return MarkedBatch{}, ErrNoMarks
+		}
+		if kind == safety.Restart {
+			return MarkedBatch{}, fmt.Errorf("restart: none of the marked rows can be restarted (%s)", strings.Join(b.Skipped, ", "))
 		}
 		what := map[string]string{safety.Debug: "a pod", safety.Scale: "replicas"}[kind]
 		return MarkedBatch{}, fmt.Errorf("%s: none of the marked rows has %s (%s)", kind, what, strings.Join(b.Skipped, ", "))

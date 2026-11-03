@@ -41,10 +41,16 @@ const (
 	Annotate = "annotate"
 	// Scale sets a workload's replicas through its scale subresource.
 	Scale = "scale"
+	// Restart rolls a workload's pods (kubectl rollout restart): every pod
+	// is replaced. It has no dialog, so it always asks, as delete does.
+	Restart = "restart"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec, Debug, OpsPod, Edit, Terminal, Label, Annotate, Scale}
+var mutating = []string{Delete, Exec, Debug, OpsPod, Edit, Terminal, Label, Annotate, Scale, Restart}
+
+// always need confirmation, whatever the rule lists.
+var always = []string{Delete, Restart}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {
@@ -65,9 +71,9 @@ type Policy struct {
 func NewPolicy(rules []config.ContextRule) *Policy { return &Policy{rules: rules} }
 
 // For returns the rule for a context. Without a matching rule the context
-// is writable and only delete needs confirmation; delete always does.
+// is writable and only delete and restart need confirmation; they always do.
 func (p *Policy) For(context string) Rule {
-	r := Rule{Context: context, Confirm: []string{Delete}}
+	r := Rule{Context: context, Confirm: slices.Clone(always)}
 	for _, cr := range p.rules {
 		if ok, _ := path.Match(cr.Match, context); !ok {
 			continue
@@ -75,8 +81,10 @@ func (p *Policy) For(context string) Rule {
 		r.Label, r.Color, r.ReadOnly, r.Strict = cr.Label, cr.Color, cr.ReadOnly, cr.Strict
 		if len(cr.Confirm) > 0 {
 			r.Confirm = slices.Clone(cr.Confirm)
-			if !slices.Contains(r.Confirm, Delete) {
-				r.Confirm = append(r.Confirm, Delete)
+			for _, k := range always {
+				if !slices.Contains(r.Confirm, k) {
+					r.Confirm = append(r.Confirm, k)
+				}
 			}
 		}
 		break

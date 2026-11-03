@@ -108,6 +108,7 @@ func (a *App) RowMeta(pane, key string) (bridge.RowMeta, error) {
 func (a *App) Label(token string, c bridge.MetaChanges) error    { return a.svc.Label(token, c) }
 func (a *App) Annotate(token string, c bridge.MetaChanges) error { return a.svc.Annotate(token, c) }
 func (a *App) Scale(token string, replicas int64) error          { return a.svc.Scale(token, replicas) }
+func (a *App) Restart(token string) error                        { return a.svc.Restart(token) }
 func (a *App) EditOpen(pane, key string) (bridge.EditSession, error) {
 	return a.svc.EditOpen(pane, key)
 }

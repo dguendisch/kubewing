@@ -94,6 +94,7 @@ export function wsTransport(url: string): Transport {
     label: (t, c) => call("Label", t, c),
     annotate: (t, c) => call("Annotate", t, c),
     scale: (t, n) => call("Scale", t, n),
+    restart: (t) => call("Restart", t),
     editOpen: (p, k) => call("EditOpen", p, k),
     editCheck: (s, y) => call("EditCheck", s, y),
     editApply: (t, s, y) => call("EditApply", t, s, y),

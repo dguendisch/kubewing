@@ -33,6 +33,7 @@ const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
 const onNode = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.kind === "Node" ? true : `needs a node or pod, not ${r.kind.toLowerCase()}`);
 const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod, not ${r.kind.toLowerCase()}`);
 const scalable = (r: RowInfo) => (r.deleted ? "deleted" : r.replicas !== undefined ? true : `${r.kind.toLowerCase()} has no replicas`);
+const restartable = (r: RowInfo) => (r.deleted ? "deleted" : r.restart ?? true);
 
 export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true, split: "detail.openSplit" },
@@ -59,6 +60,10 @@ export const rowActions: RowAction[] = [
   {
     command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "act", available: scalable, mutates: true,
     multi: (r) => r.replicas !== undefined, multiLabel: (n) => `scale ${n}…`,
+  },
+  {
+    command: "object.restart", label: "rollout restart…", group: "act", available: restartable, mutates: true,
+    multi: (r) => !r.restart, multiLabel: (n) => `rollout restart ${n}…`,
   },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true, multi: true, multiLabel: (n) => `delete ${n}…` },
 ];
