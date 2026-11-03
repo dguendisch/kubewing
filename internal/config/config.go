@@ -50,6 +50,9 @@ type Config struct {
 	Logs     Logs          `json:"logs"`
 	History  HistoryLimits `json:"history"`
 	Launch   Launch        `json:"launch"`
+	// FocusFollowsMouse focuses the pane under the mouse pointer, without a
+	// click. Default off.
+	FocusFollowsMouse bool `json:"focusFollowsMouse,omitempty"`
 }
 
 // Launch configures a launch from a terminal.
@@ -293,6 +296,7 @@ func Load(dir string) Effective {
 		}
 		e.Config.OpsPod = c.OpsPod
 		e.Config.Launch = c.Launch
+		e.Config.FocusFollowsMouse = c.FocusFollowsMouse
 		e.Config.Debug.Image = c.Debug.Image
 		if p := c.Debug.Profile; p != "" && !slices.Contains(DebugProfiles, p) {
 			errf("config.yaml", "debug.profile: unknown profile %q (known: %v)", p, DebugProfiles)

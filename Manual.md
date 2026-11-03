@@ -617,6 +617,7 @@ A shell on your Mac, on the cluster the focused pane shows: `⌃T` opens it in a
 - That kubeconfig is a small file in front of your usual kubeconfig files, holding only the current context. Credentials aren't copied, and `kubectl config use-context` or `kubens` in the shell change only this shell, not `~/.kube/config` or other terminals. A Gardener cluster opened with `⌘P` has no kubeconfig file, so its kubeconfig is written in full. The file is removed when the shell ends.
 - It works from tables, YAML and describe views, log panes and ended shells. Inside a running shell `⌃T` is the shell's own key (transpose, fzf's file picker); move to another pane first (`⌥⌘` arrows).
 - The header says **terminal**, with the context and namespace. `exit` or `⌃D` ends it, and the pane goes with it.
+- The shell has `$TERM_PROGRAM` set to `kubewing`. A profile that sets `KUBECONFIG` itself (e.g. `eval $(gardenctl kubectl-env zsh)`) replaces kubewing's; skip that part when `[[ $TERM_PROGRAM == kubewing ]]`.
 
 A shell holds the context's credentials, and kubewing can't check what it runs. So a read-only context refuses it, and `confirm: [terminal]` in a safety rule asks before it opens (see [Safety](#16-safety)).
 
@@ -662,6 +663,8 @@ The **⇄ N** badge in the tab bar (or `⌥⌘P`) lists all forwards, including 
 | `⌘I` | name the pane |
 
 `⌘D` and `⌘⇧D` are deliberately swapped compared to iTerm. `⌃D` stays out of text fields (where it's forward-delete) and terminals (where it belongs to the shell).
+
+**Focus follows mouse** (`focusFollowsMouse: true` in `config.yaml`, off by default): moving the mouse over a pane focuses it, without a click. A filter or find field, a dialog or a menu keeps the focus until you leave it, so you can type with the pointer anywhere. A maximized pane keeps it too. A pane that just opened under a resting pointer stays focused until the mouse moves.
 
 Drag a divider to resize. **Maximizing** (`⌘⇧⏎`, as in iTerm) shows the focused pane over the whole tab; the others keep running behind it, and a **⤡N** badge says how many are hidden. A click on it, `⌘⇧⏎` again, moving focus, splitting or closing a pane shows them all again.
 
@@ -774,6 +777,8 @@ history:
 
 launch:
   wait: false               # true: stay in the foreground when launched from a terminal
+
+focusFollowsMouse: false    # true: the pane under the mouse gets the focus, no click needed
 ```
 
 ### `keybindings.yaml`
@@ -851,4 +856,5 @@ The most used keys:
 - **Launching kubewing again only brought the window to the front.** That's the single-instance behavior: it opened a tab there. Use `-new-process` for a separate one.
 - **A Gardener shoot fails with `kubectl-gardenlogin` (or `kubectl`) not found.** kubewing runs the exec plugins of the kubeconfigs it uses with its own `PATH`. Launched from a terminal that's the terminal's; from the Dock or Finder, macOS's minimal one. Launch it from a terminal, or install the plugins where that `PATH` finds them.
 - **A pasted dashboard URL matches nothing.** The patterns come from `~/.garden/gardenctl-v2.yaml` (each garden's `patterns`); the dashboard's host must be in one of them. `gardenctl config set-garden … --pattern` adds one.
+- **`kubectl` in a local terminal targets another cluster, or its `$KUBECONFIG` file doesn't exist.** Your shell profile sets `KUBECONFIG` after kubewing did. With gardenctl, an untargeted session's `gardenctl kubectl-env` points at a file that isn't there yet. Skip it in kubewing's shells: `[[ $TERM_PROGRAM != kubewing ]] && eval $(gardenctl kubectl-env zsh)`.
 - **A node shell is rejected by PodSecurity.** The namespace enforces `baseline` or stricter (like `default`); pick a privileged one such as `kube-system`.

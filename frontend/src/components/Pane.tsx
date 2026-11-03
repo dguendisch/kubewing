@@ -26,6 +26,23 @@ import { PaneName } from "./NameField";
 import { ObjectPane } from "./ObjectPane";
 import { resourceLabel } from "./tabTitle";
 
+/**
+ * The pointer itself moved, no button held (not a text selection or a drag).
+ * A layout change under a resting pointer (a split opening below it) is
+ * reported as a move too, without movement: that one must not take the focus
+ * from the new pane.
+ */
+const pointerMoved = (e: React.MouseEvent) => (e.movementX !== 0 || e.movementY !== 0) && e.buttons === 0;
+
+/** Focus follows mouse: the pane under the pointer takes the focus (see S.hoverFocus). */
+function hoverFocus(e: React.MouseEvent<HTMLElement>, id: string) {
+  if (!pointerMoved(e) || S.activeTab(useUI.getState()).focused === id) return;
+  setUI((s) => S.hoverFocus(s, id));
+  // as a click would: the pane left loses the browser focus (its editor would get the typing otherwise)
+  const a = document.activeElement;
+  if (S.activeTab(useUI.getState()).focused === id && a instanceof HTMLElement && !e.currentTarget.contains(a)) a.blur();
+}
+
 /** One split pane: header (source + filter bar), live table, status line. */
 export function Pane({ id }: { id: string }) {
   const pane = useUI((s) => s.panes[id]);
@@ -45,6 +62,7 @@ export function Pane({ id }: { id: string }) {
     const t = s.tabs.find((x) => x.maximized === id);
     return t ? paneIds(t.layout).length - 1 : 0;
   });
+  const followMouse = useConfig((c) => !!c.config?.config.focusFollowsMouse);
 
   // open on mount / spec change of a table pane without server pane
   useEffect(() => {
@@ -103,6 +121,7 @@ export function Pane({ id }: { id: string }) {
       className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${corners} ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
       style={color ? { borderColor: color } : undefined}
       onMouseDown={() => setUI((s) => S.focusPane(s, id))}
+      onMouseMove={followMouse ? (e) => hoverFocus(e, id) : undefined}
     >
       <Grip id={id} />
       {hidden ? <Maximized hidden={hidden} /> : null}

@@ -1742,6 +1742,49 @@ test.describe("dockview layout", () => {
     expect((await inspect(page)).focusedPane).toBe("v2");
   });
 
+  test("focusFollowsMouse: moving the mouse over a pane focuses it, not while a field or dialog has the focus", async ({ page }) => {
+    await openTape(page);
+    const setFollow = (on: boolean) =>
+      page.evaluate((on) => {
+        const c = (window as unknown as { __kw: { config: { setState(f: (s: { config?: { config: object } }) => object): void } } }).__kw.config;
+        c.setState((s) => ({ config: { ...s.config!, config: { ...s.config!.config, focusFollowsMouse: on } } }));
+      }, on);
+    await page.keyboard.press("ControlOrMeta+Shift+D"); // v1 | v2, focus v2
+    const panes = page.locator("main > div:not([hidden]) section[data-pane]");
+    const center = async (i: number) => {
+      const b = (await panes.nth(i).boundingBox())!;
+      return [b.x + b.width / 2, b.y + b.height / 2] as const;
+    };
+    // off (the default): hovering does nothing
+    await page.mouse.move(...(await center(0)), { steps: 4 });
+    expect((await inspect(page)).focusedPane).toBe("v2");
+    await setFollow(true);
+    await page.mouse.move(...(await center(1)), { steps: 4 });
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe("v2");
+    await page.mouse.move(...(await center(0)), { steps: 4 });
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe("v1");
+    expect((await inspect(page)).focus).toBe("table");
+    // the grep field keeps the focus while typing, the pointer elsewhere
+    await page.keyboard.press("/");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("filter");
+    await page.mouse.move(...(await center(1)), { steps: 4 });
+    expect((await inspect(page)).focusedPane).toBe("v1");
+    expect((await inspect(page)).focus).toBe("filter");
+    await page.keyboard.press("Escape");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    // back in the table, the pointer resting over v2 changes nothing until it moves
+    expect((await inspect(page)).focusedPane).toBe("v1");
+    const [x, y] = await center(1);
+    await page.mouse.move(x + 20, y, { steps: 4 });
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe("v2");
+    // a resting pointer under a new split doesn't take the focus from it
+    await page.keyboard.press("ControlOrMeta+D"); // v2 over v3, focus v3
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe("v3");
+    await page.waitForTimeout(200);
+    expect((await inspect(page)).focusedPane).toBe("v3");
+    await setFollow(false);
+  });
+
   test("a resized layout survives tab switches and further splits keep the other weights", async ({ page }) => {
     await openTape(page);
     await page.keyboard.press("ControlOrMeta+Shift+D");

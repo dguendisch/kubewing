@@ -193,6 +193,7 @@ Rules are decided in Go (`internal/safety`); the frontend only shows what Go dec
 - **Generated lists with completeness tests:** the row menu comes from `actions/registry.ts` (a test fails for any `object.*` command without an entry); the cheat sheet from `keys/cheatsheet.ts` (a test fails for any command no section mentions).
 - **Swappable bridge transport:** Wails IPC in the app, WebSocket to a headless Go backend in tests and browser dev.
 - **Layout:** the store's split tree is the source of truth; `store/dock.ts` converts to and from dockview's layout.
+- **Focus follows mouse** (`focusFollowsMouse`): `mousemove` on a pane, not `mouseenter`, and only with real movement (`movementX/Y`) and no button held. A layout change under a resting pointer (a split opening, a pane closing) fires enter events and zero-movement moves, which would otherwise take the focus from the pane just opened. `S.hoverFocus` takes it only from another pane's own context (table, terminal, logs, YAML view or editor), never from a field, an overlay, the tab switcher or a maximized pane. The left element is blurred as a click would, since the store moving focus doesn't blur Monaco.
 
 ## Process model
 
@@ -207,7 +208,7 @@ UI regressions are caught by checking the app's state as data at every layer. Fu
 - **Bridge contract.** Generated TS bindings are committed (a CI check is planned).
 - **Frontend logic without a browser.** Keymap resolution and command effects are plain unit tests; a static check catches binding collisions per context and confirms suppressed webview defaults stay suppressed. Glide cell renderers are split into a pure `layout(cell, theme)` (unit-tested) and a thin `draw()`. Layout operations keep the tree valid and focus always on an existing pane.
 - **E2E on meaning.** Playwright drives the frontend in Chromium against the headless Go backend replaying tapes; tests read state through `window.__kw.inspect()` and use ARIA snapshots for DOM parts.
-- **Introspection hook:** test builds expose `window.__kw.inspect()` (layout tree, focus, per-pane pipeline, visible rows/cells, selection, open overlays).
+- **Introspection hook:** test builds expose `window.__kw.inspect()` (layout tree, focus, per-pane pipeline, visible rows/cells, selection, open overlays), and `__kw.config` (the config store) for a test to turn on a setting the shared `testdata/config` leaves off.
 - **Guardrails against AI-made regressions.** Goldens are the spec: updating them takes an explicit `-update` flag and the change is reviewed as its own diff. Lint bans raw colors outside theme tokens.
 - Planned: a WKWebView smoke suite for what Chromium can't reach (native menu accelerators, IME); invariant fuzzing with random key sequences; a golden-guard hook on `testdata/`.
 

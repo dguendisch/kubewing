@@ -62,7 +62,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 ## P4 — "Nice to have" (v2.0)
 
 1. Native tooltips into a copy-able/colored pop-over
-1. **Focus follows mouse (configurable, default off)**
 1. **Recipes** — guarded multi-step workflows (VPA reset, shoot force-delete).
 1. **AI chat** — e.g. via an Anthropic endpoint + API key; produces pipelines / proposed actions, never executes mutations without the safety model's confirmation.
 1. **Replace xterm** with ghostty(-web)?

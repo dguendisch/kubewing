@@ -952,6 +952,21 @@ export function focusPane(s: UIState, id: string): UIState {
   return withTab(s, (t) => ({ ...t, focused: id }));
 }
 
+/** Focus contexts that are a pane itself, not a field, dialog or menu in front of it. */
+const hoverable: FocusContext[] = ["table", "terminal", "ended", "logs", "detail", "edit", "editpreview"];
+
+/**
+ * Focus follows mouse (config focusFollowsMouse): the pointer moved over a
+ * pane. It takes the focus only from another pane: not from a filter or find
+ * field, a dialog, a menu or the tab switcher, which keep it until left; and
+ * not from a maximized pane (the others are hidden behind it anyway).
+ */
+export function hoverFocus(s: UIState, id: string): UIState {
+  const t = activeTab(s);
+  if (t.focused === id || t.maximized || s.overlay || s.switcher || !hoverable.includes(s.focus)) return s;
+  return focusPane(s, id);
+}
+
 export function updatePane(s: UIState, id: string, f: (p: PaneState) => PaneState): UIState {
   const p = s.panes[id];
   return p ? { ...s, panes: { ...s.panes, [id]: f(p) } } : s;

@@ -534,6 +534,27 @@ describe("directional pane focus (⌘⌥arrows)", () => {
   });
 });
 
+describe("focus follows mouse (hoverFocus)", () => {
+  const two = () => S.splitPane(S.initialState(), "row"); // v1 | v2, focus v2
+  it("focuses the hovered pane from another pane", () => {
+    expect(S.activeTab(S.hoverFocus(two(), "v1")).focused).toBe("v1");
+    const detail = { ...two(), focus: "detail" as const };
+    expect(S.activeTab(S.hoverFocus(detail, "v1")).focused).toBe("v1");
+  });
+  it("leaves fields, dialogs, the switcher and a maximized pane alone", () => {
+    const s = two();
+    expect(S.hoverFocus(s, "v2")).toBe(s); // already focused
+    const field = { ...s, focus: "filter" as const };
+    expect(S.hoverFocus(field, "v1")).toBe(field);
+    const dialog = S.openOverlay(s, { kind: "open", pane: "v2" });
+    expect(S.hoverFocus(dialog, "v1")).toBe(dialog);
+    const switching = { ...s, switcher: { index: 0, restore: "table" as const } };
+    expect(S.hoverFocus(switching, "v1")).toBe(switching);
+    const max = S.toggleMaximize(s);
+    expect(S.hoverFocus(max, "v1")).toBe(max);
+  });
+});
+
 describe("MRU tab switching (⌃⇥)", () => {
   // three tabs t1, t2, t3; t3 active → mru [t3, t2, t1]
   const three = () => [S.newTab, S.newTab].reduce(apply, S.initialState());

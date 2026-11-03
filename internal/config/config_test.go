@@ -143,6 +143,16 @@ func TestLaunchConfig(t *testing.T) {
 	}
 }
 
+// focusFollowsMouse: off unless set.
+func TestFocusFollowsMouseConfig(t *testing.T) {
+	if Load(write(t, map[string]string{"config.yaml": "theme: default\n"})).Config.FocusFollowsMouse {
+		t.Error("unset: want off")
+	}
+	if !Load(write(t, map[string]string{"config.yaml": "focusFollowsMouse: true\n"})).Config.FocusFollowsMouse {
+		t.Error("focusFollowsMouse: true not applied")
+	}
+}
+
 func hasError(errs []string, sub string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, sub) {

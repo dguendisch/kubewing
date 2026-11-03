@@ -49,3 +49,7 @@ terminal:
 #         default false: it detaches, the prompt comes back, the log goes to kubewing.log (state directory)
 launch:
   wait: false
+
+# focus follows mouse: moving the mouse over a pane focuses it, without a click
+# (fields, dialogs and menus keep the focus); default false
+focusFollowsMouse: false
