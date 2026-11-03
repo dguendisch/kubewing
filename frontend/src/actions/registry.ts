@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { defaultBindings, prettyKey, type Binding, type CommandId } from "../keys/keymap";
-import type { RowInfo, SafetyRule } from "../transport/types";
+import type { MarkedRow, RowInfo, SafetyRule } from "../transport/types";
 
 /**
  * Every operation on a table row, in menu order. The context menu (⌘⏎,
@@ -23,6 +23,10 @@ export interface RowAction {
   mutates?: boolean;
   /** The same in a split to the right: not an entry of its own, its shortcut is a hint on this one (and ⇧⏎ in the menu runs it). */
   split?: CommandId;
+  /** With rows marked, it acts on them (else on the cursor row). The rest always act on the cursor row. */
+  multi?: true | ((r: MarkedRow) => boolean);
+  /** What a multi action says with marks ("delete 5…"); n = the rows it applies to. */
+  multiLabel?: (n: number) => string;
 }
 
 const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
@@ -41,19 +45,22 @@ export const rowActions: RowAction[] = [
     group: "view",
     available: (r) => (r.hasPrev ? true : "no change seen yet"),
   },
-  { command: "object.copyName", label: "copy name", group: "view", available: () => true },
+  { command: "object.copyName", label: "copy name", group: "view", available: () => true, multi: true, multiLabel: (n) => `copy ${n} names` },
   { command: "object.copyCell", label: "copy cell…", group: "view", available: () => true },
   // read-only and metadata only: also on tombstones (the last state still has its owners)
   { command: "object.jump", label: "jump to…", group: "view", available: () => true },
   { command: "object.logs", label: "logs…", group: "view", available: (r) => (r.deleted ? "deleted" : r.logs ? true : "no pods to tail") },
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
-  { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true },
+  { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true, multi: (r) => r.kind === "Pod", multiLabel: (n) => `debug containers in ${n} pods…` },
   { command: "object.opsPod", label: "node shell…", group: "act", available: onNode, mutates: true },
   { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
-  { command: "object.label", label: "label…", group: "act", available: live, mutates: true },
-  { command: "object.annotate", label: "annotate…", group: "act", available: live, mutates: true },
-  { command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "act", available: scalable, mutates: true },
-  { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true },
+  { command: "object.label", label: "label…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `label ${n}…` },
+  { command: "object.annotate", label: "annotate…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `annotate ${n}…` },
+  {
+    command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "act", available: scalable, mutates: true,
+    multi: (r) => r.replicas !== undefined, multiLabel: (n) => `scale ${n}…`,
+  },
+  { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true, multi: true, multiLabel: (n) => `delete ${n}…` },
 ];
 
 export interface MenuItem {
@@ -67,21 +74,32 @@ export interface MenuItem {
   splitShortcut?: string;
   /** Why it's disabled; undefined = enabled. */
   disabled?: string;
+  /** With rows marked: true = acts on them, false = on the cursor row only. */
+  multi?: boolean;
 }
 
 /** Items of the open context menu (read by the dispatcher for ⏎ / j / k). */
-export const useMenu = create<{ items: MenuItem[]; row?: RowInfo }>(() => ({ items: [] }));
+export const useMenu = create<{ items: MenuItem[]; row?: RowInfo; marked?: MarkedRow[] }>(() => ({ items: [] }));
 
-/** The menu for one row. Pure. */
-export function menuFor(row: RowInfo, rule: SafetyRule | undefined, bindings: Binding[] = defaultBindings): MenuItem[] {
+/**
+ * The menu for one row, or with rows marked (marked: them) for those: a
+ * multi action applies to the marked rows it fits (none: disabled, with
+ * why), the others to the cursor row. Pure.
+ */
+export function menuFor(row: RowInfo, rule: SafetyRule | undefined, bindings: Binding[] = defaultBindings, marked?: MarkedRow[]): MenuItem[] {
   return rowActions.map((a) => {
-    let ok = a.available(row, rule);
+    const many = !!marked?.length && !!a.multi;
+    const fits = many ? marked!.filter((r) => a.multi === true || (a.multi as (r: MarkedRow) => boolean)(r)).length : 0;
+    let ok: true | string = many ? (fits ? true : `none of the ${marked!.length} marked fits`) : a.available(row, rule);
     if (ok === true && a.mutates && rule?.readOnly) ok = "read-only context";
     const key = (c: CommandId) => {
       const b = bindings.find((x) => x.command === c && (!x.when?.length || x.when.includes("table")));
       return b && prettyKey(b.key);
     };
-    const label = typeof a.label === "function" ? a.label(row) : a.label;
-    return { command: a.command, label, group: a.group, shortcut: key(a.command), split: a.split, splitShortcut: a.split && key(a.split), disabled: ok === true ? undefined : ok };
+    const label = many && a.multiLabel ? a.multiLabel(fits || marked!.length) : typeof a.label === "function" ? a.label(row) : a.label;
+    return {
+      command: a.command, label, group: a.group, shortcut: key(a.command), split: a.split, splitShortcut: a.split && key(a.split), disabled: ok === true ? undefined : ok,
+      multi: marked?.length ? many : undefined,
+    };
   });
 }

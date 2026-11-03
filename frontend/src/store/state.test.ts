@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, resize, sidePart, split, valid, type Layout } from "./layout";
+import { bottomCorners, edgeShare, grid, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, resize, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
 import { paneTitle, resourceLabel, tabTitle } from "../components/tabTitle";
 
@@ -1310,5 +1310,30 @@ describe("clusterSpec", () => {
     expect(S.emptySpec(S.initialSpec())).toBe(false);
     const s = S.launchTab(S.initialState(), "@2/live/shoot--foo--bar", "kube-system", spec);
     expect(S.focusedPane(s).spec).toBe(spec);
+  });
+});
+
+describe("debug containers in a tab of their own", () => {
+  it("tiles: up to 3 stacked, more in two stacked columns", () => {
+    const shape = (n: number) => {
+      const l = grid(Array.from({ length: n }, (_, i) => `p${i}`));
+      if (l.type === "pane") return [1];
+      return l.dir === "column" ? [l.children.length] : l.children.map((c) => (c.type === "pane" ? 1 : c.children.length));
+    };
+    expect(grid(["a", "b"])).toMatchObject({ type: "split", dir: "column" });
+    expect([1, 2, 3, 4, 5, 8].map(shape)).toEqual([[1], [2], [3], [2, 2], [3, 2], [4, 4]]);
+    expect(valid(grid(["a", "b", "c", "d", "e"]))).toBe(true);
+  });
+
+  it("opens the terminals in a new named tab, the first focused", () => {
+    const s0 = S.initialState("kind", "shop");
+    const terms = ["a", "b", "c"].map((pod) => ({ session: `s-${pod}`, pod, container: "debugger-x", context: "kind", debug: { image: "busybox" } }));
+    const s = S.openTerminalTab(s0, terms, "debug ×3");
+    const t = S.activeTab(s);
+    expect(s.tabs).toHaveLength(2);
+    expect(t.name).toBe("debug ×3");
+    expect(ids(s).map((id) => s.panes[id]!.term?.pod)).toEqual(["a", "b", "c"]);
+    expect(t.focused).toBe(ids(s)[0]);
+    expect(s.focus).toBe("terminal");
   });
 });

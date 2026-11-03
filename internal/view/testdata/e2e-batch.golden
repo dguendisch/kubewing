@@ -1,0 +1,79 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "KIND"
+    }
+  ],
+  "total": 6,
+  "offset": 0,
+  "order": [
+    "b-del-0",
+    "b-del-1",
+    "b-pod-0",
+    "b-pod-1",
+    "b-scale-0",
+    "b-scale-1"
+  ],
+  "rows": [
+    {
+      "key": "b-del-0",
+      "cells": [
+        "batch",
+        "b-del-0",
+        "ConfigMap"
+      ]
+    },
+    {
+      "key": "b-del-1",
+      "cells": [
+        "batch",
+        "b-del-1",
+        "ConfigMap"
+      ]
+    },
+    {
+      "key": "b-pod-0",
+      "cells": [
+        "batch",
+        "b-pod-0",
+        "Pod"
+      ]
+    },
+    {
+      "key": "b-pod-1",
+      "cells": [
+        "batch",
+        "b-pod-1",
+        "Pod"
+      ]
+    },
+    {
+      "key": "b-scale-0",
+      "cells": [
+        "batch",
+        "b-scale-0",
+        "Deployment"
+      ]
+    },
+    {
+      "key": "b-scale-1",
+      "cells": [
+        "batch",
+        "b-scale-1",
+        "Deployment"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 6
+  }
+}

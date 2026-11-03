@@ -167,6 +167,12 @@ type View struct {
 
 	sorted []*entry // cached display order; nil when dirty
 
+	// marks: the rows marked for actions on many rows (see Mark); anchor is
+	// the row a range extends from, base the marks before the range
+	marks  map[string]bool
+	anchor string
+	base   map[string]bool
+
 	// matchErrs counts live objects whose filter evaluation failed (not
 	// "missing field": that's a plain no-match)
 	matchErrs int
@@ -908,7 +914,7 @@ func (v *View) compare(col int, a, b *entry) int {
 }
 
 func (v *View) rowData(e *entry, now time.Time) RowData {
-	r := RowData{Key: e.key, Cells: e.cells}
+	r := RowData{Key: e.key, Cells: e.cells, Marked: v.marks[e.key]}
 	active := func(t time.Time) bool { return !t.IsZero() && now.Sub(t) < v.opts.HighlightFor }
 	switch {
 	case !e.deletedAt.IsZero(), e.goneLater:
@@ -933,7 +939,7 @@ func signature(r RowData) string {
 		b.WriteString(c)
 		b.WriteByte(0x1f)
 	}
-	fmt.Fprintf(&b, "%s|%v|%v", r.Mark, r.Changed, r.Hidden)
+	fmt.Fprintf(&b, "%s|%v|%v|%v", r.Mark, r.Changed, r.Hidden, r.Marked)
 	return b.String()
 }
 
@@ -947,6 +953,7 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 		now = v.at
 	}
 	rows := v.rows()
+	v.pruneMarks()
 
 	end := min(v.offset+v.limit, len(rows))
 	start := min(v.offset, end)
@@ -966,7 +973,7 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 			f.Rows = append(f.Rows, r)
 		}
 	}
-	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs}
+	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs, Marked: len(v.marks)}
 	status.Recording = v.opts.History != nil && v.opts.History.Recording()
 	if !v.at.IsZero() {
 		status.At, status.Behind = v.at.UTC().Format(time.RFC3339Nano), v.behind

@@ -224,6 +224,31 @@ Anything terminating stays visible. Other kinds have no checkbox. It's evaluated
 
 A double-click doesn't open the YAML; `⏎` or `y` does.
 
+### Marking rows
+
+Some actions work on many rows at once: copy name, label, annotate, scale, delete, and debug container. Mark the rows first:
+
+| Key | Marks |
+|---|---|
+| `⇧↓` / `⇧↑` (`⇧J` / `⇧K`) | from the anchor to the cursor, as the cursor moves; moving back towards the anchor unmarks again |
+| `⇧PageDown` / `⇧PageUp`, `⌥⇧↑` / `⌥⇧↓` | a page, or up to the first / last row |
+| `⇧`-click | from the anchor to the row clicked |
+| `Space`, `⌘`-click | toggles one row; it becomes the anchor |
+| `⌘A` | every row shown |
+| `Esc` | clears the marks (after a cell's text selection) |
+
+Marked rows have a blue tint and a bar on their left edge, and the status line counts them (**3 marked**). Only live rows that are shown can be marked: a mark goes away when a filter hides its row or the object is deleted, so an action never hits a row you can't see. Opening another resource or namespace starts with no marks.
+
+With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, logs, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
+
+- **Copy name** copies the names, separated by spaces, so they paste into `kubectl get pod web-0 web-1`.
+- **Label / annotate**: one dialog for all. It lists every key of the marked rows, with how many rows have it (`app=web 3/3`) and its value if they all share it (else how many values). The changes go to each row. Setting a key to the value all rows already have is no change. A key that differs, or that only some rows have, can be set or removed (`key-`).
+- **Scale**: one number for all, each row's current replicas listed.
+- **Delete**: always confirmed, listing the objects.
+- **Debug container**: one dialog for all pods, at most 8. The target is empty for each pod's own default container, `-` for none, or a container every marked pod has. Each pod gets its debug container in a pane of its own, all in a new tab named **debug ×N**, stacked one below the other (more than 3: in two columns).
+
+Each object still gets its own safety check, its UID precondition and its own request (at most 8 at once). The confirmation, if the context's rule asks for one, is one for all, and names the objects. With a `strict` rule you type the number of objects instead of a name, and a delete of more than 20 objects always asks for their number. Afterwards the status line says how many went through and names the first failures (`deleted 4 of 5 objects — web-2: forbidden`). The marks stay, so the failed rows can be retried; after a delete that removed every marked row, they're cleared.
+
 ---
 
 ## 4. Filtering
@@ -519,6 +544,8 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `s` | scale… (the entry shows the current replicas) |
 | `⌘⌫` / `Del` | delete… |
 
+With rows marked, copy name, label, annotate, scale, delete and debug act on them (see [Marking rows](#marking-rows)).
+
 ### Label, annotate
 
 `⇧L` labels the row's object, `⇧A` annotates it, as `kubectl label` / `kubectl annotate --overwrite` do. The dialog lists the current labels (or annotations) and takes changes in kubectl's syntax, separated by spaces:
@@ -594,6 +621,8 @@ Starts an ephemeral debug container in the pod, as `kubectl debug -it` does. The
 - the **profile**: `general`, `baseline`, `restricted`, `netadmin` (for tcpdump), `sysadmin` (privileged); default from `debug.profile`.
 
 `⏎` on a highlighted suggestion only takes it into the field; the next `⏎` starts. Until the container runs, the pane shows its waiting state and the kubelet's events (`Pulling image …`); a container that can't start keeps its pane with the reason. As with `kubectl debug`, the ephemeral container stays in the pod (terminated) until the pod is gone.
+
+With pods marked, `b` starts a debug container in each, a pane each in a new tab (see [Marking rows](#marking-rows)).
 
 ### Node shell: `⌥⌘O`
 
@@ -838,7 +867,7 @@ The most used keys:
 | Where | Keys |
 |---|---|
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
-| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
+| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |

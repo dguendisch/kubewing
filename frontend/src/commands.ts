@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, ClusterEntry, ColumnSpec, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, Batch, ClusterEntry, ColumnSpec, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -107,6 +107,19 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       if (s.overlay?.kind === "cells") return setUI((x) => moveCell(x, -1));
       if (s.overlay?.kind === "field") return setUI((x) => moveField(x, -1));
       return setUI((x) => S.moveSelection(x, -1, total));
+    case "mark.toggle":
+      return void markToggle(pane);
+    case "mark.down":
+    case "mark.up":
+    case "mark.pageDown":
+    case "mark.pageUp":
+    case "mark.first":
+    case "mark.last": {
+      const to = { "mark.down": 1, "mark.up": -1, "mark.pageDown": page, "mark.pageUp": -page, "mark.first": "first", "mark.last": "last" } as const;
+      return void markExtend(pane, to[cmd], total);
+    }
+    case "mark.all":
+      return void mark(pane, { op: "all" });
     case "row.pageDown":
       return setUI((x) => S.moveSelection(x, page, total));
     case "row.pageUp":
@@ -122,11 +135,14 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "object.diff":
       return openObjectView(pane, { view: "yaml", diff: true }, false);
     case "object.copyName":
-      return void copyName(pane);
+      return void hasMarks(pane).then((many) => (many ? copyMarkedNames(pane) : copyName(pane)));
     case "table.copy":
       return void copySelection(pane);
     case "table.clearSelection":
-      if (pane.serverId) setTextSel(pane.serverId, undefined);
+      // the cell's text selection first, then the marks
+      if (!pane.serverId) return;
+      if (useTextSel.getState()[pane.serverId]) return setTextSel(pane.serverId, undefined);
+      if (markedCount(pane)) return void mark(pane, { op: "clear" });
       return;
     case "object.copyCell":
       return openCells();
@@ -566,6 +582,7 @@ export function flash(paneId: string, text: string, error = false) {
 async function prepareAction(kind: ActionKind) {
   const s = useUI.getState();
   const pane = S.focusedPane(s);
+  if (batchKinds.has(kind) && (await hasMarks(pane)) && (await prepareMarked(pane, kind))) return;
   // in an object view: its object (the native menu, ⌘⌫ there)
   const key = selectedKey(pane);
   if (!pane.serverId || !key) return;
@@ -580,6 +597,125 @@ async function prepareAction(kind: ActionKind) {
       }
     }
     await proceed(pane.id, key, pending, {});
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+}
+
+/** Actions that act on the marked rows, when there are any (else on the cursor row). */
+const batchKinds = new Set<ActionKind>(["delete", "label", "annotate", "scale", "debug"]);
+
+/** At most this many pods get a debug container at once (a pane each, in a tab of their own). */
+export const maxDebugPods = 8;
+
+/**
+ * An action on the marked rows: Go prepares it for each (one decision, a
+ * token each; rows it doesn't apply to are skipped and said so), then its
+ * dialog or confirmation, as for one row.
+ */
+async function prepareMarked(pane: S.PaneState, kind: ActionKind): Promise<boolean> {
+  let batch: Batch;
+  try {
+    batch = await bridge().prepareMarked(kind, pane.serverId!);
+  } catch (e) {
+    // the marks went meanwhile (a filter hid them): the cursor row's action instead
+    if (errorText(e) === "no rows marked") return false;
+    flash(pane.id, errorText(e), true);
+    return true;
+  }
+  try {
+    if (kind === "debug" && batch.rows.length > maxDebugPods) flash(pane.id, `debug: ${batch.rows.length} pods marked, at most ${maxDebugPods} at once`, true);
+    else if (kind === "debug") setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "debug", pane: pane.id, batch }));
+    else if (kind === "label" || kind === "annotate" || kind === "scale") setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "meta", pane: pane.id, batch }));
+    else await proceedBatch(pane.id, batch, {});
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+  return true;
+}
+
+/** A prepared batch, its options picked: confirm if the rule asks for it, else run. */
+async function proceedBatch(paneId: string, batch: Batch, input: ActionInput) {
+  if (batch.needsConfirm) setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "confirm", pane: paneId, batch, ...input }));
+  else await executeBatch(paneId, batch, input);
+}
+
+/** Runs fn on every item, at most limit at once; the outcomes in order. */
+async function pooled<T, R>(items: T[], limit: number, fn: (t: T, i: number) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const out: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        out[i] = { status: "fulfilled", value: await fn(items[i]!, i) };
+      } catch (e) {
+        out[i] = { status: "rejected", reason: e };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
+const pastTense: Partial<Record<ActionKind, string>> = { delete: "deleted", label: "labeled", annotate: "annotated", scale: "scaled", debug: "started debug containers in" };
+
+/**
+ * Executes a batch, each row with its own token (≤ 8 at once). The status
+ * line says how many went through, and the first failures by name; the
+ * marks stay (a failed row can be retried), except after a delete.
+ */
+async function executeBatch(paneId: string, b: Batch, { debug, meta, scale }: ActionInput) {
+  const what = b.rows.length === 1 ? b.pending[0]!.action.resource : b.summary.split(" ")[2] ?? "objects";
+  if (b.kind === "debug") {
+    if (!debug) return;
+    const results = await pooled(b.pending, 8, (p) => bridge().debugStart(p.token, debug, 80, 24));
+    const terms: S.Term[] = [];
+    results.forEach((r) => {
+      if (r.status === "fulfilled") terms.push({ session: r.value.session, pod: r.value.pod, container: r.value.container, context: r.value.context, debug: { image: r.value.image, target: r.value.target } });
+    });
+    if (terms.length) setUI((x) => S.openTerminalTab(x, terms, `debug ×${terms.length}`, paneId));
+    return report(paneId, b, results, `${pastTense.debug} ${terms.length} pods`);
+  }
+  const run = (p: Pending) => {
+    switch (b.kind) {
+      case "delete":
+        return bridge().delete(p.token);
+      case "label":
+        return bridge().label(p.token, meta!.changes);
+      case "annotate":
+        return bridge().annotate(p.token, meta!.changes);
+      case "scale":
+        return bridge().scale(p.token, scale!.replicas);
+    }
+    return Promise.reject(new Error(`${b.kind} acts on one row only`));
+  };
+  if ((b.kind === "label" || b.kind === "annotate") && !meta) return;
+  if (b.kind === "scale" && !scale) return;
+  const results = await pooled(b.pending, 8, run);
+  const ok = results.filter((r) => r.status === "fulfilled").length;
+  if (b.kind === "delete" && ok === results.length) {
+    const p = useUI.getState().panes[paneId];
+    if (p) void mark(p, { op: "clear" });
+  }
+  report(paneId, b, results, `${pastTense[b.kind]} ${ok === results.length ? "" : `${ok} of `}${results.length} ${what}${b.kind === "scale" ? ` to ${scale!.replicas}` : ""}`);
+}
+
+/** The outcome of a batch in the status line: what went through, then the first failures with their names. */
+function report(paneId: string, b: Batch, results: PromiseSettledResult<unknown>[], done: string) {
+  const failed = results.flatMap((r, i) => (r.status === "rejected" ? [`${b.pending[i]!.action.name}: ${errorText(r.reason)}`] : []));
+  if (!failed.length) return flash(paneId, done);
+  const ok = results.length - failed.length;
+  flash(paneId, `${ok ? done : `${b.kind} failed`} — ${failed.slice(0, 3).join("; ")}${failed.length > 3 ? `; and ${failed.length - 3} more` : ""}`, true);
+}
+
+/** Copy name with marked rows: their names, space-separated (as kubectl get takes them). */
+async function copyMarkedNames(pane: S.PaneState) {
+  try {
+    const rows = await bridge().marked(pane.serverId!);
+    if (!rows.length) return copyName(pane);
+    await bridge().copyText(rows.map((r) => r.name).join(" "));
+    flash(pane.id, `copied ${rows.length} names`);
   } catch (e) {
     flash(pane.id, errorText(e), true);
   }
@@ -819,11 +955,12 @@ export async function submitOpsPod(cluster: string, node: string, opts: OpsPodOp
  */
 export async function submitDebug(opts: DebugOptions): Promise<string | undefined> {
   const o = useUI.getState().overlay;
-  if (o?.kind !== "debug" || !o.pending || !o.key) return;
+  if (o?.kind !== "debug" || !(o.batch || (o.pending && o.key))) return;
   if (!opts.image.trim()) return "an image is needed, e.g. busybox";
   setUI(S.closeOverlay);
   try {
-    await proceed(o.pane, o.key, o.pending, { debug: opts });
+    if (o.batch) await proceedBatch(o.pane, o.batch, { debug: opts });
+    else await proceed(o.pane, o.key, o.pending!, { debug: opts });
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
@@ -837,6 +974,13 @@ export async function submitDebug(opts: DebugOptions): Promise<string | undefine
  */
 export async function submitMeta(input: Pick<ActionInput, "meta" | "scale">): Promise<string | undefined> {
   const o = useUI.getState().overlay;
+  if (o?.kind === "meta" && o.batch) {
+    // the confirmation, or straight on: failures are reported per row in the status line
+    const b = o.batch;
+    if (!b.needsConfirm) setUI(S.closeOverlay);
+    await proceedBatch(o.pane, b, input);
+    return;
+  }
   if (o?.kind !== "meta" || !o.pending || !o.key) return;
   if (o.pending.needsConfirm) {
     setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "confirm", pane: o.pane, key: o.key, pending: o.pending, ...input }));
@@ -872,10 +1016,11 @@ export async function pickContainer(name: string | undefined) {
 
 async function runConfirmed() {
   const o = useUI.getState().overlay;
-  if (o?.kind !== "confirm" || !o.pending) return;
+  if (o?.kind !== "confirm" || !(o.pending || o.batch)) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o);
+    if (o.batch) await executeBatch(o.pane, o.batch, o);
+    else await execute(o.pane, o.pending!, o);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
@@ -933,6 +1078,69 @@ async function execute(paneId: string, p: Pending, { container = "", debug, ops,
       return setUI((x) => S.openTerminal(x, term, paneId, split));
     }
   }
+}
+
+/**
+ * Mark calls per server pane, in order, and the count the last one
+ * returned: an action right after a mark (⇧↓ then ⌘⌫) waits for it rather
+ * than for the frame that shows it. The count holds until the next frame,
+ * which has it (and later prunes: a filter hiding a marked row).
+ */
+const marking = new Map<string, { done: Promise<void>; count?: number }>();
+
+/** How many rows of a pane's table are marked, as far as known now (the last mark call, else the status); none in an object view. */
+function markedCount(pane: S.PaneState): number {
+  if (!pane.serverId || pane.object || pane.term || pane.logs) return 0;
+  return marking.get(pane.serverId)?.count ?? paneData.get(pane.serverId).status.marked ?? 0;
+}
+
+/** Whether rows are marked, once the mark calls on their way are through. */
+async function hasMarks(pane: S.PaneState): Promise<boolean> {
+  if (pane.serverId) await marking.get(pane.serverId)?.done;
+  return markedCount(pane) > 0;
+}
+
+function mark(pane: S.PaneState, op: MarkOp): Promise<void> {
+  const id = pane.serverId;
+  if (!id || pane.object) return Promise.resolve();
+  if (op.op === "clear" || op.op === "all") setUI((x) => S.updatePane(x, pane.id, (p) => ({ ...p, markAnchor: undefined })));
+  const m = marking.get(id) ?? { done: Promise.resolve() };
+  const done = m.done.then(async () => {
+    try {
+      m.count = await bridge().mark(id, op);
+      const off = paneData.subscribe(id, () => {
+        off();
+        if (marking.get(id)?.done === done) m.count = undefined;
+      });
+    } catch (e) {
+      m.count = undefined; // the frames tell
+      flash(pane.id, errorText(e), true);
+    }
+  });
+  m.done = done;
+  marking.set(id, m);
+  return done;
+}
+
+/** Space, ⌘-click: the cursor row in or out of the marks; it becomes the anchor of the next range. */
+export function markToggle(pane: S.PaneState, key = selectedKey(pane)) {
+  if (!key || pane.object) return;
+  setUI((x) => S.updatePane(x, pane.id, (p) => ({ ...p, markAnchor: key })));
+  return mark(pane, { op: "toggle", key });
+}
+
+/**
+ * ⇧↓ / ⇧↑ …: the cursor moves and the rows from the anchor to it are marked
+ * (moving back unmarks again); ⇧-click: to the row clicked (an index). The
+ * first one without an anchor starts at the cursor row.
+ */
+export function markExtend(pane: S.PaneState, to: number | "first" | "last" | { index: number }, total: number) {
+  const from = pane.markAnchor ?? selectedKey(pane);
+  if (!from || pane.object || !total) return;
+  const index = typeof to === "object" ? to.index : to === "first" ? 0 : to === "last" ? total - 1 : pane.selected + to;
+  const target = Math.max(0, Math.min(total - 1, index));
+  setUI((x) => S.updatePane(x, pane.id, (p) => ({ ...p, selected: target, markAnchor: from })));
+  return mark(pane, { op: "range", from, to: target });
 }
 
 /** The row a pane's row commands act on: the table's selected one; in an object view, its object. */

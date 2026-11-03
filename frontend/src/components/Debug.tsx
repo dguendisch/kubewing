@@ -4,8 +4,8 @@ import { Combobox } from "../complete/Combobox";
 import { useConfig } from "../store/config";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
-import type { ContainerInfo, DebugOptions, DebugProfile } from "../transport/types";
-import { checkDebug, imageSuggestions, initialDebug, profileCandidates, profileHints, targetCandidates } from "./debugForm";
+import type { Batch, ContainerInfo, DebugOptions, DebugProfile } from "../transport/types";
+import { checkDebug, checkDebugMany, commonTargets, imageSuggestions, initialDebug, profileCandidates, profileHints, targetCandidates } from "./debugForm";
 
 /**
  * b: a debug container (kubectl debug) in the selected pod. Asks for the
@@ -20,16 +20,24 @@ import { checkDebug, imageSuggestions, initialDebug, profileCandidates, profileH
 export function DebugDialog() {
   const o = useUI((s) => (s.overlay?.kind === "debug" ? s.overlay : undefined));
   const serverId = useUI((s) => (s.overlay?.kind === "debug" ? s.panes[s.overlay.pane]?.serverId : undefined));
+  if (o?.batch) return <Dialog key={o.batch.pending[0]!.token} batch={o.batch} />;
   if (!o?.pending || !o.key || !serverId) return null;
   return <Dialog key={o.pending.token} serverId={serverId} rowKey={o.key} pod={o.pending.action.name} />;
 }
 
-function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; pod: string }) {
+/**
+ * One pod (serverId, rowKey, pod), or the marked pods (batch): then the
+ * target is a container every pod has, empty for each pod's own default,
+ * and a debug container starts in each, a pane each in a tab of their own.
+ */
+function Dialog({ serverId, rowKey, pod, batch }: { serverId?: string; rowKey?: string; pod?: string; batch?: Batch }) {
   const cfg = useConfig((s) => s.config?.config.debug);
   const [containers, setContainers] = useState<ContainerInfo[]>();
   const [recent, setRecent] = useState<string[]>([]);
-  const [opts, setOpts] = useState<DebugOptions>(() => initialDebug(cfg, []));
+  // many pods: no target typed is each pod's default
+  const [opts, setOpts] = useState<DebugOptions>(() => (batch ? { ...initialDebug(cfg, []), target: "" } : initialDebug(cfg, [])));
   const [error, setError] = useState<string>();
+  const pods = batch?.rows.map((r) => r.containers ?? []);
 
   useEffect(() => {
     bridge()
@@ -42,6 +50,7 @@ function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; p
   }, []);
 
   useEffect(() => {
+    if (!serverId || !rowKey) return;
     bridge()
       .rowInfo(serverId, rowKey)
       .then(
@@ -60,7 +69,7 @@ function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; p
   };
   // ⏎ in a field passes its final value (an accepted suggestion) along
   const submit = (o: DebugOptions) => {
-    const r = checkDebug(o, containers ?? []);
+    const r = pods ? checkDebugMany(o, pods) : checkDebug(o, containers ?? []);
     if ("error" in r) return setError(r.error);
     void submitDebug(r.opts).then((err) => err && setError(err));
   };
@@ -69,7 +78,7 @@ function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; p
   return (
     <form
       role="dialog"
-      aria-label="debug container"
+      aria-label={batch ? "debug containers" : "debug container"}
       className="absolute top-16 left-1/2 z-30 flex w-[30rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
       onSubmit={(e) => {
         e.preventDefault();
@@ -80,8 +89,19 @@ function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; p
       }}
     >
       <div className="text-fg">
-        debug container in <span className="font-semibold">{pod}</span>
+        {batch ? (
+          <>
+            debug containers in <span className="font-semibold">{batch.rows.length} pods</span>
+            <span className="text-fg-muted"> · a pane each, in a new tab</span>
+          </>
+        ) : (
+          <>
+            debug container in <span className="font-semibold">{pod}</span>
+          </>
+        )}
       </div>
+      {batch ? <div className="truncate text-fg-muted">{batch.rows.map((r) => r.name).join(", ")}</div> : null}
+      {batch?.skipped?.length ? <div className="text-fg-muted">skipped (not pods): {batch.skipped.join(", ")}</div> : null}
       <label className="flex flex-col gap-1 text-fg-muted">
         image
         {/* suggestions (configured image, history) open on typing or ↓, not on focus */}
@@ -108,8 +128,8 @@ function Dialog({ serverId, rowKey, pod }: { serverId: string; rowKey: string; p
             onChange={set("target")}
             enterAccepts
             onSubmit={(target) => submit({ ...opts, target })}
-            candidates={targetCandidates(containers ?? [])}
-            placeholder="none"
+            candidates={pods ? commonTargets(pods) : targetCandidates(containers ?? [])}
+            placeholder={pods ? "each pod's default" : "none"}
             className={`w-full ${field}`}
           />
         </label>

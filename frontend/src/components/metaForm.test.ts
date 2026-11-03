@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasChanges, parseMeta, parseReplicas } from "./metaForm";
+import { hasChanges, parseMeta, parseReplicas, unionCurrent, unionMeta } from "./metaForm";
 
 describe("label / annotate text", () => {
   const cur = { app: "web", tier: "front" };
@@ -46,5 +46,25 @@ describe("replicas", () => {
     expect(parseReplicas("-1")).toEqual({ error: `"-1" isn't a number of replicas (0 or more)` });
     expect(parseReplicas("1.5")).toHaveProperty("error");
     expect(parseReplicas("")).toEqual({ error: "how many replicas?" });
+  });
+});
+
+describe("label / annotate on many rows", () => {
+  const keys = unionMeta([{ app: "web", tier: "front" }, { app: "web", tier: "back" }, { app: "web" }]);
+
+  it("counts keys and their values", () => {
+    expect(keys).toEqual([
+      { key: "app", count: 3, values: [{ value: "web", count: 3 }] },
+      { key: "tier", count: 2, values: [{ value: "back", count: 1 }, { value: "front", count: 1 }] },
+    ]);
+  });
+
+  it("a key the same on every row compares as one; a mixed one can be set or removed", () => {
+    const cur = unionCurrent(keys, 3);
+    const r = parseMeta("app=web tier=front", cur);
+    expect("changes" in r && r.changes.map((c) => c.op)).toEqual(["same", "change"]);
+    expect("send" in r && r.send).toEqual({ set: { tier: "front" }, remove: [] });
+    expect(parseMeta("tier-", cur)).toMatchObject({ send: { remove: ["tier"] } });
+    expect(parseMeta("env-", cur)).toEqual({ error: '"env" isn\'t set' });
   });
 });

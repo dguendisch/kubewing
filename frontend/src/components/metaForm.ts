@@ -89,3 +89,41 @@ export function parseReplicas(text: string): { replicas: number } | { error: str
   if (!/^\d+$/.test(t)) return { error: t ? `"${t}" isn't a number of replicas (0 or more)` : "how many replicas?" };
   return { replicas: Number(t) };
 }
+
+/** A key of the marked rows' labels or annotations: on how many of them, with which values (most common first). */
+export interface UnionKey {
+  key: string;
+  count: number;
+  values: { value: string; count: number }[];
+}
+
+/** The keys of many rows' labels or annotations, by key. Pure. */
+export function unionMeta(maps: (Record<string, string> | undefined)[]): UnionKey[] {
+  const by = new Map<string, Map<string, number>>();
+  for (const m of maps) {
+    for (const [k, v] of Object.entries(m ?? {})) {
+      const vs = by.get(k) ?? new Map<string, number>();
+      vs.set(v, (vs.get(v) ?? 0) + 1);
+      by.set(k, vs);
+    }
+  }
+  return [...by.entries()]
+    .map(([key, vs]) => ({
+      key,
+      count: [...vs.values()].reduce((a, b) => a + b, 0),
+      values: [...vs.entries()].map(([value, count]) => ({ value, count })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value)),
+    }))
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/**
+ * The current keys the dialog compares changes with, for many rows: a key
+ * with one value on every row is that value (setting it again is "same");
+ * one that differs, or isn't on every row, is a value no text equals, so
+ * setting it is a change and removing it is allowed. Pure.
+ */
+export function unionCurrent(keys: UnionKey[], rows: number): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const k of keys) out[k.key] = k.count === rows && k.values.length === 1 ? k.values[0]!.value : "\u0000mixed";
+  return out;
+}

@@ -41,6 +41,14 @@ export type CommandId =
   | "filter.fromDetail"
   | "filter.fromDetailNot"
   | "row.down"
+  | "mark.toggle"
+  | "mark.down"
+  | "mark.up"
+  | "mark.pageDown"
+  | "mark.pageUp"
+  | "mark.first"
+  | "mark.last"
+  | "mark.all"
   | "row.up"
   | "row.pageDown"
   | "row.pageUp"
@@ -141,6 +149,7 @@ export const commandIds: readonly CommandId[] = [
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
+  "mark.toggle", "mark.down", "mark.up", "mark.pageDown", "mark.pageUp", "mark.first", "mark.last", "mark.all",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "source.reconnect", "source.refresh",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.logs", "view.logs",
@@ -251,6 +260,17 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+ArrowUp", command: "row.first", when: ["table"] },
   { key: "Shift+G", command: "row.last", when: ["table"] },
   { key: "Alt+ArrowDown", command: "row.last", when: ["table"] },
+  // marking rows for an action on many (delete, label, debug …): ⇧ with a move extends from the anchor, as in a file list
+  { key: "Space", command: "mark.toggle", when: ["table"] },
+  { key: "Shift+J", command: "mark.down", when: ["table"] },
+  { key: "Shift+ArrowDown", command: "mark.down", when: ["table"] },
+  { key: "Shift+K", command: "mark.up", when: ["table"] },
+  { key: "Shift+ArrowUp", command: "mark.up", when: ["table"] },
+  { key: "Shift+PageDown", command: "mark.pageDown", when: ["table"] },
+  { key: "Shift+PageUp", command: "mark.pageUp", when: ["table"] },
+  { key: "Alt+Shift+ArrowUp", command: "mark.first", when: ["table"] },
+  { key: "Alt+Shift+ArrowDown", command: "mark.last", when: ["table"] },
+  { key: "Meta+A", command: "mark.all", when: ["table"] },
   // the row's YAML in place of the table (Esc or ⌘← back to it); ⇧⏎ in a split to the right, to compare
   { key: "Enter", command: "detail.open", when: ["table"] },
   { key: "Y", command: "detail.open", when: ["table"] },

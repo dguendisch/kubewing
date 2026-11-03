@@ -43,22 +43,24 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
   const context = useUI((s) => s.panes[paneId]?.context);
   const rule = useRules((r) => (context ? r[context] : undefined));
   const bindings = useConfig((s) => s.bindings);
-  const { items, row } = useMenu();
+  const { items, row, marked } = useMenu();
+  // an object view acts on its object: the table's marks don't apply
+  const inObject = useUI((s) => !!s.panes[paneId]?.object);
 
   useEffect(() => {
     useMenu.setState({ items: [], row: undefined }, true);
-    bridge()
-      .rowInfo(serverId, rowKey)
-      .then(
-        (r) => useMenu.setState({ row: r, items: menuFor(r, rule, bindings) }, true),
-        () => setUI(S.closeOverlay),
-      );
+    // asked, not taken from the frame: a mark just made may not have reached it yet
+    const many = inObject ? Promise.resolve([]) : bridge().marked(serverId).catch(() => []);
+    Promise.all([bridge().rowInfo(serverId, rowKey), many]).then(
+      ([r, m]) => useMenu.setState({ row: r, marked: m.length ? m : undefined, items: menuFor(r, rule, bindings, m) }, true),
+      () => setUI(S.closeOverlay),
+    );
   }, [serverId, rowKey]);
 
   // availability follows rule/keymap changes while open; highlight the first enabled entry
   useEffect(() => {
     if (!row) return;
-    const next = menuFor(row, rule, bindings);
+    const next = menuFor(row, rule, bindings, marked);
     useMenu.setState({ items: next });
     const first = next.findIndex((i) => !i.disabled);
     setUI((s) => (s.overlay?.kind === "menu" && next[s.overlay.index ?? 0]?.disabled && first >= 0 ? { ...s, overlay: { ...s.overlay, index: first } } : s));
@@ -97,8 +99,16 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
       style={pos ? { left: pos.x, top: pos.y } : undefined}
     >
       <div className="border-b border-border px-3 pb-1 text-fg-muted">
-        <span className="text-fg">{row?.name ?? "…"}</span>
-        {row ? ` · ${row.kind.toLowerCase()}${row.namespace ? ` · ${row.namespace}` : ""}` : null}
+        {marked ? (
+          <>
+            <span className="text-marked">{marked.length} marked</span> · cursor on <span className="text-fg">{row?.name}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-fg">{row?.name ?? "…"}</span>
+            {row ? ` · ${row.kind.toLowerCase()}${row.namespace ? ` · ${row.namespace}` : ""}` : null}
+          </>
+        )}
       </div>
       {items.map((it, i) => (
         <div key={it.command}>
@@ -121,6 +131,7 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
             }}
           >
             <span>{it.label}</span>
+            {it.multi === false && !it.disabled ? <span className="truncate text-[11px] text-fg-muted">· {row?.name}</span> : null}
             {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}
             <span className="ml-auto text-fg-muted">{it.shortcut}</span>
             {it.splitShortcut ? (

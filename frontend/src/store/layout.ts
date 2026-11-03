@@ -10,6 +10,19 @@ export function paneIds(l: Layout): string[] {
   return l.type === "pane" ? [l.id] : l.children.flatMap(paneIds);
 }
 
+/**
+ * Panes tiled in a grid: up to 3 stacked (horizontal splits, as wide as the
+ * tab: a shell's lines stay long), more in two such columns side by side
+ * (the left one takes the odd one), e.g. for one terminal per pod.
+ */
+export function grid(ids: string[]): Layout {
+  if (ids.length === 1) return leaf(ids[0]!);
+  const column = (xs: string[]): Layout => (xs.length === 1 ? leaf(xs[0]!) : { type: "split", dir: "column", children: xs.map(leaf) });
+  if (ids.length <= 3) return column(ids);
+  const left = Math.ceil(ids.length / 2);
+  return { type: "split", dir: "row", children: [column(ids.slice(0, left)), column(ids.slice(left))] };
+}
+
 /** Splits `target` in `dir` ("row" = side by side), inserting `newId` after it. */
 export function split(l: Layout, target: string, dir: "row" | "column", newId: string): Layout {
   return insert(l, target, dir === "row" ? "right" : "bottom", newId);

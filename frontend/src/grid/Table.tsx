@@ -68,6 +68,8 @@ interface Props {
   /** Resource type (pods, deployments.apps): its dragged column widths apply, and a drag saves them. */
   type?: string;
   onSelect: (row: number) => void;
+  /** ⇧-click (range: from the anchor to the row) or ⌘-click (toggle the row) on a row: marks it for an action on many rows. */
+  onMark?: (row: number, how: "range" | "toggle") => void;
   /** Right-click on a cell: select its row and open its context menu at (x, y) in the viewport; column = the cell's. */
   onContextMenu?: (row: number, x: number, y: number, column: string | undefined) => void;
   /** Right-click on the header. */
@@ -98,7 +100,7 @@ const saveWidthsAfter = 300;
  * Live table. Data flows bridge → paneData → updateCells (no React render).
  * Only visible rows (+ overscan) are requested from Go.
  */
-export function Table({ serverId, grep, selected, focused, type, onSelect, onContextMenu, onHeaderMenu, onColumnMoved, sort, onSort }: Props) {
+export function Table({ serverId, grep, selected, focused, type, onSelect, onMark, onContextMenu, onHeaderMenu, onColumnMoved, sort, onSort }: Props) {
   const ref = useRef<DataEditorRef>(null);
   const data = useRef<PaneData>(paneData.get(serverId));
   const [, force] = useReducer((x: number) => x + 1, 0);
@@ -107,7 +109,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   const { theme, colors } = useMemo(() => {
     void themeGen;
     const colors: Record<string, string> = {};
-    for (const v of [...Object.values(colorVar), "hidden", "match", "accent"]) colors[v] = token(v);
+    for (const v of [...Object.values(colorVar), "hidden", "match", "accent", "marked"]) colors[v] = token(v);
     return { theme: gridTheme(), colors };
   }, [themeGen]);
 
@@ -209,6 +211,8 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
   const measureCtx = useRef<CanvasRenderingContext2D | null>(null);
   // a text drag stays in its cell's row: Glide's own drag selection would select the rows it crosses
   const dragging = useRef(false);
+  // a ⇧- or ⌘-click marks rows: the cursor goes where onMark puts it, not where Glide's selection would
+  const marking = useRef(false);
   const measurer = () => {
     measureCtx.current ??= document.createElement("canvas").getContext("2d");
     const ctx = measureCtx.current!;
@@ -257,6 +261,12 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     if (e.button !== 0) return;
     const h = hit(e.clientX, e.clientY);
     if (!h) return;
+    // ⇧ / ⌘: marks rows (Glide's own selection change is ignored for it, see marking)
+    if (onMark && (e.shiftKey || e.metaKey)) {
+      marking.current = true;
+      setTextSel(serverId, undefined);
+      return onMark(h.row, e.shiftKey ? "range" : "toggle");
+    }
     const cols = data.current.columns;
     if (e.detail >= 3) return setTextSel(serverId, selectIn(h.r, cols, h.col, "all"));
     if (e.detail === 2) {
@@ -353,6 +363,18 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
     const r = rowAt(data.current, row);
     const column = data.current.columns[col];
     const l = layout(r, col, column, nowOf(data.current));
+    // marked for an action on many rows: under a diff tint, and a bar at the row's left edge
+    if (r?.marked) {
+      ctx.save();
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = colors["marked"]!;
+      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+      ctx.restore();
+      if (col === 0) {
+        ctx.fillStyle = colors["marked"]!;
+        ctx.fillRect(rect.x, rect.y, 3, rect.height);
+      }
+    }
     if (l.tint) {
       ctx.save();
       ctx.globalAlpha = 0.16;
@@ -451,6 +473,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onCon
       gridSelection={selection}
       onGridSelectionChange={(s) => {
         if (dragging.current) return;
+        if (marking.current) return void (marking.current = false);
         const r = s.current?.cell[1] ?? s.rows.first();
         if (r !== undefined) onSelect(r);
       }}

@@ -2,6 +2,7 @@ package safety
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -121,5 +122,63 @@ func TestPolicyChangeInvalidatesTokens(t *testing.T) {
 	}
 	if r := g.Rule("garden-prod-eu"); !r.ReadOnly {
 		t.Errorf("rule after reload: %+v", r)
+	}
+}
+
+func TestPrepareBatch(t *testing.T) {
+	g := NewGuard(NewPolicy(rules), time.Now)
+	as := []Action{del("kind", "a"), del("kind", "b"), del("kind", "c")}
+	b, err := g.PrepareBatch(as, []any{"ta", "tb", "tc"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Summary != "delete 3 pods -n ns on kind" || !b.NeedsConfirm || b.TypeToConfirm != "" || len(b.Pending) != 3 {
+		t.Fatalf("batch: %+v", b)
+	}
+	// each token is bound to its own object
+	for i, p := range b.Pending {
+		a, target, err := g.Redeem(p.Token, Delete)
+		if err != nil || a != as[i] || target != []any{"ta", "tb", "tc"}[i] {
+			t.Errorf("token %d: %v %v %v", i, a, target, err)
+		}
+	}
+
+	// strict rules type the count, not a name
+	live := []Action{del("live-1", "a"), del("live-1", "b")}
+	if b, _ := g.PrepareBatch(live, []any{nil, nil}); b.TypeToConfirm != "2" {
+		t.Errorf("strict: %+v", b)
+	}
+	// a big delete types the count anyway; a big exec on a plain context doesn't confirm at all
+	var big, execs []Action
+	for i := range TypeCountAbove + 1 {
+		big = append(big, del("kind", fmt.Sprint(i)))
+		e := del("kind", fmt.Sprint(i))
+		e.Kind = Exec
+		execs = append(execs, e)
+	}
+	targets := make([]any, len(big))
+	if b, _ := g.PrepareBatch(big, targets); b.TypeToConfirm != fmt.Sprint(TypeCountAbove+1) {
+		t.Errorf("big delete: %+v", b)
+	}
+	if b, _ := g.PrepareBatch(execs, targets); b.NeedsConfirm || b.TypeToConfirm != "" {
+		t.Errorf("big exec: %+v", b)
+	}
+
+	// mixed resources and namespaces
+	mixed := []Action{del("kind", "a"), {Kind: Delete, Context: "kind", Resource: "secrets", Namespace: "other", Name: "s"}}
+	if b, _ := g.PrepareBatch(mixed, []any{nil, nil}); b.Summary != "delete 2 objects in 2 namespaces on kind" {
+		t.Errorf("mixed: %q", b.Summary)
+	}
+
+	// read-only: refused whole, no token left behind
+	g = NewGuard(NewPolicy(rules), time.Now)
+	if _, err := g.PrepareBatch([]Action{del("garden-prod-eu", "a"), del("garden-prod-eu", "b")}, []any{nil, nil}); !errors.Is(err, ErrReadOnly) {
+		t.Errorf("read-only: %v", err)
+	}
+	if _, err := g.PrepareBatch([]Action{del("kind", "a"), del("other", "b")}, []any{nil, nil}); err == nil {
+		t.Error("two contexts in one batch must be refused")
+	}
+	if n := len(g.pending); n != 0 {
+		t.Errorf("%d tokens left behind", n)
 	}
 }

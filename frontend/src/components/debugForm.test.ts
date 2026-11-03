@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ContainerInfo } from "../transport/types";
-import { checkDebug, imageSuggestions, initialDebug, profileCandidates, targetCandidates } from "./debugForm";
+import { checkDebug, checkDebugMany, commonTargets, imageSuggestions, initialDebug, profileCandidates, targetCandidates } from "./debugForm";
 
 const pod: ContainerInfo[] = [
   { name: "app", kind: "container", state: "running" },
@@ -43,5 +43,26 @@ describe("debug dialog", () => {
     expect(checkDebug({ image: " ", target: "", profile: "" }, pod)).toEqual({ error: "an image is needed, e.g. busybox" });
     expect(checkDebug({ image: "busybox", target: "debugger-abcde", profile: "" }, pod)).toEqual({ error: 'no container "debugger-abcde" to target (app, side, init; empty = none)' });
     expect(checkDebug({ image: "busybox", target: "", profile: "root" }, pod)).toEqual({ error: 'unknown profile "root" (general, baseline, restricted, netadmin, sysadmin)' });
+  });
+});
+
+describe("debug containers in many pods", () => {
+  const a: ContainerInfo[] = [{ name: "app", kind: "container", default: true }, { name: "sidecar", kind: "container" }];
+  const b: ContainerInfo[] = [{ name: "app", kind: "container", default: true }, { name: "dbg", kind: "ephemeral" }];
+  const c: ContainerInfo[] = [{ name: "sidecar", kind: "container", default: true }, { name: "app", kind: "container" }];
+
+  it("targets only containers every pod has, or none", () => {
+    expect(commonTargets([a, b])).toEqual([
+      { value: "app", label: "app", detail: "default of all" },
+      { value: "-", label: "-", detail: "none: no shared processes" },
+    ]);
+    expect(commonTargets([a, c]).map((t) => [t.value, t.detail])).toEqual([["app", undefined], ["sidecar", undefined], ["-", "none: no shared processes"]]);
+  });
+
+  it("empty target: each pod's default; a container not in every pod is refused", () => {
+    expect(checkDebugMany({ image: " busybox ", target: "", profile: "" }, [a, b])).toEqual({ opts: { image: "busybox", target: "", profile: "general" } });
+    expect(checkDebugMany({ image: "busybox", target: "-", profile: "netadmin" }, [a, b])).toEqual({ opts: { image: "busybox", target: "-", profile: "netadmin" } });
+    expect(checkDebugMany({ image: "busybox", target: "sidecar", profile: "" }, [a, b])).toMatchObject({ error: expect.stringContaining('not every pod has a container "sidecar"') });
+    expect(checkDebugMany({ image: "", target: "", profile: "" }, [a])).toMatchObject({ error: expect.stringContaining("image") });
   });
 });

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { applySpec, moveColumn, openColumns, reconnect, refresh } from "../commands";
+import { applySpec, markExtend, markToggle, moveColumn, openColumns, reconnect, refresh } from "../commands";
 import { RecordButton, TravelBadge, TravelBar, useKey, usePaneStatus } from "./Travel";
 import { Table } from "../grid/Table";
-import type { PaneData } from "../grid/rowcache";
+import { rowAt, type PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useUI } from "../store/store";
@@ -381,7 +381,17 @@ function TablePane({
             sort={S.sortOf(pane.spec.sort)}
             onSort={(column) => void applySpec(id, { ...pane.spec, sort: S.nextSort(pane.spec.sort, column) })}
             onSelect={(row) => setUI((s) => S.updatePane(s, id, (p) => ({ ...p, selected: row })))}
+            onMark={(row, how) => {
+              setUI((s) => S.focusPane(s, id));
+              const p = useUI.getState().panes[id]!;
+              if (how === "range") return void markExtend(p, { index: row }, paneData.get(p.serverId!).total);
+              setUI((s) => S.updatePane(s, id, (q) => ({ ...q, selected: row })));
+              void markToggle(p, keyAt({ ...p, selected: row }));
+            }}
             onContextMenu={(row, x, y, column) => {
+              // a row outside the marks: the menu is for it alone, as in Finder
+              const d = paneData.get(pane.serverId!);
+              if (d.status.marked && !rowAt(d, row)?.marked) void bridge().mark(pane.serverId!, { op: "clear" }).catch(() => {});
               setUI((s) => S.updatePane(S.focusPane(s, id), id, (p) => ({ ...p, selected: row })));
               const key = keyAt({ ...pane, selected: row });
               if (key) setUI((s) => S.openOverlay(S.closeOverlay(s), { kind: "menu", pane: id, key, index: 0, rowIndex: row, at: { x, y }, column }));
@@ -755,6 +765,11 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>
+      {st?.marked ? (
+        <span aria-label="marked rows" className="text-marked" title="actions on many rows act on these (esc clears)">
+          {st.marked} marked
+        </span>
+      ) : null}
       {st?.skipped ? <Skipped pane={pane} n={st.skipped} /> : null}
       {st?.snapshot ? <AutoRefresh pane={pane} /> : null}
       {st?.error ? <StatusError paneId={pane.id} which="source" text={st.error} /> : null}

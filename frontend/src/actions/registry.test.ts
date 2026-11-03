@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { commandIds, defaultBindings, mergeBindings } from "../keys/keymap";
-import type { RowInfo, SafetyRule } from "../transport/types";
+import type { MarkedRow, RowInfo, SafetyRule } from "../transport/types";
 import { menuFor, rowActions } from "./registry";
 // the dispatcher's source, to check every menu command is handled
 import commandsSrc from "../commands.ts?raw";
@@ -98,5 +98,36 @@ describe("diff entry", () => {
     expect(label({ ...pod, changes: undefined })).toBe("diff last change");
     expect(label({ ...pod, changes: 1 })).toBe("diff last change");
     expect(label({ ...pod, changes: 7 })).toBe("diff changes (7)");
+  });
+});
+
+describe("row actions menu with marked rows", () => {
+  const marked: MarkedRow[] = [
+    { key: "u1", kind: "Pod", name: "web-0" },
+    { key: "u3", kind: "Pod", name: "web-1" },
+    { key: "u2", kind: "ConfigMap", name: "cfg" },
+  ];
+
+  it("multi actions act on the marked rows they fit, the rest on the cursor row", () => {
+    const m = byCmd(menuFor(cm, undefined, defaultBindings, marked));
+    expect(m["object.delete"]).toMatchObject({ label: "delete 3…", multi: true, disabled: undefined });
+    expect(m["object.label"]!.label).toBe("label 3…");
+    expect(m["object.copyName"]!.label).toBe("copy 3 names");
+    // the cursor row is a config map, but two marked rows are pods
+    expect(m["object.debug"]).toMatchObject({ label: "debug containers in 2 pods…", disabled: undefined });
+    expect(m["object.scale"]!.disabled).toBe("none of the 3 marked fits");
+    // single-row actions keep the cursor row's availability
+    expect(m["object.exec"]).toMatchObject({ multi: false, disabled: "needs a pod, not configmap" });
+    expect(m["object.describe"]).toMatchObject({ multi: false, disabled: undefined });
+  });
+
+  it("read-only contexts refuse the multi mutations too", () => {
+    const m = byCmd(menuFor(pod, ro, defaultBindings, marked));
+    expect(m["object.delete"]!.disabled).toBe("read-only context");
+    expect(m["object.copyName"]!.disabled).toBeUndefined();
+  });
+
+  it("without marks nothing changes", () => {
+    expect(menuFor(pod, undefined, defaultBindings, [])).toEqual(menuFor(pod, undefined));
   });
 });

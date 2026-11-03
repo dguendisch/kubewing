@@ -50,3 +50,26 @@ export function initialDebug(cfg: DebugConfig | undefined, cs: ContainerInfo[], 
   const target = cs.find((c) => c.default)?.name ?? cs.find((c) => c.kind !== "ephemeral")?.name ?? "";
   return { image: cfg?.image ?? recent[0] ?? "", target, profile: cfg?.profile ?? "general" };
 }
+
+/**
+ * The containers a debug container can target in every one of several pods
+ * (by name), and "-" for none. An empty field is each pod's own default. Pure.
+ */
+export function commonTargets(pods: ContainerInfo[][]): Candidate[] {
+  const [first = [], ...rest] = pods.map((cs) => targetCandidates(cs));
+  const common = first.filter((c) => rest.every((cs) => cs.some((x) => x.value === c.value)));
+  return [
+    ...common.map((c) => ({ value: c.value, label: c.value, detail: pods.every((cs) => cs.find((x) => x.default)?.name === c.value) ? "default of all" : undefined })),
+    { value: "-", label: "-", detail: "none: no shared processes" },
+  ];
+}
+
+/** The many-pods dialog's values as Go takes them: empty target = each pod's default (""), "-" = none. Pure. */
+export function checkDebugMany(o: DebugOptions, pods: ContainerInfo[][]): { opts: DebugOptions } | { error: string } {
+  const image = o.image.trim(), target = o.target.trim(), profile = o.profile.trim() || "general";
+  if (!image) return { error: "an image is needed, e.g. busybox" };
+  const targets = commonTargets(pods).map((c) => c.value);
+  if (target && !targets.includes(target)) return { error: `not every pod has a container "${target}" (${targets.filter((t) => t !== "-").join(", ") || "none in common"}; empty = each pod's default, - = none)` };
+  if (!(debugProfiles as readonly string[]).includes(profile)) return { error: `unknown profile "${profile}" (${debugProfiles.join(", ")})` };
+  return { opts: { image, target, profile } };
+}

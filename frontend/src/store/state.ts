@@ -1,9 +1,9 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { Batch, ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import type { Place } from "../editor/Viewer";
-import { insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
+import { grid, insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -63,6 +63,8 @@ export interface PaneState {
   opening?: boolean;
   error?: string;
   selected: number;
+  /** The row (key) a range of marked rows extends from (⇧↓, ⇧-click); set by the last toggle or the first extend. */
+  markAnchor?: string;
   /** Navigation history (⌘J jumps, ⌘O to a new source), as in a browser: the views before (⌘←) and, after going back, after (⌘→) this one; newest last. */
   back?: HistoryEntry[];
   forward?: HistoryEntry[];
@@ -256,6 +258,8 @@ export interface Overlay {
   tabId?: string;
   /** confirm, container: the prepared action. */
   pending?: Pending;
+  /** confirm, debug, meta: the action prepared for the marked rows (in place of pending). */
+  batch?: Batch;
   /** container: the pod's containers to pick from. */
   containers?: ContainerChoice[];
   /** confirm: the container a prepared exec enters ("" or unset = the pod's default). */
@@ -509,6 +513,19 @@ export function openTerminal(s: UIState, term: Term, from = activeTab(s).focused
     focus: "terminal",
     overlay: undefined,
   };
+}
+
+/**
+ * Opens terminals in a new tab of their own, tiled (one debug container per
+ * marked pod); the first is focused. from: the pane whose spec they keep.
+ */
+export function openTerminalTab(s: UIState, terms: Term[], name: string, from = activeTab(s).focused): UIState {
+  const src = s.panes[from] ?? focusedPane(s);
+  const ids = terms.map((_, i) => `v${s.nextId + i}`);
+  const panes = { ...s.panes };
+  terms.forEach((term, i) => (panes[ids[i]!] = { id: ids[i]!, spec: { ...src.spec }, selected: 0, term, context: term.context }));
+  const tab: Tab = { id: `t${s.nextId}`, layout: grid(ids), focused: ids[0]!, name };
+  return { ...s, tabs: [...s.tabs, tab], activeTab: s.tabs.length, nextId: s.nextId + terms.length, panes, focus: "terminal", overlay: undefined };
 }
 
 /** Opens a log pane below the focused pane and focuses it. */

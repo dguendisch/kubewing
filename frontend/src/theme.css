@@ -17,6 +17,7 @@
   --color-changed: #e2c08d;
   --color-hidden: #c586c0;
   --color-match: #6a8caf;
+  --color-marked: #4a7fc1; /* rows marked for an action on many rows */
   --color-prod: #f14c4c;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
 }

@@ -1,0 +1,22 @@
+# E2E tape for actions on many rows (marked rows): pods, a deployment and
+# config maps, in a namespace of their own (tape objects are found by
+# namespace/name across tapes). Each test acts on its own objects, as
+# deletes and patches persist for the backend's lifetime.
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Kind, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: b-pod-0, namespace: batch, uid: b-pod-0, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: b}}, spec: {containers: [{name: app}, {name: sidecar}]}, status: {phase: Running}}
+    cells: [b-pod-0, Pod]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: b-pod-1, namespace: batch, uid: b-pod-1, creationTimestamp: "2026-01-01T10:00:00Z", labels: {app: b, tier: x}}, spec: {containers: [{name: app}]}, status: {phase: Running}}
+    cells: [b-pod-1, Pod]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: b-scale-0, namespace: batch, uid: b-scale-0, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 2}}
+    cells: [b-scale-0, Deployment]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: b-scale-1, namespace: batch, uid: b-scale-1, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 3}}
+    cells: [b-scale-1, Deployment]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: b-del-0, namespace: batch, uid: b-del-0, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [b-del-0, ConfigMap]
+  - object: {apiVersion: v1, kind: ConfigMap, metadata: {name: b-del-1, namespace: batch, uid: b-del-1, creationTimestamp: "2026-01-01T10:00:00Z"}}
+    cells: [b-del-1, ConfigMap]

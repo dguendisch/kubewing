@@ -200,6 +200,91 @@ func (g *Guard) Redeem(token, kind string) (Action, any, error) {
 	return is.action, is.target, nil
 }
 
+// TypeCountAbove: a delete of more objects than this asks for their count
+// to be typed, whatever the rule says.
+const TypeCountAbove = 20
+
+// Batch is one action prepared for many objects: a token each (bound to
+// its object, redeemed by the single-object calls), under one decision.
+type Batch struct {
+	// Pending holds the tokens, in the order of the actions.
+	Pending []Pending `json:"pending"`
+	// Summary is shown in the confirmation dialog.
+	Summary      string `json:"summary"`
+	Kind         string `json:"kind"`
+	Context      string `json:"context"`
+	Rule         Rule   `json:"rule"`
+	NeedsConfirm bool   `json:"needsConfirm"`
+	// TypeToConfirm is the count of objects to type (strict mode, big deletes), or "".
+	TypeToConfirm string `json:"typeToConfirm,omitempty"`
+}
+
+// PrepareBatch checks actions of one kind on one context (a pane's marked
+// rows) and issues a token for each; targets are their Prepare targets.
+// It's all or nothing: a refusal issues no token.
+func (g *Guard) PrepareBatch(as []Action, targets []any) (Batch, error) {
+	if len(as) == 0 || len(as) != len(targets) {
+		return Batch{}, errors.New("nothing to prepare")
+	}
+	kind, ctx := as[0].Kind, as[0].Context
+	for _, a := range as[1:] {
+		if a.Kind != kind || a.Context != ctx {
+			return Batch{}, errors.New("a batch is one action on one context")
+		}
+	}
+	if len(as) == 1 {
+		p, err := g.Prepare(as[0], targets[0])
+		if err != nil {
+			return Batch{}, err
+		}
+		return Batch{Pending: []Pending{p}, Summary: p.Summary, Kind: kind, Context: ctx, Rule: p.Rule, NeedsConfirm: p.NeedsConfirm, TypeToConfirm: p.TypeToConfirm}, nil
+	}
+	b := Batch{Kind: kind, Context: ctx, Summary: batchSummary(as)}
+	for i, a := range as {
+		p, err := g.Prepare(a, targets[i])
+		if err != nil {
+			g.drop(b.Pending)
+			return Batch{}, err
+		}
+		b.Pending = append(b.Pending, p)
+	}
+	b.Rule, b.NeedsConfirm = b.Pending[0].Rule, b.Pending[0].NeedsConfirm
+	if b.NeedsConfirm && (b.Rule.Strict || kind == Delete && len(as) > TypeCountAbove) {
+		b.TypeToConfirm = fmt.Sprint(len(as))
+	}
+	return b, nil
+}
+
+// drop withdraws issued tokens (a batch that couldn't be prepared whole).
+func (g *Guard) drop(ps []Pending) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, p := range ps {
+		delete(g.pending, p.Token)
+	}
+}
+
+// batchSummary: "delete 5 pods -n ns on ctx"; mixed resources count as
+// objects, mixed namespaces are counted.
+func batchSummary(as []Action) string {
+	res, ns := map[string]bool{}, map[string]bool{}
+	for _, a := range as {
+		res[a.Resource], ns[a.Namespace] = true, true
+	}
+	what := "objects"
+	if len(res) == 1 {
+		what = as[0].Resource
+	}
+	where := ""
+	switch {
+	case len(ns) > 1:
+		where = fmt.Sprintf(" in %d namespaces", len(ns))
+	case as[0].Namespace != "":
+		where = " -n " + as[0].Namespace
+	}
+	return fmt.Sprintf("%s %d %s%s on %s", as[0].Kind, len(as), what, where, orCurrent(as[0].Context))
+}
+
 func ctxName(r Rule) string {
 	if r.Label != "" {
 		return fmt.Sprintf("%q (%s)", r.Context, r.Label)

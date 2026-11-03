@@ -15,6 +15,8 @@ export interface RowData {
   mark?: Mark;
   changed?: number[];
   hidden?: boolean;
+  /** Marked for an action on many rows (Transport.mark). */
+  marked?: boolean;
 }
 
 export interface Status {
@@ -45,6 +47,8 @@ export interface Status {
   listTypes?: number;
   /** Resource types the last listing couldn't list (see Transport.skipped). */
   skipped?: number;
+  /** Rows marked for an action on many rows. */
+  marked?: number;
 }
 
 /** A resource type a listing couldn't list, and why (forbidden, an aggregated API down). */
@@ -407,6 +411,36 @@ export interface Pending {
   needsConfirm: boolean;
   /** Strict mode: the text the user must type to confirm. */
   typeToConfirm?: string;
+}
+
+/** Mirrors view.MarkOp: toggle a row (it becomes the anchor), a range from the anchor (from: its key) to index to, all shown, none. */
+export type MarkOp = { op: "toggle"; key: string } | { op: "range"; from: string; to: number } | { op: "all" } | { op: "clear" };
+
+/** Mirrors bridge.MarkedRow: a marked row, with what the dialogs of an action on many rows show. */
+export interface MarkedRow {
+  key: string;
+  kind: string;
+  name: string;
+  namespace?: string;
+  replicas?: number;
+  containers?: ContainerInfo[];
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+}
+
+/** Mirrors safety.Batch + bridge.MarkedBatch: one action prepared for the marked rows, a token each (pending[i] for rows[i]). */
+export interface Batch {
+  pending: Pending[];
+  summary: string;
+  kind: ActionKind;
+  context: string;
+  rule: SafetyRule;
+  needsConfirm: boolean;
+  /** The count of objects to type (strict mode, big deletes). */
+  typeToConfirm?: string;
+  rows: MarkedRow[];
+  /** Marked rows the action doesn't apply to (scale: no replicas; debug: not a pod). */
+  skipped?: string[];
 }
 
 /** Mirrors bridge.EditSession: an opened editor (Go keeps the original it patches against). */
@@ -799,6 +833,12 @@ export interface Transport {
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */
   delete(token: string): Promise<void>;
+  /** Changes a pane's marked rows (frames show them); how many are marked now. */
+  mark(pane: string, op: MarkOp): Promise<number>;
+  /** A pane's marked rows, in display order. */
+  marked(pane: string): Promise<MarkedRow[]>;
+  /** Checks a mutation on every marked row (one decision, a token each); throws if refused. */
+  prepareMarked(kind: ActionKind, pane: string): Promise<Batch>;
   /** A row's labels and annotations (label / annotate dialogs). */
   rowMeta(pane: string, key: string): Promise<RowMeta>;
   /** Executes a prepared label / annotate: sets and removes keys. */

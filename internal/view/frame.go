@@ -45,6 +45,8 @@ type RowData struct {
 	Changed []int `json:"changed,omitempty"`
 	// Hidden marks a recent change outside the displayed columns.
 	Hidden bool `json:"hidden,omitempty"`
+	// Marked: the row is marked for an action on many rows (View.Mark).
+	Marked bool `json:"marked,omitempty"`
 }
 
 // Status summarizes the source and pipeline state of a view.
@@ -80,4 +82,6 @@ type Status struct {
 	Listing   int    `json:"listing,omitempty"`
 	ListTypes int    `json:"listTypes,omitempty"`
 	Skipped   int    `json:"skipped,omitempty"`
+	// Marked counts the rows marked for an action on many rows.
+	Marked int `json:"marked,omitempty"`
 }

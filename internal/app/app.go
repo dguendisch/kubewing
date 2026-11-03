@@ -94,7 +94,14 @@ func (a *App) OtherPlane(cluster, namespace string) (bridge.ClusterOpen, error) 
 func (a *App) Prepare(kind, pane, key string) (safety.Pending, error) {
 	return a.svc.Prepare(kind, pane, key)
 }
-func (a *App) Delete(token string) error { return a.svc.Delete(token) }
+func (a *App) Delete(token string) error                     { return a.svc.Delete(token) }
+func (a *App) Mark(pane string, op view.MarkOp) (int, error) { return a.svc.Mark(pane, op) }
+func (a *App) Marked(pane string) ([]bridge.MarkedRow, error) {
+	return a.svc.Marked(pane)
+}
+func (a *App) PrepareMarked(kind, pane string) (bridge.MarkedBatch, error) {
+	return a.svc.PrepareMarked(kind, pane)
+}
 func (a *App) RowMeta(pane, key string) (bridge.RowMeta, error) {
 	return a.svc.RowMeta(pane, key)
 }

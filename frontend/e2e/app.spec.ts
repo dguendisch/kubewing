@@ -13,7 +13,7 @@ type Inspect = {
   selected?: string;
   activeTab: number;
   tabs: { id: string; focused: string; layout: unknown }[];
-  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[] }[]; status?: { synced: boolean; at?: string; recording?: boolean }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
+  panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[]; marked?: boolean }[]; status?: { synced: boolean; at?: string; recording?: boolean; marked?: number }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
   logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string; viewportY: number; length: number; rows: number }>;
 };
 
@@ -5424,5 +5424,152 @@ test.describe("⌘P: open a cluster", () => {
     await page.getByRole("combobox", { name: "cluster" }).fill("seed--loam");
     await expect(options(page).first()).toHaveText(/^seed loam.*tape-garden/);
     await page.keyboard.press("Escape");
+  });
+});
+
+// e2e-batch, by name: b-del-0, b-del-1, b-pod-0, b-pod-1, b-scale-0, b-scale-1. Deletes and
+// patches persist for the backend's lifetime: each test acts on its own rows.
+test.describe("marked rows", () => {
+  const marked = async (page: Page) => (await focused(page)).rows.filter((r) => r.marked).map((r) => r.key);
+  const status = (page: Page) => page.locator("section[data-pane]").first().getByLabel("marked rows");
+  const termText = (page: Page) => page.locator("[data-terminal] .xterm-rows").allInnerTexts();
+  /** e2e-batch, synced: its rows less those other tests deleted (b-del-*: the backend is shared). */
+  async function openBatch(page: Page) {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-batch");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => {
+      const p = await focused(page);
+      return p.spec.resource === "e2e-batch" && !!p.status?.synced && p.rows.some((r) => r.key === "b-scale-1");
+    }).toBe(true);
+  }
+  async function goTo(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+  }
+
+  test("⇧↓ marks from the anchor, back unmarks; space and ⌘A; esc clears; actions on one row stay on the cursor's", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openBatch(page);
+    await goTo(page, "b-pod-0");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("Shift+J");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-0", "b-pod-1", "b-scale-0"]);
+    await expect(status(page)).toHaveText("3 marked");
+    const at = async (key: string) => (await focused(page)).rows.findIndex((r) => r.key === key);
+    expect((await focused(page)).selected).toBe(await at("b-scale-0"));
+    // towards the anchor again: unmarked
+    await page.keyboard.press("Shift+K");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-0", "b-pod-1"]);
+    // space toggles the cursor row (it becomes the anchor)
+    await page.keyboard.press("Space");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-0"]);
+    // copy name: the marked names, space-separated
+    await page.keyboard.press("j");
+    await page.keyboard.press("Space");
+    await page.keyboard.press("ControlOrMeta+Enter");
+    const menu = page.getByRole("menu");
+    await expect(menu).toContainText("2 marked · cursor on b-scale-0");
+    await expect(menu.getByRole("menuitem", { name: /^copy 2 names/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /^delete 2…/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /^debug containers in 1 pods…/ })).toBeVisible();
+    // describe stays on the cursor row
+    await expect(menu.getByRole("menuitem", { name: /^describe.*b-scale-0/ })).toBeVisible();
+    await menu.getByRole("menuitem", { name: /^copy 2 names/ }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("b-pod-0 b-scale-0");
+    // ⌘A: every row shown; esc clears
+    await page.keyboard.press("ControlOrMeta+A");
+    const shown = (await focused(page)).rows.length; // b-del-* may be gone (the delete test)
+    await expect.poll(async () => (await marked(page)).length).toBe(shown);
+    await page.keyboard.press("Escape");
+    await expect.poll(() => marked(page)).toEqual([]);
+    await expect(status(page)).toHaveCount(0);
+    // ⌘-click toggles, ⇧-click a range from it
+    const cell = (row: number) => page.locator("section[data-pane] canvas").first().boundingBox().then((b) => ({ x: b!.x + 80, y: b!.y + 24 + 22 * row + 11 }));
+    const c1 = await cell(await at("b-pod-0"));
+    await page.keyboard.down("Meta");
+    await page.mouse.click(c1.x, c1.y);
+    await page.keyboard.up("Meta");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-0"]);
+    const c3 = await cell(await at("b-scale-0"));
+    await page.keyboard.down("Shift");
+    await page.mouse.click(c3.x, c3.y);
+    await page.keyboard.up("Shift");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-0", "b-pod-1", "b-scale-0"]);
+    expect((await focused(page)).selected).toBe(await at("b-scale-0"));
+    // a grep hiding marked rows drops their marks
+    await page.keyboard.press("/");
+    await page.keyboard.type("pod-1");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-1"]);
+  });
+
+  test("delete of marked rows: one confirmation listing them, then both deleted", async ({ page }) => {
+    await openBatch(page);
+    await goTo(page, "b-del-0");
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect.poll(() => marked(page)).toEqual(["b-del-0", "b-del-1"]);
+    await page.keyboard.press("ControlOrMeta+Backspace");
+    const dialog = page.getByRole("alertdialog", { name: "confirm delete" });
+    // a tape's resource is named after it (on a cluster: "delete 2 configmaps …")
+    await expect(dialog.getByRole("paragraph")).toHaveText("delete 2 e2e-batch -n batch on tape");
+    await expect(dialog.getByRole("list", { name: "objects" })).toHaveText(/b-del-0.*b-del-1/s);
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).rows.filter((r) => r.mark === "deleted").map((r) => r.key)).toEqual(["b-del-0", "b-del-1"]);
+    await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("deleted 2 e2e-batch");
+    await expect.poll(() => marked(page)).toEqual([]);
+  });
+
+  test("label and scale marked rows: one dialog for all; scale skips rows without replicas", async ({ page }) => {
+    await openBatch(page);
+    await goTo(page, "b-pod-1");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("Shift+ArrowDown");
+    await expect.poll(() => marked(page)).toEqual(["b-pod-1", "b-scale-0", "b-scale-1"]);
+    await page.keyboard.press("Shift+L");
+    const dialog = page.getByRole("dialog", { name: "label 3" });
+    // app=b on one of three rows
+    await expect(dialog.getByRole("list", { name: "labels" })).toContainText("app=b1/3");
+    await dialog.getByRole("textbox", { name: "changes" }).fill("team=x");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("labeled 3 e2e-batch");
+
+    await page.keyboard.press("s");
+    const scale = page.getByRole("dialog", { name: "scale 2" });
+    await expect(scale).toContainText("skipped (doesn't apply): b-pod-1");
+    await expect(scale.getByRole("list", { name: "replicas now" })).toHaveText(/b-scale-0\s*2.*b-scale-1\s*3/s);
+    await scale.getByRole("textbox", { name: "replicas" }).fill("0");
+    await page.keyboard.press("Enter");
+    await expect(scale).toHaveCount(0);
+    await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("scaled 2 e2e-batch to 0");
+  });
+
+  test("debug containers in marked pods: one dialog, a pane each in a new tab", async ({ page }) => {
+    await openBatch(page);
+    await goTo(page, "b-pod-0");
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.keyboard.press("b");
+    const dialog = page.getByRole("dialog", { name: "debug containers" });
+    await expect(dialog).toContainText("debug containers in 2 pods");
+    const target = dialog.getByRole("combobox", { name: "target" });
+    // b-pod-0 has a sidecar, b-pod-1 doesn't
+    await target.fill("sidecar");
+    await target.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText('not every pod has a container "sidecar"');
+    await target.fill("");
+    // an image no history entry completes to (⏎ on a suggestion would only take it)
+    const image = dialog.getByRole("combobox", { name: "image" });
+    await image.fill("batch-debug:1");
+    await expect(dialog.getByRole("listbox", { name: "image suggestions" })).toHaveCount(0);
+    await image.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("tab", { selected: true })).toContainText("debug ×2");
+    await expect.poll(async () => (await termText(page)).length).toBe(2);
+    await expect.poll(async () => (await termText(page)).join("\n")).toMatch(/b-pod-0[\s\S]*b-pod-1|b-pod-1[\s\S]*b-pod-0/);
+    // each pod's own default container as target
+    await expect.poll(async () => (await termText(page)).join("\n")).toContain('target "app"');
   });
 });
