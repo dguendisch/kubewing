@@ -1399,6 +1399,23 @@ test("cmd+opt+arrows move focus between tiles and stop at the edge", async ({ pa
   await expect(page.locator("[data-pane=v3]")).toHaveClass(/border-accent/);
 });
 
+test("cmd+ctrl+arrows move the focused pane's divider, also in what dockview shows", async ({ page }) => {
+  await openTape(page);
+  // v1 | (v2 / v3), focus v3
+  await page.keyboard.press("ControlOrMeta+Shift+D");
+  await page.keyboard.press("ControlOrMeta+D");
+  const box = async (id: string) => (await page.locator(`[data-pane=${id}]`).boundingBox())!;
+  const w1 = (await box("v1")).width;
+  const h3 = (await box("v3")).height;
+  await page.keyboard.press("Control+Meta+ArrowLeft"); // v3's left divider: v1 shrinks
+  await expect.poll(async () => (await box("v1")).width).toBeLessThan(w1 - 20);
+  await page.keyboard.press("Control+Meta+ArrowUp"); // v3's divider above it: v3 grows
+  await expect.poll(async () => (await box("v3")).height).toBeGreaterThan(h3 + 20);
+  await page.keyboard.press("Control+Meta+ArrowDown"); // and back
+  await expect.poll(async () => Math.abs((await box("v3")).height - h3)).toBeLessThan(3);
+  expect((await inspect(page)).focusedPane).toBe("v3"); // the focus stays
+});
+
 test("opt+up / opt+down jump to the first / last row", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("Alt+ArrowDown");

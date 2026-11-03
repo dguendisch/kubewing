@@ -659,6 +659,7 @@ The **⇄ N** badge in the tab bar (or `⌥⌘P`) lists all forwards, including 
 | `⌃D`, `⌃⇧D` | close the pane |
 | `⌘[` / `⌘]` | previous / next pane |
 | `⌘⌥←→↑↓` | pane in that direction |
+| `⌘⌃←→↑↓` | move the pane's divider in that direction |
 | `⌘⇧⏎` | maximize the pane / show all again |
 | `⌘I` | name the pane |
 
@@ -666,7 +667,7 @@ The **⇄ N** badge in the tab bar (or `⌥⌘P`) lists all forwards, including 
 
 **Focus follows mouse** (`focusFollowsMouse: true` in `config.yaml`, off by default): moving the mouse over a pane focuses it, without a click. A filter or find field, a dialog or a menu keeps the focus until you leave it, so you can type with the pointer anywhere. A maximized pane keeps it too. A pane that just opened under a resting pointer stays focused until the mouse moves.
 
-Drag a divider to resize. **Maximizing** (`⌘⇧⏎`, as in iTerm) shows the focused pane over the whole tab; the others keep running behind it, and a **⤡N** badge says how many are hidden. A click on it, `⌘⇧⏎` again, moving focus, splitting or closing a pane shows them all again.
+Drag a divider to resize, or use `⌘⌃` arrows (as in iTerm): the divider on the arrow's side of the focused pane moves that way, so `⌘⌃→` widens a pane on the left and narrows one on the right. At the tab's edge, where there is no divider, the opposite one moves. Hold the keys to keep moving it; it stops before a pane gets too small. **Maximizing** (`⌘⇧⏎`, as in iTerm) shows the focused pane over the whole tab; the others keep running behind it, and a **⤡N** badge says how many are hidden. A click on it, `⌘⇧⏎` again, moving focus, splitting or closing a pane shows them all again.
 
 **Moving panes** (as in ghostty): hovering a pane shows a grip at its top. Dragging it shows where it would go: the side of another pane (taking half of its place), a whole edge of the tab, a tab header (holding over it switches to that tab, so you can drop next to one of its panes), or `+` for a tab of its own. Dropping moves the pane as it is (its watch, filters, history, a shell and its screen). `Esc` cancels.
 

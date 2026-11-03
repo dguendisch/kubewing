@@ -2,7 +2,7 @@ import type { CommandId, FocusContext } from "../keys/keymap";
 import type { ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
-import { insert, insertEdge, leaf, neighbor, paneIds, remove, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
+import { insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -945,6 +945,23 @@ export function focusDirection(s: UIState, dir: Direction): UIState {
   const t = activeTab(s);
   const id = neighbor(t.layout, t.focused, dir);
   return id ? withTab({ ...s, focus: "table" }, (x) => ({ ...x, focused: id })) : s;
+}
+
+/** Pixels a divider moves per ⌘⌃arrow (held, the key repeats). */
+const RESIZE_STEP_PX = 40;
+
+/**
+ * ⌘⌃arrows: moves a divider of the focused pane in that direction (see
+ * layout.resize). `box` is the tab's size in pixels. Not while maximized:
+ * the others are hidden, so nothing would show.
+ */
+export function resizePane(s: UIState, dir: Direction, box: { width: number; height: number }): UIState {
+  const t = activeTab(s);
+  if (t.maximized) return s;
+  const extent = dir === "left" || dir === "right" ? box.width : box.height;
+  if (extent <= 0) return s;
+  const layout = resize(t.layout, t.focused, dir, RESIZE_STEP_PX / extent, MIN_PANE_PX / extent);
+  return layout === t.layout ? s : withTab(s, () => ({ ...t, layout }));
 }
 
 export function focusPane(s: UIState, id: string): UIState {

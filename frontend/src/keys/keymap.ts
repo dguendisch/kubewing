@@ -17,6 +17,10 @@ export type CommandId =
   | "pane.focusRight"
   | "pane.focusUp"
   | "pane.focusDown"
+  | "pane.resizeLeft"
+  | "pane.resizeRight"
+  | "pane.resizeUp"
+  | "pane.resizeDown"
   | "pane.toggleMaximize"
   | "pane.rename"
   | "tab.new"
@@ -130,7 +134,8 @@ export type CommandId =
 /** Every command id, for validating user keybindings. */
 export const commandIds: readonly CommandId[] = [
   "pane.splitRight", "pane.splitDown", "pane.close", "pane.focusNext", "pane.focusPrev",
-  "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown", "pane.toggleMaximize", "pane.rename",
+  "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown",
+  "pane.resizeLeft", "pane.resizeRight", "pane.resizeUp", "pane.resizeDown", "pane.toggleMaximize", "pane.rename",
   "tab.new", "tab.rename", "tab.close", "tab.next", "tab.prev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
   "tab.mruNext", "tab.mruPrev", "tab.switcherCommit", "tab.switcherCancel",
@@ -169,6 +174,11 @@ export const defaultBindings: Binding[] = [
   { key: "Alt+Meta+ArrowRight", command: "pane.focusRight" },
   { key: "Alt+Meta+ArrowUp", command: "pane.focusUp" },
   { key: "Alt+Meta+ArrowDown", command: "pane.focusDown" },
+  // as in iTerm: the focused pane's divider moves in the arrow's direction
+  { key: "Ctrl+Meta+ArrowLeft", command: "pane.resizeLeft" },
+  { key: "Ctrl+Meta+ArrowRight", command: "pane.resizeRight" },
+  { key: "Ctrl+Meta+ArrowUp", command: "pane.resizeUp" },
+  { key: "Ctrl+Meta+ArrowDown", command: "pane.resizeDown" },
   // iTerm's "maximize active pane"; global, so it works from a shell and the YAML editor too
   { key: "Meta+Shift+Enter", command: "pane.toggleMaximize" },
   // iTerm's "Edit Tab Title" (⌘⇧I) and "Edit Session" (⌘I) name tabs and panes; a double-click does too.
@@ -463,13 +473,14 @@ function resolveOwn(key: string, focus: FocusContext, bindings: Binding[]): Comm
 export const editorModal = (focus: FocusContext) => focus === "edit" || focus === "editpreview";
 
 /**
- * Global commands that only move the focus (or maximize its pane): they reach
- * the app from the editor too. Not ⌘[ / ⌘] (next/previous pane): they're the
+ * Global commands that only move the focus (or maximize or resize its pane):
+ * they reach the app from the editor too. Not ⌘[ / ⌘] (next/previous pane): they're the
  * editor's indent.
  */
 const focusMoves = new Set<CommandId>([
   "pane.toggleMaximize",
   "pane.focusLeft", "pane.focusRight", "pane.focusUp", "pane.focusDown",
+  "pane.resizeLeft", "pane.resizeRight", "pane.resizeUp", "pane.resizeDown",
   "tab.next", "tab.prev", "tab.mruNext", "tab.mruPrev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
 ]);

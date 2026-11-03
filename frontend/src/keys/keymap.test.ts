@@ -47,6 +47,8 @@ describe("resolve", () => {
       expect(resolve("Meta+Shift+D", ctx)).toBe("pane.splitRight");
       expect(resolve("Alt+Meta+ArrowLeft", ctx)).toBe("pane.focusLeft");
       expect(resolve("Alt+Meta+ArrowDown", ctx)).toBe("pane.focusDown");
+      expect(resolve("Ctrl+Meta+ArrowLeft", ctx)).toBe("pane.resizeLeft");
+      expect(resolve("Ctrl+Meta+ArrowUp", ctx)).toBe("pane.resizeUp");
       expect(resolve("Ctrl+Tab", ctx)).toBe("tab.mruNext");
       expect(resolve("Ctrl+Shift+Tab", ctx)).toBe("tab.mruPrev");
       expect(resolve("Meta+1", ctx)).toBe("tab.goto1");
@@ -124,6 +126,7 @@ describe("terminal focus", () => {
     expect(resolve("Meta+W", "terminal")).toBe("tab.close");
     expect(resolve("Meta+Shift+]", "terminal")).toBe("tab.next");
     expect(resolve("Alt+Meta+ArrowLeft", "terminal")).toBe("pane.focusLeft");
+    expect(resolve("Ctrl+Meta+ArrowRight", "terminal")).toBe("pane.resizeRight");
     expect(resolve("Ctrl+Tab", "terminal")).toBe("tab.mruNext");
     expect(resolve("Ctrl+Shift+Tab", "terminal")).toBe("tab.mruPrev");
     expect(resolve("Ctrl+Shift+D", "terminal")).toBe("pane.close"); // a shell that ignores ⌃D
@@ -163,6 +166,7 @@ describe("edit", () => {
       expect(resolve("Ctrl+Tab", ctx)).toBe("tab.mruNext");
       expect(resolve("Meta+Shift+]", ctx)).toBe("tab.next");
       expect(resolve("Meta+Shift+Enter", ctx)).toBe("pane.toggleMaximize");
+      expect(resolve("Ctrl+Meta+ArrowDown", ctx)).toBe("pane.resizeDown");
     }
   });
   it("the preview steps through changes and applies with ⏎", () => {

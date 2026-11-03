@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, sidePart, split, valid, type Layout } from "./layout";
+import { bottomCorners, edgeShare, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, resize, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
 import { paneTitle, resourceLabel, tabTitle } from "../components/tabTitle";
 
@@ -531,6 +531,60 @@ describe("directional pane focus (⌘⌥arrows)", () => {
     s = S.focusDirection(s, "left");
     expect(S.activeTab(s).focused).toBe("v1");
     expect(S.focusDirection(s, "left")).toBe(s);
+  });
+});
+
+describe("resizing panes (⌘⌃arrows)", () => {
+  // ┌────┬────┐
+  // │ v1 │ v2 │
+  // │    ├────┤
+  // │    │ v3 │
+  // └────┴────┘
+  const l: Layout = split(split(leaf("v1"), "v1", "row", "v2"), "v2", "column", "v3");
+  const r = (x: Layout, id: string) => {
+    const b = rects(x).get(id)!;
+    return { x: +b.x.toFixed(3), y: +b.y.toFixed(3), w: +b.w.toFixed(3), h: +b.h.toFixed(3) };
+  };
+
+  it("moves the divider on the arrow's side, or the opposite one at the tab's edge", () => {
+    expect(r(resize(l, "v1", "right", 0.1, 0.05), "v1").w).toBe(0.6); // v1 grows to the right
+    expect(r(resize(l, "v1", "left", 0.1, 0.05), "v1").w).toBe(0.4); // left edge is the tab's: its right divider moves left
+    expect(r(resize(l, "v2", "left", 0.1, 0.05), "v2")).toEqual({ x: 0.4, y: 0, w: 0.6, h: 0.5 }); // the outer divider
+    expect(r(resize(l, "v2", "right", 0.1, 0.05), "v2")).toEqual({ x: 0.6, y: 0, w: 0.4, h: 0.5 }); // at the edge: the same divider, right
+    expect(r(resize(l, "v2", "down", 0.1, 0.05), "v2").h).toBe(0.6);
+    expect(r(resize(l, "v3", "down", 0.1, 0.05), "v3")).toEqual({ x: 0.5, y: 0.6, w: 0.5, h: 0.4 }); // at the bottom: the divider above it
+    expect(r(resize(l, "v3", "up", 0.1, 0.05), "v3").h).toBe(0.6);
+  });
+  it("keeps the tree valid and the other splits' sizes", () => {
+    const x = resize(resize(l, "v3", "up", 0.1, 0.05), "v1", "right", 0.2, 0.05);
+    expect(valid(x)).toBe(true);
+    expect(r(x, "v3")).toEqual({ x: 0.7, y: 0.4, w: 0.3, h: 0.6 });
+  });
+  it("stops at the smallest pane, and changes nothing without a divider on that axis", () => {
+    expect(r(resize(l, "v1", "right", 0.9, 0.1), "v1").w).toBe(0.9);
+    const full = resize(l, "v1", "right", 0.4, 0.1);
+    expect(resize(full, "v1", "right", 0.1, 0.1)).toBe(full); // no room left: same layout
+    expect(resize(l, "v1", "up", 0.1, 0.1)).toBe(l); // v1 spans the tab's height
+    expect(resize(leaf("v1"), "v1", "left", 0.1, 0.1)).toEqual(leaf("v1"));
+  });
+  it("respects the smallest pane inside a nested split by its shares", () => {
+    // v1 | (v2 / (v3 | v4) with v3 at 20% of its split)
+    const nested: Layout = {
+      type: "split", dir: "row", children: [leaf("v1"), { type: "split", dir: "column", children: [leaf("v2"), { type: "split", dir: "row", children: [leaf("v3"), leaf("v4")], sizes: [0.2, 0.8] }] }],
+    };
+    // v3 is 0.1 of the tab wide; a min of 0.05 lets the right half shrink to 0.25
+    expect(r(resize(nested, "v1", "right", 0.5, 0.05), "v3").w).toBe(0.05);
+    expect(r(resize(nested, "v1", "right", 0.5, 0.05), "v1").w).toBe(0.75);
+  });
+  it("resizePane works in pixels and not while maximized", () => {
+    let s = S.splitPane(S.initialState(), "row"); // v1 | v2, focus v2
+    s = S.resizePane(s, "left", { width: 1000, height: 500 }); // 40px of 1000
+    expect(r(S.activeTab(s).layout, "v2").w).toBe(0.54);
+    s = S.toggleMaximize(s);
+    expect(S.resizePane(s, "left", { width: 1000, height: 500 })).toBe(s);
+    s = S.toggleMaximize(s);
+    for (let i = 0; i < 20; i++) s = S.resizePane(s, "right", { width: 1000, height: 500 });
+    expect(r(S.activeTab(s).layout, "v2").w).toBe(0.1); // dockview's 100px minimum
   });
 });
 

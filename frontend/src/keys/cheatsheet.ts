@@ -51,6 +51,8 @@ const sections: { title: string; rows: Row[] }[] = [
       row("next / previous pane", "pane.focusNext", "pane.focusPrev"),
       row("pane left / right", "pane.focusLeft", "pane.focusRight"),
       row("pane above / below", "pane.focusUp", "pane.focusDown"),
+      row("move the pane's divider left / right (at the tab's edge: the other one)", "pane.resizeLeft", "pane.resizeRight"),
+      row("move the pane's divider up / down", "pane.resizeUp", "pane.resizeDown"),
     ],
   },
   {

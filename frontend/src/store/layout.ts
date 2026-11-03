@@ -200,6 +200,59 @@ export function neighbor(l: Layout, from: string, dir: Direction): string | unde
   return best?.id;
 }
 
+type Split = Extract<Layout, { type: "split" }>;
+
+/** dockview's smallest pane (MINIMUM_DOCKVIEW_GROUP_PANEL_WIDTH/HEIGHT), in pixels: a resize stops there. */
+export const MIN_PANE_PX = 100;
+
+/**
+ * ⌘⌃arrows (as tmux's resize-pane): moves a divider of pane `id` by `step`
+ * in `dir`. That's the divider on the pane's `dir` side, or the opposite one
+ * at the tab's edge: ⌘⌃→ grows a pane on the left and shrinks one on the
+ * right. `step` and `min` (a pane's smallest extent) are fractions of the
+ * tab along that axis. The divider stops where a pane would get smaller than
+ * `min`; the same layout when it can't move at all.
+ */
+export function resize(l: Layout, id: string, dir: Direction, step: number, min: number): Layout {
+  const axis = dir === "left" || dir === "right" ? "row" : "column";
+  // the splits along the axis on the way to the pane, innermost first: the child index there and the split's extent
+  const path: { node: Split; i: number; extent: number }[] = [];
+  const walk = (n: Layout, r: Rect): boolean => {
+    if (n.type === "pane") return n.id === id;
+    let at = 0;
+    return shares(n).some((f, i) => {
+      const sub = n.dir === "row" ? { ...r, x: r.x + r.w * at, w: r.w * f } : { ...r, y: r.y + r.h * at, h: r.h * f };
+      at += f;
+      if (!walk(n.children[i]!, sub)) return false;
+      if (n.dir === axis) path.push({ node: n, i, extent: axis === "row" ? r.w : r.h });
+      return true;
+    });
+  };
+  walk(l, { x: 0, y: 0, w: 1, h: 1 });
+  const after = path.find((p) => p.i < p.node.children.length - 1);
+  const before = after ? undefined : path.find((p) => p.i > 0);
+  const at = after ?? before;
+  if (!at) return l;
+  const k = after ? at.i : at.i - 1; // the divider between children k and k+1
+  const f = shares(at.node);
+  // a child's smallest extent: a split along the axis shrinks its children by their shares
+  const minOf = (n: Layout): number =>
+    n.type === "pane"
+      ? min
+      : n.dir === axis
+        ? Math.max(...shares(n).map((g, j) => minOf(n.children[j]!) / g))
+        : Math.max(...n.children.map(minOf));
+  const want = ((dir === "right" || dir === "down" ? 1 : -1) * step) / at.extent;
+  const d = Math.min(Math.max(want, minOf(at.node.children[k]!) / at.extent - f[k]!), f[k + 1]! - minOf(at.node.children[k + 1]!) / at.extent);
+  if (Math.abs(d) <= EPS || Math.sign(d) !== Math.sign(want)) return l;
+  const sizes = [...f];
+  sizes[k]! += d;
+  sizes[k + 1]! -= d;
+  const replace = (n: Layout): Layout =>
+    n === at.node ? { ...n, sizes } : n.type === "pane" ? n : { ...n, children: n.children.map(replace) };
+  return replace(l);
+}
+
 /** The window's bottom corners a pane touches: macOS rounds those, so the pane's frame has to follow. */
 export function bottomCorners(l: Layout, id: string): { left: boolean; right: boolean } {
   const r = rects(l).get(id);

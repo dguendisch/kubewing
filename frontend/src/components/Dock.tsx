@@ -109,7 +109,7 @@ export function Dock({ tabId, active }: { tabId: string; active: boolean }) {
   }, [layout, maximized, active]);
 
   return (
-    <div ref={host} className="h-full w-full">
+    <div ref={host} data-dock={tabId} className="h-full w-full">
     <DockviewReact
       className="kw-dock h-full w-full"
       components={components}

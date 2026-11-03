@@ -45,6 +45,14 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.focusDirection(x, "up"));
     case "pane.focusDown":
       return setUI((x) => S.focusDirection(x, "down"));
+    case "pane.resizeLeft":
+      return resizePane("left");
+    case "pane.resizeRight":
+      return resizePane("right");
+    case "pane.resizeUp":
+      return resizePane("up");
+    case "pane.resizeDown":
+      return resizePane("down");
     case "pane.toggleMaximize":
       return setUI(S.toggleMaximize);
     case "pane.rename":
@@ -376,6 +384,13 @@ function closePaneAsking(paneId: string) {
   const p = useUI.getState().panes[paneId];
   if (!S.unsaved(p)) return setUI((x) => S.closePane(x, paneId));
   setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "closePane", pane: paneId }));
+}
+
+/** ⌘⌃arrows: the step and the smallest pane are pixels, so the active tab's dock is measured. */
+function resizePane(dir: "left" | "right" | "up" | "down") {
+  const s = useUI.getState();
+  const r = document.querySelector(`[data-dock="${S.activeTab(s).id}"]`)?.getBoundingClientRect();
+  if (r) setUI((x) => S.resizePane(x, dir, { width: r.width, height: r.height }));
 }
 
 /** The editor goes: back to the object view it was opened from, or (e in the table) to the table. */
