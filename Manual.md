@@ -16,7 +16,7 @@ kubewing is a keyboard-driven desktop UI for Kubernetes: `kubectl`'s operations,
 10. [Navigating between resources](#10-navigating-between-resources)
 11. [Row actions](#11-row-actions)
 12. [Logs](#12-logs)
-13. [Shells: exec, debug containers, node shells](#13-shells-exec-debug-containers-node-shells)
+13. [Shells: exec, debug containers, node shells, local terminals](#13-shells-exec-debug-containers-node-shells-local-terminals)
 14. [Port-forwarding](#14-port-forwarding)
 15. [Layout: splits, tabs, names](#15-layout-splits-tabs-names)
 16. [Safety](#16-safety)
@@ -556,9 +556,9 @@ Scrolled up, new lines don't move the view. The status line shows **following** 
 
 ---
 
-## 13. Shells: exec, debug containers, node shells
+## 13. Shells: exec, debug containers, node shells, local terminals
 
-All shells open in a terminal pane below the table. Every key goes to the shell except `⌘` chords, `⌃⇥` and `⌃⇧D`. `⌃D` or `exit` ends the shell and the pane goes with it; `⌃⇧D` closes the pane of a shell that won't end.
+All shells open in a terminal pane below the table (a local terminal to the right with `⌃⇧T`). Every key goes to the shell except `⌘` chords, `⌃⇥` and `⌃⇧D`. `⌃D` or `exit` ends the shell and the pane goes with it; `⌃⇧D` closes the pane of a shell that won't end.
 
 `⌘F` finds in the output and scrollback: matches highlight as you type, `⏎`/`⇧⏎` or `⌘G`/`⌘⇧G` step, `⌥⌘C` / `⌥⌘W` / `⌥⌘R` toggle case, whole word and regex, `Esc` closes back to the prompt.
 
@@ -590,6 +590,18 @@ A privileged pod on a node, like ops-toolbelt's `hacks/ops-pod`. `⌥⌘O` from 
 - **show YAML…** shows the pod kubewing would create, editable. Edited, that YAML is what starts (it must stay a `v1` Pod on the chosen node with the `ops-pod` container); `⌘⏎` starts it, `Esc` goes back to the form.
 
 The namespace and checkboxes of the last pod that started are remembered across restarts. The pod is named `ops-pod-kubewing-<user>-<hex>`, privileged with host PID, bound to the node via `nodeName` (so cordoned and tainted nodes work), and labelled `app=opspod`. **It's deleted when the shell ends, the pane is closed or the app quits.**
+
+### Local terminal: `⌃T` / `⌃⇧T`
+
+A shell on your Mac, on the cluster the focused pane shows: `⌃T` opens it in a split below, `⌃⇧T` to the right. Use it to run `kubectl`, `helm`, `stern`, scripts or anything else against the cluster you're looking at, without targeting it by hand.
+
+- It's your login shell (`$SHELL -l`, like a new Terminal tab), starting in your home directory, so your profile's `PATH`, aliases and prompt are there even when kubewing was started from the Dock.
+- `$KUBECONFIG` points at a kubeconfig of the shell's own: its current context is the pane's, in the pane's namespace (with all namespaces, the context's own). `kubectl get pods` lists what the pane lists.
+- That kubeconfig is a small file in front of your usual kubeconfig files, holding only the current context. Credentials aren't copied, and `kubectl config use-context` or `kubens` in the shell change only this shell, not `~/.kube/config` or other terminals. A Gardener cluster opened with `⌘P` has no kubeconfig file, so its kubeconfig is written in full. The file is removed when the shell ends.
+- It works from tables, YAML and describe views, log panes and ended shells. Inside a running shell `⌃T` is the shell's own key (transpose, fzf's file picker); move to another pane first (`⌥⌘` arrows).
+- The header says **terminal**, with the context and namespace. `exit` or `⌃D` ends it, and the pane goes with it.
+
+A shell holds the context's credentials, and kubewing can't check what it runs. So a read-only context refuses it, and `confirm: [terminal]` in a safety rule asks before it opens (see [Safety](#16-safety)).
 
 #### Why not `kubectl debug node`?
 
@@ -671,7 +683,7 @@ Safety rules guard clusters against mistakes. They're per kubeconfig context and
 contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
-  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit]}
+  - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal]}
 ```
 
 | Field | Effect |
@@ -679,8 +691,8 @@ contexts:
 | `match` | Required. A glob (`*`, `?`, `[a-z]`) on the context name. The first matching rule wins, so put specific rules before broad ones. |
 | `label` | A badge on the pane frame, header and tab, e.g. `PROD`. |
 | `color` | Colors frame, header and tab: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
-| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`) and edit. Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
-| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`. Delete always asks. An edit asks after its diff preview. |
+| `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit and local terminals (`terminal`: a shell can run anything). Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
+| `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`. Delete always asks. An edit asks after its diff preview. |
 | `strict` | A confirmation needs the object's name typed, not just `⏎`. |
 
 A context no rule matches is writable, and only delete asks.
@@ -798,7 +810,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find |

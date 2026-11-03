@@ -197,6 +197,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     }
     case "object.debug":
       return void prepareAction("debug");
+    case "terminal.splitDown":
+    case "terminal.splitRight":
+      return void openLocalTerminal(cmd === "terminal.splitDown" ? "column" : "row");
     case "object.opsPod":
       return void openOpsPod();
     case "object.portForward": {
@@ -739,6 +742,22 @@ async function openOpsPod() {
 }
 
 /**
+ * ⌃T / ⌃⇧T: a local shell on the focused pane's context and namespace (its
+ * kubeconfig is the shell's own), in a split below / to the right. Go checks
+ * the safety rule (a read-only context refuses it), which may ask first.
+ */
+async function openLocalTerminal(split: "row" | "column") {
+  const pane = S.focusedPane(useUI.getState());
+  try {
+    const pending = await bridge().prepareTerminal(pane.spec.context, pane.spec.namespace);
+    if (pending.needsConfirm) return setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "confirm", pane: pane.id, pending, split }));
+    await execute(pane.id, pending, "", undefined, undefined, undefined, split);
+  } catch (e) {
+    flash(pane.id, errorText(e), true);
+  }
+}
+
+/**
  * The ops pod dialog's ⏎: Go prepares it (safety policy, the node exists),
  * then it's confirmed if the rule asks for it, else started. A refusal is
  * returned so the dialog stays open with it.
@@ -797,13 +816,13 @@ async function runConfirmed() {
   if (o?.kind !== "confirm" || !o.pending) return;
   setUI(S.closeOverlay);
   try {
-    await execute(o.pane, o.pending, o.container, o.debug, o.ops, o.edit);
+    await execute(o.pane, o.pending, o.container, o.debug, o.ops, o.edit, o.split);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
 }
 
-async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState) {
+async function execute(paneId: string, p: Pending, container = "", debug?: DebugOptions, ops?: OpsPodOptions, edit?: S.EditState, split: "row" | "column" = "column") {
   switch (p.action.kind) {
     case "edit": {
       if (!edit) return;
@@ -839,6 +858,11 @@ async function execute(paneId: string, p: Pending, container = "", debug?: Debug
         ops: { node: r.node, namespace: r.namespace, image: r.image, settings: r.settings },
       };
       return setUI((x) => S.openTerminal(x, term, paneId));
+    }
+    case "terminal": {
+      const r = await bridge().terminalStart(p.token, 80, 24);
+      const term: S.Term = { session: r.session, pod: "", container: "", context: r.context, local: { namespace: r.namespace } };
+      return setUI((x) => S.openTerminal(x, term, paneId, split));
     }
   }
 }

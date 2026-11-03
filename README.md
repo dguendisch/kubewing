@@ -14,6 +14,7 @@ A keyboard-driven native desktop UI for Kubernetes: `kubectl`'s operations, the 
 - **Multi-pod logs** with a live fzf-like filter
 - **port-forwards** with completion on available ports
 - **exec**, **debug containers**, and **node shells** with proper configurability
+- **Local terminals** (`⌃T`/`⌃⇧T`): your own shell on the cluster you're looking at, with a kubeconfig of its own (context and namespace of the pane), so `kubectl`, `helm` or any script just works
 - **Edit resources**: a server dry-run diff before writing, only the change sent, and a conflict instead of overwriting someone else's change.
 - **Tabs, splits, a cheat sheet** (`?`), a native menu bar and rebindable keys. Launching kubewing from another terminal opens a tab on that terminal's kubeconfig.
 - **Safety per context**: prod is labelled and red, read-only contexts refuse mutations, confirmations (typed names for strict ones), all enforced in the backend with single-use tokens bound to the exact object.

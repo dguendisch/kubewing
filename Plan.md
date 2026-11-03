@@ -48,7 +48,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 ## P3 — "Operator power" (v1.0)
 
-1. Open a local xterm pane with the current kubeconfig injected
 1. RBAC views
 1. **Encoders:** like decoders, for editing: `⏎` on a value in the editor shows e.g. the base64-decoded text → edit it → applying base64-encodes it back into the YAML, where it can be applied. Same for further levels (e.g. brotli).
 1. From a node's describe output, recognize the pods listed there and allow navigating to them, with all pod operations (via the context menu)

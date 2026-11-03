@@ -31,10 +31,13 @@ const (
 	// Edit patches an object with what was changed in the editor (like
 	// kubectl edit). Not confirmed by default: its diff preview is the review.
 	Edit = "edit"
+	// Terminal opens a local shell with the context's kubeconfig: whatever
+	// it runs (kubectl delete …) is beyond kubewing's checks.
+	Terminal = "terminal"
 )
 
 // Mutating actions are refused on read-only contexts.
-var mutating = []string{Delete, Exec, Debug, OpsPod, Edit}
+var mutating = []string{Delete, Exec, Debug, OpsPod, Edit, Terminal}
 
 // Rule is the effective safety rule for one context.
 type Rule struct {
@@ -198,8 +201,14 @@ func ctxName(r Rule) string {
 }
 
 func summary(a Action) string {
-	if a.Kind == OpsPod {
+	switch a.Kind {
+	case OpsPod:
 		return fmt.Sprintf("node shell on node %s on %s", a.Name, orCurrent(a.Context))
+	case Terminal:
+		if a.Namespace != "" {
+			return fmt.Sprintf("local terminal on %s, namespace %s", orCurrent(a.Context), a.Namespace)
+		}
+		return fmt.Sprintf("local terminal on %s", orCurrent(a.Context))
 	}
 	obj := a.Resource + "/" + a.Name
 	if a.Namespace != "" {

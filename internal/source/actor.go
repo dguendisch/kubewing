@@ -39,6 +39,11 @@ type Actor interface {
 	// waits until it runs, opens a shell in it with a TTY until it exits or
 	// ctx ends, then deletes the pod.
 	OpsPod(ctx context.Context, cluster string, p OpsPodSpec, s ExecStreams) error
+	// Shell runs a local shell (the user's login shell, in a PTY) with
+	// $KUBECONFIG set to a kubeconfig of its own whose current context is
+	// the cluster's, in namespace ("" = the context's), until it exits or
+	// ctx ends.
+	Shell(ctx context.Context, cluster, namespace string, s ExecStreams) error
 	// PortForward forwards local ports on 127.0.0.1 to a pod ("8080:80",
 	// ":80" for a random local port) until Stop.
 	PortForward(ctx context.Context, cluster, namespace, pod string, ports []string) (*Forward, error)

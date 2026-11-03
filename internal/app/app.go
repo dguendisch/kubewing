@@ -152,6 +152,12 @@ func (a *App) CheckOpsPod(cluster, node string, o bridge.OpsPodOptions) error {
 func (a *App) OpsPodStart(token string, o bridge.OpsPodOptions, cols, rows int) (bridge.OpsPodResult, error) {
 	return a.svc.OpsPodStart(token, o, cols, rows)
 }
+func (a *App) PrepareTerminal(cluster, namespace string) (safety.Pending, error) {
+	return a.svc.PrepareTerminal(cluster, namespace)
+}
+func (a *App) TerminalStart(token string, cols, rows int) (bridge.TerminalResult, error) {
+	return a.svc.TerminalStart(token, cols, rows)
+}
 func (a *App) RemoveDebugImage(image string) ([]string, error) {
 	return a.svc.RemoveDebugImage(image)
 }

@@ -174,8 +174,10 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
       <Badges rule={rule} />
       <PaneName pane={pane} />
       <span className="text-fg-muted">{pane.context}</span>
-      <span className="font-semibold text-accent">{term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
-      {term.ops ? (
+      <span className="font-semibold text-accent">{term.local ? "terminal" : term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
+      {term.local ? (
+        term.local.namespace ? <span className="text-fg-muted">{term.local.namespace}</span> : null
+      ) : term.ops ? (
         <>
           <span>{term.ops.node}</span>
           <span className="text-fg-muted">

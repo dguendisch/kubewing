@@ -419,3 +419,45 @@ func TestDebugRefusedOnReadOnlyAndNonPods(t *testing.T) {
 		t.Errorf("debug on a configmap: %v", err)
 	}
 }
+
+// A local terminal: prepared against the context's rule (refused on
+// read-only, confirmed when asked), a session like exec's on the pane's
+// cluster and namespace.
+func TestTerminalSession(t *testing.T) {
+	svc, log, _ := deleteSetup(t, nil)
+	if _, err := svc.TerminalStart("forged", 80, 24); err == nil {
+		t.Fatal("a terminal without a prepared token must be refused")
+	}
+	p, err := svc.PrepareTerminal("", "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.NeedsConfirm || p.Summary != "local terminal on tape, namespace shop" {
+		t.Errorf("pending: %+v", p)
+	}
+	if _, err := svc.ExecStart(p.Token, "", 80, 24); err == nil {
+		t.Error("a terminal token must not start an exec")
+	}
+	p, _ = svc.PrepareTerminal("", "shop")
+	tr, err := svc.TerminalStart(p.Token, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tr.Context != "tape" || tr.Namespace != "shop" {
+		t.Errorf("result: %+v", tr)
+	}
+	waitOutput(t, log, tr.Session, func(out, _ string) bool {
+		return strings.HasPrefix(out, `local terminal: context tape, namespace "shop"`) && strings.HasSuffix(out, "local:tape$ ")
+	})
+	input(t, svc, tr.Session, "exit 2\r")
+	waitOutput(t, log, tr.Session, func(_, exit string) bool { return exit == "2" })
+
+	ro, _, _ := deleteSetup(t, []config.ContextRule{{Match: "tape", ReadOnly: true}})
+	if _, err := ro.PrepareTerminal("", ""); err == nil || !strings.Contains(err.Error(), "read-only") {
+		t.Errorf("terminal on read-only: %v", err)
+	}
+	ask, _, _ := deleteSetup(t, []config.ContextRule{{Match: "tape", Confirm: []string{"terminal"}}})
+	if p, err := ask.PrepareTerminal("", ""); err != nil || !p.NeedsConfirm || p.Summary != "local terminal on tape" {
+		t.Errorf("confirm: [terminal]: %+v %v", p, err)
+	}
+}

@@ -83,6 +83,8 @@ const layout: { title: string; entries: Entry[] }[] = [
     entries: [
       ["Split Down", "pane.splitDown"],
       ["Split Right", "pane.splitRight"],
+      ["Terminal Below", "terminal.splitDown"],
+      ["Terminal Right", "terminal.splitRight"],
       ["Maximize Pane", "pane.toggleMaximize"],
       ["Name Pane…", "pane.rename"],
       null,

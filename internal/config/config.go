@@ -178,7 +178,7 @@ type Diff struct {
 }
 
 // Actions that a context rule can require confirmation for.
-var Actions = []string{"delete", "exec", "debug", "opspod", "edit"}
+var Actions = []string{"delete", "exec", "debug", "opspod", "edit", "terminal"}
 
 // ContextRule applies to kubeconfig contexts whose name matches Match.
 type ContextRule struct {

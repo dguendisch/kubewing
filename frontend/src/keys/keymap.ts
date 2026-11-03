@@ -81,6 +81,8 @@ export type CommandId =
   | "object.editSplit"
   | "object.debug"
   | "object.opsPod"
+  | "terminal.splitDown"
+  | "terminal.splitRight"
   | "object.portForward"
   | "object.logs"
   | "view.logs"
@@ -133,7 +135,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "source.reconnect", "source.refresh",
-  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "object.portForward", "object.logs", "view.logs",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
@@ -302,6 +304,10 @@ export const defaultBindings: Binding[] = [
   { key: "B", command: "object.debug", when: ["table"] },
   // from anywhere (also a terminal pane): the node is prefilled from the selected row, if any
   { key: "Alt+Meta+O", command: "object.opsPod" },
+  // a local shell with the focused pane's kubeconfig context and namespace, in a split below / to the right.
+  // Not in a running shell (⌃T is its own there: transpose, fzf's file picker), nor in text fields
+  { key: "Ctrl+T", command: "terminal.splitDown", when: ["table", "detail", "ended", "logs"] },
+  { key: "Ctrl+Shift+T", command: "terminal.splitRight", when: ["table", "detail", "ended", "logs"] },
   { key: "F", command: "object.portForward", when: ["table"] },
   // logs (stern-like): ⌘L tails the selected row's pods, ⌥⌘L every pod the pods pane shows
   { key: "Meta+L", command: "object.logs", when: ["table"] },

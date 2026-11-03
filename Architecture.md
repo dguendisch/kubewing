@@ -67,7 +67,7 @@ client-go/informers, `k8s.io/kubectl` packages (apply, diff, printers, exec, por
 | Command palette (planned) | cmdk — not used for `⌘O`: it forces Enter onto the highlighted item, which breaks free-text submit |
 | Splits / tabs | dockview |
 | YAML view / edit / diff | Monaco (incl. diff editor), trimmed to a lazily loaded viewer; a small Monarch tokenizer for decoded JSON instead of Monaco's JSON language service and its worker |
-| Terminal (exec, debug, node shell, logs) | xterm.js |
+| Terminal (exec, debug, node shell, local terminal, logs) | xterm.js |
 | Motion | Motion (formerly Framer Motion), subtle only |
 
 - Canvas constraint: no arbitrary HTML in table cells — typed columns (bytes, diff highlight, "changed, not visible" marker) are Glide custom cell renderers.
@@ -170,6 +170,18 @@ Which fields name another object (`secretName`, `roleRef`, a shoot's `seedName`)
 
 `internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` (and a tape fake) behind it. One follower per pod container (shared on the pane's watch for a whole-pane tail), `logs.maxStreams` concurrent, restart-resume via the RFC 3339 timestamp. The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`).
 
+## Local terminals
+
+`⌃T` / `⌃⇧T` start the user's login shell on the Mac (`source.RunShell`: `$SHELL -l` in a PTY via `creack/pty`, in `$HOME`) as one more session of the bridge's `startSession`, so output, input, resize, find and the pane's lifecycle are exec's.
+
+- **A kubeconfig of its own** (`source.ShellKubeconfig`), not `--context` flags or `kubectl config use-context`: tools other than kubectl (helm, stern, k9s, scripts) read `$KUBECONFIG` too, and switching the user's current context would move every other terminal. For a kubeconfig of files, the shell's `$KUBECONFIG` is an overlay file (current context, the context with the pane's namespace) followed by those files: kubectl merges the files and the first file setting a value wins, so the overlay decides the current context and namespace while clusters, users and exec plugins come from the original files untouched (no credentials copied, a refreshed token file still read). `kubectl config set-context`/`use-context` write into the first file, the overlay. An in-memory kubeconfig (a Gardener target, `RegisterConfig`) has no files, so it's written whole. The file is `0600` in a fresh `0700` temp directory, removed when the shell ends.
+- **The pane's spec, not its rows:** the cluster and namespace of the focused pane (`PrepareTerminal(cluster, namespace)`), so it works from any pane kind; the namespace `""` (all) leaves the context's own.
+- **A safety action** (`terminal`): the shell holds the context's credentials and nothing it runs passes the safety model, so read-only contexts refuse it and `confirm: [terminal]` asks. Same two-phase token as the other actions.
+- **Environment:** kubewing's own, with `TERM=xterm-256color`, `TERM_PROGRAM=kubewing` (the launching terminal's `TERM_*`/`ITERM_*` dropped: the shell runs in xterm.js) and a UTF-8 `LANG` if none is set (a Dock launch has none).
+- **Closing** cancels the session: `SIGHUP` to the shell, as a closed terminal window sends, `SIGKILL` 2 s later (`exec.Cmd.WaitDelay`). Once the shell has exited, the PTY is closed after its last output (≤ 200 ms), so a background job still holding the terminal doesn't keep the session open.
+- **Keys:** bound in table, detail, logs and ended contexts only: in a running shell `⌃T` is the shell's (`terminalReserved` keeps every non-`⌘` chord there).
+- Tapes fake it with the echo shell (`local:<context>$`, after a line naming the context and namespace).
+
 ## Safety model
 
 Rules are decided in Go (`internal/safety`); the frontend only shows what Go decided. Every mutation is two-phase: Go checks the rule and issues a single-use token, valid for 60 s and bound to that exact action and object (kind, context, resource, namespace, name, UID); the mutating call only runs when it redeems that token. So no path (keys, menu, context menu, palette) gets around a rule, and a confirmation can't act on another object than the one it showed. A config reload drops outstanding tokens. Deletes carry a UID precondition; edits a resourceVersion precondition.
@@ -218,7 +230,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/fieldpath` | field-path diff of two objects (lists matched by `name`/`type`/…), applied forward or in reverse; a YAML line → its field path; pure |
 | `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; pure |
 | `internal/history` | per-object versions: newest object + reverse deltas; global memory budget; the table at a moment, changes over time, a field's values |
-| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, exec, debug containers, node shells, port-forward, logs) |
+| `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, exec, debug containers, node shells, local terminals, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
 | `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |

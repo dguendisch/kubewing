@@ -396,7 +396,7 @@ export interface SafetyRule {
   strict?: boolean;
 }
 
-export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit";
+export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal";
 
 /** Mirrors safety.Pending: a prepared mutation awaiting (confirmation and) execution. */
 export interface Pending {
@@ -639,6 +639,14 @@ export interface OpsPodResult {
   settings?: string;
 }
 
+/** Mirrors bridge.TerminalResult: a started local terminal. */
+export interface TerminalResult {
+  session: string;
+  context: string;
+  /** The shell's kubeconfig namespace; unset = the context's own. */
+  namespace?: string;
+}
+
 /** Mirrors bridge.SessionPayload: output (base64) or, last, the exit. */
 export interface SessionPayload {
   id: string;
@@ -824,6 +832,10 @@ export interface Transport {
   prepareOpsPod(cluster: string, node: string): Promise<Pending>;
   /** Starts a prepared ops pod: created, shell once it runs, deleted when the session ends. */
   opsPodStart(token: string, opts: OpsPodOptions, cols: number, rows: number): Promise<OpsPodResult>;
+  /** Checks a local terminal on a cluster against the safety policy (it holds the context's credentials); throws if refused. */
+  prepareTerminal(cluster: string, namespace: string): Promise<Pending>;
+  /** Starts a prepared local terminal: the login shell with a kubeconfig of its own on the cluster and namespace. */
+  terminalStart(token: string, cols: number, rows: number): Promise<TerminalResult>;
   sessionInput(id: string, data: string): Promise<void>;
   sessionResize(id: string, cols: number, rows: number): Promise<void>;
   sessionClose(id: string): Promise<void>;

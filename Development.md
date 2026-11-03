@@ -46,7 +46,7 @@ Scenario tapes (`testdata/tapes/*.yaml`) are scripted fake clusters: starting ob
 | E2E | Playwright drives Chromium against the headless backend; asserts via `window.__kw.inspect()` and ARIA snapshots, never pixels. | `make e2e` |
 | Lint | `gofmt`, and no raw colors outside theme tokens (`frontend/scripts/lint-tokens.mjs`). | `make lint` |
 
-Inside a sandbox, Go needs a writable build cache: `GOCACHE=$TMPDIR/gocache go test ./internal/...`.
+Inside a sandbox, Go needs a writable build cache: `GOCACHE=$TMPDIR/gocache go test ./internal/...`. The local-terminal PTY tests (`TestRunPTY*` in `internal/source`) skip where `/dev/ptmx` can't be opened (the macOS sandbox); run them outside it.
 
 ## Docs
 

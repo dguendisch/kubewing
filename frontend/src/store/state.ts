@@ -137,6 +137,8 @@ export interface Term {
   debug?: { image: string; target?: string };
   /** An ops pod on a node (pod = the ops pod, container its one container). */
   ops?: { node: string; namespace: string; image: string; settings?: string };
+  /** A local shell with the context's kubeconfig (pod and container unused); namespace unset = the context's own. */
+  local?: { namespace?: string };
   /** Exit code or error once the session ended; the pane stays until closed. */
   exited?: string;
   /** Set on the first keystroke: a shell that dies before it is ever used failed on its own. */
@@ -265,6 +267,8 @@ export interface Overlay {
   opsDefaults?: OpsPodDefaults;
   /** confirm: the edit being written (the pane's; a failed write goes back to its editor). */
   edit?: EditState;
+  /** confirm: where a prepared local terminal opens, below ("column") or to the right ("row"). */
+  split?: "row" | "column";
   /** columns: the pane's columns, loaded before it opens. */
   columns?: ColumnChoices;
   /** field: a field's values over time (⇧H in the YAML); ⏎ takes the pane there. */
@@ -485,11 +489,11 @@ export function checkFollow(s: UIState): UIState {
   return s;
 }
 
-/** Opens a terminal pane for an exec session below the focused pane (⌘D direction) and focuses it. */
-export function openTerminal(s: UIState, term: Term, from = activeTab(s).focused): UIState {
+/** Opens a terminal pane for a session below the focused pane (⌘D direction; "row": to its right) and focuses it. */
+export function openTerminal(s: UIState, term: Term, from = activeTab(s).focused, dir: "row" | "column" = "column"): UIState {
   const src = s.panes[from] ?? focusedPane(s);
   const id = `v${s.nextId}`;
-  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, from, "column", id), focused: id }));
+  const next = withTab(s, (t) => ({ ...t, layout: split(t.layout, from, dir, id), focused: id }));
   return {
     ...next,
     nextId: s.nextId + 1,

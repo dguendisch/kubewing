@@ -44,6 +44,7 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("split down", "pane.splitDown"),
       row("split right", "pane.splitRight"),
+      row("local terminal on the pane's context and namespace, below / to the right", "terminal.splitDown", "terminal.splitRight"),
       row("close pane", "pane.close"),
       row("maximize pane / show all again", "pane.toggleMaximize"),
       row("name the pane (also double-click its header; empty = none)", "pane.rename"),

@@ -3446,6 +3446,62 @@ test.describe("object actions", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
+  test("⌃T / ⌃⇧T: a local terminal on the pane's context and namespace, below / to the right", async ({ page }) => {
+    await openStatic(page);
+    const table = (await inspect(page)).focusedPane;
+    await page.keyboard.press("Control+T");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    let s = await inspect(page);
+    const below = s.focusedPane;
+    expect((s.panes[below] as unknown as { term?: unknown }).term).toMatchObject({ context: "tape", local: {} });
+    expect(s.tabs[0]!.layout).toMatchObject({ type: "split", dir: "column", children: [{ id: table }, { id: below }] });
+    await expect(page.locator("section[data-pane] header").filter({ hasText: "terminal" })).toContainText("tape");
+    // the tape's shell says what a real shell's kubeconfig would hold
+    await expect.poll(() => termText(page)).toContain('local terminal: context tape, namespace ""');
+    await expect.poll(() => termText(page)).toContain("local:tape$");
+    // ⌃T is the shell's in a running terminal (transpose): typed, no new pane
+    await page.keyboard.press("Control+T");
+    await page.waitForTimeout(200);
+    expect(Object.keys((await inspect(page)).panes)).toHaveLength(2);
+    // from the table, ⌃⇧T: to its right, in the table's namespace
+    await page.keyboard.press("Alt+ControlOrMeta+ArrowUp");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "namespace" }).fill("shop");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => ((await focused(page)) as unknown as { pipeline: string }).pipeline).toContain(`"namespace":"shop"`);
+    await page.keyboard.press("Control+Shift+T");
+    await expect.poll(async () => Object.keys((await inspect(page)).panes).length).toBe(3);
+    s = await inspect(page);
+    expect(s.tabs[0]!.layout).toMatchObject({ type: "split", dir: "column", children: [{ type: "split", dir: "row", children: [{ id: table }, { id: s.focusedPane }] }, { id: below }] });
+    const right = page.locator(`section[data-pane="${s.focusedPane}"] [data-terminal] .xterm-rows`);
+    await expect.poll(() => right.innerText()).toContain('local terminal: context tape, namespace "shop"');
+    // exit closes it, as an exec's does
+    await page.keyboard.type("exit");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => Object.keys((await inspect(page)).panes).length).toBe(2);
+  });
+
+  test("local terminal: refused on a read-only context, confirmed where the rule asks", async ({ page }) => {
+    await openStatic(page, "tape-prod");
+    await page.keyboard.press("Control+T");
+    await expect(page.getByLabel("message")).toContainText("read-only context");
+    expect(Object.keys((await inspect(page)).panes)).toHaveLength(1);
+    await page.keyboard.press("ControlOrMeta+O");
+    await page.getByRole("combobox", { name: "context" }).selectOption("tape-dev");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect(page.locator("section[data-pane] header").first()).toContainText("DEV");
+    await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
+    await page.keyboard.press("Control+Shift+T");
+    const confirm = page.getByRole("alertdialog", { name: "confirm terminal" });
+    await expect(confirm).toContainText("local terminal on tape-dev");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    expect((await inspect(page)).tabs[0]!.layout).toMatchObject({ type: "split", dir: "row" });
+  });
+
   test("read-only context: exec refused; describe still works", async ({ page }) => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-1");

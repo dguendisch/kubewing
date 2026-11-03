@@ -61,6 +61,8 @@ export function wailsTransport(): Transport {
     opsPodTarget: (p, k) => call("OpsPodTarget", p, k),
     prepareOpsPod: (c, n) => call("PrepareOpsPod", c, n),
     opsPodStart: (t, o, cols, rows) => call("OpsPodStart", t, o, cols, rows),
+    prepareTerminal: (c, ns) => call("PrepareTerminal", c, ns),
+    terminalStart: (t, cols, rows) => call("TerminalStart", t, cols, rows),
     sessionInput: (id, d) => call("SessionInput", id, d),
     sessionResize: (id, c, r) => call("SessionResize", id, c, r),
     sessionClose: (id) => call("SessionClose", id),

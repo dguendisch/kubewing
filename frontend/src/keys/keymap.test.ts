@@ -78,6 +78,14 @@ describe("resolve", () => {
     expect(resolve("Ctrl+D", "terminal")).toBeUndefined(); // the shell's EOF
     expect(resolve("Ctrl+D", "ended")).toBe("pane.close"); // …until the shell has ended
     expect(resolve("Ctrl+D", "logs")).toBe("pane.close"); // a log pane has no shell to take ⌃D
+    // a local terminal on the pane's context, from tables, object views, log panes; ⌃T stays the shell's in a terminal
+    for (const ctx of ["table", "detail", "logs", "ended"] as const) {
+      expect(resolve("Ctrl+T", ctx)).toBe("terminal.splitDown");
+      expect(resolve("Ctrl+Shift+T", ctx)).toBe("terminal.splitRight");
+    }
+    expect(resolve("Ctrl+T", "terminal")).toBeUndefined();
+    expect(resolve("Ctrl+Shift+T", "terminal")).toBeUndefined();
+    expect(resolve("Ctrl+T", "filter")).toBeUndefined(); // transpose in text fields
     // the log view scrolls with the usual keys; ⏎ jumps to the latest line
     expect(resolve("ArrowDown", "logs")).toBe("logs.lineDown");
     expect(resolve("PageUp", "logs")).toBe("logs.pageUp");

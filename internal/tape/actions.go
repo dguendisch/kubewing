@@ -207,6 +207,15 @@ func (o *Opener) OpsPod(ctx context.Context, cluster string, p source.OpsPodSpec
 	return o.Exec(ctx, cluster, p.Namespace, p.Node, p.Name, nil, s)
 }
 
+// Shell implements source.Actor: no local process, the echo shell (prompt
+// local:<context>), after a line naming the context and namespace a real
+// shell's kubeconfig would have.
+func (o *Opener) Shell(ctx context.Context, cluster, namespace string, s source.ExecStreams) error {
+	name, _ := o.ContextName(cluster)
+	fmt.Fprintf(s.Stdout, "local terminal: context %s, namespace %q\r\n", name, namespace)
+	return o.Exec(ctx, cluster, namespace, "local", name, nil, s)
+}
+
 // OpsPods are the ops pods that currently exist, by namespace/name (tests).
 func (o *Opener) OpsPods() map[string]*corev1.Pod {
 	o.mu.Lock()
