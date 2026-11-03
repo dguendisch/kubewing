@@ -14,10 +14,20 @@ export const useTabDrag = create<{ tab?: string }>(() => ({}));
 /** Pixels the pointer moves before a press on a tab becomes a drag (as for a pane's grip). */
 const THRESHOLD = 4;
 
-/** Where the dragged tab belongs for a pointer at x: before the first other tab whose middle lies right of it. */
-export function dropIndex(mids: number[], x: number): number {
-  const i = mids.findIndex((m) => x < m);
-  return i < 0 ? mids.length : i;
+type Box = { left: number; right: number; top: number; bottom: number };
+
+/**
+ * Where the dragged tab belongs for a pointer at (x, y), given the other tabs' boxes in order:
+ * in the row the pointer is in (the nearest one, above or below the bar), before the first tab
+ * whose middle lies right of it, else after that row's last tab.
+ */
+export function dropIndex(boxes: Box[], x: number, y: number): number {
+  if (!boxes.length) return 0;
+  const dist = (b: Box) => (y < b.top ? b.top - y : y > b.bottom ? y - b.bottom : 0);
+  const d = Math.min(...boxes.map(dist));
+  const row = boxes.map((b, i) => ({ b, i })).filter(({ b }) => dist(b) === d);
+  const hit = row.find(({ b }) => x < (b.left + b.right) / 2);
+  return hit ? hit.i : row[row.length - 1]!.i + 1;
 }
 
 /** Starts following a press on a tab; window listeners take over until it's released. */
@@ -38,14 +48,9 @@ export function startTabDrag(tabId: string, down: PointerEvent) {
         return i >= 0 && i !== s.activeTab ? { ...s, activeTab: i, overlay: undefined, focus: "table" } : s;
       });
     }
-    // the other tabs' middles, as laid out now (they shift while the dragged one passes)
-    const mids = [...document.querySelectorAll<HTMLElement>("[role=tablist] [data-tab]")]
-      .filter((el) => el.dataset.tab !== tabId)
-      .map((el) => {
-        const r = el.getBoundingClientRect();
-        return r.left + r.width / 2;
-      });
-    const to = dropIndex(mids, e.clientX);
+    // the other tabs, as laid out now (they shift, and change rows, while the dragged one passes)
+    const boxes = [...document.querySelectorAll<HTMLElement>("[role=tablist] [data-tab]")].filter((el) => el.dataset.tab !== tabId).map((el) => el.getBoundingClientRect());
+    const to = dropIndex(boxes, e.clientX, e.clientY);
     setUI((s) => S.moveTab(s, tabId, to));
   };
   const end = (keep: boolean) => {

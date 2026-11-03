@@ -665,6 +665,8 @@ Drag a divider to resize. **Maximizing** (`⌘⇧⏎`, as in iTerm) shows the fo
 
 Hovering a tab shows a **✕** at its left, which closes that tab (asking first in the same cases as `⌘W`). It sits on the left so you can close several tabs in a row: the next tab moves into place with its ✕ under the pointer, and you just keep clicking.
 
+Tabs keep their width: when there are more than fit, they wrap into more rows and the panes below get shorter. Dragging a tab reorders the tabs, across rows too.
+
 ### Names
 
 `⌘⇧I` (or a double-click on the tab) names the tab; `⌘I` (or a double-click on the empty part of a pane's header) names the pane. The name applies as you type; `⏎` or a click elsewhere keeps it, `Esc` restores the old one, an empty name removes it.

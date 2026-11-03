@@ -46,7 +46,8 @@ export function App() {
   const renaming = useUI((s) => (s.overlay?.kind === "renameTab" ? s.overlay.tabId : undefined));
   return (
     <div className="relative flex h-full flex-col">
-      <nav role="tablist" className="flex h-7 shrink-0 items-end gap-px bg-bg pl-20" style={{ ["--wails-draggable" as string]: "drag" }}>
+      {/* too many tabs for one row wrap into more (they keep their width); the panes give up the room */}
+      <nav role="tablist" className="flex min-h-7 shrink-0 flex-wrap items-end gap-px bg-bg pl-20" style={{ ["--wails-draggable" as string]: "drag" }}>
         {tabs.map((t, i) => {
           const p = panes[t.focused];
           const n = S.tabShortcut(i, tabs.length);
@@ -56,7 +57,7 @@ export function App() {
               ⌘{n}
             </span>
           );
-          const className = `flex items-baseline gap-2 py-1 pr-3 pl-6 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"} ${t.id === dragged ? "opacity-70" : ""}`;
+          const className = `flex items-baseline gap-2 py-1 whitespace-nowrap pr-3 pl-6 ${i === active ? "bg-bg-elev text-fg" : "text-fg-muted"} ${t.id === dragged ? "opacity-70" : ""}`;
           // on the tab's left, not its right: closing tab after tab, the next one slides under the pointer, × included
           const close = (
             <button

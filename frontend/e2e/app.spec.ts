@@ -1320,6 +1320,36 @@ test("a tab's ✕ shows on hover at its left: clicking on the same spot closes t
   expect(await order()).toEqual([t4]);
 });
 
+test("more tabs than fit wrap into rows (same height each, full titles); the panes make room", async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 600 });
+  await openTape(page);
+  const bar = page.getByRole("tablist");
+  const one = (await bar.boundingBox())!.height;
+  const tabs = page.getByRole("tab");
+  const tabHeight = (await tabs.first().boundingBox())!.height;
+  for (let i = 0; i < 7; i++) await page.keyboard.press("ControlOrMeta+T");
+  await expect(tabs).toHaveCount(8);
+  const rows = new Set(await Promise.all((await tabs.all()).map(async (t) => Math.round((await t.boundingBox())!.y))));
+  expect(rows.size).toBeGreaterThan(1);
+  for (const t of await tabs.all()) expect((await t.boundingBox())!.height).toBe(tabHeight); // not squeezed
+  const barBox = (await bar.boundingBox())!;
+  expect(barBox.height).toBeGreaterThan(one);
+  // the pane area starts below the last row, nothing overlaps
+  const area = (await page.locator(`[data-tab-area]:visible`).boundingBox())!;
+  expect(area.y).toBeGreaterThanOrEqual(barBox.y + barBox.height);
+  // dragging the last tab onto the first row's start puts it first
+  const order = async () => (await inspect(page)).tabs.map((t) => t.id);
+  const ids = await order();
+  const last = (await tabs.last().boundingBox())!;
+  const first = (await tabs.first().boundingBox())!;
+  await page.mouse.move(last.x + last.width / 2, last.y + last.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(last.x + last.width / 2 + 10, last.y + last.height / 2, { steps: 2 });
+  await page.mouse.move(first.x + 5, first.y + first.height / 2, { steps: 10 });
+  await page.mouse.up();
+  expect(await order()).toEqual([ids.at(-1), ...ids.slice(0, -1)]);
+});
+
 test("switching tabs keeps each tab's live table", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("ControlOrMeta+T");
