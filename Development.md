@@ -15,6 +15,8 @@ make e2e               # Playwright (Chromium) against the headless backend repl
 make headless          # backend over WebSocket on :7777 replaying tapes + testdata/catalog.yaml (TAPES= for your real kubeconfig)
 make golden-update     # regenerate the view goldens, then review the diff on its own
 make icon              # regenerate the app icon from build/appicon.svg
+make dist              # the release zip: bin/kubewing-<version>-macos-arm64.zip (+ .sha256)
+make release BUMP=…    # tag the next release (see Releases)
 ```
 
 `make e2e` and `make icon` can't run inside the macOS sandbox (Chromium needs Mach ports; `iconutil` needs the system temp dir). Never call `npx playwright test` or `npx playwright install` directly: only the Makefile points Playwright at the browsers in `.cache/ms-playwright`.
@@ -47,6 +49,25 @@ Scenario tapes (`testdata/tapes/*.yaml`) are scripted fake clusters: starting ob
 | Lint | `gofmt`, and no raw colors outside theme tokens (`frontend/scripts/lint-tokens.mjs`). | `make lint` |
 
 Inside a sandbox, Go needs a writable build cache: `GOCACHE=$TMPDIR/gocache go test ./internal/...`. The local-terminal PTY tests (`TestRunPTY*` in `internal/source`) skip where `/dev/ptmx` can't be opened (the macOS sandbox); run them outside it.
+
+## Releases
+
+A release is a pushed tag `vX.Y.Z` (or a release candidate `vX.Y.Z-rc.N`). `make release` creates it locally, pushing it is up to you:
+
+```sh
+make release BUMP=minor RC=1   # v0.2.0-rc.1; again: v0.2.0-rc.2, …
+make release BUMP=minor        # v0.2.0: promotes the candidates (the same commit or a later one)
+make release BUMP=patch        # v0.2.1
+make release BUMP=major DRY=1  # only shows the next tag and its notes
+git push origin v0.2.0         # publishes the release
+```
+
+- The bump counts from the newest final release (no release yet: from `0.0.0`, so the first `BUMP=minor` is `v0.1.0`). Candidates count per version, so `BUMP=minor RC=1` after `v0.2.0-rc.2` is `v0.2.0-rc.3`.
+- It refuses unless you're on `main` with a clean working tree and `main` equals `origin/main` (the tag must point at a commit GitHub has), and one commit gets one release (only a final may join its own candidates). It runs `make test` first (`SKIP_TESTS=1` skips it).
+- The annotated tag's message is the release notes: the commit subjects since the previous release (the previous candidate for a candidate, the previous final for a final), opened in `$EDITOR` to edit first. Deleting everything aborts. A tag pushed by mistake: `git push origin :refs/tags/vX.Y.Z` before the workflow publishes, else delete the release on GitHub too.
+- Pushing the tag runs `.github/workflows/release.yml` on a macOS arm64 runner: it checks the tag is annotated and on `main`, runs `make test`, `make dist VERSION=X.Y.Z`, and publishes a GitHub release with the zip and its `.sha256`, the tag message as notes. Candidates become pre-releases; a final is marked latest. Started by hand (Actions → release → Run workflow) it only builds, and the zip is a workflow artifact for 7 days.
+- Nothing in the repository holds the version: `make` reads it from the tag (`git describe`: `0.2.0`, `0.2.0-3-gabc1234` after it, `-dirty` with changes; `0.0.0-dev` without tags) or takes `VERSION=`. It goes into the binary (`internal/app.Version`, shown by `-version` and the About box) and the bundle's `Info.plist`; `build/darwin/Info.plist` is the template.
+- The zip is ad-hoc signed (`codesign -s -`), not notarized (needs a paid Apple developer account). See the [manual](Manual.md#installing) for what users do on first launch.
 
 ## Docs
 

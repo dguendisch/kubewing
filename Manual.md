@@ -30,9 +30,22 @@ Key notation: `⌘` Command, `⌥` Option, `⌃` Control, `⇧` Shift, `⏎` Ret
 
 ## 1. Getting started
 
-### Building and launching
+### Installing
 
-kubewing is macOS first. Build and start it from the repository (see [Development.md](Development.md) for the toolchain):
+kubewing runs on Macs with Apple silicon (macOS 11 or later). Download `kubewing-<version>-macos-arm64.zip` from the [releases](https://github.com/dguendisch/kubewing/releases), unpack it (double-click), and move `kubewing.app` to `/Applications`. Releases named `-rc.N` are release candidates: previews of the next version.
+
+kubewing isn't notarized by Apple, so macOS blocks the first launch ("Apple could not verify kubewing…"). Allow it once, either way:
+
+- open it, click **Done**, then **System Settings → Privacy & Security → Open Anyway** (near the bottom), and confirm with your password; or
+- in a terminal: `xattr -dr com.apple.quarantine /Applications/kubewing.app`
+
+To check a download, compare `shasum -a 256 kubewing-*.zip` with the `.sha256` file next to it in the release. The version is shown in **kubewing → About kubewing**, and `kubewing -version` prints it.
+
+To start it from a terminal (for the [flags](#command-line-flags)), link it into your `PATH`, e.g. `ln -s /Applications/kubewing.app/Contents/MacOS/kubewing ~/bin/kubewing`.
+
+### Building from source
+
+kubewing can also be built and started from the repository (see [Development.md](Development.md) for the toolchain):
 
 ```sh
 make deps   # once
@@ -71,6 +84,7 @@ Launching kubewing again while one is running **opens a new tab in the running o
 | `-state <dir>` | Where kubewing writes `history.yaml`, `columns.yaml`, `clusters.yaml` and `kubewing.log` (default: the config directory). |
 | `-garden <dir>` | The directory of the `gardenctl-v2.yaml` to read (default `$GCTL_HOME`, else `~/.garden`). |
 | `-headless <addr>` | No window: serve the UI's backend over WebSocket (for development and tests). |
+| `-version` | Print the version and exit. |
 
 ---
 
@@ -888,6 +902,7 @@ The most used keys:
 
 ## 19. Troubleshooting
 
+- **macOS says kubewing "is damaged and can't be opened".** The download lost its signature, e.g. unpacked by a tool that drops bundle metadata. Unpack the zip with Finder (or `ditto -x -k`), or remove the quarantine flag as in [Installing](#installing).
 - **Where's the log?** `kubewing.log` in the state directory (default `~/.kubewing/`), rotated to `kubewing.log.1` at 10 MiB. Or start with `-wait` to see it in the terminal.
 - **A pane shows an error.** Click the status line's error to see the full message, including what the server answered.
 - **A pane says `connection refused` on `127.0.0.1` or `localhost`.** The context points at a local cluster (kind, minikube, …) that's stopped, or that's gone while its kubeconfig entry stayed behind. The pane says so, and its button opens `⌘P` to replace the pane with another cluster. Start the cluster again, or remove its context (`kind delete cluster` does both: cluster and context). `kubectl config unset current-context` makes kubewing start with `⌘P`.

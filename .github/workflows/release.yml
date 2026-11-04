@@ -1,0 +1,92 @@
+# Builds kubewing.app for a pushed release tag and publishes it as a GitHub release.
+# Tags come from `make release` (scripts/release.sh); vX.Y.Z-rc.N becomes a pre-release.
+# Run by hand (workflow_dispatch), it only builds: the zip is a workflow artifact, no release.
+name: release
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+', 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    # arm64; Wails needs cgo against Cocoa/WebKit, so no cross-compiling from Linux
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write # gh release create
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # tags and main, for the checks and git describe
+
+      - name: Check the tag
+        if: env.TAG != ''
+        run: |
+          # checkout leaves a lightweight copy of the tag: fetch the annotated one (its message is the notes)
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          [[ $(git cat-file -t "$TAG") == tag ]] || { echo "::error::$TAG isn't an annotated tag (use make release)"; exit 1; }
+          git merge-base --is-ancestor "$TAG" origin/main || { echo "::error::$TAG isn't on main"; exit 1; }
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # the Makefile keeps Go's caches in .cache/, cached below
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            .cache/gopath/pkg/mod
+            .cache/gobuild
+            .cache/npm
+          key: release-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.sum', 'frontend/package-lock.json') }}
+          restore-keys: release-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Dependencies
+        # Go modules come with the first make target (the Makefile points Go's caches into .cache/)
+        run: cd frontend && npm ci --cache ../.cache/npm
+
+      - name: Test
+        # main.go embeds frontend/dist, so go vet needs it built
+        run: make frontend test
+
+      - name: Build
+        run: |
+          # a dispatched run gets git describe's version (e.g. 0.2.0-3-gabc1234)
+          make dist ${TAG:+VERSION=${TAG#v}}
+          bin/kubewing.app/Contents/MacOS/kubewing -version
+          ls bin/*.zip bin/*.sha256 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the build
+        if: env.TAG == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: kubewing-macos-arm64
+          path: |
+            bin/*.zip
+            bin/*.sha256
+          retention-days: 7
+
+      - name: Publish the release
+        if: env.TAG != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -l --format='%(contents:body)' "$TAG" > "$RUNNER_TEMP/notes.md"
+          flags=(--latest)
+          [[ $TAG == *-rc.* ]] && flags=(--prerelease --latest=false)
+          gh release create "$TAG" bin/*.zip bin/*.sha256 \
+            --verify-tag --title "kubewing ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"

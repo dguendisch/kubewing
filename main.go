@@ -44,7 +44,12 @@ func main() {
 	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
 	gardenHome := flag.String("garden", "", "gardenctl's directory with gardenctl-v2.yaml (default: $GCTL_HOME, else ~/.garden); headless: none unless given, and session targets from its sessions/")
 	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
+	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *version {
+		fmt.Println(app.Version)
+		return
+	}
 	// from the Dock or Finder: the login shell's PATH (exec plugins) and variables, before anything reads them
 	if *headless == "" {
 		if err := app.LoginEnv(); err != nil {
@@ -139,7 +144,7 @@ func main() {
 	}
 	a := application.New(application.Options{
 		Name:        "kubewing",
-		Description: "keyboard-driven Kubernetes UI",
+		Description: "keyboard-driven Kubernetes UI\n\nversion " + app.Version, // the app menu's About
 		Icon:        appIcon,
 		Services:    []application.Service{application.NewService(api)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},

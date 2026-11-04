@@ -277,7 +277,9 @@ func TestRegistryRecordingToggle(t *testing.T) {
 // (the first or the restarted one) delivers.
 type restartOpener struct{ feeds chan chan Event }
 
-func (f *restartOpener) Resolve(_, _ string) (Resolved, error) { return Resolved{Namespaced: true}, nil }
+func (f *restartOpener) Resolve(_, _ string) (Resolved, error) {
+	return Resolved{Namespaced: true}, nil
+}
 
 func (f *restartOpener) Watch(ctx context.Context, _ string, _ Resolved, _ Key, out chan<- Event) {
 	feed := make(chan Event)

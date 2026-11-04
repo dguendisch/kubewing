@@ -203,6 +203,15 @@ Rules are decided in Go (`internal/safety`); the frontend only shows what Go dec
 - **Login environment** (`app.LoginEnv`, first thing in `main`): a launchd start (parent pid 1, not the `Detach` child) has launchd's minimal environment, yet client-go runs exec credential plugins with kubewing's `PATH`. It runs `$SHELL -i -l -c 'command env -0'` once (stdin `/dev/null`, 10 s timeout) and adopts the result, minus `PWD`/`OLDPWD`/`SHLVL`/`_`. The output is cut between unique markers because profiles print things (banners, iTerm's escape codes). This is what VS Code does. Running the shell per plugin call instead would cost a profile load each time. On failure the launchd environment stays and the log says so. Not in `-headless` (tests keep the environment they were given).
 - **Detaching:** launched from a terminal, kubewing re-runs itself in a session of its own (stdin `/dev/null`, output appended to `kubewing.log`, rotated at 10 MiB). Piped/redirected output and `-headless` never detach.
 
+## Releases
+
+- **The tag is the version.** No file in the repository holds it, so a release needs no "bump" commit and `scripts/release.sh` only ever tags. `make` derives it with `git describe` and stamps it in at build time: `-ldflags -X internal/app.Version` (the `-version` flag and the About box, which Wails builds from the app's `Description`, not from `Info.plist`) and `plutil` on the bundle's copy of `Info.plist`. `CFBundleShortVersionString` takes numbers only, so a candidate's `-rc.N` lives in `CFBundleVersion` alone.
+- **Tagged locally, published by the push.** The script decides the next version and checks the commit (on `main`, clean, equal to `origin/main`, tests pass), but never pushes: the person releasing keeps that step. The workflow only reacts to the pushed tag and re-checks that it's annotated and on `main`. The release notes travel in the tag's message, so they're edited once, locally, and GitHub's own generated notes aren't used. `actions/checkout` fetches tags as lightweight copies, so the workflow re-fetches the tag to read its message.
+- **Candidates:** `vX.Y.Z-rc.N` → a GitHub pre-release, never "latest". GitHub's latest-release API skips pre-releases, which the planned auto-updater relies on to offer only finals by default.
+- **Unsigned by Apple:** no paid developer account, so no Developer ID and no notarization. The linker ad-hoc signs only the arm64 binary; `make dist` re-signs the whole bundle ad hoc (`codesign --deep -s -`), since a bundle whose seal doesn't cover `Info.plist` and its resources is reported as "damaged" after download, which users can't get past as easily as Gatekeeper's "unverified developer". The zip is made by `ditto`, which keeps the bundle's metadata and signature intact. A download carries the quarantine flag, so the first launch needs "Open Anyway"; files a program downloads itself (not a browser) don't get it, so an in-app updater won't hit this again.
+- **arm64 only, zip only:** Wails needs cgo against Cocoa/WebKit, so the build runs on a macOS runner, not cross-compiled. Asset names are stable (`kubewing-<version>-macos-arm64.zip`) for the updater to find. macOS runners cost more on private repos, so CI runs on release tags only.
+- Actions are pinned by commit SHA, the job alone gets `contents: write`, and releases are made with the runner's `gh` rather than a third-party action.
+
 ## Testing strategy: assert on state, not pixels
 
 UI regressions are caught by checking the app's state as data at every layer. Full-app screenshot diffs are not used.
@@ -237,6 +246,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, edit, label/annotate patches, scale, exec, debug containers, node shells, local terminals, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
+| `scripts/release.sh`, `.github/workflows/release.yml` | tagging the next release; building and publishing it on the tag's push |
 | `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
 | `internal/gardener` | gardenctl-v2 config and patterns, target resolution in the garden (shoot, control plane, project), gardenlogin kubeconfigs, gardenctl session targets; no Gardener Go deps |
 | `internal/safety` | per-context rules, two-phase mutations (prepare → single-use token → execute) |

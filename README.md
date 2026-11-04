@@ -29,7 +29,9 @@ A vibe-coded, keyboard-driven, native desktop UI for Kubernetes matching most fe
 
 ## Quick start
 
-macOS:
+macOS (Apple silicon): download the zip from the [releases](https://github.com/dguendisch/kubewing/releases), unpack it and move `kubewing.app` to `/Applications`. It isn't notarized, so allow the first launch once (see [Installing](Manual.md#installing)).
+
+From source:
 
 ```sh
 make deps

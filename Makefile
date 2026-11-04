@@ -12,7 +12,18 @@ export npm_config_cache := $(ROOT)/.cache/npm
 export PLAYWRIGHT_BROWSERS_PATH := $(ROOT)/.cache/ms-playwright
 NPM_BIN := frontend/node_modules/.bin
 
-.PHONY: deps frontend build app icon run headless test test-go test-fe e2e golden-update lint
+# The release tag is the only place the version lives (see scripts/release.sh): v0.2.0 → 0.2.0,
+# commits after it 0.2.0-3-gabc1234, uncommitted changes -dirty. CI passes VERSION= from the tag.
+VERSION ?= $(shell git describe --tags --match 'v[0-9]*' --dirty 2>/dev/null | sed 's/^v//')
+ifeq ($(VERSION),)
+VERSION := 0.0.0-dev
+endif
+# Info.plist's CFBundleShortVersionString takes numbers only: 0.2.0-rc.1 → 0.2.0
+SHORT_VERSION := $(shell echo '$(VERSION)' | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
+LDFLAGS := -X github.com/dguendisch/kubewing/internal/app.Version=$(VERSION)
+DIST := bin/kubewing-$(VERSION)-macos-arm64.zip
+
+.PHONY: deps frontend build app dist release icon run headless test test-go test-fe e2e golden-update lint
 
 deps:
 	go mod download all
@@ -23,7 +34,7 @@ frontend:
 	cd frontend && ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build --mode production
 
 build: frontend
-	go build -o bin/kubewing .
+	go build -trimpath -ldflags '$(LDFLAGS)' -o bin/kubewing .
 
 # macOS shows a bare binary as a generic "exec" in the Dock; a minimal bundle gives it the real icon.
 # Exec'ing the bundled binary (not `open`) keeps stdout/stderr and flags in this terminal.
@@ -33,9 +44,27 @@ APP := bin/kubewing.app
 app: build
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp build/darwin/Info.plist $(APP)/Contents/
+	plutil -replace CFBundleShortVersionString -string '$(SHORT_VERSION)' $(APP)/Contents/Info.plist
+	plutil -replace CFBundleVersion -string '$(VERSION)' $(APP)/Contents/Info.plist
 	cp build/darwin/icons.icns $(APP)/Contents/Resources/
 	rm -f $(APP)/Contents/MacOS/kubewing
 	cp bin/kubewing $(APP)/Contents/MacOS/
+
+# The downloadable release asset (built by .github/workflows/release.yml). Not notarized: no paid Apple
+# account. An ad-hoc signature over the whole bundle (not just the binary, which the linker signs) keeps
+# a download from being "damaged"; ditto, not zip, keeps the bundle's metadata intact.
+dist: app
+	codesign --force --deep --sign - $(APP)
+	codesign --verify --deep --strict $(APP)
+	rm -f $(DIST) $(DIST).sha256
+	ditto -c -k --keepParent $(APP) $(DIST)
+	cd bin && shasum -a 256 $(notdir $(DIST)) > $(notdir $(DIST)).sha256
+	@echo "built $(DIST)"
+
+# Tags the next release locally; pushing the tag is yours, and that push makes the GitHub release.
+# BUMP=patch|minor|major, RC=1 for a release candidate, DRY=1 to only show, SKIP_TESTS=1.
+release:
+	BUMP='$(BUMP)' RC='$(RC)' DRY='$(DRY)' SKIP_TESTS='$(SKIP_TESTS)' scripts/release.sh
 
 run: app
 	./$(APP)/Contents/MacOS/kubewing -wait
