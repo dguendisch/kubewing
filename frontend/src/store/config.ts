@@ -14,6 +14,7 @@ export const themeTokens = [
   "fg-muted",
   "accent",
   "added",
+  "connected",
   "deleted",
   "changed",
   "hidden",

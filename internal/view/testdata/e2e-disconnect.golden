@@ -1,0 +1,30 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 1,
+  "offset": 0,
+  "order": [
+    "net-0"
+  ],
+  "rows": [
+    {
+      "key": "net-0",
+      "cells": [
+        "shop",
+        "net-0"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 1
+  }
+}

@@ -145,7 +145,9 @@ func snapshot(ctx context.Context, l SnapshotLister, cluster, namespace string, 
 	types = SnapshotTypes(types)
 	kinds := kindLabels(types)
 	prog := Listing{Types: len(types)}
-	send(ctx, out, Event{Type: Listed, Listing: &prog})
+	// events carry copies: the receiver keeps the pointer while prog counts on
+	start := prog
+	send(ctx, out, Event{Type: Listed, Listing: &start})
 
 	lctx, cancel := context.WithTimeout(ctx, snapshotWait)
 	defer cancel()

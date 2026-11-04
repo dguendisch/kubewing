@@ -15,7 +15,9 @@ export default defineConfig({
   use: { baseURL: "http://127.0.0.1:5199", viewport: { width: 1400, height: 800 } },
   webServer: [
     {
-      command: `${goEnv} && cd .. && go run . -headless 127.0.0.1:7777 -tapes testdata/tapes -catalog testdata/catalog.yaml -config testdata/config -garden testdata/garden -state "$(mktemp -d)"`,
+      // KUBECONFIG: an empty one, never the developer's: a tape pane is the "current context", and
+      // what kubewing reads from a real kubeconfig's (gardenlogin: ⌘⇧P's target) would leak in
+      command: `${goEnv} && export KUBECONFIG="$(mktemp)" && cd .. && go run . -headless 127.0.0.1:7777 -tapes testdata/tapes -catalog testdata/catalog.yaml -config testdata/config -garden testdata/garden -state "$(mktemp -d)"`,
       url: "http://127.0.0.1:7777/healthz",
       reuseExistingServer: false,
       timeout: 120_000,

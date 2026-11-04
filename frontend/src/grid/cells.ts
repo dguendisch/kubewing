@@ -61,11 +61,11 @@ export function withAlpha(color: string, alpha: number): string {
 }
 
 /**
- * #RRGGBB of a hex or rgb() token, blended over bg at alpha if given (xterm's
- * search decorations take nothing else: no rgba, no CSS variables).
+ * #RRGGBB of a hex or RGB token, blended over bg at alpha (bg needed below 1;
+ * xterm's search decorations take nothing else: no alpha, no CSS variables).
  */
-export function toHex(color: string, alpha = 1, bg = "#000000"): string {
-  const c = rgbOf(color, "toHex"), b = rgbOf(bg, "toHex");
+export function toHex(color: string, alpha = 1, bg?: string): string {
+  const c = rgbOf(color, "toHex"), b = bg === undefined ? c : rgbOf(bg, "toHex");
   return "#" + c.map((v, i) => Math.round(v * alpha + b[i]! * (1 - alpha)).toString(16).padStart(2, "0")).join("");
 }
 
