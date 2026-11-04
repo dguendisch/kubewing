@@ -200,6 +200,7 @@ Rules are decided in Go (`internal/safety`); the frontend only shows what Go dec
 ## Process model
 
 - **Single instance per config directory:** Wails' single-instance lock (in `NSTemporaryDirectory()`), keyed by the config directory, checked before `application.New` (which would exit silently); the second launch says so on stderr and hands over its kubeconfig path.
+- **Login environment** (`app.LoginEnv`, first thing in `main`): a launchd start (parent pid 1, not the `Detach` child) has launchd's minimal environment, yet client-go runs exec credential plugins with kubewing's `PATH`. It runs `$SHELL -i -l -c 'command env -0'` once (stdin `/dev/null`, 10 s timeout) and adopts the result, minus `PWD`/`OLDPWD`/`SHLVL`/`_`. The output is cut between unique markers because profiles print things (banners, iTerm's escape codes). This is what VS Code does. Running the shell per plugin call instead would cost a profile load each time. On failure the launchd environment stays and the log says so. Not in `-headless` (tests keep the environment they were given).
 - **Detaching:** launched from a terminal, kubewing re-runs itself in a session of its own (stdin `/dev/null`, output appended to `kubewing.log`, rotated at 10 MiB). Piped/redirected output and `-headless` never detach.
 
 ## Testing strategy: assert on state, not pixels

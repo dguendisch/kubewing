@@ -45,6 +45,12 @@ func main() {
 	gardenHome := flag.String("garden", "", "gardenctl's directory with gardenctl-v2.yaml (default: $GCTL_HOME, else ~/.garden); headless: none unless given, and session targets from its sessions/")
 	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
 	flag.Parse()
+	// from the Dock or Finder: the login shell's PATH (exec plugins) and variables, before anything reads them
+	if *headless == "" {
+		if err := app.LoginEnv(); err != nil {
+			log.Printf("keeping launchd's environment: %v", err)
+		}
+	}
 
 	var opener interface {
 		source.Opener

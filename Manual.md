@@ -48,6 +48,10 @@ Launched from a terminal, kubewing **detaches**: the prompt comes back right awa
 - `-wait` (or `launch.wait: true` in `config.yaml`; `-wait=false` overrides it) keeps it in the foreground with the log in the terminal.
 - Output redirected to a file or pipe (`kubewing 2>&1 | tee …`) is left as it is, and kubewing doesn't detach.
 
+### Launching from the Dock or Finder
+
+Started from the Dock, Finder or `open`, kubewing first asks your login shell for its environment (`$SHELL -i -l`, like a new Terminal tab, so `.zprofile` and `.zshrc` both count) and uses it. So `PATH` and with it the credential plugins of your kubeconfigs (`kubectl`, `kubectl-gardenlogin`, `kubectl oidc-login`), `KUBECONFIG`, `GCTL_HOME` and `KUBEWING_HOME` are the same as from a terminal. If the shell gives no answer within 10 seconds, kubewing goes on with macOS's minimal environment and says so in the log.
+
 ### One kubewing per config directory
 
 Launching kubewing again while one is running **opens a new tab in the running one** and brings its window to the front; the new launch exits (and says so in the terminal). The new tab starts on *that terminal's* kubeconfig, at its current context and namespace, so a `gardenctl` shell's target opens as it is.
@@ -105,7 +109,7 @@ Entries that can't be opened (a garden whose kubeconfig is missing) are greyed o
 
 **Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘P`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘P` or `⌘J`, also right after opening, with `⌘O` still over the empty pane (it then stays open over the other plane). It also works on clusters opened from a terminal with gardenctl's kubeconfigs (`gardenctl target`, then `kubewing`), as their kubeconfig says which shoot or control plane they are. On a seed, the shoot is the one whose namespace the pane shows (`shoot--<project>--<name>`), else the one whose control plane was opened there last (a pane on nodes, or on all namespaces). Elsewhere it says so in the status line.
 
-**Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on kubewing's `PATH`.
+**Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on your shell's `PATH` (see [Launching from the Dock or Finder](#launching-from-the-dock-or-finder)).
 
 | Target | Opens | Context name | Namespace |
 |---|---|---|---|
@@ -890,7 +894,7 @@ The most used keys:
 - **Completion doesn't know a resource.** The catalog loads once a pane is open on that context and follows CRD changes; unknown text in `⌘O` still opens as typed.
 - **A config change has no effect.** Press `⌘⇧,` and check the banner: invalid parts are reported and skipped.
 - **Launching kubewing again only brought the window to the front.** That's the single-instance behavior: it opened a tab there. Use `-new-process` for a separate one.
-- **A Gardener shoot fails with `kubectl-gardenlogin` (or `kubectl`) not found.** kubewing runs the exec plugins of the kubeconfigs it uses with its own `PATH`. Launched from a terminal that's the terminal's; from the Dock or Finder, macOS's minimal one. Launch it from a terminal, or install the plugins where that `PATH` finds them.
+- **A Gardener shoot fails with `kubectl-gardenlogin` (or `kubectl`) not found.** kubewing runs the exec plugins of the kubeconfigs it uses with its own `PATH`: the terminal's when launched from one, your login shell's when launched from the Dock or Finder. Check that `command -v kubectl-gardenlogin` finds it in a new Terminal tab. Launched from the Dock, look in the log for `keeping launchd's environment`: your profile took longer than 10 seconds or failed.
 - **A pasted dashboard URL matches nothing.** The patterns come from `~/.garden/gardenctl-v2.yaml` (each garden's `patterns`); the dashboard's host must be in one of them. `gardenctl config set-garden … --pattern` adds one.
 - **`kubectl` in a local terminal targets another cluster, or its `$KUBECONFIG` file doesn't exist.** Your shell profile sets `KUBECONFIG` after kubewing did. With gardenctl, an untargeted session's `gardenctl kubectl-env` points at a file that isn't there yet. Skip it in kubewing's shells: `[[ $TERM_PROGRAM != kubewing ]] && eval $(gardenctl kubectl-env zsh)`.
 - **A node shell is rejected by PodSecurity.** The namespace enforces `baseline` or stricter (like `default`); pick a privileged one such as `kube-system`.

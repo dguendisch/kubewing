@@ -1,6 +1,6 @@
 # kubewing 🪽
 
-A keyboard-driven native desktop UI for Kubernetes: `kubectl`'s operations, the shell's grep / watch / diff, and a terminal multiplexer's tabs and splits, in one window.
+A vibe-coded, keyboard-driven, native desktop UI for Kubernetes matching most features of `kubectl`, the shell's grep / watch / diff / viddy, and a terminal multiplexer's tabs and splits, in one app.
 
 ## Highlights
 
