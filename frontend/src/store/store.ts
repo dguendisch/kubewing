@@ -7,7 +7,7 @@ import { menuSpec } from "../keys/appMenu";
 import type { Binding } from "../keys/keymap";
 import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
-import { checkFollow, contextNamespace, initialState, logsEnded, orphanedEdits, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
+import { checkFollow, contextNamespace, initialState, pickClusterState, logsEnded, orphanedEdits, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 import { logBuffers } from "../logs/buffer";
 
 /**
@@ -111,11 +111,13 @@ export function connect(t: Transport) {
 /**
  * Loads the kubeconfig contexts. Called once before the first render: the
  * first pane then starts in the current context's namespace, if it sets one.
- * Without a readable kubeconfig everything starts in all namespaces.
+ * Without a current context (no kubeconfig, or none set as current, as a
+ * Dock launch may have), the first pane lists nothing and ⌘P picks a cluster.
  */
 export async function loadContexts() {
   const list = await bridge().contexts("").catch(() => undefined);
   useContexts.setState({ list });
+  if (!list?.current) return useUI.setState(pickClusterState(), true);
   const ns = contextNamespace(list, "");
   if (ns) useUI.setState(initialState("", ns), true);
 }

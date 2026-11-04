@@ -5,7 +5,7 @@ import { Table } from "../grid/Table";
 import { rowAt, type PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
-import { bridge, paneData, setUI, useUI } from "../store/store";
+import { bridge, paneData, setUI, useContexts, useUI } from "../store/store";
 import { useConfig } from "../store/config";
 import { formatAge } from "../grid/cells";
 import { prettyKey } from "../keys/keymap";
@@ -403,7 +403,12 @@ function TablePane({
             }}
           />
         ) : null}
-        {pane.error ? <div role="alert" className="absolute inset-x-0 top-0 p-3 text-deleted">{pane.error}</div> : null}
+        {pane.error ? (
+          <div role="alert" className="absolute inset-x-0 top-0 p-3 text-deleted">
+            {pane.error}
+            <LocalRefusedHint pane={pane} />
+          </div>
+        ) : null}
       </div>
       <PaneFooter pane={pane} />
     </>
@@ -412,18 +417,26 @@ function TablePane({
 
 /** ⌘P's pane before ⌘O picked what it lists: its cluster, and the key to pick (a click opens ⌘O too). */
 function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
-  const key = useConfig((c) => c.bindings.find((b) => b.command === "source.open")?.key);
+  // the current context of a kubeconfig without one: nothing to list from, ⌘P picks a cluster
+  const noCluster = useContexts((c) => !c.list?.current) && !S.splitCluster(pane.spec.context).context;
+  const key = useConfig((c) => c.bindings.find((b) => b.command === (noCluster ? "cluster.open" : "source.open"))?.key);
   return (
     <>
       <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
         <Badges rule={rule} />
         <PaneName pane={pane} />
-        <span className="text-fg-muted">{S.clusterLabel(pane.spec.context)}</span>
+        <span className="text-fg-muted">{noCluster ? "no cluster" : S.clusterLabel(pane.spec.context)}</span>
         <NameGap paneId={pane.id} />
       </header>
       <div className="flex min-h-0 flex-1 items-center justify-center">
-        <button type="button" aria-label="pick what to list" onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "open", pane: pane.id }))} className="text-fg-muted hover:text-fg">
-          nothing listed yet{key ? `: ${prettyKey(key)}` : ""} picks a resource
+        <button
+          type="button"
+          aria-label={noCluster ? "pick a cluster" : "pick what to list"}
+          onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: noCluster ? "clusters" : "open", pane: pane.id }))}
+          className="text-fg-muted hover:text-fg"
+        >
+          {noCluster ? "no cluster yet" : "nothing listed yet"}
+          {key ? `: ${prettyKey(key)}` : ""} picks {noCluster ? "one" : "a resource"}
         </button>
       </div>
       {/* nothing is watched: no sync state or counts, only messages (⌘⇧P's) */}
@@ -432,6 +445,33 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
         <StatusMessage pane={pane} className="ml-auto" />
       </footer>
     </>
+  );
+}
+
+/**
+ * Under an open's error: a local cluster that refused the connection is
+ * likely stopped (kind, minikube) or gone with its kubeconfig entry left
+ * behind; a button picks another cluster (⌘P).
+ */
+function LocalRefusedHint({ pane }: { pane: S.PaneState }) {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "cluster.open")?.key);
+  const addr = S.localRefused(pane.error);
+  if (!addr) return null;
+  const ctx = pane.context || S.splitCluster(pane.spec.context).context;
+  return (
+    <div aria-label="hint" className="mt-2 flex items-center gap-3 text-fg-muted">
+      <span>
+        Nothing listens on {addr}: a local cluster (kind, minikube, …) that's stopped, or a kubeconfig entry left from one that's gone
+        {ctx ? ` (context ${ctx})` : " (your kubeconfig's current context)"}.
+      </span>
+      <button
+        type="button"
+        onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "clusters", pane: pane.id, where: "here" }))}
+        className="shrink-0 border border-border px-2 py-0.5 text-fg hover:border-accent"
+      >
+        open another cluster{key ? ` (${prettyKey(key)})` : ""}
+      </button>
+    </div>
   );
 }
 

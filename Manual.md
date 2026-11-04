@@ -39,7 +39,7 @@ make deps   # once
 make run    # builds bin/kubewing.app and starts it in the foreground
 ```
 
-The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces. Other clusters, Gardener shoots included, are a `⌘P` away (see [Opening a cluster](#opening-a-cluster-p)).
+The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces. Without a kubeconfig, or with none of its contexts set as current, it opens with `⌘P` instead, over an empty pane (new tabs start empty too). Other clusters, Gardener shoots included, are a `⌘P` away (see [Opening a cluster](#opening-a-cluster-p)).
 
 ### Launching from a terminal
 
@@ -890,6 +890,7 @@ The most used keys:
 
 - **Where's the log?** `kubewing.log` in the state directory (default `~/.kubewing/`), rotated to `kubewing.log.1` at 10 MiB. Or start with `-wait` to see it in the terminal.
 - **A pane shows an error.** Click the status line's error to see the full message, including what the server answered.
+- **A pane says `connection refused` on `127.0.0.1` or `localhost`.** The context points at a local cluster (kind, minikube, …) that's stopped, or that's gone while its kubeconfig entry stayed behind. The pane says so, and its button opens `⌘P` to replace the pane with another cluster. Start the cluster again, or remove its context (`kind delete cluster` does both: cluster and context). `kubectl config unset current-context` makes kubewing start with `⌘P`.
 - **A pane says disconnected, or looks stuck.** Press `⌘⇧R` (or click the connection state) to reconnect its context.
 - **Completion doesn't know a resource.** The catalog loads once a pane is open on that context and follows CRD changes; unknown text in `⌘O` still opens as typed.
 - **A config change has no effect.** Press `⌘⇧,` and check the banner: invalid parts are reported and skipped.

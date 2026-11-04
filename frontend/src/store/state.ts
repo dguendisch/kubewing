@@ -236,6 +236,8 @@ export interface Overlay {
   kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
   /** history: which one. */
   dir?: "back" | "forward";
+  /** clusters: where it opens at first, in place of the last choice (a broken pane's hint: here). */
+  where?: ClusterTarget;
   /** error: which error (the source's, the CEL filter's, the pane's message). */
   view?: "source" | "filter" | "skipped" | "flash";
   /** error: its full text. */
@@ -774,6 +776,28 @@ export const emptySpec = (spec: PaneSpec) => !spec.resource;
 /** The resource of a listing: everything in a namespace, listed once (not kubectl's `all` category). */
 export const allResources = "all";
 export const isAll = (resource: string) => resource.trim().toLowerCase() === allResources;
+
+/**
+ * The start without a current context (no kubeconfig, or none set as
+ * current): a pane listing nothing with ⌘P open over it, not client-go's
+ * fallback (localhost:8080, connection refused). New tabs, and the pane left
+ * when the last tab closes, start empty too.
+ */
+export function pickClusterState(): UIState {
+  const s = initialState();
+  const spec = clusterSpec("");
+  return openOverlay({ ...s, panes: { v1: { ...s.panes.v1!, spec } }, defaults: spec }, { kind: "clusters", pane: "v1" });
+}
+
+/**
+ * The address of a local cluster that refused the connection (a stopped
+ * kind or minikube, the port gone), from Go's dial error: "127.0.0.1:61894",
+ * "[::1]:6443", "localhost:8080". undefined for anything else.
+ */
+export function localRefused(error: string | undefined): string | undefined {
+  const m = error?.match(/dial tcp ((?:127(?:\.\d{1,3}){3}|\[::1\]|localhost):\d+): connect: connection refused/);
+  return m?.[1];
+}
 
 /** A later launch from a terminal: a tab on its kubeconfig's context, in that context's namespace. */
 export function launchTab(s: UIState, cluster: string, namespace = "", spec = initialSpec(cluster, namespace)): UIState {

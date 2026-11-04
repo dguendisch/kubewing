@@ -11,7 +11,7 @@ export function ClusterPicker() {
   const overlay = useUI((s) => s.overlay);
   if (overlay?.kind !== "clusters") return null;
   // mounted per open: the list is read anew, the text starts empty
-  return <Picker paneId={overlay.pane} />;
+  return <Picker paneId={overlay.pane} initialWhere={overlay.where} />;
 }
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
@@ -39,7 +39,7 @@ let lastTarget: S.ClusterTarget = "tab";
  * with ⌘O over it. Resolving a Gardener target may take a login (the
  * garden's exec plugin): the dialog stays until it's done or failed.
  */
-function Picker({ paneId }: { paneId: string }) {
+function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.ClusterTarget }) {
   const id = useId();
   const [list, setList] = useState<ClusterList>();
   const [text, setText] = useState("");
@@ -48,7 +48,7 @@ function Picker({ paneId }: { paneId: string }) {
   const [choices, setChoices] = useState<ClusterEntry[]>();
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string>();
-  const [where, setWhereState] = useState(lastTarget);
+  const [where, setWhereState] = useState(initialWhere ?? lastTarget);
   const setWhere = (w: S.ClusterTarget) => setWhereState((lastTarget = w));
   // a shoot line opens the shoot or its control plane: shoot at every open
   const [plane, setPlane] = useState<Plane>("shoot");

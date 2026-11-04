@@ -1337,3 +1337,27 @@ describe("debug containers in a tab of their own", () => {
     expect(s.focus).toBe("terminal");
   });
 });
+
+describe("start without a current context", () => {
+  it("lists nothing and opens ⌘P; new tabs and the last tab's replacement list nothing either", () => {
+    const s = S.pickClusterState();
+    invariants(s);
+    expect(S.emptySpec(S.focusedPane(s).spec)).toBe(true);
+    expect(s.overlay).toMatchObject({ kind: "clusters", pane: "v1" });
+    expect(s.focus).toBe("dialog");
+    const t = S.closeOverlay(s);
+    expect(S.emptySpec(S.focusedPane(S.newTab(t)).spec)).toBe(true);
+    expect(S.emptySpec(S.focusedPane(S.closeTab(t)).spec)).toBe(true);
+  });
+});
+
+describe("localRefused", () => {
+  it("names a loopback address that refused the connection, nothing else", () => {
+    expect(S.localRefused(`resolve "pods": Get "https://127.0.0.1:61894/api?timeout=32s": dial tcp 127.0.0.1:61894: connect: connection refused`)).toBe("127.0.0.1:61894");
+    expect(S.localRefused("dial tcp [::1]:6443: connect: connection refused")).toBe("[::1]:6443");
+    expect(S.localRefused("dial tcp localhost:8080: connect: connection refused")).toBe("localhost:8080");
+    expect(S.localRefused("dial tcp 10.0.0.1:443: connect: connection refused")).toBeUndefined();
+    expect(S.localRefused("dial tcp 127.0.0.1:6443: i/o timeout")).toBeUndefined();
+    expect(S.localRefused(undefined)).toBeUndefined();
+  });
+});

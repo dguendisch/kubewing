@@ -5464,6 +5464,93 @@ test.describe("⌘P: open a cluster", () => {
 
 // e2e-batch, by name: b-del-0, b-del-1, b-pod-0, b-pod-1, b-scale-0, b-scale-1. Deletes and
 // patches persist for the backend's lifetime: each test acts on its own rows.
+test("without a current context, kubewing starts with ⌘P open over a pane listing nothing", async ({ page }) => {
+  // the backend's kubeconfig as a Dock launch without one sees it: no current context
+  const opened: string[] = [];
+  await page.routeWebSocket(/\/kw-ws$/, (ws) => {
+    const server = ws.connectToServer();
+    const contexts = new Set<number>();
+    ws.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (msg.method === "Contexts") contexts.add(msg.id);
+      if (msg.method === "Open") opened.push(msg.args[0]);
+      server.send(m);
+    });
+    server.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (contexts.delete(msg.id) && msg.result) msg.result.current = "";
+      ws.send(JSON.stringify(msg));
+    });
+  });
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: "open cluster" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "cluster" })).toBeFocused();
+  const s = await inspect(page);
+  expect(s.overlays).toEqual(["clusters"]);
+  expect(s.panes[s.focusedPane]!.spec.resource).toBe("");
+  // Esc: the pane says there's no cluster, its button opens ⌘P again; nothing was ever opened (no localhost:8080)
+  await page.keyboard.press("Escape");
+  const pane = page.locator(`section[data-pane="${s.focusedPane}"]`);
+  await expect(pane.getByRole("button", { name: "pick a cluster" })).toHaveText(/no cluster yet/);
+  await pane.getByRole("button", { name: "pick a cluster" }).click();
+  await expect(dialog).toBeVisible();
+  // a new tab starts empty too
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("ControlOrMeta+T");
+  await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+  const t = await inspect(page);
+  expect(t.panes[t.focusedPane]!.spec.resource).toBe("");
+  expect(opened).toEqual([]);
+});
+
+test("a local cluster refusing the connection: the error hints at it, its button picks another cluster here", async ({ page }) => {
+  // the first open fails as a stopped kind cluster's does (Go's dial error, as the bridge passes it on)
+  let failed = false;
+  await page.routeWebSocket(/\/kw-ws$/, (ws) => {
+    const server = ws.connectToServer();
+    let first: number | undefined;
+    ws.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (msg.method === "Open" && !failed) {
+        failed = true;
+        first = msg.id;
+      }
+      server.send(m);
+    });
+    server.onMessage((m) => {
+      const msg = JSON.parse(String(m));
+      if (msg.id !== undefined && msg.id === first) {
+        // the server pane it opened is never used: close it, answer with the error
+        if (msg.result?.pane) server.send(JSON.stringify({ id: -1, method: "Close", args: [msg.result.pane] }));
+        ws.send(JSON.stringify({ id: msg.id, error: `resolve "pods": Get "https://127.0.0.1:61894/api?timeout=32s": dial tcp 127.0.0.1:61894: connect: connection refused` }));
+        return;
+      }
+      ws.send(JSON.stringify(msg));
+    });
+  });
+  await page.goto("/");
+  const pane = page.locator("section[data-pane]").first();
+  const alert = pane.getByRole("alert");
+  await expect(alert).toContainText("connection refused");
+  await expect(alert.getByLabel("hint")).toContainText("Nothing listens on 127.0.0.1:61894");
+  await alert.getByRole("button", { name: /open another cluster/ }).click();
+  const dialog = page.getByRole("dialog", { name: "open cluster" });
+  await expect(dialog).toBeVisible();
+  // here, not the last choice: the broken pane is the one to replace
+  await expect(dialog.getByRole("radiogroup", { name: "open in" }).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
+  // the test garden (the tape backend's own contexts aren't in a kubeconfig ⌘P can open)
+  await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
+  await dialog.getByRole("option").filter({ hasText: /^tape-garden/ }).first().click();
+  // the pane is on it, listing nothing yet (⌘O open over it), the error gone; one tab still
+  await expect(page.getByRole("combobox", { name: "resource" })).toBeVisible();
+  const s = await inspect(page);
+  expect(s.tabs.length).toBe(1);
+  expect(s.overlays).toEqual(["open"]);
+  expect(((await focused(page)).spec as { context?: string }).context).toMatch(/^@\d+\/tape-garden$/);
+  await expect(alert).toHaveCount(0);
+});
+
 test.describe("marked rows", () => {
   const marked = async (page: Page) => (await focused(page)).rows.filter((r) => r.marked).map((r) => r.key);
   const status = (page: Page) => page.locator("section[data-pane]").first().getByLabel("marked rows");
