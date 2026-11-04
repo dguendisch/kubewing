@@ -27,11 +27,11 @@ func ShellCommand() []string {
 	return []string{sh, "-l"}
 }
 
-// RunShell runs ShellCommand in a PTY with $KUBECONFIG = kubeconfig, in the
-// home directory, until it exits or ctx ends (a hang-up, as a closed
-// terminal window sends).
-func RunShell(ctx context.Context, kubeconfig string, s ExecStreams) error {
-	return runPTY(ctx, ShellCommand(), shellEnv(os.Environ(), kubeconfig), s)
+// RunShell runs ShellCommand in a PTY with $KUBECONFIG = kubeconfig and env
+// ("K=V") added, in the home directory, until it exits or ctx ends (a
+// hang-up, as a closed terminal window sends).
+func RunShell(ctx context.Context, kubeconfig string, env []string, s ExecStreams) error {
+	return runPTY(ctx, ShellCommand(), shellEnv(os.Environ(), kubeconfig, env), s)
 }
 
 func runPTY(ctx context.Context, argv, env []string, s ExecStreams) error {

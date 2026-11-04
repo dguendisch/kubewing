@@ -12,13 +12,13 @@ import (
 )
 
 // Shell implements Actor.
-func (o *ClusterOpener) Shell(ctx context.Context, cluster, namespace string, s ExecStreams) error {
-	env, cleanup, err := ShellKubeconfig(cluster, namespace)
+func (o *ClusterOpener) Shell(ctx context.Context, cluster, namespace string, env []string, s ExecStreams) error {
+	kubeconfig, cleanup, err := ShellKubeconfig(cluster, namespace)
 	if err != nil {
 		return err
 	}
 	defer cleanup()
-	return RunShell(ctx, env, s)
+	return RunShell(ctx, kubeconfig, env, s)
 }
 
 // ShellKubeconfig writes a kubeconfig for a local shell on a cluster and
@@ -78,20 +78,27 @@ func ShellKubeconfig(cluster, namespace string) (env string, cleanup func(), err
 
 // shellEnv is kubewing's environment for a local shell: $KUBECONFIG, the
 // terminal's identity (xterm.js, not the terminal kubewing was launched
-// from), and a UTF-8 locale when none is set (launched from the Dock).
-func shellEnv(environ []string, kubeconfig string) []string {
+// from), a UTF-8 locale when none is set (launched from the Dock), and env
+// ("K=V", e.g. its own $GCTL_SESSION_ID), which replaces what's inherited.
+func shellEnv(environ []string, kubeconfig string, env []string) []string {
 	out := []string{}
 	locale := false
+	set := map[string]bool{}
+	for _, kv := range env {
+		k, _, _ := strings.Cut(kv, "=")
+		set[k] = true
+	}
 	for _, kv := range environ {
 		k, _, _ := strings.Cut(kv, "=")
 		switch {
-		case k == "KUBECONFIG", k == "TERM", k == "COLORTERM", strings.HasPrefix(k, "TERM_"), strings.HasPrefix(k, "ITERM_"), strings.HasPrefix(k, "LC_TERMINAL"):
+		case set[k], k == "KUBECONFIG", k == "TERM", k == "COLORTERM", strings.HasPrefix(k, "TERM_"), strings.HasPrefix(k, "ITERM_"), strings.HasPrefix(k, "LC_TERMINAL"):
 			continue
 		case k == "LANG", k == "LC_ALL", k == "LC_CTYPE":
 			locale = true
 		}
 		out = append(out, kv)
 	}
+	out = append(out, env...)
 	out = append(out, "KUBECONFIG="+kubeconfig, "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=kubewing")
 	if !locale {
 		out = append(out, "LANG=en_US.UTF-8")

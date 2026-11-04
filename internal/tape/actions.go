@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -209,10 +211,13 @@ func (o *Opener) OpsPod(ctx context.Context, cluster string, p source.OpsPodSpec
 
 // Shell implements source.Actor: no local process, the echo shell (prompt
 // local:<context>), after a line naming the context and namespace a real
-// shell's kubeconfig would have.
-func (o *Opener) Shell(ctx context.Context, cluster, namespace string, s source.ExecStreams) error {
+// shell's kubeconfig would have, and its gardenctl target if it has one.
+func (o *Opener) Shell(ctx context.Context, cluster, namespace string, env []string, s source.ExecStreams) error {
 	name, _ := o.ContextName(cluster)
 	fmt.Fprintf(s.Stdout, "local terminal: context %s, namespace %q\r\n", name, namespace)
+	if t := o.gardenctlTarget(env); t != "" {
+		fmt.Fprintf(s.Stdout, "gardenctl target: %s\r\n", t)
+	}
 	return o.Exec(ctx, cluster, namespace, "local", name, nil, s)
 }
 
@@ -327,4 +332,23 @@ func (o *Opener) PortForward(_ context.Context, _, _, _ string, ports []string) 
 	f.Stop = func() { once.Do(func() { close(done) }) }
 	f.Err = func() error { return nil }
 	return f, nil
+}
+
+// gardenctlTarget is the target of the shell's gardenctl session (its
+// $GCTL_SESSION_ID's target.yaml in Sessions), on one line; "" = none.
+func (o *Opener) gardenctlTarget(env []string) string {
+	id := ""
+	for _, kv := range env {
+		if v, ok := strings.CutPrefix(kv, "GCTL_SESSION_ID="); ok {
+			id = v
+		}
+	}
+	if id == "" || o.Sessions == "" {
+		return ""
+	}
+	b, err := os.ReadFile(filepath.Join(o.Sessions, id, "target.yaml"))
+	if err != nil {
+		return ""
+	}
+	return strings.Join(strings.Fields(string(b)), " ")
 }

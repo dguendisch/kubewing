@@ -1,6 +1,7 @@
 package gardener
 
 import (
+	"crypto/rand"
 	"os"
 	"path/filepath"
 	"slices"
@@ -53,4 +54,49 @@ func Sessions(dir string) []SessionTarget {
 		seen[s.Target] = true
 		return false
 	})
+}
+
+// sessionTarget is gardenctl's target.yaml.
+type sessionTarget struct {
+	Garden       string `json:"garden,omitempty"`
+	Project      string `json:"project,omitempty"`
+	Seed         string `json:"seed,omitempty"`
+	Shoot        string `json:"shoot,omitempty"`
+	ControlPlane bool   `json:"controlPlane,omitempty"`
+}
+
+// NewSession is a gardenctl session of its own for a local shell: a fresh
+// id (the shell's $GCTL_SESSION_ID), with target t written to
+// dir/<id>/target.yaml as `gardenctl target` writes it (t.Garden "" = no
+// target). The cleanup removes the session directory, also what gardenctl
+// put there (its kubeconfigs). dir "" = gardenctl's sessions are unknown:
+// only the id.
+func NewSession(dir string, t Target) (id string, cleanup func(), err error) {
+	id = "kubewing-" + rand.Text()
+	cleanup = func() {}
+	if dir == "" {
+		return id, cleanup, nil
+	}
+	sd := filepath.Join(dir, id)
+	cleanup = func() { _ = os.RemoveAll(sd) }
+	if t.Garden == "" {
+		return id, cleanup, nil
+	}
+	st := sessionTarget{Garden: t.Garden, Shoot: t.Shoot, ControlPlane: t.ControlPlane && t.Shoot != "", Seed: t.Seed}
+	if t.Shoot != "" || t.Seed == "" {
+		// gardenctl refuses a project with a seed but no shoot
+		st.Project = t.ProjectName()
+	}
+	b, err := yaml.Marshal(st)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := os.MkdirAll(sd, 0o700); err != nil {
+		return "", nil, err
+	}
+	if err := os.WriteFile(filepath.Join(sd, "target.yaml"), b, 0o600); err != nil {
+		cleanup()
+		return "", nil, err
+	}
+	return id, cleanup, nil
 }

@@ -138,3 +138,59 @@ func TestSessions(t *testing.T) {
 		t.Error("no dir")
 	}
 }
+
+// A local shell's gardenctl session: a fresh id, its target as gardenctl
+// writes it (and Sessions reads it back), removed by the cleanup.
+func TestNewSession(t *testing.T) {
+	dir := t.TempDir()
+	cases := []struct {
+		t    Target
+		want string
+	}{
+		{Target{Garden: "g", Namespace: "garden-p", Shoot: "s"}, "garden: g\nproject: p\nshoot: s\n"},
+		{Target{Garden: "g", Project: "p", Shoot: "s", ControlPlane: true, Seed: "soil"}, "controlPlane: true\ngarden: g\nproject: p\nseed: soil\nshoot: s\n"},
+		{Target{Garden: "g", Seed: "soil"}, "garden: g\nseed: soil\n"},
+		{Target{Garden: "g", Namespace: "garden"}, "garden: g\nproject: garden\n"},
+		{Target{Garden: "g"}, "garden: g\n"},
+	}
+	ids := map[string]bool{}
+	for _, c := range cases {
+		id, cleanup, err := NewSession(dir, c.t)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if ids[id] || !strings.HasPrefix(id, "kubewing-") || len(id) > 128 {
+			t.Errorf("id %q", id)
+		}
+		ids[id] = true
+		f := filepath.Join(dir, id, "target.yaml")
+		b, err := os.ReadFile(f)
+		if err != nil || string(b) != c.want {
+			t.Errorf("%+v: %q %v, want %q", c.t, b, err, c.want)
+		}
+		if fi, _ := os.Stat(f); fi == nil || fi.Mode().Perm() != 0o600 {
+			t.Errorf("mode %v", fi)
+		}
+		if got := Sessions(dir); len(got) == 0 || got[0].Garden != "g" {
+			t.Errorf("read back: %+v", got)
+		}
+		cleanup()
+		if _, err := os.Stat(filepath.Join(dir, id)); err == nil {
+			t.Error("cleanup leaves the session")
+		}
+	}
+	// no target: an id only, nothing written
+	id, cleanup, err := NewSession(dir, Target{})
+	cleanup()
+	if err != nil || id == "" {
+		t.Fatal(id, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, id)); err == nil {
+		t.Error("no target, no session directory")
+	}
+	if id, cleanup, err := NewSession("", Target{Garden: "g"}); err != nil || id == "" {
+		t.Error(id, err)
+	} else {
+		cleanup()
+	}
+}

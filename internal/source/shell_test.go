@@ -89,12 +89,12 @@ func TestShellKubeconfigInMemory(t *testing.T) {
 }
 
 func TestShellEnv(t *testing.T) {
-	got := shellEnv([]string{"HOME=/h", "KUBECONFIG=/old", "TERM=screen", "TERM_PROGRAM=iTerm.app", "ITERM_SESSION_ID=1", "LC_TERMINAL=iTerm2", "PATH=/bin"}, "/k")
-	want := []string{"HOME=/h", "PATH=/bin", "KUBECONFIG=/k", "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=kubewing", "LANG=en_US.UTF-8"}
+	got := shellEnv([]string{"HOME=/h", "KUBECONFIG=/old", "GCTL_SESSION_ID=theirs", "TERM=screen", "TERM_PROGRAM=iTerm.app", "ITERM_SESSION_ID=1", "LC_TERMINAL=iTerm2", "PATH=/bin"}, "/k", []string{"GCTL_SESSION_ID=own"})
+	want := []string{"HOME=/h", "PATH=/bin", "GCTL_SESSION_ID=own", "KUBECONFIG=/k", "TERM=xterm-256color", "COLORTERM=truecolor", "TERM_PROGRAM=kubewing", "LANG=en_US.UTF-8"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
-	if got := shellEnv([]string{"LANG=de_DE.UTF-8"}, "/k"); got[len(got)-1] != "TERM_PROGRAM=kubewing" {
+	if got := shellEnv([]string{"LANG=de_DE.UTF-8"}, "/k", nil); got[len(got)-1] != "TERM_PROGRAM=kubewing" {
 		t.Errorf("a set locale is kept, none added: %v", got)
 	}
 }
@@ -126,7 +126,7 @@ func TestRunPTY(t *testing.T) {
 	out := &lockedBuf{}
 	done := make(chan error, 1)
 	go func() {
-		done <- runPTY(context.Background(), []string{"/bin/sh"}, shellEnv([]string{"PATH=/bin:/usr/bin", "PS1=$ "}, "/tmp/kc"), ExecStreams{Stdin: inR, Stdout: out, Resize: resize})
+		done <- runPTY(context.Background(), []string{"/bin/sh"}, shellEnv([]string{"PATH=/bin:/usr/bin", "PS1=$ "}, "/tmp/kc", nil), ExecStreams{Stdin: inR, Stdout: out, Resize: resize})
 	}()
 	go func() { _, _ = io.WriteString(inW, "stty size; echo kc=$KUBECONFIG; exit 3\n") }()
 	select {

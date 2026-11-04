@@ -27,6 +27,9 @@ type Opener struct {
 	Speed float64
 	// Catalog optionally fakes the cluster's resource types and namespaces.
 	Catalog *Catalog
+	// Sessions is gardenctl's sessions directory, where Shell reads the
+	// target of its $GCTL_SESSION_ID; "" = none.
+	Sessions string
 
 	mu sync.Mutex
 	// live are the running replays per tape (a tape is reachable under its

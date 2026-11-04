@@ -21,6 +21,9 @@ import (
 type Gardener struct {
 	Paths  gardener.Paths
 	Lookup gardener.Lookup
+	// ShellSessions is where local terminals' gardenctl sessions go: gardenctl's
+	// sessions directory (Paths.Sessions), a directory of their own in tests.
+	ShellSessions string
 }
 
 // resolveTimeout bounds resolving a target: the garden's login (a browser

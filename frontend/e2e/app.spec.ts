@@ -5304,6 +5304,13 @@ test.describe("⌘P: open a cluster", () => {
     await page.keyboard.press("ControlOrMeta+Shift+P");
     await expect(pane.getByRole("status", { name: "pane status" }).getByLabel("message")).toContainText("soil");
     await expect(pane).toHaveAttribute("data-context", "tape-garden/shoot--foo--bar");
+    // ⌃T: the local terminal targets the shoot for gardenctl too (its own session)
+    await page.keyboard.press("Control+T");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await expect.poll(() => page.locator("[data-terminal] .xterm-rows").innerText()).toContain("gardenctl target: garden: tape-garden project: foo shoot: bar");
+    await page.keyboard.type("exit");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
 
     // remembered: first in the list next time, with a ✕ to forget it; where it opens too
     await page.keyboard.press("ControlOrMeta+P");

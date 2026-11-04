@@ -108,7 +108,18 @@ func main() {
 			paths.Sessions = filepath.Join(*gardenHome, "sessions")
 		}
 		lookup, _ := opener.(gardener.Lookup)
-		opts.Gardener = &bridge.Gardener{Paths: paths, Lookup: lookup}
+		opts.Gardener = &bridge.Gardener{Paths: paths, Lookup: lookup, ShellSessions: paths.Sessions}
+		if *headless != "" {
+			// tests: local terminals' sessions not in the repository
+			dir, err := os.MkdirTemp("", "kubewing-gardenctl-")
+			if err != nil {
+				log.Fatal(err)
+			}
+			opts.Gardener.ShellSessions = dir
+			if o, ok := opener.(*tape.Opener); ok {
+				o.Sessions = dir
+			}
+		}
 	}
 	// ops pods are named after the user, as ops-toolbelt's $(whoami); tapes: a fixed one (e2e)
 	if *tapes != "" {

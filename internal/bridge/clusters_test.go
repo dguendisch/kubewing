@@ -314,3 +314,82 @@ contexts: [{name: ` + ctx + `, context: {cluster: c, user: u` + nsLine + `}}]
 		t.Errorf("not Gardener: %v", err)
 	}
 }
+
+// A local terminal's gardenctl target: the pane's Gardener cluster as
+// `gardenctl target` would name it, found as ⌘⇧P finds it; a terminal on
+// another cluster gets a session of its own without one.
+func TestTerminalGardenctlTarget(t *testing.T) {
+	root, _ := filepath.Abs("../..")
+	t.Chdir(root)
+	op := &tape.Opener{Tapes: map[string]*tape.Tape{}}
+	for _, n := range []string{"garden-shoots", "garden-projects", "garden-cas", "e2e-static"} {
+		tp, err := tape.Load("testdata/tapes/" + n + ".yaml")
+		if err != nil {
+			t.Fatal(err)
+		}
+		op.Tapes[n] = tp
+		op.Tapes[tp.Pipeline.Source.Resource] = tp
+	}
+	sessions := t.TempDir()
+	op.Sessions = sessions
+	cfg := config.Defaults("")
+	log := &eventLog{events: map[string][]any{}}
+	svc := New(source.NewRegistry(op), log, Options{
+		Actor: op, Config: &cfg, Clock: fixedClock{time.Date(2026, 11, 4, 10, 0, 0, 0, time.UTC)},
+		Clusters: config.OpenClusters(""),
+		Gardener: &Gardener{Paths: gardener.Paths{Config: "testdata/garden/gardenctl-v2.yaml"}, Lookup: op, ShellSessions: sessions},
+	})
+	o, err := svc.OpenCluster(ClusterEntry{Cluster: config.Cluster{Garden: "tape-garden", Project: "foo", Shoot: "bar"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gk, err := svc.OpenCluster(ClusterEntry{Cluster: config.Cluster{Garden: "tape-garden"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := filepath.Join(t.TempDir(), "kc")
+	if err := os.WriteFile(seed, []byte("apiVersion: v1\nkind: Config\ncurrent-context: tape-garden/seed--soil\nclusters: [{name: c, cluster: {server: \"https://127.0.0.1:2\"}}]\nusers: [{name: u, user: {}}]\ncontexts: [{name: tape-garden/seed--soil, context: {cluster: c, user: u}}, {name: other, context: {cluster: c, user: u}}]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ref := source.RegisterKubeconfig([]string{seed})
+
+	for _, c := range []struct{ name, cluster, namespace, want string }{
+		{"shoot", o.Cluster, "kube-system", "garden: tape-garden project: foo shoot: bar"},
+		{"seed, a shoot's namespace", source.JoinCluster(ref, "tape-garden/seed--soil"), "shoot--foo--bar", "controlPlane: true garden: tape-garden project: foo seed: soil shoot: bar"},
+		{"seed", source.JoinCluster(ref, "tape-garden/seed--soil"), "", "garden: tape-garden seed: soil"},
+		{"garden, a project's namespace", gk.Cluster, "garden-foo", "garden: tape-garden project: foo"},
+		{"garden", gk.Cluster, "", "garden: tape-garden"},
+		{"not Gardener", source.JoinCluster(ref, "other"), "", ""},
+	} {
+		p, err := svc.PrepareTerminal(c.cluster, c.namespace)
+		if err != nil {
+			t.Fatal(c.name, err)
+		}
+		tr, err := svc.TerminalStart(p.Token, 80, 24)
+		if err != nil {
+			t.Fatal(c.name, err)
+		}
+		out, _ := waitOutput(t, log, tr.Session, func(out, _ string) bool { return strings.HasSuffix(out, "$ ") })
+		got := ""
+		if _, rest, ok := strings.Cut(out, "gardenctl target: "); ok {
+			got, _, _ = strings.Cut(rest, "\r\n")
+		}
+		if got != c.want {
+			t.Errorf("%s: target %q, want %q", c.name, got, c.want)
+		}
+		input(t, svc, tr.Session, "exit\r")
+		waitOutput(t, log, tr.Session, func(_, exit string) bool { return exit != "" })
+	}
+	// each shell's session is removed when it ends
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		left, _ := os.ReadDir(sessions)
+		if len(left) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("sessions left: %v", left)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
