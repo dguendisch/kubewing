@@ -1053,6 +1053,22 @@ test("j/k move selection, enter shows the object in place, d toggles diff, esc b
   await expect(grid).toBeVisible();
 });
 
+test("back from an object opened over the table, the table is scrolled as it was", async ({ page }) => {
+  // short enough that the tape's rows don't fit: the last row is scrolled to
+  await page.setViewportSize({ width: 1400, height: 260 });
+  await openTape(page, "e2e-static", 8);
+  await page.keyboard.press("Shift+G");
+  const pane = page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`);
+  const scroller = pane.locator(".dvn-scroller");
+  await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  const top = await scroller.evaluate((el) => el.scrollTop);
+  await page.keyboard.press("Enter");
+  await expect(pane.getByRole("region", { name: "object detail" })).toContainText("kind:");
+  await page.keyboard.press("Escape");
+  await expect.poll(async () => Object.keys((await inspect(page)).objects)).toEqual([]);
+  expect(await scroller.evaluate((el) => el.scrollTop)).toBe(top);
+});
+
 test("⏎ in place is a history step: Esc back to the table, ⌘→ forward to the object again", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("j");

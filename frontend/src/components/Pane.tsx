@@ -149,13 +149,18 @@ export function Pane({ id }: { id: string }) {
       ) : pane.object?.split ? (
         <ObjectPane pane={pane} rule={rule} focused={objectFocused} />
       ) : (
-        <>
-          {/* the table stays mounted under an object opened over it: back, it's scrolled as it was */}
-          <div className={`${pane.object ? "hidden" : "flex"} min-h-0 flex-1 flex-col`}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* the table stays laid out under an object opened over it (invisible, not display: none,
+              which would reset its scroll): back, it's scrolled as it was */}
+          <div className={`${pane.object ? "invisible" : ""} flex min-h-0 flex-1 flex-col`}>
             <TablePane pane={pane} id={id} rule={rule} filterField={filterField} tableFocused={tableFocused && !pane.object} />
           </div>
-          {pane.object ? <ObjectPane pane={pane} rule={rule} focused={objectFocused} /> : null}
-        </>
+          {pane.object ? (
+            <div className="absolute inset-0 flex flex-col">
+              <ObjectPane pane={pane} rule={rule} focused={objectFocused} />
+            </div>
+          ) : null}
+        </div>
       )}
     </section>
   );
