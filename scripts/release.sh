@@ -114,11 +114,6 @@ else
 	make test || die "make test failed: nothing tagged"
 fi
 
-if [[ -t 0 && -t 1 ]]; then
-	read -r -p "release $tag with these notes? [y/N] " answer
-	[[ $answer == [yY]* ]] || die "nothing tagged"
-fi
-
 # --- a final stamps its version into Changelog.md, in a commit of its own ---
 if [[ -z $rc ]]; then
 	stamped=$(mktemp "${TMPDIR:-/tmp}/kubewing-changelog.XXXXXX")

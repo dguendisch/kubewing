@@ -37,10 +37,27 @@ func TestClusters(t *testing.T) {
 	cfg.Config.Contexts = []config.ContextRule{{Match: "tape-garden/*", Label: "TG", ReadOnly: true}}
 	at := time.Date(2026, 11, 2, 10, 0, 0, 0, time.UTC)
 	state := t.TempDir()
+	// a session's target is as old as its file: a copy set before the clock, not
+	// whenever the checkout wrote testdata (later than opening a cluster, on CI)
+	b, err := os.ReadFile("testdata/garden/sessions/term1/target.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions := t.TempDir()
+	target := filepath.Join(sessions, "term1", "target.yaml")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(target, b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(target, at.Add(-time.Minute), at.Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
 	svc := New(source.NewRegistry(op), &eventLog{events: map[string][]any{}}, Options{
 		Actor: op, Config: &cfg, Clock: fixedClock{at},
 		Clusters: config.OpenClusters(state),
-		Gardener: &Gardener{Paths: gardener.Paths{Config: "testdata/garden/gardenctl-v2.yaml", Sessions: "testdata/garden/sessions"}, Lookup: op},
+		Gardener: &Gardener{Paths: gardener.Paths{Config: "testdata/garden/gardenctl-v2.yaml", Sessions: sessions}, Lookup: op},
 	})
 
 	l := svc.Clusters()
