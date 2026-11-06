@@ -4,6 +4,11 @@
 - Design decisions and internals go to `Architecture.md`; build/test changes to `Development.md`.
 - `README.md` keeps only the highlights.
 
+# Changelog
+
+- Every significant user-facing change (a new feature, changed behavior, a fixed bug users could hit, a removal) gets a line in `Changelog.md` under `## [Unreleased]`, in `### Added`, `### Changed`, `### Fixed` or `### Removed`. Write it for users, as in `Manual.md`: one line, no internal names. Tests, refactoring, CI and tooling get none.
+- It's the source of the GitHub release notes and the updater's "what's new". Never write the `## [X.Y.Z] - date` headings by hand: `make release` stamps them.
+
 # Tests
 
 - e2e (Playwright): run only `make e2e` from the repo root, outside the sandbox. Chromium needs Mach ports, so it can't run inside the macOS sandbox.

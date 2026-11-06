@@ -9,7 +9,9 @@
 #   SKIP_TESTS=1            don't run `make test` first (e.g. promoting a tested candidate)
 #
 # Usually via make: `make release BUMP=minor RC=1`.
-# The tag is the only place the version lives: no commit is made (see Architecture.md, Releases).
+# The release notes are Changelog.md's [Unreleased] section. A final also stamps that section with
+# its version and date, committed as "release: vX.Y.Z" before tagging; a candidate commits nothing.
+# The tag is the only place the version lives otherwise (see Architecture.md, Releases).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -69,11 +71,22 @@ for t in $(git tag --points-at HEAD --list 'v[0-9]*'); do
 done
 [[ -z $(git ls-remote --tags origin "refs/tags/$tag") ]] || die "$tag already exists on origin"
 
-# --- release notes: the commit subjects since the previous release ---
+# --- release notes: Changelog.md's [Unreleased] section ---
+# A candidate previews its version, so it gets the whole section too (not only what's new since
+# the previous candidate). The commits are only shown, to check the changelog against.
 range=HEAD
 [[ -n $since ]] && range=$since..HEAD
-notes=$(git log --no-merges --format='- %s' "$range")
-[[ -n $notes ]] || die "no commits since $since"
+commits=$(git log --no-merges --format='- %s' "$range")
+[[ -n $commits ]] || die "no commits since $since"
+[[ -f Changelog.md ]] || die "Changelog.md is missing"
+grep -qx '## \[Unreleased\]' Changelog.md || die "Changelog.md has no '## [Unreleased]' section"
+# the lines between "## [Unreleased]" and the next "## [", without leading and trailing blank lines
+notes=$(awk '/^## \[/ { if (in_section) exit; in_section = ($0 == "## [Unreleased]"); next }
+	in_section { if (NF) { printf "%s", blank; blank = ""; print; seen = 1 } else if (seen) blank = blank "\n" }' Changelog.md)
+[[ -n $notes ]] || die "Changelog.md's [Unreleased] section is empty: add this release's changes there first"
+
+version=${target#v}
+today=$(date +%F)
 
 echo "release: ${base_tag:-no release yet} → $tag ($BUMP${rc:+, candidate})"
 if [[ -z $rc ]] && ((last_rc > 0)); then
@@ -84,8 +97,11 @@ if [[ -z $rc ]] && ((last_rc > 0)); then
 	fi
 fi
 echo "         on $(git log -1 --format='%h %s')"
-echo "notes (since ${since:-the first commit}):"
+[[ -z $rc ]] && echo "         Changelog.md: [Unreleased] becomes [$version] - $today, committed as 'release: $tag'"
+echo "notes (Changelog.md, [Unreleased]):"
 echo "$notes" | sed 's/^/  /'
+echo "commits (since ${since:-the first commit}):"
+echo "$commits" | sed 's/^/  /'
 
 if [[ -n $dry ]]; then
 	echo "release: dry run, nothing tagged"
@@ -98,27 +114,40 @@ else
 	make test || die "make test failed: nothing tagged"
 fi
 
-# --- the tag: annotated, its message is the release notes on GitHub ---
-msg=$(mktemp "${TMPDIR:-/tmp}/kubewing-release.XXXXXX")
-trap 'rm -f "$msg"' EXIT
-{
-	echo "kubewing $tag"
-	echo
-	echo "$notes"
-	echo
-	echo "# The release notes of $tag (the first line is the tag's title, the rest goes to GitHub)."
-	echo "# Lines starting with # are dropped. Delete everything to abort."
-} >"$msg"
 if [[ -t 0 && -t 1 ]]; then
-	git tag --annotate --edit --cleanup=strip --file "$msg" "$tag" || die "nothing tagged"
-else
-	git tag --annotate --cleanup=strip --file "$msg" "$tag"
+	read -r -p "release $tag with these notes? [y/N] " answer
+	[[ $answer == [yY]* ]] || die "nothing tagged"
 fi
 
-cat <<EOF
+# --- a final stamps its version into Changelog.md, in a commit of its own ---
+if [[ -z $rc ]]; then
+	stamped=$(mktemp "${TMPDIR:-/tmp}/kubewing-changelog.XXXXXX")
+	awk -v heading="## [$version] - $today" \
+		'!done && $0 == "## [Unreleased]" { print; print ""; print heading; done = 1; next } { print }' \
+		Changelog.md >"$stamped"
+	cat "$stamped" >Changelog.md
+	rm -f "$stamped"
+	git commit --quiet --only Changelog.md -m "release: $tag"
+fi
+
+# --- the tag: annotated, its message is the release notes on GitHub ---
+# --cleanup=whitespace keeps the notes' "### Added" headings (strip would drop them as comments)
+printf 'kubewing %s\n\n%s\n' "$tag" "$notes" | git tag --annotate --cleanup=whitespace --file - "$tag"
+
+if [[ -z $rc ]]; then
+	cat <<EOF2
+
+release: committed Changelog.md and tagged $tag (local only). To publish both:
+  git push --atomic origin main $tag
+To undo instead:
+  git tag -d $tag && git reset --hard HEAD^
+EOF2
+else
+	cat <<EOF2
 
 release: tagged $tag (local only). To publish:
   git push origin $tag
 To undo instead:
   git tag -d $tag
-EOF
+EOF2
+fi

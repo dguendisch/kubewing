@@ -61,7 +61,8 @@ dist: app
 	cd bin && shasum -a 256 $(notdir $(DIST)) > $(notdir $(DIST)).sha256
 	@echo "built $(DIST)"
 
-# Tags the next release locally; pushing the tag is yours, and that push makes the GitHub release.
+# Tags the next release locally (notes from Changelog.md; a final commits its stamped changelog first);
+# pushing is yours, and the tag's push makes the GitHub release.
 # BUMP=patch|minor|major, RC=1 for a release candidate, DRY=1 to only show, SKIP_TESTS=1.
 release:
 	BUMP='$(BUMP)' RC='$(RC)' DRY='$(DRY)' SKIP_TESTS='$(SKIP_TESTS)' scripts/release.sh
