@@ -5,13 +5,15 @@ import { chord } from "../keys/keymap";
 import { bridge, setUI, usePortForwards, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { PortForward } from "../transport/types";
-import { describeForward, forwardedRemotes, forwardsTo, lastToken, listedRemotes, parsePorts, portCandidates } from "./ports";
+import { describeForward, forwardedRemotes, forwardsTo, forwardTarget, lastToken, listedRemotes, parsePorts, portCandidates } from "./ports";
 
 /**
- * f: port-forwards of the selected pod. Lists the ones already running (✕
- * stops one) and starts new ones on 127.0.0.1: a single declared port not
- * forwarded yet is prefilled; with several, they're offered in a list
- * (number, name, protocol, container) to pick one or more from.
+ * f: port-forwards of the selected pod or service. Lists the ones already
+ * running (✕ stops one) and starts new ones on 127.0.0.1: a single declared
+ * port not forwarded yet is prefilled; with several, they're offered in a
+ * list (number, name, protocol, container or target port) to pick one or
+ * more from. A service's ports are service ports: Go picks one of its pods
+ * and forwards to their target ports, as kubectl port-forward svc/… does.
  */
 export function PortForwardDialog() {
   const overlay = useUI((s) => s.overlay);
@@ -22,7 +24,7 @@ export function PortForwardDialog() {
 }
 
 function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverId: string; context?: string; rowKey: string }) {
-  const [row, setRow] = useState<{ name: string; namespace?: string }>();
+  const [row, setRow] = useState<{ name: string; namespace?: string; service: boolean }>();
   const [ports, setPorts] = useState("");
   const [error, setError] = useState<string>();
   const [declared, setDeclared] = useState<Candidate[]>([]);
@@ -34,7 +36,7 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
   const [inList, setInList] = useState(false);
   const [pick, setPick] = useState(0);
   const all = usePortForwards((s) => s.list);
-  const running = row ? forwardsTo(all, context, row.namespace, row.name) : [];
+  const running = row ? forwardsTo(all, context, row.namespace, row.name, row.service) : [];
   const busy = forwardedRemotes(running);
 
   // offered: declared ports not forwarded yet; one left is prefilled, several are a list to pick from
@@ -42,10 +44,10 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
     bridge()
       .rowInfo(serverId, rowKey)
       .then((r) => {
-        setRow({ name: r.name, namespace: r.namespace });
+        setRow({ name: r.name, namespace: r.namespace, service: !!r.service });
         const c = portCandidates(r.portInfo ?? []);
         setDeclared(c);
-        const taken = forwardedRemotes(forwardsTo(usePortForwards.getState().list, context, r.namespace, r.name));
+        const taken = forwardedRemotes(forwardsTo(usePortForwards.getState().list, context, r.namespace, r.name, !!r.service));
         const free = c.filter((x) => !taken.has(Number(x.label)));
         const usable = free.filter((x) => !x.disabled);
         // a single forwardable port alone: prefilled; otherwise the list (it also says why UDP ports can't go)
@@ -111,7 +113,7 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
         if (e.key === "Escape") setUI(S.closeOverlay);
       }}
     >
-      <div className="text-fg">port-forward {row?.name ?? "…"}</div>
+      <div className="text-fg">port-forward {row ? `${row.service ? "svc/" : ""}${row.name}` : "…"}</div>
       {running.length ? (
         <ul
           ref={runningList}
@@ -151,7 +153,7 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
         </ul>
       ) : null}
       <label className="relative flex flex-col gap-1 text-fg-muted">
-        ports (local:remote, or remote for a random local port)
+        {row?.service ? "service ports (local:port, or port for a random local port)" : "ports (local:remote, or remote for a random local port)"}
         <input
           ref={input}
           autoFocus
@@ -242,6 +244,8 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
 
 /** One running forward with a stop button; an ended one shows why. */
 function ForwardRow({ f, where, active }: { f: PortForward; where?: boolean; active?: boolean }) {
+  // a service's forward names the pod it picked, also in the service's dialog
+  const target = forwardTarget(f);
   const stop = (e: React.MouseEvent) => {
     e.preventDefault(); // keep the focus where it is (the ports field, the list)
     void bridge().portForwardStop(f.id).catch(() => {});
@@ -251,12 +255,16 @@ function ForwardRow({ f, where, active }: { f: PortForward; where?: boolean; act
       {/* the ports never wrap; the pod name truncates instead */}
       <span className={`shrink-0 whitespace-nowrap ${f.error ? "text-fg-muted line-through" : "text-fg"}`}>{describeForward(f)}</span>
       {where ? (
-        <span className="min-w-0 truncate text-fg-muted" title={`${f.context} · ${f.namespace}/${f.pod}`}>
-          {f.context} · {f.namespace}/{f.pod}
+        <span className="min-w-0 truncate text-fg-muted" title={`${f.context} · ${target}`}>
+          {f.context} · {target}
+        </span>
+      ) : f.service ? (
+        <span className="min-w-0 truncate text-fg-muted" title={`to pod ${f.pod}`}>
+          pod {f.pod}
         </span>
       ) : null}
       {f.error ? <span className="truncate text-deleted">{f.error}</span> : null}
-      {/* in the pod dialog the list is the keyboard stop (⌫); the button is for the mouse */}
+      {/* in the pod/service dialog the list is the keyboard stop (⌫); the button is for the mouse */}
       <button type="button" tabIndex={where ? undefined : -1} aria-label={`stop ${describeForward(f)}`} title={f.error ? "remove" : "stop"} onMouseDown={stop} className="ml-auto rounded border border-border px-1.5 leading-tight text-fg-muted hover:border-deleted hover:text-deleted">
         ✕
       </button>
@@ -274,7 +282,7 @@ export function PortForwardList() {
     <div role="dialog" aria-label="port-forwards" className="absolute top-16 left-1/2 z-30 flex w-[36rem] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-2xl">
       <div className="border-b border-border px-3 py-1 text-fg">port-forwards</div>
       {list.length === 0 ? (
-        <div className="px-3 py-2 text-fg-muted">none · f on a pod starts one</div>
+        <div className="px-3 py-2 text-fg-muted">none · f on a pod or service starts one</div>
       ) : (
         <ul role="listbox" aria-label="active port-forwards">
           {list.map((f, i) => (

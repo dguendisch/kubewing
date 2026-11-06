@@ -12,7 +12,7 @@ A vibe-coded, keyboard-driven, desktop UI for Kubernetes matching most features 
 - **Decode anything.** `⏎` on a YAML value unwraps base64 → gzip/brotli → YAML/JSON, renders certificates, keys (matched to their certificate), JWTs, and goes deeper level by level: secret → kubeconfig → CA → certificate. Decoded diffs show what changed inside a managed resource's compressed blob.
 - **Jump between related resources** (`⌘J`): owners up the chain, what a workload runs, a pod's claims → volumes → attachments, events; from a garden's shoot or seed straight into its cluster or control plane. From the YAML, `⌘`-click a `secretName`, `roleRef` or `seedName` to land on the object it names (rules extendable in `refs.yaml`). Back and forward like a browser.
 - **Multi-pod logs** with a live fzf-like filter
-- **port-forwards** with completion on available ports
+- **port-forwards** to pods and services with completion on available ports
 - **exec**, **debug containers**, and **node shells** with proper configurability
 - **Local terminals** (`⌃T`/`⌃⇧T`): your own shell on the cluster you're looking at, with a kubeconfig of its own (context and namespace of the pane), so `kubectl`, `helm` or any script just works
 - **Marked rows** (`⇧↓`, `⇧`/`⌘`-click, `⌘A`): delete, label, annotate, scale or rollout-restart many objects at once under one confirmation, or open a debug container in every marked pod, a pane each.

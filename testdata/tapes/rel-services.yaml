@@ -1,0 +1,20 @@
+# Relation tapes: see rel-pods.yaml. Services for port-forward (f): web
+# selects app=web in shop (web-7d9f-a is the ready one, so it's picked) and
+# maps 80 to the named container port http (8080), 9090 to itself (no
+# targetPort); dns has a UDP-only port; external has no selector; idle
+# selects no pods.
+filter: true
+pipeline:
+  source: {resource: rel-services}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Type, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Service, metadata: {name: web, namespace: shop, uid: rs-web, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {type: ClusterIP, clusterIP: 10.0.0.10, selector: {app: web}, ports: [{name: http, port: 80, targetPort: http}, {name: metrics, port: 9090}]}}
+    cells: [web, ClusterIP]
+  - object: {apiVersion: v1, kind: Service, metadata: {name: dns, namespace: shop, uid: rs-dns, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {type: ClusterIP, clusterIP: 10.0.0.11, selector: {app: web}, ports: [{name: dns, port: 53, protocol: UDP, targetPort: 5353}, {name: http, port: 8080, protocol: TCP, targetPort: 8080}]}}
+    cells: [dns, ClusterIP]
+  - object: {apiVersion: v1, kind: Service, metadata: {name: external, namespace: shop, uid: rs-external, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {type: ClusterIP, clusterIP: 10.0.0.12, ports: [{port: 443}]}}
+    cells: [external, ClusterIP]
+  - object: {apiVersion: v1, kind: Service, metadata: {name: idle, namespace: shop, uid: rs-idle, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {type: ClusterIP, clusterIP: 10.0.0.13, selector: {app: nothing}, ports: [{port: 80, targetPort: 8080}]}}
+    cells: [idle, ClusterIP]

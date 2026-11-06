@@ -169,7 +169,7 @@ func TestExecRefusedOnReadOnlyAndNonPods(t *testing.T) {
 	if _, err := svc2.Prepare("exec", res2.Pane, "s-cfg"); err == nil || !strings.Contains(err.Error(), "needs a pod") {
 		t.Errorf("exec on a configmap: %v", err)
 	}
-	if _, err := svc2.PortForwardStart(res2.Pane, "s-cfg", []string{"80"}); err == nil || !strings.Contains(err.Error(), "needs a pod") {
+	if _, err := svc2.PortForwardStart(res2.Pane, "s-cfg", []string{"80"}); err == nil || !strings.Contains(err.Error(), "needs a pod or service") {
 		t.Errorf("port-forward on a configmap: %v", err)
 	}
 }
@@ -181,7 +181,7 @@ func TestPortForwardLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []source.Port{{Local: 9090, Remote: 80}, {Local: 40001, Remote: 443}}
+	want := []ForwardPort{{Local: 9090, Remote: 80}, {Local: 40001, Remote: 443}}
 	if f.Pod != "web-0" || f.Namespace != "shop" || f.Context != "tape" || len(f.Ports) != 2 || f.Ports[0] != want[0] || f.Ports[1] != want[1] {
 		t.Errorf("forward: %+v", f)
 	}
@@ -231,7 +231,7 @@ func TestRowInfo(t *testing.T) {
 		t.Errorf("pod: %+v", pod)
 	}
 	// name, protocol (TCP when unset) and container of each declared port, in spec order
-	if want := "[{8080 http TCP app} {9090 metrics TCP app} {5353 dns UDP sidecar}]"; fmt.Sprint(pod.PortInfo) != want {
+	if want := "[{8080 http TCP app } {9090 metrics TCP app } {5353 dns UDP sidecar }]"; fmt.Sprint(pod.PortInfo) != want {
 		t.Errorf("portInfo = %v, want %s", pod.PortInfo, want)
 	}
 	// web-1 has no container statuses: state unknown; the first container is the default

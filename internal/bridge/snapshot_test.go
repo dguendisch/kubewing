@@ -12,7 +12,7 @@ import (
 // deployments 2, pods 5, claims 7, replica sets 2, role bindings 1, roles
 // 1, secrets 2, service accounts 1, stateful sets 3, widgets 1 (and the
 // e2e-deploys tape's apps/v1 Deployments resolve to rel-deployments)
-const shopObjects = 28
+const shopObjects = 32
 
 func snapshotPane(t *testing.T) (*Service, OpenResult) {
 	t.Helper()

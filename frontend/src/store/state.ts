@@ -218,7 +218,7 @@ export interface Tab {
 
 export interface Overlay {
   /** open: ⌘O; clusters: ⌘P (a cluster for the pane or a new tab); confirm: a prepared action;
-   *  portforward: ports dialog for a row's pod; forwards: list of port-forwards;
+   *  portforward: ports dialog for a row's pod or service; forwards: list of port-forwards;
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes, or unsaved edits;
    *  closePane: closing a pane with unsaved edits;
    *  container: which container a prepared exec enters;

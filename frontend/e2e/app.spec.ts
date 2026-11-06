@@ -4724,7 +4724,7 @@ test.describe("jump to (⌘J)", () => {
     // tape resource names; the pods are already listed above (same kind), so not repeated
     await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
     await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
-    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 12 types");
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 13 types");
     await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
     await expect.poll(async () => {
       const p = await focused(page);
@@ -4970,7 +4970,7 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(async () => {
       const p = await focused(page);
       return p.spec.resource === "all" && p.status?.synced ? p.total : -1;
-    }).toBe(28);
+    }).toBe(32);
     const p = await focused(page);
     expect(p.columns).toEqual(["KIND", "NAME", "OWNER", "AGE", "DELETING", "FINALIZERS"]);
     expect(p.spec.sort).toBe("KIND");
@@ -4995,7 +4995,7 @@ test.describe("jump to (⌘J)", () => {
     // ⌘R lists again
     await page.keyboard.press("ControlOrMeta+R");
     await expect(status.getByRole("button", { name: "refresh listing" })).toContainText(/listed [0-2]s ago/);
-    expect((await focused(page)).total).toBe(28);
+    expect((await focused(page)).total).toBe(32);
     // a live pane says it needs none
     await openRel(page, "rel-pods", 6);
     await page.keyboard.press("ControlOrMeta+R");
@@ -5010,7 +5010,7 @@ test.describe("jump to (⌘J)", () => {
     await expect.poll(async () => {
       const p = await focused(page);
       return p.status?.synced ? `${p.spec.resource} ${(p.spec as { namespace?: string }).namespace} ${p.total}` : "";
-    }).toBe("all shop 28");
+    }).toBe("all shop 32");
     await page.keyboard.press("ControlOrMeta+ArrowLeft");
     await expect.poll(async () => (await focused(page)).spec.resource).toBe("rel-namespaces");
   });
@@ -5032,6 +5032,57 @@ test.describe("jump to (⌘J)", () => {
 // (worker excluded by app=api), a later api-2 and a deleted api-1. Each pod's
 // lines carry its name; a selector pane filters pods, the live filter filters
 // lines.
+test.describe("port-forward to a service", () => {
+  async function select(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+    await expect.poll(async () => (await focused(page)).rows[(await focused(page)).selected]?.key).toBe(key);
+  }
+
+  test("f on a service offers its ports with their targets, forwards to its ready pod; refused without a selector", async ({ page }) => {
+    await openTape(page, "rel-services", 4);
+    await select(page, "rs-web");
+    await page.keyboard.press("f");
+    const dialog = page.getByRole("dialog", { name: "port-forward" });
+    await expect(dialog).toContainText("port-forward svc/web");
+    await expect(dialog).toContainText("service ports");
+    const declared = dialog.getByRole("listbox", { name: "declared ports" });
+    // service ports; 80 goes to the pods' named port http
+    await expect(declared.getByRole("option")).toHaveText(["80http · TCP · → http", "9090metrics · TCP"]);
+    await page.keyboard.press("Enter"); // 80, a local port above 8000
+    await expect(dialog.getByRole("combobox", { name: "ports" })).toHaveValue("8080:80 ");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    // the ready pod of the selector (web-7d9f-a, not web-7d9f-b), on its container port
+    await expect(page.getByLabel("message")).toContainText("127.0.0.1:8080 → svc 80 → 8080");
+    await page.keyboard.press("ControlOrMeta+Alt+P");
+    const list = page.getByRole("listbox", { name: "active port-forwards" });
+    await expect(list.getByRole("option")).toHaveCount(1);
+    await expect(list.getByRole("option").first()).toContainText("shop/svc/web → web-7d9f-a");
+    await page.keyboard.press("Escape");
+
+    // f again: the running forward is the service's, 80 isn't offered any more
+    await page.keyboard.press("f");
+    const running = dialog.getByRole("listbox", { name: "running port-forwards" });
+    await expect(running.getByRole("option")).toHaveText([/^127\.0\.0\.1:8080 → svc 80 → 8080pod web-7d9f-a✕$/]);
+    await expect(dialog.getByRole("combobox", { name: "ports" })).toHaveValue("9090:9090"); // the one left: prefilled
+    await page.keyboard.press("Escape");
+
+    // no selector: no pods to forward to, said in the dialog
+    await select(page, "rs-external");
+    await page.keyboard.press("f");
+    await expect(dialog.getByRole("combobox", { name: "ports" })).toHaveValue("8443:443");
+    await page.keyboard.press("Enter");
+    await expect(dialog.getByRole("alert")).toContainText("service external has no selector");
+    await page.keyboard.press("Escape");
+
+    await page.keyboard.press("ControlOrMeta+Alt+P");
+    await page.keyboard.press("x");
+    await expect(page.getByLabel("active port-forwards")).toHaveCount(0);
+  });
+});
+
 test.describe("logs", () => {
   async function openLogs(page: Page, labelSelector = "") {
     await ready(page);

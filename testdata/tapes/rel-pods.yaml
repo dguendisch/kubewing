@@ -1,4 +1,5 @@
 # Relation tapes (jump menu, u): a deployment → replica sets → pods chain
+# (web-7d9f-a is ready, web-7d9f-b not: a port-forward to rel-services' web picks a)
 # in "shop", a custom resource (widgets.e2e.kubewing) that owns config maps
 # and scales pods, and owners that are gone. filter: true makes replays and
 # metadata lists honor namespace and selectors like an API server.
@@ -9,9 +10,9 @@ columns:
   - {name: Name, type: string, priority: 0}
   - {name: Status, type: string, priority: 0}
 initial:
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-a, namespace: shop, uid: rp-web-a, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-a, namespace: shop, uid: rp-web-a, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1, containers: [{name: app, ports: [{name: http, containerPort: 8080}, {name: metrics, containerPort: 9090}]}]}, status: {phase: Running, conditions: [{type: Ready, status: "True", lastTransitionTime: "2026-01-01T10:01:00Z"}]}}
     cells: [web-7d9f-a, Running]
-  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-b, namespace: shop, uid: rp-web-b, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2}, status: {phase: Running}}
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: web-7d9f-b, namespace: shop, uid: rp-web-b, labels: {app: web}, ownerReferences: [{apiVersion: apps/v1, kind: ReplicaSet, name: web-7d9f, uid: rr-web-7d9f, controller: true}], creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-2, containers: [{name: app, ports: [{name: http, containerPort: 8080}, {name: metrics, containerPort: 9090}]}]}, status: {phase: Running}}
     cells: [web-7d9f-b, Running]
   # matches the deployment's selector, but no replica set owns it (adopted by nothing): counts for the deployment, not the replica set
   - object: {apiVersion: v1, kind: Pod, metadata: {name: web-stray, namespace: shop, uid: rp-web-stray, labels: {app: web}, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {nodeName: node-1}, status: {phase: Running}}

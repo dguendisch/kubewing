@@ -1,18 +1,26 @@
 import type { Candidate } from "../complete/complete";
 import type { PortForward, PortInfo } from "../transport/types";
 
-/** The forwards to one pod (same context, namespace and name). Pure. */
-export function forwardsTo(list: PortForward[], context: string | undefined, namespace: string | undefined, pod: string): PortForward[] {
-  return list.filter((f) => f.context === context && f.namespace === (namespace ?? "") && f.pod === pod);
+/**
+ * The forwards to one pod, or started on one service (service = true), in
+ * the same context and namespace. A pod's dialog lists those to the pod
+ * itself, not those a service picked it for. Pure.
+ */
+export function forwardsTo(list: PortForward[], context: string | undefined, namespace: string | undefined, name: string, service = false): PortForward[] {
+  return list.filter((f) => f.context === context && f.namespace === (namespace ?? "") && (service ? f.service === name : !f.service && f.pod === name));
 }
 
-/** Remote ports already forwarded by live (not ended) forwards. Pure. */
+/** Remote ports already forwarded by live (not ended) forwards; a service's are its service ports. Pure. */
 export function forwardedRemotes(list: PortForward[]): Set<number> {
-  return new Set(list.filter((f) => !f.error).flatMap((f) => f.ports.map((p) => p.remote)));
+  return new Set(list.filter((f) => !f.error).flatMap((f) => f.ports.map((p) => p.service ?? p.remote)));
 }
 
-/** "127.0.0.1:18080 → 8080, …" */
-export const describeForward = (f: PortForward) => f.ports.map((p) => `127.0.0.1:${p.local} → ${p.remote}`).join(", ");
+/** "127.0.0.1:18080 → 8080, …"; a service's: "127.0.0.1:8080 → svc 80 → 8080" (service port, then the pod's) */
+export const describeForward = (f: PortForward) =>
+  f.ports.map((p) => `127.0.0.1:${p.local} → ${f.service && p.service !== undefined ? `svc ${p.service} → ` : ""}${p.remote}`).join(", ");
+
+/** Where a forward goes: "ns/pod", or "ns/svc/web → pod" for a service. */
+export const forwardTarget = (f: PortForward) => (f.service ? `${f.namespace}/svc/${f.service} → ${f.pod}` : `${f.namespace}/${f.pod}`);
 
 /**
  * Parses "8080:80 9090" (space or comma separated) into bridge port specs;
@@ -38,7 +46,7 @@ export function parsePorts(s: string): string[] | string {
 export const defaultLocal = (remote: number) => (remote < 1000 ? 8000 + remote : remote);
 
 /**
- * Completion candidates for the declared ports: one per port number,
+ * Completion candidates for the declared ports (or a service's ports): one per port number,
  * inserted as "local:remote" (see defaultLocal). A number declared more than once (CoreDNS: 53 as "dns"
  * UDP and "dns-tcp" TCP) is one entry listing all of them. Names, protocols
  * and containers show as detail; names match as aliases ("met" finds
@@ -53,10 +61,18 @@ export function portCandidates(ports: PortInfo[]): Candidate[] {
     const protos = uniq(decl.map((d) => d.protocol ?? "TCP"));
     // port-forward carries TCP only (kubectl refuses UDP-only ports too)
     const tcp = protos.includes("TCP");
+    // a service port goes to its target port on the pod (shown unless it's the same number)
+    const targets = uniq(decl.map((d) => d.target)).filter((t) => t !== String(port));
     return {
       value: `${defaultLocal(port)}:${port}`,
       label: String(port),
-      detail: [names.join(", "), protos.join("/"), uniq(decl.map((d) => d.container)).join(", "), tcp ? "" : "can't forward"].filter(Boolean).join(" · "),
+      detail: [
+        names.join(", "),
+        protos.join("/"),
+        uniq(decl.map((d) => d.container)).join(", "),
+        targets.length ? `→ ${targets.join(", ")}` : "",
+        tcp ? "" : "can't forward",
+      ].filter(Boolean).join(" · "),
       aliases: names,
       ...(tcp ? {} : { disabled: "port-forward is TCP only" }),
     };

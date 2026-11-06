@@ -117,13 +117,16 @@ type RowInfo struct {
 	Changes int `json:"changes,omitempty"`
 	// Pod is true for v1 Pods (exec, port-forward).
 	Pod bool `json:"pod,omitempty"`
+	// Service is true for v1 Services (port-forward to one of its pods).
+	Service bool `json:"service,omitempty"`
 	// Logs is true when the row can produce logs: a pod, or a workload, node
 	// or namespace whose pods can be tailed.
 	Logs       bool     `json:"logs,omitempty"`
 	Containers []string `json:"containers,omitempty"`
 	// ContainerInfo lists every container exec can enter, for the picker.
 	ContainerInfo []ContainerInfo `json:"containerInfo,omitempty"`
-	// Ports are the declared container ports (port-forward defaults).
+	// Ports are the declared container ports, a service's ports
+	// (port-forward defaults).
 	Ports []int64 `json:"ports,omitempty"`
 	// PortInfo details them for the port-forward dialog's completion.
 	PortInfo []PortInfo `json:"portInfo,omitempty"`
@@ -135,12 +138,15 @@ type RowInfo struct {
 	Restart string `json:"restart,omitempty"`
 }
 
-// PortInfo is one declared container port.
+// PortInfo is one declared container port, or one port of a service.
 type PortInfo struct {
 	Port      int64  `json:"port"`
 	Name      string `json:"name,omitempty"`
 	Protocol  string `json:"protocol,omitempty"` // TCP if unset, as Kubernetes defaults it
-	Container string `json:"container"`
+	Container string `json:"container,omitempty"`
+	// Target is a service port's target port: a number or a container
+	// port name (resolved on the pod the forward picks).
+	Target string `json:"target,omitempty"`
 }
 
 // ContainerInfo is one container of a pod (exec picker).
@@ -177,7 +183,7 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 			r.item = source.Item{Object: pn.full.get(key)}
 		}
 	}
-	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod()}
+	info := RowInfo{Key: key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Deleted: deleted, HasPrev: hasPrev, Changes: changes, Pod: r.isPod(), Service: r.isService()}
 	info.Logs = info.Pod || podChild(r.item.Object) != nil
 	info.Replicas = replicas(r.item.Object)
 	info.Restart = restartable(r)
@@ -189,10 +195,13 @@ func (s *Service) RowInfo(paneID, key string) (RowInfo, error) {
 			info.ContainerInfo[i].Default = info.ContainerInfo[i].Name == def
 		}
 		info.PortInfo = portInfo(r)
-		for _, p := range info.PortInfo {
-			if !slices.Contains(info.Ports, p.Port) {
-				info.Ports = append(info.Ports, p.Port)
-			}
+	}
+	if info.Service {
+		info.PortInfo = servicePortInfo(r)
+	}
+	for _, p := range info.PortInfo {
+		if !slices.Contains(info.Ports, p.Port) {
+			info.Ports = append(info.Ports, p.Port)
 		}
 	}
 	return info, nil
@@ -206,14 +215,8 @@ func portInfo(r row) []PortInfo {
 		cname, _, _ := unstructured.NestedString(asMap(c), "name")
 		ports, _, _ := unstructured.NestedSlice(asMap(c), "ports")
 		for _, p := range ports {
-			// int64 from the cluster source; float64 would be plain encoding/json
-			var n int64
-			switch v := asMap(p)["containerPort"].(type) {
-			case int64:
-				n = v
-			case float64:
-				n = int64(v)
-			default:
+			n, ok := intOf(asMap(p)["containerPort"])
+			if !ok {
 				continue
 			}
 			name, _, _ := unstructured.NestedString(asMap(p), "name")
@@ -643,14 +646,25 @@ func (b *batcher) Close() {
 
 // PortForwardInfo describes a running port-forward.
 type PortForwardInfo struct {
-	ID        string        `json:"id"`
-	Context   string        `json:"context"`
-	Namespace string        `json:"namespace"`
-	Pod       string        `json:"pod"`
-	Ports     []source.Port `json:"ports"`
+	ID        string `json:"id"`
+	Context   string `json:"context"`
+	Namespace string `json:"namespace"`
+	// Pod is the pod forwarded to; for a service, the one it picked.
+	Pod string `json:"pod"`
+	// Service is set when the forward was started on a service.
+	Service string        `json:"service,omitempty"`
+	Ports   []ForwardPort `json:"ports"`
 	// Error is set once the forward ended on its own (pod gone …); it then
 	// stays in the list until stopped, so the user sees why.
 	Error string `json:"error,omitempty"`
+}
+
+// ForwardPort is one forwarded port: local on 127.0.0.1, remote on the
+// pod, and for a service the service port it stands for.
+type ForwardPort struct {
+	Local   uint16 `json:"local"`
+	Remote  uint16 `json:"remote"`
+	Service uint16 `json:"service,omitempty"`
 }
 
 type forward struct {
@@ -658,8 +672,10 @@ type forward struct {
 	f    *source.Forward
 }
 
-// PortForwardStart forwards local ports (on 127.0.0.1) to the pod of a row.
-// ports are "local:remote" or "remote"/":remote" for a random local port.
+// PortForwardStart forwards local ports (on 127.0.0.1) to the pod of a row,
+// or for a service, to one of its pods (see servicePod): its ports are then
+// service ports. ports are "local:remote" or "remote"/":remote" for a
+// random local port.
 // It doesn't change cluster state, so it needs no token and works on
 // read-only contexts.
 func (s *Service) PortForwardStart(paneID, key string, ports []string) (PortForwardInfo, error) {
@@ -670,8 +686,8 @@ func (s *Service) PortForwardStart(paneID, key string, ports []string) (PortForw
 	if err != nil {
 		return PortForwardInfo{}, err
 	}
-	if !r.isPod() {
-		return PortForwardInfo{}, fmt.Errorf("port-forward needs a pod, not %s", strings.ToLower(r.kind()))
+	if !r.isPod() && !r.isService() {
+		return PortForwardInfo{}, fmt.Errorf("port-forward needs a pod or service, not %s", strings.ToLower(r.kind()))
 	}
 	if len(ports) == 0 {
 		return PortForwardInfo{}, errors.New("no ports given")
@@ -683,15 +699,27 @@ func (s *Service) PortForwardStart(paneID, key string, ports []string) (PortForw
 		}
 		norm[i] = p
 	}
+	info := PortForwardInfo{Context: r.context, Namespace: r.namespace(), Pod: r.name()}
+	var svcPorts map[uint16]uint16
+	if r.isService() {
+		info.Service = r.name()
+		if info.Pod, norm, svcPorts, err = s.servicePod(r, norm); err != nil {
+			return PortForwardInfo{}, err
+		}
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	f, err := s.opts.Actor.PortForward(ctx, r.cluster, r.namespace(), r.name(), norm)
+	f, err := s.opts.Actor.PortForward(ctx, r.cluster, r.namespace(), info.Pod, norm)
 	if err != nil {
 		return PortForwardInfo{}, err
 	}
+	for _, p := range f.Ports {
+		info.Ports = append(info.Ports, ForwardPort{Local: p.Local, Remote: p.Remote, Service: svcPorts[p.Remote]})
+	}
 	s.mu.Lock()
 	s.next++
-	fw := &forward{f: f, info: PortForwardInfo{ID: fmt.Sprintf("f%d", s.next), Context: r.context, Namespace: r.namespace(), Pod: r.name(), Ports: f.Ports}}
+	info.ID = fmt.Sprintf("f%d", s.next)
+	fw := &forward{f: f, info: info}
 	s.forwards[fw.info.ID] = fw
 	s.mu.Unlock()
 	go func() {

@@ -150,21 +150,31 @@ func (s *Service) logsPods(g logsTarget) ([]source.Item, error) {
 	}
 	defer sub.Close()
 	v := s.logsView(g, sub)
-	timeout := time.After(logsTargetsWait)
+	ev, err := firstList(sub, logsTargetsWait)
+	if err != nil {
+		return nil, err
+	}
+	return g.apply(v, ev).Items, nil
+}
+
+// firstList waits, up to wait, for the first list of a pods watch (a
+// shared watch already synced answers at once).
+func firstList(sub *source.Subscription, wait time.Duration) (source.Event, error) {
+	timeout := time.After(wait)
 	for {
 		select {
 		case ev, ok := <-sub.Events:
 			if !ok {
-				return nil, fmt.Errorf("the pods watch closed")
+				return source.Event{}, fmt.Errorf("the pods watch closed")
 			}
 			if ev.Type == source.Error {
-				return nil, fmt.Errorf("%s", ev.Err)
+				return source.Event{}, fmt.Errorf("%s", ev.Err)
 			}
 			if ev.Type == source.Relist {
-				return g.apply(v, ev).Items, nil
+				return ev, nil
 			}
 		case <-timeout:
-			return nil, fmt.Errorf("timed out listing the pods")
+			return source.Event{}, fmt.Errorf("timed out listing the pods")
 		}
 	}
 }

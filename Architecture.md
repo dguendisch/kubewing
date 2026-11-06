@@ -170,6 +170,14 @@ Which fields name another object (`secretName`, `roleRef`, a shoot's `seedName`)
 
 `internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` (and a tape fake) behind it. One follower per pod container (shared on the pane's watch for a whole-pane tail), `logs.maxStreams` concurrent, restart-resume via the RFC 3339 timestamp. The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`).
 
+## Port-forward to services
+
+A pod forward is client-go's SPDY/WebSocket port-forward (`source.Cluster.PortForward`). A service forward (`bridge/svcforward.go`) resolves to a pod forward in the bridge, as `kubectl port-forward svc/…` does, with kubectl's own helpers so the choices match it:
+
+- **The pod:** the service's selector is a pods watch on the shared registry (`v1/Pod` resolved by kind, so tapes resolve too); its first list ranked by `podutils.ActivePods`, the most active taken. It must be running.
+- **The ports:** the dialog sends service ports; `util.LookupContainerPortNumberByServicePort` maps each to the pod's target port (named target ports through the pod's containers, headless services unchanged). UDP-only service ports are refused up front.
+- **No failover:** the forward is pinned to that pod, as with kubectl; it ends with the pod. `PortForwardInfo` keeps the service name and, per port, the service port next to the pod's, so the service's dialog lists its own forwards (not those to its pods directly) and offers the service ports not yet taken.
+
 ## Local terminals
 
 `⌃T` / `⌃⇧T` start the user's login shell on the Mac (`source.RunShell`: `$SHELL -l` in a PTY via `creack/pty`, in `$HOME`) as one more session of the bridge's `startSession`, so output, input, resize, find and the pane's lifecycle are exec's.
@@ -255,7 +263,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |
 | `internal/app` | the Wails-bound service (thin adapter over the bridge), native menu, window, single instance, detaching |
 | `internal/relations` | the jump menu's relations (namespace, owners, owned, references), each as a pipeline target; field reference rules (`refs.yaml`, embedded) matched over a YAML text; pure |
-| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward); fake metrics (`metrics:`); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
+| `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward; a service's via `rel-services`); fake metrics (`metrics:`); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
 | `frontend/src` | React 19 + Compiler, Glide grid, zustand, transport (Wails / WS) |
 | `frontend/src/actions` | row actions registry (row menu) |
 | `frontend/src/keys` | keymap, cheat sheet, native menu |

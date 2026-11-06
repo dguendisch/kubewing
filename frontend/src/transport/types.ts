@@ -542,13 +542,15 @@ export interface RowInfo {
   /** With recorded history: how many changes of the row are kept (the diff steps through them). */
   changes?: number;
   pod?: boolean;
+  /** A v1 Service: port-forward goes to one of its pods. */
+  service?: boolean;
   /** The row can produce logs: a pod, or a workload/node/namespace with pods. */
   logs?: boolean;
   containers?: string[];
   /** Every container exec can enter, for the picker. */
   containerInfo?: ContainerInfo[];
   ports?: number[];
-  /** The declared container ports in spec order (port-forward completion). */
+  /** The declared container ports, or a service's ports, in spec order (port-forward completion). */
   portInfo?: PortInfo[];
   /** spec.replicas of a scalable row (deployments, stateful sets, custom resources with a scale subresource). */
   replicas?: number;
@@ -580,12 +582,14 @@ export interface ContainerInfo {
   default?: boolean;
 }
 
-/** Mirrors bridge.PortInfo. */
+/** Mirrors bridge.PortInfo: a declared container port, or a service port. */
 export interface PortInfo {
   port: number;
   name?: string;
   protocol?: string;
-  container: string;
+  container?: string;
+  /** A service port's target port: a number or a container port name. */
+  target?: string;
 }
 
 /** Mirrors bridge.DescribeResult: one describe run plus, from the previous look, a normalized pair to diff. */
@@ -771,8 +775,12 @@ export interface PortForward {
   id: string;
   context: string;
   namespace: string;
+  /** The pod forwarded to; for a service, the one it picked. */
   pod: string;
-  ports: { local: number; remote: number }[];
+  /** Set when started on a service. */
+  service?: string;
+  /** remote is the pod's port; service the service port it stands for (service forwards). */
+  ports: { local: number; remote: number; service?: number }[];
   /** Set once the forward ended on its own (pod gone …). */
   error?: string;
 }
@@ -907,7 +915,7 @@ export interface Transport {
   sessionInput(id: string, data: string): Promise<void>;
   sessionResize(id: string, cols: number, rows: number): Promise<void>;
   sessionClose(id: string): Promise<void>;
-  /** Forwards 127.0.0.1 ports to a row's pod ("8080:80", "80" = random local port). */
+  /** Forwards 127.0.0.1 ports to a row's pod, or a service's pod by service port ("8080:80", "80" = random local port). */
   portForwardStart(pane: string, key: string, ports: string[]): Promise<PortForward>;
   portForwards(): Promise<PortForward[]>;
   portForwardStop(id: string): Promise<void>;

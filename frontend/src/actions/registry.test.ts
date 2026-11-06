@@ -29,7 +29,11 @@ describe("row actions menu", () => {
     const m = byCmd(menuFor(cm, undefined));
     expect(m["object.exec"]!.disabled).toBe("needs a pod, not configmap");
     expect(m["object.logs"]!.disabled).toBe("no pods to tail");
-    expect(m["object.portForward"]!.disabled).toBe("needs a pod, not configmap");
+    expect(m["object.portForward"]!.disabled).toBe("needs a pod or service, not configmap");
+    // a service forwards to one of its pods
+    const svc = byCmd(menuFor({ key: "s1", kind: "Service", name: "web", namespace: "shop", service: true }, undefined));
+    expect(svc["object.portForward"]!.disabled).toBeUndefined();
+    expect(svc["object.exec"]!.disabled).toBe("needs a pod, not service");
     expect(m["object.opsPod"]!.disabled).toBe("needs a node or pod, not configmap");
     // a node row: everything pod-only is off, the ops pod is on
     const node = byCmd(menuFor({ key: "n1", kind: "Node", name: "n1" }, undefined));

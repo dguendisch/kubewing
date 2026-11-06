@@ -691,7 +691,7 @@ A shell holds the context's credentials, and kubewing can't check what it runs. 
 
 ## 14. Port-forwarding
 
-`f` on a pod forwards ports on `127.0.0.1`. The dialog lists the pod's running forwards (✕ stops one) and offers the declared ports not forwarded yet:
+`f` on a pod or a service forwards ports on `127.0.0.1` (a service: see [below](#services)). The dialog lists the pod's running forwards (✕ stops one) and offers the declared ports not forwarded yet:
 
 - Each port is forwarded locally on the same number, except below 1000 (binding those needs root), which gets 8000 added (`8053:53`, `8443:443`).
 - With one port it's prefilled, so `f ⏎` forwards it. With several, a list shows each with name, protocol and container; type a number or name to narrow it, `⏎` adds the highlighted one, the next `⏎` forwards. `⇥` completes to the best match.
@@ -701,6 +701,17 @@ A shell holds the context's credentials, and kubewing can't check what it runs. 
 From the keyboard, `⇧⇥` goes up into the running forwards; `↑`/`↓` pick, `x` or `⌫` stops one, `⇥`/`Esc` goes back.
 
 The **⇄ N** badge in the tab bar (or `⌥⌘P`) lists all forwards, including those whose pod is no longer shown; `x`, `⌫` or ✕ stops one.
+
+### Services
+
+`f` on a service works like `kubectl port-forward svc/…`. The dialog offers the service's ports, each with its target port when it differs (`80 · http · TCP · → http`). The forward goes to one pod the service selects:
+
+- It picks the most active pod: running and ready over pending, ready the longest, fewest restarts (the same choice kubectl makes).
+- Each service port goes to its target port on that pod. A named target port (`targetPort: http`) is looked up in the pod's containers.
+- The forward stays on that pod. If the pod goes away, the forward ends with the reason; `f` again picks a pod anew.
+- A service without a selector (one with manually managed endpoints), or whose selector matches no pod, can't be forwarded; the dialog says why.
+
+A service's forwards are listed as `127.0.0.1:8080 → svc 80 → 8080` with the pod they go to, in its dialog and in `⌥⌘P`.
 
 ---
 

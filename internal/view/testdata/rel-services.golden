@@ -1,0 +1,61 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "TYPE"
+    }
+  ],
+  "total": 4,
+  "offset": 0,
+  "order": [
+    "rs-dns",
+    "rs-external",
+    "rs-idle",
+    "rs-web"
+  ],
+  "rows": [
+    {
+      "key": "rs-dns",
+      "cells": [
+        "shop",
+        "dns",
+        "ClusterIP"
+      ]
+    },
+    {
+      "key": "rs-external",
+      "cells": [
+        "shop",
+        "external",
+        "ClusterIP"
+      ]
+    },
+    {
+      "key": "rs-idle",
+      "cells": [
+        "shop",
+        "idle",
+        "ClusterIP"
+      ]
+    },
+    {
+      "key": "rs-web",
+      "cells": [
+        "shop",
+        "web",
+        "ClusterIP"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 4
+  }
+}

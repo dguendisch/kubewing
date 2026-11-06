@@ -190,8 +190,8 @@ func TestOwnedScan(t *testing.T) {
 		t.Errorf("items = %+v", got.Items)
 	}
 	// rel-* namespaced types: configmaps, deployments, pods, pvcs, replicasets, rolebindings, roles, secrets,
-	// serviceaccounts, statefulsets, widgets; e2e-deploys shares a kind
-	if got.Scanned != 11 || got.Skipped != 0 {
+	// serviceaccounts, services, statefulsets, widgets; e2e-deploys shares a kind
+	if got.Scanned != 12 || got.Skipped != 0 {
 		t.Errorf("scanned %d skipped %d", got.Scanned, got.Skipped)
 	}
 }

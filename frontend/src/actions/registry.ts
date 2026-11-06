@@ -32,6 +32,7 @@ export interface RowAction {
 const live = (r: RowInfo) => (r.deleted ? "deleted" : true);
 const onNode = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.kind === "Node" ? true : `needs a node or pod, not ${r.kind.toLowerCase()}`);
 const pod = (r: RowInfo) => (r.deleted ? "deleted" : r.pod ? true : `needs a pod, not ${r.kind.toLowerCase()}`);
+const forwardable = (r: RowInfo) => (r.deleted ? "deleted" : r.pod || r.service ? true : `needs a pod or service, not ${r.kind.toLowerCase()}`);
 const scalable = (r: RowInfo) => (r.deleted ? "deleted" : r.replicas !== undefined ? true : `${r.kind.toLowerCase()} has no replicas`);
 const restartable = (r: RowInfo) => (r.deleted ? "deleted" : r.restart ?? true);
 
@@ -54,7 +55,7 @@ export const rowActions: RowAction[] = [
   { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
   { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true, multi: (r) => r.kind === "Pod", multiLabel: (n) => `debug containers in ${n} pods…` },
   { command: "object.opsPod", label: "node shell…", group: "act", available: onNode, mutates: true },
-  { command: "object.portForward", label: "port-forward…", group: "act", available: pod },
+  { command: "object.portForward", label: "port-forward…", group: "act", available: forwardable },
   { command: "object.label", label: "label…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `label ${n}…` },
   { command: "object.annotate", label: "annotate…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `annotate ${n}…` },
   {

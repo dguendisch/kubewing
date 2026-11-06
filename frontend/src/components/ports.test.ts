@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { defaultLocal, describeForward, forwardedRemotes, forwardsTo, lastToken, listedRemotes, parsePorts, portCandidates } from "./ports";
+import { defaultLocal, describeForward, forwardedRemotes, forwardsTo, forwardTarget, lastToken, listedRemotes, parsePorts, portCandidates } from "./ports";
 import { rank } from "../complete/complete";
 
 describe("ports", () => {
@@ -50,6 +50,32 @@ describe("ports", () => {
     // an ended forward doesn't hold its port any more: it can be offered again
     expect([...forwardedRemotes(mine)]).toEqual([9153]);
     expect(describeForward(mine[0]!)).toBe("127.0.0.1:19153 → 9153");
+    expect(forwardTarget(mine[0]!)).toBe("kube-system/coredns");
+  });
+
+  it("keeps a service's forwards apart from its pod's, by service port", () => {
+    const viaSvc = { id: "f5", context: "kind", namespace: "shop", pod: "web-a", service: "web", ports: [{ local: 8080, remote: 8080, service: 80 }] };
+    const direct = { id: "f6", context: "kind", namespace: "shop", pod: "web-a", ports: [{ local: 9090, remote: 9090 }] };
+    const list = [viaSvc, direct];
+    expect(forwardsTo(list, "kind", "shop", "web", true).map((f) => f.id)).toEqual(["f5"]);
+    expect(forwardsTo(list, "kind", "shop", "web-a").map((f) => f.id)).toEqual(["f6"]);
+    // the service dialog offers service ports: 80 is taken, not 8080
+    expect([...forwardedRemotes([viaSvc])]).toEqual([80]);
+    expect(describeForward(viaSvc)).toBe("127.0.0.1:8080 → svc 80 → 8080");
+    expect(forwardTarget(viaSvc)).toBe("shop/svc/web → web-a");
+  });
+
+  it("shows a service port's target when it differs", () => {
+    const svc = [
+      { port: 80, name: "http", protocol: "TCP", target: "http" },
+      { port: 9090, name: "metrics", protocol: "TCP", target: "9090" },
+      { port: 53, name: "dns", protocol: "UDP", target: "5353" },
+    ];
+    expect(portCandidates(svc).map((c) => [c.value, c.detail])).toEqual([
+      ["8080:80", "http · TCP · → http"],
+      ["9090:9090", "metrics · TCP"],
+      ["8053:53", "dns · UDP · → 5353 · can't forward"],
+    ]);
   });
 
   it("finds the token being completed and the ports already listed", () => {
