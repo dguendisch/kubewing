@@ -22,8 +22,9 @@ type Frame struct {
 // ColumnInfo describes a rendered column.
 type ColumnInfo struct {
 	Name string `json:"name"`
-	// Type is "", "number", "bytes" or "age" (cell holds an RFC3339
-	// timestamp the frontend renders relative to its own clock).
+	// Type is "", "number", "bytes", "age" (cell holds an RFC3339
+	// timestamp the frontend renders relative to its own clock) or
+	// "restarts" (a pod's "3 (<RFC3339>)", the timestamp rendered alike).
 	Type string `json:"type,omitempty"`
 }
 

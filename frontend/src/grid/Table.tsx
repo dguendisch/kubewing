@@ -18,7 +18,7 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
 import { bridge, paneData, useColumns } from "../store/store";
-import { layout, withAlpha, type ColorToken } from "./cells";
+import { clockRendered, layout, withAlpha, type ColorToken } from "./cells";
 import { grepRanges, parseGrep, type Range } from "../components/grep";
 import { nowOf, rowAt, type PaneData } from "./rowcache";
 import { boundaryAt, charAt, current, selectIn, setTextSel, shownRange, textStart, useTextSel, wordAt, type TextSel } from "./textsel";
@@ -166,9 +166,9 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
     });
   }, [serverId]);
 
-  // age columns are rendered client-side (against nowOf); repaint them once per second (in the past they stand still)
+  // age and restarts columns are rendered client-side (against nowOf); repaint them once per second (in the past they stand still)
   useEffect(() => {
-    const ageCols = data.current.columns.flatMap((c, i) => (c.type === "age" ? [i] : []));
+    const ageCols = data.current.columns.flatMap((c, i) => (clockRendered(c) ? [i] : []));
     if (!ageCols.length || data.current.status.at) return;
     const id = setInterval(() => {
       const d = data.current;
@@ -271,8 +271,8 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
     if (e.detail >= 3) return setTextSel(serverId, selectIn(h.r, cols, h.col, "all"));
     if (e.detail === 2) {
       const w = wordAt(h.text, charAt(h.text, h.x, h.measure));
-      // between words (or an empty cell): nothing; an age cell is selected whole
-      return setTextSel(serverId, w || cols[h.col]?.type === "age" ? selectIn(h.r, cols, h.col, w ?? "all") : undefined);
+      // between words (or an empty cell): nothing; an age or restarts cell is selected whole
+      return setTextSel(serverId, w || clockRendered(cols[h.col]) ? selectIn(h.r, cols, h.col, w ?? "all") : undefined);
     }
     setTextSel(serverId, undefined);
     const from = boundaryAt(h.text, h.x, h.measure);
@@ -397,8 +397,8 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
     ctx.beginPath();
     ctx.rect(rect.x, rect.y, rect.width, rect.height);
     ctx.clip();
-    // age cells show "5m" but grep matched the raw timestamp: offsets don't apply
-    if (r && terms.length && column?.type !== "age") {
+    // age and restarts cells show "5m" but grep matched the raw timestamp: offsets don't apply
+    if (r && terms.length && !clockRendered(column)) {
       ctx.save();
       ctx.globalAlpha = 0.45;
       ctx.fillStyle = colors["match"]!;

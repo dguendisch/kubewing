@@ -93,6 +93,8 @@ type colSpec struct {
 	cellIndex int // index into server-side table cells; -1 if unused
 	// stamp: the cell is a timestamp read from the object, shown as an age
 	stamp func(obj *unstructured.Unstructured) string
+	// fromCell: the server cell (cellIndex) completed from the object
+	fromCell func(obj *unstructured.Unstructured, cell any) string
 	// metric: the cell is from data outside the object (see SetMetrics)
 	metric     func(obj map[string]any, d metricData) string
 	metricFrom metricSource
@@ -475,6 +477,12 @@ func serverColumns(defs []metav1.TableColumnDefinition, namespaced bool, kind st
 			cs.numeric = false
 			cs.info.Type = string(pipeline.TypeAge)
 		}
+		// a pod's "3 (5m ago)": its "ago" ticks too (see podRestarts), sorted by the count
+		if kind == "Pod" && cs.info.Name == "RESTARTS" {
+			cs.fromCell = podRestarts
+			cs.numeric = true
+			cs.info.Type = string(pipeline.TypeRestarts)
+		}
 		out = append(out, cs)
 	}
 	return out
@@ -665,6 +673,9 @@ func (v *View) render(e *entry) {
 			if c.cellIndex < len(e.item.Cells) {
 				val = e.item.Cells[c.cellIndex]
 			}
+			if c.fromCell != nil {
+				val = c.fromCell(e.item.Object, val)
+			}
 		case c.path != nil:
 			val = c.path.Get(obj)
 		case c.program != nil:
@@ -678,7 +689,12 @@ func (v *View) render(e *entry) {
 	for i, c := range v.cols {
 		e.nums[i] = math.NaN()
 		if c.numeric {
-			if f, ok := numericValue(cells[i]); ok {
+			cell := cells[i]
+			if c.info.Type == string(pipeline.TypeRestarts) {
+				// "3 (…)": the count
+				cell, _, _ = strings.Cut(cell, " ")
+			}
+			if f, ok := numericValue(cell); ok {
 				e.nums[i] = f
 			}
 		} else if f, ok := humanDuration(cells[i]); ok {

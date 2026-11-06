@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { formatAge } from "./cells";
+import { clockRendered, shownText } from "./cells";
 import type { ColumnInfo, RowData } from "../transport/types";
 
 /**
@@ -9,7 +9,8 @@ import type { ColumnInfo, RowData } from "../transport/types";
  * column, not to a screen position, and holds the cell's text as selected:
  * once the cell changes, it's stale and neither drawn nor copied.
  *
- * An age cell is selected whole: it shows "5m" but copies its timestamp.
+ * An age or restarts cell is selected whole: it shows "5m" ("3 (5m ago)") but
+ * copies its timestamp.
  */
 export interface TextSel {
   /** Row key (object UID). */
@@ -17,10 +18,11 @@ export interface TextSel {
   column: string;
   /** The cell's text when selected (an age cell's: its timestamp). */
   text: string;
-  /** [start, end) in the shown text; an age cell: the whole of it. */
+  /** [start, end) in the shown text; an age or restarts cell: the whole of it. */
   start: number;
   end: number;
-  age?: boolean;
+  /** Set for a cell rendered against the clock (age, restarts): the column it's shown as. */
+  clock?: ColumnInfo;
 }
 
 /** Per server pane id. */
@@ -65,12 +67,12 @@ export function textStart(rect: { x: number; width: number }, width: number, ali
   return align === "right" ? rect.x + rect.width - pad - width : rect.x + pad;
 }
 
-/** A selection of [start, end) in a cell, or of the whole cell (age, triple-click); undefined for an empty cell. Pure. */
+/** A selection of [start, end) in a cell, or of the whole cell (age, restarts, triple-click); undefined for an empty cell. Pure. */
 export function selectIn(row: RowData, columns: ColumnInfo[], col: number, range: [number, number] | "all"): TextSel | undefined {
   const c = columns[col];
   const text = row.cells[col] ?? "";
   if (!c || !text) return undefined;
-  if (c.type === "age") return { key: row.key, column: c.name, text, start: 0, end: Number.MAX_SAFE_INTEGER, age: true };
+  if (clockRendered(c)) return { key: row.key, column: c.name, text, start: 0, end: Number.MAX_SAFE_INTEGER, clock: c };
   const [start, end] = range === "all" ? [0, text.length] : range;
   if (start >= end) return undefined;
   return { key: row.key, column: c.name, text, start, end };
@@ -86,10 +88,10 @@ export function current(sel: TextSel | undefined, row: RowData | undefined, colu
 /** What ⌘C copies: the selected part, an age cell's timestamp; undefined when stale. Pure. */
 export function selectedText(sel: TextSel | undefined, row: RowData | undefined, columns: ColumnInfo[]): string | undefined {
   if (current(sel, row, columns) === undefined) return undefined;
-  return sel!.age ? sel!.text : sel!.text.slice(sel!.start, sel!.end);
+  return sel!.clock ? sel!.text : sel!.text.slice(sel!.start, sel!.end);
 }
 
 /** The [start, end) to highlight in the shown text (an age cell's "5m" whole). Pure. */
 export function shownRange(sel: TextSel, now: number): [number, number] {
-  return sel.age ? [0, formatAge(sel.text, now).length] : [sel.start, sel.end];
+  return sel.clock ? [0, shownText(sel.text, sel.clock, now).length] : [sel.start, sel.end];
 }

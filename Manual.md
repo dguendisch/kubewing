@@ -221,6 +221,8 @@ Columns and widths are kept in `columns.yaml` across restarts. Changing columns 
 
 **Events** get real timestamps: LAST SEEN and FIRST SEEN (`-o wide`) are taken from the event object as kubectl picks them, shown as ages that tick and sort by the exact time. An events pane starts sorted by LAST SEEN, newest first.
 
+**Pods** show RESTARTS as kubectl does, `3 (5m ago)`. The "ago" ticks: it counts from the last restart of any of the pod's containers. The column sorts by the number of restarts and is marked changed only when the pod restarts again.
+
 ### Hide healthy
 
 `h` (or the **hide healthy** checkbox in the pane header) hides what needs no attention:

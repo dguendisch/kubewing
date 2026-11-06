@@ -48,10 +48,13 @@ describe("selection", () => {
     expect(selectedText(part, row, cols)).toBe("eb");
     expect(selectedText(selectIn(row, cols, 0, "all"), row, cols)).toBe("web-0");
     const age = selectIn(row, cols, 2, [0, 1])!; // any selection in it takes the whole cell
-    expect(age).toMatchObject({ age: true, column: "AGE" });
+    expect(age).toMatchObject({ clock: cols[2], column: "AGE" });
     expect(selectedText(age, row, cols)).toBe("2026-01-01T11:00:00Z");
     expect(shownRange(age, now)).toEqual([0, 2]); // "1h"
     expect(shownRange(part, now)).toEqual([1, 3]);
+    const rc = [{ name: "RESTARTS", type: "restarts" as const }];
+    const restarts = selectIn({ key: "u1", cells: ["3 (2026-01-01T11:00:00Z)"] }, rc, 0, [0, 1])!;
+    expect(shownRange(restarts, now)).toEqual([0, 10]); // "3 (1h ago)"
   });
 
   it("nothing to select in an empty cell or an empty range", () => {

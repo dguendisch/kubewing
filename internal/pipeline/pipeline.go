@@ -83,6 +83,11 @@ const (
 	TypeNumber ColumnType = "number" // numeric sort
 	TypeBytes  ColumnType = "bytes"  // human-readable size, numeric sort
 	TypeAge    ColumnType = "age"    // timestamp rendered relative by the frontend; never diffed
+	// TypeRestarts is a pod's Restarts server column: "3 (<RFC 3339>)", the
+	// timestamp rendered relative by the frontend ("3 (5m ago)"); sorted by
+	// the count and diffed (the timestamp moves only with a restart). Not
+	// for custom columns.
+	TypeRestarts ColumnType = "restarts"
 )
 
 // Column is one rendered column: a custom one (Path or Expr), or with

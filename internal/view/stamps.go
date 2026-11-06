@@ -1,6 +1,7 @@
 package view
 
 import (
+	"strings"
 	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -22,6 +23,44 @@ func deletionStamp(obj *unstructured.Unstructured) string {
 		return t.UTC().Format(time.RFC3339)
 	}
 	return ""
+}
+
+// podRestarts re-derives a pod's Restarts cell. The server sends it as text,
+// "3 (5m ago)", whose "ago" part only changes when the pod does. The count
+// stays the server's; the "ago" part becomes the newest restart's timestamp:
+// "3 (2026-01-01T11:55:00Z)", which the frontend renders against its own
+// clock (pipeline.TypeRestarts). Without a timestamp in the pod, or without
+// an "ago" part, the server's text stays.
+func podRestarts(obj *unstructured.Unstructured, cell any) string {
+	s, _ := cell.(string)
+	count, rest, ok := strings.Cut(s, " (")
+	if !ok || !strings.HasSuffix(rest, " ago)") {
+		return s
+	}
+	if t := lastRestart(obj.Object); t != "" {
+		return count + " (" + t + ")"
+	}
+	return s
+}
+
+// lastRestart is when a container of the pod last terminated (kubectl's
+// "ago": the newest lastState.terminated.finishedAt, init containers too),
+// as RFC 3339 in UTC to the second; "" if none did.
+func lastRestart(pod map[string]any) string {
+	var last string
+	for _, field := range []string{"initContainerStatuses", "containerStatuses"} {
+		statuses, _, _ := unstructured.NestedSlice(pod, "status", field)
+		for _, cs := range statuses {
+			m, ok := cs.(map[string]any)
+			if !ok {
+				continue
+			}
+			if t := firstStamp(m, []string{"lastState", "terminated", "finishedAt"}); t > last {
+				last = t
+			}
+		}
+	}
+	return last
 }
 
 func creationStamp(obj *unstructured.Unstructured) string {

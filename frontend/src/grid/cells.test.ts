@@ -28,6 +28,12 @@ describe("layout", () => {
     expect(layout({ ...row, hidden: true }, 0, cols[0], now).hiddenMarker).toBe(true);
     expect(layout({ ...row, hidden: true }, 1, cols[1], now).hiddenMarker).toBe(false);
   });
+  it("a pod's restarts: the count and how long ago the last restart was, right-aligned", () => {
+    const c = { name: "RESTARTS", type: "restarts" as const };
+    expect(layout({ key: "k", cells: ["3 (2026-01-01T11:55:00Z)"] }, 0, c, now)).toMatchObject({ text: "3 (5m ago)", align: "right" });
+    expect(layout({ key: "k", cells: ["0"] }, 0, c, now).text).toBe("0");
+    expect(layout({ key: "k", cells: ["1 (5m ago)"] }, 0, c, now).text).toBe("1 (5m ago)"); // the server's text
+  });
   it("missing rows render empty", () => {
     expect(layout(undefined, 0, cols[0], now).text).toBe("");
   });

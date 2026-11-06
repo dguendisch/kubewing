@@ -306,3 +306,73 @@ func TestHumanDuration(t *testing.T) {
 		}
 	}
 }
+
+func restartsPod(uid string, cell string, finished ...string) source.Item {
+	var statuses []any
+	for _, f := range finished {
+		statuses = append(statuses, map[string]any{"name": "c", "lastState": map[string]any{"terminated": map[string]any{"finishedAt": f}}})
+	}
+	obj := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": uid, "namespace": "ns"}, "status": map[string]any{"containerStatuses": statuses}}
+	u := &unstructured.Unstructured{Object: obj}
+	u.SetUID(k8stypes.UID(uid))
+	return source.Item{Object: u, Cells: []any{uid, cell}}
+}
+
+// A pod's Restarts "3 (5m ago)" keeps the server's count, its "ago" becomes
+// the newest restart's timestamp (rendered by the frontend: it ticks); sorted
+// by the count; an update with the same restarts isn't a change.
+func TestPodRestartsColumn(t *testing.T) {
+	defs := []metav1.TableColumnDefinition{{Name: "Name", Type: "string"}, {Name: "Restarts", Type: "string"}}
+	v, err := New(pipeline.Pipeline{
+		Source: pipeline.Source{Resource: "pods"},
+		Render: pipeline.Render{Columns: []pipeline.Column{{Name: "NAME"}, {Name: "RESTARTS"}}},
+	}, Options{Kind: "Pod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: defs, Items: []source.Item{
+		restartsPod("ten", "10 (2m ago)", "2026-01-01T11:50:00Z", "2026-01-01T11:58:00.5Z"),
+		restartsPod("three", "3 (1h ago)", "2026-01-01T11:00:00Z"),
+		restartsPod("none", "0"),
+		restartsPod("gone", "1 (5m ago)"), // no lastState left: the server's text
+	}}, t0)
+	if c := v.cols[1]; c.info.Type != string(pipeline.TypeRestarts) || c.timeDerived {
+		t.Fatalf("RESTARTS: type %q, time-derived %v", c.info.Type, c.timeDerived)
+	}
+	for name, want := range map[string]string{"ten": "10 (2026-01-01T11:58:00Z)", "three": "3 (2026-01-01T11:00:00Z)", "none": "0", "gone": "1 (5m ago)"} {
+		if got := v.entries[name].cells[1]; got != want {
+			t.Errorf("%s: %q, want %q", name, got, want)
+		}
+	}
+	if err := v.SetStages([]pipeline.Stage{{Sort: []string{"-RESTARTS"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := names(v), []string{"ten", "three", "gone", "none"}; !slices.Equal(got, want) {
+		t.Errorf("sort -RESTARTS = %v, want %v", got, want)
+	}
+
+	// the server's "ago" moved on, the restart didn't: no change
+	_, _ = v.Frame(t0)
+	v.Apply(source.Event{Type: source.Modified, Item: restartsPod("three", "3 (61m ago)", "2026-01-01T11:00:00Z")}, t0.Add(time.Minute))
+	if e := v.entries["three"]; !e.changedAt[1].IsZero() {
+		t.Fatal("same restarts marked changed")
+	}
+	// restarted again: a change
+	v.Apply(source.Event{Type: source.Modified, Item: restartsPod("three", "4 (1s ago)", "2026-01-01T12:01:00Z")}, t0.Add(2*time.Minute))
+	if e := v.entries["three"]; e.cells[1] != "4 (2026-01-01T12:01:00Z)" || e.changedAt[1].IsZero() {
+		t.Fatalf("restart: cell %q, changed %v", e.cells[1], e.changedAt[1])
+	}
+}
+
+// Another kind's Restarts stays the server's text.
+func TestRestartsColumnOnlyForPods(t *testing.T) {
+	defs := []metav1.TableColumnDefinition{{Name: "Name", Type: "string"}, {Name: "Restarts", Type: "string"}}
+	v, err := New(pipeline.Pipeline{Source: pipeline.Source{Resource: "widgets"}}, Options{Kind: "Widget"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Columns: defs, Items: []source.Item{restartsPod("a", "3 (1h ago)", "2026-01-01T11:00:00Z")}}, t0)
+	if c := v.cols[1]; c.info.Type != "" || v.entries["a"].cells[1] != "3 (1h ago)" {
+		t.Fatalf("RESTARTS: type %q, cell %q", c.info.Type, v.entries["a"].cells[1])
+	}
+}

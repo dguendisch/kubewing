@@ -1,6 +1,7 @@
 // Mirrors internal/view/frame.go and internal/bridge/bridge.go.
 import type { Menu as AppMenu } from "../keys/appMenu";
-export type ColumnType = "" | "number" | "bytes" | "age";
+/** restarts: a pod's server column "3 (<RFC 3339>)", shown as "3 (5m ago)" (Go's pipeline.TypeRestarts). */
+export type ColumnType = "" | "number" | "bytes" | "age" | "restarts";
 
 export interface ColumnInfo {
   name: string;

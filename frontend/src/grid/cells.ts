@@ -34,11 +34,27 @@ export function formatAge(iso: string, now: number): string {
   return `${s}s`;
 }
 
+/** Columns whose cells the frontend renders against its clock (shown text ≠ cell text): they tick. */
+export function clockRendered(c: ColumnInfo | undefined): boolean {
+  return c?.type === "age" || c?.type === "restarts";
+}
+
+/** A cell as shown: an age cell's timestamp as "5m", a restarts cell's "3 (<timestamp>)" as "3 (5m ago)"; else as is. */
+export function shownText(raw: string, column: ColumnInfo | undefined, now: number): string {
+  if (!raw) return raw;
+  if (column?.type === "age") return formatAge(raw, now);
+  if (column?.type === "restarts") {
+    const m = /^(\S+) \((.+)\)$/.exec(raw);
+    if (m && !Number.isNaN(Date.parse(m[2]!))) return `${m[1]} (${formatAge(m[2]!, now)} ago)`;
+  }
+  return raw;
+}
+
 export function layout(row: RowData | undefined, col: number, column: ColumnInfo | undefined, now: number): CellLayout {
   if (!row || !column) return { text: "", color: "fgMuted", hiddenMarker: false, strike: false, align: "left" };
   const raw = row.cells[col] ?? "";
-  const text = column.type === "age" ? formatAge(raw, now) : raw;
-  const numeric = column.type === "number" || column.type === "bytes";
+  const text = shownText(raw, column, now);
+  const numeric = column.type === "number" || column.type === "bytes" || column.type === "restarts";
   const base: CellLayout = { text, color: "fg", hiddenMarker: false, strike: false, align: numeric ? "right" : "left" };
   if (row.mark === "deleted") return { ...base, color: "deleted", tint: "deleted", strike: true };
   if (row.mark === "added") return { ...base, color: "added", tint: "added" };
@@ -90,7 +106,7 @@ export interface CellChoice {
   label: string;
   /** What ⏎ copies. */
   text: string;
-  /** How the table shows it, where that differs from what's copied (an age column's "5m"). */
+  /** How the table shows it, where that differs from what's copied (an age column's "5m", a restarts column's "3 (5m ago)"). */
   shown?: string;
   /** Why it can't be copied; undefined = it can. */
   disabled?: string;
@@ -101,13 +117,13 @@ export const wholeRow = "whole row";
 /**
  * The picker's entries: every shown column in table order with the row's
  * value, then the whole row (tab-separated, so it pastes into a
- * spreadsheet's columns). An age column copies its timestamp: a "5m" goes
- * stale once pasted. Empty cells are listed but skipped. Pure.
+ * spreadsheet's columns). An age or restarts column copies its timestamp: a
+ * "5m" goes stale once pasted. Empty cells are listed but skipped. Pure.
  */
 export function cellChoices(row: RowData, columns: ColumnInfo[], now: number): CellChoice[] {
   const cells = columns.map((c, i): CellChoice => {
     const text = row.cells[i] ?? "";
-    const shown = c.type === "age" && text ? formatAge(text, now) : text;
+    const shown = shownText(text, c, now);
     return { label: c.name, text, shown: shown === text ? undefined : shown, disabled: text ? undefined : "empty" };
   });
   if (columns.length < 2) return cells;

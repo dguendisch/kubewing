@@ -1,10 +1,10 @@
 # kubewing 🪽
 
-A vibe-coded, keyboard-driven, native desktop UI for Kubernetes matching most features of `kubectl`, the shell's grep / watch / diff / viddy, and a terminal multiplexer's tabs and splits, in one app.
+A vibe-coded, keyboard-driven, desktop UI for Kubernetes matching most features of `kubectl`, the shell's grep / watch / diff / viddy, and a terminal multiplexer's tabs and splits, in one app.
 
 ## Highlights
 
-- **Live tables for any resource**, CRDs included, with `kubectl`'s columns from the server, custom path/CEL columns per resource type, CPU and memory of pods and nodes (`kubectl top`, `m`), and sorting that understands numbers, ages and durations.
+- **Live tables for any resource (backed by watches)**, CRDs included, with `kubectl`'s columns from the server, custom path/CEL columns per resource type, CPU and memory of pods and nodes (`kubectl top`, `m`), and sorting that understands numbers, ages and durations.
 - **Everything in a namespace** (`all`): every object of every type, CRDs included (what `kubectl get all` leaves out), listed once and refreshed with `⌘R`, which marks what changed since.
 - **A diff that knows objects.** Changes are keyed by UID: changed cells, added and deleted rows, a "changed, not visible" marker. AGE ticks and noise (resourceVersion, managedFields, heartbeats) never count as changes. A recreated object is a removal plus an addition, not a change.
 - **Time travel.** Record changes and scrub the whole table back in time (similar to `viddy` but based on resource field changes, not line/text changes), deleted objects included. Ask any YAML field "when did you change?" (`⇧H`), step through an object's versions with the changes listed as field paths (`spec.containers[name=app].image: "web:1" → "web:2"`).
