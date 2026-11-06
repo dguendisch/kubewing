@@ -4258,6 +4258,12 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
     await expect.poll(() => page.locator("[data-terminal] .xterm-rows").innerText()).toContain("$");
+    // the rows fit the host's content box: none is clipped at the bottom (the prompt line)
+    const overflow = await page.locator("[data-terminal]").evaluate((host) => {
+      const screen = host.querySelector(".xterm-screen")!.getBoundingClientRect();
+      return screen.bottom - (host.getBoundingClientRect().bottom - parseFloat(getComputedStyle(host).paddingBottom));
+    });
+    expect(overflow).toBeLessThanOrEqual(0.5);
     await page.keyboard.press("Control+D"); // ends the shell, the pane goes with it
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     await page.keyboard.press("ControlOrMeta+Enter");

@@ -176,5 +176,11 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     if (term.current) term.current.options.scrollback = scrollback;
   }, [scrollback]);
 
-  return <div ref={host} data-terminal={session} className="h-full w-full overflow-hidden p-1" />;
+  // the padding sits on a wrapper: FitAddon sizes rows by the host's computed height, which with
+  // border-box includes the host's own padding, so a padded host lost the bottom row by up to 8px
+  return (
+    <div className="h-full w-full overflow-hidden p-1">
+      <div ref={host} data-terminal={session} className="h-full w-full overflow-hidden" />
+    </div>
+  );
 }
