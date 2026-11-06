@@ -22,6 +22,7 @@ import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
 import { NameField } from "./components/NameField";
 import { startTabDrag, useTabDrag } from "./components/TabDrag";
+import { UpdateDialog, UpdateHint } from "./update/UpdateDialog";
 import { dispatch } from "./commands";
 import { prettyKey } from "./keys/keymap";
 import { useKeys } from "./keys/useKeys";
@@ -108,17 +109,21 @@ export function App() {
         <button aria-label="new tab" data-new-tab className="px-2 py-1 text-fg-muted" onClick={() => setUI(S.newTab)}>
           +
         </button>
-        {forwards ? (
-          <button
-            type="button"
-            aria-label="active port-forwards"
-            title={`port-forwards${listKeyText ? ` (${listKeyText})` : ""}`}
-            className="ml-auto self-center rounded px-3 text-fg-muted hover:text-fg"
-            onClick={() => dispatch("portforward.list")}
-          >
-            ⇄ {forwards}
-          </button>
-        ) : null}
+        {/* the right end: a new version, the port-forwards */}
+        <div className="ml-auto flex self-center" style={noDrag}>
+          <UpdateHint />
+          {forwards ? (
+            <button
+              type="button"
+              aria-label="active port-forwards"
+              title={`port-forwards${listKeyText ? ` (${listKeyText})` : ""}`}
+              className="self-center rounded px-3 text-fg-muted hover:text-fg"
+              onClick={() => dispatch("portforward.list")}
+            >
+              ⇄ {forwards}
+            </button>
+          ) : null}
+        </div>
       </nav>
       <ConfigErrors />
       <main className="relative min-h-0 flex-1 p-px">
@@ -150,6 +155,7 @@ export function App() {
       <ColumnsDialog />
       <TabSwitcher />
       <Help />
+      <UpdateDialog />
       <DragPreview />
     </div>
   );

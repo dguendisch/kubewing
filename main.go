@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/gardener"
 	"github.com/dguendisch/kubewing/internal/source"
 	"github.com/dguendisch/kubewing/internal/tape"
+	"github.com/dguendisch/kubewing/internal/update"
 )
 
 //go:embed all:frontend/dist
@@ -44,6 +46,8 @@ func main() {
 	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
 	gardenHome := flag.String("garden", "", "gardenctl's directory with gardenctl-v2.yaml (default: $GCTL_HOME, else ~/.garden); headless: none unless given, and session targets from its sessions/")
 	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
+	releases := flag.String("releases", "", "headless only: the update check reads this file (GitHub's release list as JSON, e.g. testdata/releases.json) instead of GitHub")
+	releasesCurrent := flag.String("releases-current", "", "with -releases: the version the update check takes as running (default: this build's)")
 	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 	if *version {
@@ -128,13 +132,15 @@ func main() {
 		opts.User = u.Username
 	}
 	if *headless != "" {
-		runHeadless(*headless, opener, opts, *tapes != "")
+		runHeadless(*headless, opener, opts, *tapes != "", *releases, *releasesCurrent, *stateDir)
 		return
 	}
 
 	emit := &wailsEmitter{}
 	svc := bridge.New(source.NewRegistry(opener), emit, opts)
 	api := app.New(svc)
+	installer := &update.Installer{Bundle: update.RunningBundle(), PublicKey: update.PublicKey}
+	api.Updater = update.New(update.Options{Current: app.Version, Feed: update.GitHub{}, StateDir: *stateDir, Emit: emit.Emit, Installer: installer})
 	var win *application.WebviewWindow
 	var single *application.SingleInstanceOptions
 	if !*newProcess {
@@ -165,6 +171,11 @@ func main() {
 		SingleInstance: single,
 	})
 	emit.app = a
+	installer.Quit = a.Quit
+	api.OpenURLFn = a.Browser.OpenURL
+	ctx, stopUpdater := context.WithCancel(context.Background())
+	defer stopUpdater()
+	api.StartUpdater(ctx)
 	// before the frontend sends its menus (and should it never): no ⌘W "Close Window", no ⌘R "Reload"
 	a.Menu.Set(app.BaseMenu(nil, emit.Emit))
 	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emit.Emit)) }
@@ -197,9 +208,16 @@ func waitFlag(wait bool, configDir string) bool {
 	return config.Load(configDir).Config.Launch.Wait
 }
 
-func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTapes bool) {
+func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTapes bool, releases, current, stateDir string) {
 	hub := bridge.NewHub()
 	api := app.New(bridge.New(source.NewRegistry(opener), hub, opts))
+	if releases != "" {
+		// tests: a fake feed, checked on request only (no schedule runs), never installed (no Installer)
+		if current == "" {
+			current = app.Version
+		}
+		api.Updater = update.New(update.Options{Current: current, Feed: update.File(releases), StateDir: stateDir, Emit: hub.Emit})
+	}
 	if fromTapes {
 		api.ContextsFn = func(string) (bridge.ContextList, error) {
 			// tape-dev sets a namespace like a kubeconfig context can (e2e: new panes start in it)

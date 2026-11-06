@@ -5785,3 +5785,63 @@ test.describe("marked rows", () => {
     await expect.poll(async () => (await termText(page)).join("\n")).toContain('target "app"');
   });
 });
+
+test.describe("updates", () => {
+  const dispatch = (page: Page, c: string) => page.evaluate((c) => (window as unknown as { __kw: { dispatch(c: string): void } }).__kw.dispatch(c), c);
+  // one backend for the run: the skipped version is remembered across tests
+  test.afterEach(async ({ page }) => {
+    await page.evaluate(() => (window as unknown as { __kw: { bridge(): { skipUpdate(v: string): Promise<unknown> } } }).__kw.bridge().skipUpdate(""));
+  });
+
+  test("check for updates: release notes of every version since the running one, as Markdown; skip hides the hint", async ({ page }) => {
+    await ready(page);
+    // no automatic check in the test backend: no hint before one
+    await expect(page.getByRole("button", { name: "update available" })).toHaveCount(0);
+    // the app menu's "Check for Updates…"
+    await dispatch(page, "update.check");
+    const dialog = page.getByRole("dialog", { name: "update" });
+    await expect(dialog).toContainText("kubewing 0.3.0 is available, you have 0.1.0");
+    expect((await inspect(page)).overlays).toEqual(["update"]);
+    // finals only (no candidate), newest first, down to the running version (exclusive)
+    const notes = dialog.getByRole("region", { name: /^kubewing / });
+    await expect(notes).toHaveCount(2);
+    await expect(notes.nth(0)).toHaveAccessibleName("kubewing 0.3.0");
+    await expect(notes.nth(1)).toHaveAccessibleName("kubewing 0.2.0");
+    // Markdown: headings, lists, emphasis, code, links into the repository at the version
+    const latest = notes.nth(0);
+    await expect(latest.getByRole("heading", { name: "Added" })).toBeVisible();
+    await expect(latest.getByRole("heading", { name: "Fixed" })).toBeVisible();
+    await expect(latest.getByRole("listitem")).toHaveCount(3);
+    await expect(latest.locator("strong")).toHaveText("Updates:");
+    await expect(latest.locator("code")).toHaveText("code");
+    await expect(latest.getByRole("link", { name: "manual" })).toHaveAttribute("href", "https://github.com/dguendisch/kubewing/blob/v0.3.0/Manual.md#updates");
+    // raw HTML stays text, a javascript: link isn't one
+    await expect(latest).toContainText("<b>raw html</b>");
+    await expect(latest.locator("b")).toHaveCount(0);
+    await expect(latest.getByRole("link", { name: "elsewhere" })).toHaveCount(0);
+    await expect(latest).toContainText("a fix elsewhere");
+    // this backend can't replace itself: the button opens the release page instead
+    await expect(dialog.getByRole("button", { name: "download…" })).toBeFocused();
+    await expect(dialog).toContainText("checks daily (update.checkDays)");
+
+    // esc closes; the hint stays for the offered version
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect((await inspect(page)).focus).toBe("table");
+    const hint = page.getByRole("button", { name: "update available" });
+    await expect(hint).toHaveText("⬆ 0.3.0");
+
+    // the hint reopens the notes; skipping hides it, remembered across a reload
+    await hint.click();
+    await dialog.getByRole("button", { name: "skip this version" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(hint).toHaveCount(0);
+    await page.reload();
+    await ready(page);
+    await dispatch(page, "update.check");
+    await expect(dialog).toContainText("kubewing 0.3.0 is available");
+    await expect(dialog.getByRole("button", { name: "skip this version" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "update available" })).toHaveCount(0);
+  });
+});

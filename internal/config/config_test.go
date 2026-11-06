@@ -143,6 +143,29 @@ func TestLaunchConfig(t *testing.T) {
 	}
 }
 
+func TestUpdateConfig(t *testing.T) {
+	for _, c := range []struct {
+		yaml string
+		days int
+		pre  bool
+		errs int
+	}{
+		{"theme: default\n", 1, false, 0},
+		{"update: {checkDays: 7}\n", 7, false, 0},
+		{"update: {checkDays: 0}\n", 0, false, 0},
+		{"update: {checkDays: -1, prereleases: true}\n", 1, true, 1},
+		{"update: {checkDays: 1000}\n", 1, false, 1},
+	} {
+		e := Load(write(t, map[string]string{"config.yaml": c.yaml}))
+		if got := e.Config.Update.Days(); got != c.days || e.Config.Update.Prereleases != c.pre || len(e.Errors) != c.errs {
+			t.Errorf("%q: days %d, prereleases %v, errors %v", c.yaml, got, e.Config.Update.Prereleases, e.Errors)
+		}
+	}
+	if d := Defaults("").Config.Update.Days(); d != DefaultUpdateCheckDays {
+		t.Errorf("defaults: %d days", d)
+	}
+}
+
 // focusFollowsMouse: off unless set.
 func TestFocusFollowsMouseConfig(t *testing.T) {
 	if Load(write(t, map[string]string{"config.yaml": "theme: default\n"})).Config.FocusFollowsMouse {

@@ -1,5 +1,5 @@
 import { Call, Clipboard, Events } from "@wailsio/runtime";
-import type { Config, FramePayload, Launch, LogsPayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
+import type { Config, FramePayload, Launch, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
 const call = <T>(method: string, ...args: unknown[]) =>
@@ -86,6 +86,11 @@ export function wailsTransport(): Transport {
     refresh: (p) => call("Refresh", p),
     skipped: (p) => call("Skipped", p),
     setMenu: (m) => call("SetMenu", m),
+    updateStatus: () => call("UpdateStatus"),
+    checkUpdate: () => call("CheckUpdate"),
+    skipUpdate: (v) => call("SkipUpdate", v),
+    installUpdate: () => call("InstallUpdate"),
+    openURL: (u) => call("OpenURL", u),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),
     onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),
     onColumns: (cb) => Events.On("kw:columns", (ev) => cb(ev.data as Record<string, TypeView>)),
@@ -94,5 +99,6 @@ export function wailsTransport(): Transport {
     onPortForwards: (cb) => Events.On("kw:portforwards", (ev) => cb(ev.data as PortForward[])),
     onCommand: (cb) => Events.On("kw:command", (ev) => cb(ev.data as string)),
     onLaunch: (cb) => Events.On("kw:launch", (ev) => cb(ev.data as Launch)),
+    onUpdate: (cb) => Events.On("kw:update", (ev) => cb(ev.data as UpdateStatus)),
   };
 }

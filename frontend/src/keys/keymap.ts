@@ -121,6 +121,7 @@ export type CommandId =
   | "confirm.accept"
   | "confirm.cancel"
   | "help.toggle"
+  | "update.check"
   | "edit.submit"
   | "edit.back"
   | "term.find"
@@ -156,7 +157,7 @@ export const commandIds: readonly CommandId[] = [
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
-  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "edit.submit", "edit.back",
+  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "update.check", "edit.submit", "edit.back",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "view.toggleMetrics", "view.toggleAllocation", "history.toggleRecording",
   "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",

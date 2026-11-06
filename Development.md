@@ -16,6 +16,7 @@ make headless          # backend over WebSocket on :7777 replaying tapes + testd
 make golden-update     # regenerate the view goldens, then review the diff on its own
 make icon              # regenerate the app icon from build/appicon.svg
 make dist              # the release zip: bin/kubewing-<version>-macos-arm64.zip (+ .sha256)
+make sign              # its signature for the updater (.sig), key in $KUBEWING_SIGNING_KEY (see Release signing)
 make release BUMP=…    # tag the next release (see Releases)
 ```
 
@@ -72,9 +73,26 @@ git push origin v0.2.0-rc.1    # publishes a candidate
 - The bump counts from the newest final release (no release yet: from `0.0.0`, so the first `BUMP=minor` is `v0.1.0`). Candidates count per version, so `BUMP=minor RC=1` after `v0.2.0-rc.2` is `v0.2.0-rc.3`.
 - It refuses unless you're on `main` with a clean working tree and `main` equals `origin/main` (the tag must point at a commit GitHub has), and one commit gets one release (only a final may join its own candidates). It runs `make test` first (`SKIP_TESTS=1` skips it).
 - The release notes are `Changelog.md`'s `## [Unreleased]` section (it refuses an empty one). Check them with `DRY=1` first: nothing asks before tagging, since nothing is published before the push. A final then stamps the section (`## [Unreleased]` stays, empty, above `## [X.Y.Z] - date`) and commits that as `release: vX.Y.Z`, so the tag points at that commit; a candidate commits nothing and its notes are the whole section so far. The annotated tag's message carries the notes. A tag pushed by mistake: `git push origin :refs/tags/vX.Y.Z` before the workflow publishes, else delete the release on GitHub too.
-- Pushing the tag runs `.github/workflows/release.yml` on a macOS arm64 runner: it checks the tag is annotated and on `main`, runs `make test`, `make dist VERSION=X.Y.Z`, and publishes a GitHub release with the zip and its `.sha256`, the tag message as notes. Candidates become pre-releases; a final is marked latest. Started by hand (Actions → release → Run workflow) it only builds, and the zip is a workflow artifact for 7 days.
+- Pushing the tag runs `.github/workflows/release.yml` on a macOS arm64 runner: it checks the tag is annotated and on `main`, runs `make test`, `make dist VERSION=X.Y.Z`, signs the zip (`make sign`, see Release signing), and publishes a GitHub release with the zip, its `.sha256` and `.sig`, the tag message as notes. Candidates become pre-releases; a final is marked latest. Started by hand (Actions → release → Run workflow) it only builds, and the zip is a workflow artifact for 7 days.
 - Nothing in the repository holds the version (the changelog's headings only record it): `make` reads it from the tag (`git describe`: `0.2.0`, `0.2.0-3-gabc1234` after it, `-dirty` with changes; `0.0.0-dev` without tags) or takes `VERSION=`. It goes into the binary (`internal/app.Version`, shown by `-version` and the About box) and the bundle's `Info.plist`; `build/darwin/Info.plist` is the template.
 - The zip is ad-hoc signed (`codesign -s -`), not notarized (needs a paid Apple developer account). See the [manual](Manual.md#installing) for what users do on first launch.
+
+### Release signing
+
+The updater installs only zips signed with the release key (see [Architecture.md](Architecture.md#updates)). Set it up once, before the first release that ships the updater:
+
+```sh
+go run ./internal/update/cmd/releasesign -keygen
+```
+
+- The private key goes into the repository's Actions secret `KUBEWING_SIGNING_KEY` (Settings → Secrets and variables → Actions). Keep a copy offline, e.g. in a password manager: nothing else can sign releases the installed apps accept.
+- The public key goes into `build/release-key.pub` (one line), committed. `make` builds it into the binary. A build without the file checks for updates but can't install them.
+- Once `build/release-key.pub` is committed, the workflow refuses to publish a release without the secret. `make sign` also checks that the secret matches the committed public key.
+- Rotating: the apps out there only trust the key they were built with. Ship the new public key in a release still signed with the old key, and switch the secret only after that.
+
+### Trying the updater
+
+`make headless` and the E2E backend don't touch GitHub. `-releases testdata/releases.json` reads a fake release list, and `-releases-current 0.1.0` poses as an installed 0.1.0. They check only on request (the menu's command: `__kw.dispatch("update.check")` in the browser console) and never install. To try a real install: build the app with an older `VERSION=` (and the release key), copy it to a folder you own, and start it from there.
 
 ## Docs
 

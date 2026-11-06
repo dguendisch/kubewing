@@ -50,6 +50,13 @@ terminal:
 launch:
   wait: false
 
+# update check (kubewing's GitHub releases)
+#   checkDays:   days between automatic checks; 0 = off (kubewing → Check for Updates… still works); default 1
+#   prereleases: offer release candidates (-rc.N) too; default false
+update:
+  checkDays: 1
+  prereleases: false
+
 # focus follows mouse: moving the mouse over a pane focuses it, without a click
 # (fields, dialogs and menus keep the focus); default false
 focusFollowsMouse: false

@@ -233,7 +233,7 @@ export interface Overlay {
    *  field: a field's values over time (⇧H in an object view);
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
    *  logs: containers, history and follow of a log tail, before it starts. */
-  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs";
+  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "update";
   /** history: which one. */
   dir?: "back" | "forward";
   /** clusters: where it opens at first, in place of the last choice (a broken pane's hint: here). */
@@ -1069,6 +1069,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   renameTab: "dialog",
   renamePane: "dialog",
   logs: "dialog",
+  // the release notes: Esc and its buttons, handled in the dialog
+  update: "dialog",
 };
 
 /** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */

@@ -273,6 +273,44 @@ export interface ClusterOpen {
 }
 
 /** Mirrors app.Launch: a later launch from a terminal, opened as a tab on its kubeconfig. */
+/** One version's release notes (Markdown: its Changelog.md section). */
+export interface UpdateNote {
+  version: string;
+  date?: string;
+  prerelease?: boolean;
+  body: string;
+  url?: string;
+}
+
+/** A newer version (internal/update.Offer). */
+export interface UpdateOffer {
+  version: string;
+  prerelease?: boolean;
+  /** The offered version's and every final's in between, newest first. */
+  notes: UpdateNote[];
+  /** The release page. */
+  url: string;
+  size: number;
+}
+
+/** The updater's state (internal/update.Status), pushed on every change. */
+export interface UpdateStatus {
+  current: string;
+  /** A release build: development builds never get offers. */
+  released: boolean;
+  /** Automatic check interval in days, 0 = off. */
+  checkDays: number;
+  checking?: boolean;
+  offer?: UpdateOffer;
+  skipped?: string;
+  lastCheck?: string;
+  error?: string;
+  /** Why "update" only opens the release page; unset = it installs in place. */
+  cannotInstall?: string;
+  installing?: "download" | "verify" | "install" | "restart";
+  progress?: number;
+}
+
 export interface Launch {
   cluster: string;
   namespace?: string;
@@ -939,6 +977,12 @@ export interface Transport {
   skipped(pane: string): Promise<SkippedType[]>;
   /** Installs the native menu's command menus (macOS app; a no-op headless). */
   setMenu(menus: AppMenu[]): Promise<void>;
+  updateStatus(): Promise<UpdateStatus>;
+  checkUpdate(): Promise<UpdateStatus>;
+  skipUpdate(version: string): Promise<UpdateStatus>;
+  installUpdate(): Promise<void>;
+  /** Opens an http(s) link in the default browser, never in the app's webview. */
+  openURL(url: string): Promise<void>;
   onFrame(cb: (p: FramePayload) => void): () => void;
   onConfig(cb: (c: Config) => void): () => void;
   /** A type's column settings changed (any client): all types' settings. */
@@ -950,4 +994,5 @@ export interface Transport {
   onCommand(cb: (command: string) => void): () => void;
   /** kubewing was launched again from a terminal: open a tab on its kubeconfig. */
   onLaunch(cb: (l: Launch) => void): () => void;
+  onUpdate(cb: (s: UpdateStatus) => void): () => void;
 }

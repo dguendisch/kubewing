@@ -1,0 +1,41 @@
+[
+  {
+    "tag_name": "v0.4.0-rc.1",
+    "name": "kubewing 0.4.0-rc.1",
+    "body": "### Added\n- a candidate's feature",
+    "prerelease": true,
+    "published_at": "2026-12-10T10:00:00Z",
+    "html_url": "https://github.com/dguendisch/kubewing/releases/tag/v0.4.0-rc.1",
+    "assets": [{"name": "kubewing-0.4.0-rc.1-macos-arm64.zip", "size": 42000000, "browser_download_url": "https://example.invalid/0.4.0-rc.1.zip"}]
+  },
+  {
+    "tag_name": "v0.3.0",
+    "name": "kubewing 0.3.0",
+    "body": "### Added\n- **Updates:** kubewing tells you about new versions, see the [manual](Manual.md#updates)\n- a `code` span & <b>raw html</b>\n\n### Fixed\n- a fix [elsewhere](javascript:alert(1))",
+    "prerelease": false,
+    "published_at": "2026-12-01T10:00:00Z",
+    "html_url": "https://github.com/dguendisch/kubewing/releases/tag/v0.3.0",
+    "assets": [
+      {"name": "kubewing-0.3.0-macos-arm64.zip", "size": 42000000, "browser_download_url": "https://example.invalid/0.3.0.zip", "digest": "sha256:7bf199651443d0bd5519ae05592a3e1d737b74c3e005fca9bba8054844ff55b7"},
+      {"name": "kubewing-0.3.0-macos-arm64.zip.sig", "size": 89, "browser_download_url": "https://example.invalid/0.3.0.zip.sig"}
+    ]
+  },
+  {
+    "tag_name": "v0.2.0",
+    "name": "kubewing 0.2.0",
+    "body": "### Changed\n- something changed",
+    "prerelease": false,
+    "published_at": "2026-11-20T10:00:00Z",
+    "html_url": "https://github.com/dguendisch/kubewing/releases/tag/v0.2.0",
+    "assets": [{"name": "kubewing-0.2.0-macos-arm64.zip", "size": 41000000, "browser_download_url": "https://example.invalid/0.2.0.zip"}]
+  },
+  {
+    "tag_name": "v0.1.0",
+    "name": "kubewing 0.1.0",
+    "body": "### Added\n- First release",
+    "prerelease": false,
+    "published_at": "2026-11-06T20:25:06Z",
+    "html_url": "https://github.com/dguendisch/kubewing/releases/tag/v0.1.0",
+    "assets": [{"name": "kubewing-0.1.0-macos-arm64.zip", "size": 41975851, "browser_download_url": "https://example.invalid/0.1.0.zip"}]
+  }
+]

@@ -20,10 +20,13 @@ VERSION := 0.0.0-dev
 endif
 # Info.plist's CFBundleShortVersionString takes numbers only: 0.2.0-rc.1 → 0.2.0
 SHORT_VERSION := $(shell echo '$(VERSION)' | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
-LDFLAGS := -X github.com/dguendisch/kubewing/internal/app.Version=$(VERSION)
+# The release signing key's public half (build/release-key.pub, see Development.md): without it a build
+# checks for updates but can't install them.
+RELEASE_KEY := $(shell cat build/release-key.pub 2>/dev/null)
+LDFLAGS := -X github.com/dguendisch/kubewing/internal/app.Version=$(VERSION) -X github.com/dguendisch/kubewing/internal/update.PublicKey=$(RELEASE_KEY)
 DIST := bin/kubewing-$(VERSION)-macos-arm64.zip
 
-.PHONY: deps frontend build app dist release icon run headless test test-go test-fe e2e golden-update lint
+.PHONY: deps frontend build app dist sign release icon run headless test test-go test-fe e2e golden-update lint
 
 deps:
 	go mod download all
@@ -60,6 +63,10 @@ dist: app
 	ditto -c -k --keepParent $(APP) $(DIST)
 	cd bin && shasum -a 256 $(notdir $(DIST)) > $(notdir $(DIST)).sha256
 	@echo "built $(DIST)"
+
+# Signs the release zip for the updater ($(DIST).sig); the key is the KUBEWING_SIGNING_KEY secret.
+sign:
+	go run ./internal/update/cmd/releasesign $(DIST)
 
 # Tags the next release locally (notes from Changelog.md; a final commits its stamped changelog first);
 # pushing is yours, and the tag's push makes the GitHub release.

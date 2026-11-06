@@ -1,4 +1,4 @@
-import type { Config, FramePayload, LogsPayload, PortForward, SessionPayload, Transport, TypeView } from "./types";
+import type { Config, FramePayload, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus } from "./types";
 
 /** WebSocket transport to the headless Go backend (tests, browser dev). */
 export function wsTransport(url: string): Transport {
@@ -10,6 +10,7 @@ export function wsTransport(url: string): Transport {
   const sessionListeners = new Set<(p: SessionPayload) => void>();
   const logsListeners = new Set<(p: LogsPayload) => void>();
   const forwardListeners = new Set<(l: PortForward[]) => void>();
+  const updateListeners = new Set<(s: UpdateStatus) => void>();
   let ws: WebSocket;
   const ready = new Promise<void>((resolve, reject) => {
     ws = new WebSocket(url);
@@ -39,6 +40,10 @@ export function wsTransport(url: string): Transport {
       }
       if (msg.event === "kw:portforwards") {
         forwardListeners.forEach((cb) => cb(msg.data));
+        return;
+      }
+      if (msg.event === "kw:update") {
+        updateListeners.forEach((cb) => cb(msg.data));
         return;
       }
       const p = pending.get(msg.id);
@@ -137,6 +142,12 @@ export function wsTransport(url: string): Transport {
     refresh: (p) => call("Refresh", p),
     skipped: (p) => call("Skipped", p),
     setMenu: (m) => call("SetMenu", m),
+    updateStatus: () => call("UpdateStatus"),
+    checkUpdate: () => call("CheckUpdate"),
+    skipUpdate: (v) => call("SkipUpdate", v),
+    installUpdate: () => call("InstallUpdate"),
+    // browser/test build: the page opens links in a new tab itself (Go has no browser to hand them to)
+    openURL: async (u) => void window.open(u, "_blank", "noopener"),
     onFrame: (cb) => {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);
@@ -160,6 +171,10 @@ export function wsTransport(url: string): Transport {
     onPortForwards: (cb) => {
       forwardListeners.add(cb);
       return () => forwardListeners.delete(cb);
+    },
+    onUpdate: (cb) => {
+      updateListeners.add(cb);
+      return () => updateListeners.delete(cb);
     },
     // no native menu in the browser, and no second launch to hand over
     onCommand: () => () => {},

@@ -197,6 +197,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
       row("list everything in a namespace again (open it as resource all)", "source.refresh"),
       row("reload the config", "config.reload"),
+      row("check for updates (unbound: the app menu has it)", "update.check"),
       row("this cheat sheet", "help.toggle"),
       row("run the prepared action", "confirm.accept"),
       row("cancel the prepared action", "confirm.cancel"),

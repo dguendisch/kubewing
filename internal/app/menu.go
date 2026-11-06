@@ -23,15 +23,29 @@ type MenuHost interface {
 // CommandEvent carries a clicked menu item's command id back to the dispatcher.
 const CommandEvent = "kw:command"
 
+// UpdateCommand is the app menu's "Check for Updates…" (frontend: keys/keymap.ts).
+const UpdateCommand = "update.check"
+
 // BaseMenu is the macOS menu before the frontend sends its own, and the frame
-// around it after: app menu, Edit (text fields need its ⌘C/⌘V/⌘A/⌘Z in
+// around it after: app menu (with "Check for Updates…"), Edit (text fields need its ⌘C/⌘V/⌘A/⌘Z in
 // WKWebView) and Window. Wails' default would add ⌘W "Close Window" (quitting
 // the app with its sessions, since the last window closing terminates it) and
 // ⌘R "Reload" (losing all UI state): kubewing binds ⌘W to "close tab" and
 // suppresses reload.
 func BaseMenu(commands []Menu, emit func(name string, data any)) *application.Menu {
 	m := application.NewMenu()
-	m.AddRole(application.AppMenu)
+	// the AppMenu role's items, with "Check for Updates…" after About (as macOS apps have it)
+	app := m.AddSubmenu("kubewing")
+	app.AddRole(application.About)
+	app.Add("Check for Updates…").OnClick(func(*application.Context) { emit(CommandEvent, UpdateCommand) })
+	app.AddSeparator()
+	app.AddRole(application.ServicesMenu)
+	app.AddSeparator()
+	app.AddRole(application.Hide)
+	app.AddRole(application.HideOthers)
+	app.AddRole(application.UnHide)
+	app.AddSeparator()
+	app.AddRole(application.Quit)
 	m.AddRole(application.EditMenu)
 	for _, c := range commands {
 		sub := m.AddSubmenu(c.Title)

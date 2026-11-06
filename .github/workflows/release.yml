@@ -70,6 +70,18 @@ jobs:
           bin/kubewing.app/Contents/MacOS/kubewing -version
           ls bin/*.zip bin/*.sha256 | tee -a "$GITHUB_STEP_SUMMARY"
 
+      - name: Sign
+        # the updater installs only signed zips; once build/release-key.pub is committed, a release must be signed
+        env:
+          KUBEWING_SIGNING_KEY: ${{ secrets.KUBEWING_SIGNING_KEY }}
+        run: |
+          if [[ -z $KUBEWING_SIGNING_KEY ]]; then
+            [[ -f build/release-key.pub && -n $TAG ]] && { echo "::error::build/release-key.pub is committed, but the KUBEWING_SIGNING_KEY secret is missing"; exit 1; }
+            echo "::warning::no KUBEWING_SIGNING_KEY: the zip is unsigned, the updater won't install it"
+            exit 0
+          fi
+          make sign ${TAG:+VERSION=${TAG#v}}
+
       - name: Upload the build
         if: env.TAG == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -78,6 +90,7 @@ jobs:
           path: |
             bin/*.zip
             bin/*.sha256
+            bin/*.sig
           retention-days: 7
 
       - name: Publish the release
@@ -88,5 +101,6 @@ jobs:
           git tag -l --format='%(contents:body)' "$TAG" > "$RUNNER_TEMP/notes.md"
           flags=(--latest)
           [[ $TAG == *-rc.* ]] && flags=(--prerelease --latest=false)
-          gh release create "$TAG" bin/*.zip bin/*.sha256 \
+          shopt -s nullglob
+          gh release create "$TAG" bin/*.zip bin/*.sha256 bin/*.zip.sig \
             --verify-tag --title "kubewing ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"

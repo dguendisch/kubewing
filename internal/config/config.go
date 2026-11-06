@@ -50,6 +50,7 @@ type Config struct {
 	Logs     Logs          `json:"logs"`
 	History  HistoryLimits `json:"history"`
 	Launch   Launch        `json:"launch"`
+	Update   Update        `json:"update"`
 	// FocusFollowsMouse focuses the pane under the mouse pointer, without a
 	// click. Default off.
 	FocusFollowsMouse bool `json:"focusFollowsMouse,omitempty"`
@@ -62,6 +63,29 @@ type Launch struct {
 	// terminal gets its prompt back and the log goes to kubewing.log in the
 	// state directory.
 	Wait bool `json:"wait,omitempty"`
+}
+
+// Update configures the update check (kubewing's GitHub releases).
+type Update struct {
+	// CheckDays is how many days pass between automatic checks; 0 turns them
+	// off (the menu's "Check for Updates…" still works). Unset = daily.
+	CheckDays *int `json:"checkDays,omitempty"`
+	// Prereleases offers release candidates too. Default off: finals only.
+	Prereleases bool `json:"prereleases,omitempty"`
+}
+
+// Update check interval bounds and default (days).
+const (
+	DefaultUpdateCheckDays = 1
+	MaxUpdateCheckDays     = 365
+)
+
+// Days is the check interval in days, 0 = off.
+func (u Update) Days() int {
+	if u.CheckDays == nil {
+		return DefaultUpdateCheckDays
+	}
+	return *u.CheckDays
 }
 
 // HistoryLimits bound recorded history (per source, while recording): how
@@ -293,6 +317,12 @@ func Load(dir string) Effective {
 			errf("config.yaml", "%v", err)
 		} else {
 			e.Config.History = c.History
+		}
+		if d := c.Update.CheckDays; d != nil && (*d < 0 || *d > MaxUpdateCheckDays) {
+			errf("config.yaml", "update.checkDays: %d is not between 0 (off) and %d days", *d, MaxUpdateCheckDays)
+			e.Config.Update.Prereleases = c.Update.Prereleases
+		} else {
+			e.Config.Update = c.Update
 		}
 		e.Config.OpsPod = c.OpsPod
 		e.Config.Launch = c.Launch

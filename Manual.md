@@ -43,6 +43,18 @@ To check a download, compare `shasum -a 256 kubewing-*.zip` with the `.sha256` f
 
 To start it from a terminal (for the [flags](#command-line-flags)), link it into your `PATH`, e.g. `ln -s /Applications/kubewing.app/Contents/MacOS/kubewing ~/bin/kubewing`.
 
+### Updates
+
+kubewing checks for a new version once a day. When one is out, **⬆ 0.3.0** appears at the right end of the tab bar. Click it to read what's new: the release notes of every version since yours, newest first. **kubewing → Check for Updates…** checks right away and shows the same notes, or says you're up to date.
+
+- **Update to 0.3.0** downloads the new version, checks that it's an unchanged, signed kubewing release, replaces the app and restarts it. A restart ends terminals, log tails and port-forwards: the dialog says how many and asks first. macOS doesn't ask to allow the new version again.
+- **Skip this version** hides the hint until a newer version is out.
+- **Later** closes the dialog. The hint stays.
+
+Where kubewing can't replace itself, the button reads **download…** and opens the release page, and the dialog says why. That happens when the app runs from a folder you can't write to, or wasn't moved out of Downloads (macOS then runs it from a temporary copy). Development builds (built from source) aren't offered updates.
+
+Set how often kubewing checks with `update.checkDays` in [`config.yaml`](#configyaml): `7` checks weekly, `0` turns automatic checks off (**Check for Updates…** still works). Release candidates are offered only with `update.prereleases: true`. The check asks GitHub for the list of releases and sends nothing about you or your clusters.
+
 ### Building from source
 
 kubewing can also be built and started from the repository (see [Development.md](Development.md) for the toolchain):
@@ -81,7 +93,7 @@ Launching kubewing again while one is running **opens a new tab in the running o
 | `-wait` | Stay in the foreground, logging to the terminal. |
 | `-new-process` | Start a separate kubewing instead of opening a tab in the running one. |
 | `-config <dir>` | Config directory (default `$KUBEWING_HOME`, else `~/.kubewing`). |
-| `-state <dir>` | Where kubewing writes `history.yaml`, `columns.yaml`, `clusters.yaml` and `kubewing.log` (default: the config directory). |
+| `-state <dir>` | Where kubewing writes `history.yaml`, `columns.yaml`, `clusters.yaml`, `update.json` and `kubewing.log` (default: the config directory). |
 | `-garden <dir>` | The directory of the `gardenctl-v2.yaml` to read (default `$GCTL_HOME`, else `~/.garden`). |
 | `-headless <addr>` | No window: serve the UI's backend over WebSocket (for development and tests). |
 | `-version` | Print the version and exit. |
@@ -811,6 +823,7 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
 | `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
 | `clusters.yaml` | written by kubewing: the recently opened clusters (`⌘P`), the latest first, at most 100 |
+| `update.json` | written by kubewing: when it last checked for updates, and the version you skipped |
 
 ### `config.yaml`
 
@@ -847,6 +860,10 @@ history:
 
 launch:
   wait: false               # true: stay in the foreground when launched from a terminal
+
+update:
+  checkDays: 1              # days between update checks, 0 = off (Check for Updates… still works), at most 365
+  prereleases: false        # true: offer release candidates too
 
 focusFollowsMouse: false    # true: the pane under the mouse gets the focus, no click needed
 ```
@@ -919,6 +936,7 @@ The most used keys:
 ## 19. Troubleshooting
 
 - **macOS says kubewing "is damaged and can't be opened".** The download lost its signature, e.g. unpacked by a tool that drops bundle metadata. Unpack the zip with Finder (or `ditto -x -k`), or remove the quarantine flag as in [Installing](#installing).
+- **The update fails.** The dialog shows why. A download that doesn't match its signature or GitHub's checksum is never installed: try again later, or download the release by hand (see [Installing](#installing)). "Rate limit" means GitHub is limiting checks from your network for the hour.
 - **Where's the log?** `kubewing.log` in the state directory (default `~/.kubewing/`), rotated to `kubewing.log.1` at 10 MiB. Or start with `-wait` to see it in the terminal.
 - **A pane shows an error.** Click the status line's error to see the full message, including what the server answered.
 - **A pane says `connection refused` on `127.0.0.1` or `localhost`.** The context points at a local cluster (kind, minikube, …) that's stopped, or that's gone while its kubeconfig entry stayed behind. The pane says so, and its button opens `⌘P` to replace the pane with another cluster. Start the cluster again, or remove its context (`kind delete cluster` does both: cluster and context). `kubectl config unset current-context` makes kubewing start with `⌘P`.

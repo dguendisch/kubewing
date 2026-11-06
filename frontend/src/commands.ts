@@ -14,6 +14,7 @@ import { cellChoices, initialCell, wholeRow } from "./grid/cells";
 import { nowOf, rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
 import { logBuffers } from "./logs/buffer";
+import { useUpdate } from "./update/update";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -335,6 +336,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void reconnect(pane.id);
     case "source.refresh":
       return void refresh(pane.id);
+    case "update.check":
+      // the app menu's "Check for Updates…": the dialog, checking at once
+      return void openUpdate(pane.id, true);
     case "help.toggle":
       // from an open menu or port-forward list: that overlay closes, the sheet replaces it
       return setUI((x) => (x.overlay?.kind === "help" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "help", pane: pane.id })));
@@ -1647,4 +1651,17 @@ function pickField(paneId: string, at: string | undefined) {
   if (!t || t.serverId !== p?.serverId) return flash(paneId, "the table this object came from is gone", true);
   setUI((x) => (p!.object?.split ? S.focusPane(x, t.id) : S.leaveObject(x, paneId)));
   void travel(t.id, { to: at });
+}
+
+/**
+ * The update dialog (release notes of the offered version); check: fetch the
+ * releases first (the menu's "Check for Updates…"), the tab bar's hint shows
+ * what the last check found.
+ */
+export function openUpdate(paneId: string, check: boolean) {
+  setUI((x) => (x.overlay?.kind === "update" ? x : S.openOverlay(S.closeOverlay(x), { kind: "update", pane: paneId })));
+  if (!check) return;
+  void bridge()
+    .checkUpdate()
+    .then((st) => useUpdate.setState({ status: st }), () => {}); // the failure arrives as the status' error (kw:update)
 }

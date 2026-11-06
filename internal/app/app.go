@@ -3,6 +3,10 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"net/url"
+
 	"github.com/dguendisch/kubewing/internal/bridge"
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
@@ -10,6 +14,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/relations"
 	"github.com/dguendisch/kubewing/internal/safety"
 	"github.com/dguendisch/kubewing/internal/source"
+	"github.com/dguendisch/kubewing/internal/update"
 	"github.com/dguendisch/kubewing/internal/view"
 )
 
@@ -20,6 +25,10 @@ type App struct {
 	ContextsFn func(cluster string) (bridge.ContextList, error)
 	// MenuFn installs the native menu (see menu.go); nil without one (headless, tests).
 	MenuFn func([]Menu)
+	// Updater checks for and installs new versions; nil = none (tests).
+	Updater *update.Updater
+	// OpenURLFn opens a link in the browser; nil = links aren't opened (headless: the page opens them).
+	OpenURLFn func(string) error
 }
 
 // New wraps a service.
@@ -75,12 +84,16 @@ func (a *App) Close(pane string) error                             { return a.sv
 func (a *App) Contexts(cluster string) (bridge.ContextList, error) { return a.ContextsFn(cluster) }
 func (a *App) Catalog(context string) catalog.Snapshot             { return a.svc.Catalog(context) }
 func (a *App) Config() config.Effective                            { return a.svc.Config() }
-func (a *App) ReloadConfig() config.Effective                      { return a.svc.ReloadConfig() }
-func (a *App) Reconnect(cluster string) int                        { return a.svc.Reconnect(cluster) }
-func (a *App) Refresh(pane string) error                           { return a.svc.Refresh(pane) }
-func (a *App) Skipped(pane string) ([]source.SkippedType, error)   { return a.svc.Skipped(pane) }
-func (a *App) ContextRule(context string) safety.Rule              { return a.svc.ContextRule(context) }
-func (a *App) Clusters() bridge.ClusterList                        { return a.svc.Clusters() }
+func (a *App) ReloadConfig() config.Effective {
+	cfg := a.svc.ReloadConfig()
+	a.configureUpdater(cfg)
+	return cfg
+}
+func (a *App) Reconnect(cluster string) int                      { return a.svc.Reconnect(cluster) }
+func (a *App) Refresh(pane string) error                         { return a.svc.Refresh(pane) }
+func (a *App) Skipped(pane string) ([]source.SkippedType, error) { return a.svc.Skipped(pane) }
+func (a *App) ContextRule(context string) safety.Rule            { return a.svc.ContextRule(context) }
+func (a *App) Clusters() bridge.ClusterList                      { return a.svc.Clusters() }
 func (a *App) MatchTarget(text string) ([]bridge.ClusterEntry, error) {
 	return a.svc.MatchTarget(text)
 }
@@ -190,6 +203,67 @@ func (a *App) LogsTargets(pane, key string, whole bool) (bridge.LogsTargets, err
 }
 func (a *App) LogsStart(pane, key string, whole bool, o bridge.LogsOptions) (bridge.LogsResult, error) {
 	return a.svc.LogsStart(pane, key, whole, o)
+}
+
+// StartUpdater applies the config to the updater and runs its schedule until ctx ends.
+func (a *App) StartUpdater(ctx context.Context) {
+	if a.Updater == nil {
+		return
+	}
+	a.configureUpdater(a.svc.Config())
+	go a.Updater.Run(ctx)
+}
+
+func (a *App) configureUpdater(cfg config.Effective) {
+	if a.Updater != nil {
+		a.Updater.Configure(cfg.Config.Update.Days(), cfg.Config.Update.Prereleases)
+	}
+}
+
+// UpdateStatus is the update state (also pushed as update.Event on every change).
+func (a *App) UpdateStatus() update.Status {
+	if a.Updater == nil {
+		return update.Status{Current: Version, Released: update.Released(Version), CannotInstall: "updates are off in this build"}
+	}
+	return a.Updater.Status()
+}
+
+// CheckUpdate checks the releases now.
+func (a *App) CheckUpdate() (update.Status, error) {
+	if a.Updater == nil {
+		return a.UpdateStatus(), errors.New("updates are off in this build")
+	}
+	return a.Updater.Check(context.Background())
+}
+
+// SkipUpdate hides the hint for version until a newer one is out ("" = undo).
+func (a *App) SkipUpdate(version string) update.Status {
+	if a.Updater == nil {
+		return a.UpdateStatus()
+	}
+	return a.Updater.Skip(version)
+}
+
+// InstallUpdate downloads and installs the offered version, then restarts
+// kubewing (ending its sessions). Progress and failures arrive as update.Event.
+func (a *App) InstallUpdate() error {
+	if a.Updater == nil {
+		return errors.New("updates are off in this build")
+	}
+	return a.Updater.Install(context.Background())
+}
+
+// OpenURL opens an http(s) link in the default browser (release notes' links:
+// the webview itself must never navigate away from the app).
+func (a *App) OpenURL(link string) error {
+	u, err := url.Parse(link)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
+		return errors.New("not a web link: " + link)
+	}
+	if a.OpenURLFn == nil {
+		return errors.New("no browser to open " + link)
+	}
+	return a.OpenURLFn(u.String())
 }
 
 // SetMenu replaces the native menu's command menus; the frontend builds them

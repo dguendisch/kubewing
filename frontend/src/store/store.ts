@@ -9,6 +9,7 @@ import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
 import { checkFollow, contextNamespace, initialState, pickClusterState, logsEnded, orphanedEdits, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 import { logBuffers } from "../logs/buffer";
+import { useUpdate } from "../update/update";
 
 /**
  * UI state (layout, focus, overlays) lives in a React-subscribed store.
@@ -79,6 +80,8 @@ export function connect(t: Transport) {
   });
   t.onPortForwards((l) => usePortForwards.setState({ list: l }, true));
   t.portForwards().then((l) => usePortForwards.setState({ list: l }, true), () => {});
+  t.onUpdate((st) => useUpdate.setState({ status: st }));
+  t.updateStatus().then((st) => useUpdate.setState({ status: st }), () => {});
   t.onColumns((c) => useColumns.setState({ types: c ?? {} }, true));
   t.columnConfigs().then((c) => useColumns.setState({ types: c ?? {} }, true), () => {});
   t.onConfig((c) => {
