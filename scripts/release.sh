@@ -73,11 +73,10 @@ done
 
 # --- release notes: Changelog.md's [Unreleased] section ---
 # A candidate previews its version, so it gets the whole section too (not only what's new since
-# the previous candidate). The commits are only shown, to check the changelog against.
+# the previous candidate).
 range=HEAD
 [[ -n $since ]] && range=$since..HEAD
-commits=$(git log --no-merges --format='- %s' "$range")
-[[ -n $commits ]] || die "no commits since $since"
+(($(git rev-list --count "$range") > 0)) || die "no commits since $since"
 [[ -f Changelog.md ]] || die "Changelog.md is missing"
 grep -qx '## \[Unreleased\]' Changelog.md || die "Changelog.md has no '## [Unreleased]' section"
 # the lines between "## [Unreleased]" and the next "## [", without leading and trailing blank lines
@@ -100,8 +99,6 @@ echo "         on $(git log -1 --format='%h %s')"
 [[ -z $rc ]] && echo "         Changelog.md: [Unreleased] becomes [$version] - $today, committed as 'release: $tag'"
 echo "notes (Changelog.md, [Unreleased]):"
 echo "$notes" | sed 's/^/  /'
-echo "commits (since ${since:-the first commit}):"
-echo "$commits" | sed 's/^/  /'
 
 if [[ -n $dry ]]; then
 	echo "release: dry run, nothing tagged"
