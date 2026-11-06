@@ -97,14 +97,17 @@ export function useFieldCompletion({
     return { from: ctx.from, word: ctx.word, cands };
   };
 
+  // bumped by Esc: a lookup still pending then must not reopen the list it closed
+  const dismissed = useRef(0);
   useEffect(() => {
     if (!enabled || !serverId) return setList(undefined);
     const explicit = asked?.value === value && asked.caret === caret;
     const at = candidates(serverId, explicit);
     if (!at) return setList(undefined);
     let live = true;
+    const gen = dismissed.current;
     void at.cands.then((cands) => {
-      if (!live) return;
+      if (!live || gen !== dismissed.current) return;
       const matches = rank(at.word, cands, 30);
       // nothing more to add when the text is complete (an operator's value adds a space), unless asked for
       const typed = value.slice(at.from, caret);
@@ -168,6 +171,7 @@ export function useFieldCompletion({
       e.preventDefault();
       e.stopPropagation();
       // (asked stays: clearing it would run the lookup again and reopen the list)
+      dismissed.current++;
       setList(undefined);
       return true;
     }

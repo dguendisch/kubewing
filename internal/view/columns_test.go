@@ -307,7 +307,7 @@ func TestHumanDuration(t *testing.T) {
 	}
 }
 
-func restartsPod(uid string, cell string, finished ...string) source.Item {
+func restartsPod(uid string, cell any, finished ...string) source.Item {
 	var statuses []any
 	for _, f := range finished {
 		statuses = append(statuses, map[string]any{"name": "c", "lastState": map[string]any{"terminated": map[string]any{"finishedAt": f}}})
@@ -335,11 +335,12 @@ func TestPodRestartsColumn(t *testing.T) {
 		restartsPod("three", "3 (1h ago)", "2026-01-01T11:00:00Z"),
 		restartsPod("none", "0"),
 		restartsPod("gone", "1 (5m ago)"), // no lastState left: the server's text
+		restartsPod("int", int64(2)),      // an integer cell: the count
 	}}, t0)
 	if c := v.cols[1]; c.info.Type != string(pipeline.TypeRestarts) || c.timeDerived {
 		t.Fatalf("RESTARTS: type %q, time-derived %v", c.info.Type, c.timeDerived)
 	}
-	for name, want := range map[string]string{"ten": "10 (2026-01-01T11:58:00Z)", "three": "3 (2026-01-01T11:00:00Z)", "none": "0", "gone": "1 (5m ago)"} {
+	for name, want := range map[string]string{"ten": "10 (2026-01-01T11:58:00Z)", "three": "3 (2026-01-01T11:00:00Z)", "none": "0", "gone": "1 (5m ago)", "int": "2"} {
 		if got := v.entries[name].cells[1]; got != want {
 			t.Errorf("%s: %q, want %q", name, got, want)
 		}
@@ -347,7 +348,7 @@ func TestPodRestartsColumn(t *testing.T) {
 	if err := v.SetStages([]pipeline.Stage{{Sort: []string{"-RESTARTS"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := names(v), []string{"ten", "three", "gone", "none"}; !slices.Equal(got, want) {
+	if got, want := names(v), []string{"ten", "three", "int", "gone", "none"}; !slices.Equal(got, want) {
 		t.Errorf("sort -RESTARTS = %v, want %v", got, want)
 	}
 

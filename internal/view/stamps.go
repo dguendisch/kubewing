@@ -30,9 +30,13 @@ func deletionStamp(obj *unstructured.Unstructured) string {
 // stays the server's; the "ago" part becomes the newest restart's timestamp:
 // "3 (2026-01-01T11:55:00Z)", which the frontend renders against its own
 // clock (pipeline.TypeRestarts). Without a timestamp in the pod, or without
-// an "ago" part, the server's text stays.
+// an "ago" part, the server's text stays; a count alone (an integer cell, as
+// older servers and tapes send it) is formatted as is.
 func podRestarts(obj *unstructured.Unstructured, cell any) string {
-	s, _ := cell.(string)
+	s, ok := cell.(string)
+	if !ok {
+		return format(cell, "")
+	}
 	count, rest, ok := strings.Cut(s, " (")
 	if !ok || !strings.HasSuffix(rest, " ago)") {
 		return s

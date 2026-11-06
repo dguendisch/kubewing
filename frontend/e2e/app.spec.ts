@@ -1001,7 +1001,7 @@ test.describe("text selection in a cell", () => {
     const age = rows[0]!.cells[columns.indexOf("AGE")]!;
     expect(age).toMatch(/^\d{4}-\d\d-\d\dT/); // the cell holds the timestamp, the table shows "5m"
     await page.mouse.dblclick(box.x + box.width - 70 + 12, box.y + 24 + 11);
-    await expect.poll(() => sel(page)).toMatchObject({ column: "AGE", age: true });
+    await expect.poll(() => sel(page)).toMatchObject({ column: "AGE", clock: { type: "age" } });
     await page.keyboard.press("ControlOrMeta+C");
     await expect.poll(() => clipboard(page)).toBe(age);
     // j: another row, the selection goes
@@ -3893,12 +3893,16 @@ test.describe("object actions", () => {
       await yaml.locator(".view-line", { hasText: "stage:" }).click();
       const line = (await inspect(page)).cursor;
       expect(line).toBeGreaterThan(0);
-      const y = (await yaml.locator(".view-line", { hasText: "stage:" }).boundingBox())!.y;
+      const shown = yaml.locator(".view-line", { hasText: "stage:" });
+      await expect(shown).toBeVisible();
+      const y = (await shown.boundingBox())!.y;
       await page.keyboard.press("e");
       const editor = dialog(page).locator("[data-editor=yaml]");
       await expect(editor.locator(".view-lines")).toContainText("stage:");
       await expect.poll(async () => (await inspect(page)).editCursor).toBe(line);
-      expect(Math.abs((await editor.locator(".view-line", { hasText: "stage:" }).boundingBox())!.y - y)).toBeLessThan(4);
+      // polled: Monaco re-renders its lines while revealing the cursor's, a line between two renders has no box (null)
+      const stage = editor.locator(".view-line", { hasText: "stage:" });
+      await expect.poll(async () => Math.abs(((await stage.boundingBox())?.y ?? Infinity) - y)).toBeLessThan(4);
       // typed on another line, previewed (not written: replicas is never sent, see below), back: the cursor is on that line still
       await retype(page, 'replicas: "3"', 'replicas: "5"');
       const typed = (await inspect(page)).editCursor;
