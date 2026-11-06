@@ -125,7 +125,10 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
             onMouseMove={() => !it.disabled && setUI((s) => (s.overlay?.kind === "jump" && s.overlay.index !== i ? { ...s, overlay: { ...s.overlay, index: i } } : s))}
             onClick={(e) => void runJump(i, e.shiftKey ? "pane" : e.metaKey && it.cluster ? "tab" : "here")}
           >
-            <span className="truncate">{it.indent ? `↑ ${it.label}` : it.label}</span>
+            <span className="truncate">
+              {it.indent ? "↑ " : ""}
+              <Label label={it.label} type={it.type} muted={!!it.disabled} />
+            </span>
             {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}
             {!it.disabled && it.note ? <span className="truncate text-[11px] text-fg-muted">· {it.note}</span> : null}
             <span className="ml-auto shrink-0 text-fg-muted">{it.detail}</span>
@@ -133,6 +136,22 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * An entry's label with its resource type set apart from the name, in the
+ * color of the resource in a pane's header (a disabled entry's stays muted).
+ */
+function Label({ label, type, muted }: { label: string; type?: string; muted: boolean }) {
+  if (!type || !label.startsWith(type)) return <>{label}</>;
+  return (
+    <>
+      <span data-part="type" className={muted ? undefined : "text-accent"}>
+        {type}
+      </span>
+      {label.slice(type.length)}
+    </>
   );
 }
 

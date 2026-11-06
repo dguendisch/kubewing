@@ -66,7 +66,7 @@ func TestOwnersControllerFirst(t *testing.T) {
 	if len(got) != 2 || got[0].Name != "rs" || !got[0].Controller || got[1].Name != "a" {
 		t.Fatalf("owners = %+v, want the controller first", got)
 	}
-	if r := OwnerRelation(got[0], 1); r.ID != "owner:rs" || r.Label != "replicaset rs" || r.Section != SectionOwner {
+	if r := OwnerRelation(got[0], 1); r.ID != "owner:rs" || r.Label != "replicaset rs" || r.Type != "replicaset" || r.Section != SectionOwner {
 		t.Errorf("relation = %+v", r)
 	}
 }
@@ -221,11 +221,11 @@ func TestReferences(t *testing.T) {
 	}
 
 	one := RefRelation(Ref{APIVersion: "v1", Kind: "PersistentVolumeClaim", Namespace: "shop", Name: "data"}, "persistentvolumeclaims")
-	if one.ID != "ref:v1/PersistentVolumeClaim/shop/data" || one.Label != "persistentvolumeclaim data" || one.Section != SectionReference {
+	if one.ID != "ref:v1/PersistentVolumeClaim/shop/data" || one.Label != "persistentvolumeclaim data" || one.Type != "persistentvolumeclaim" || one.Section != SectionReference {
 		t.Errorf("one = %+v", one)
 	}
 	set := RefRelation(va, "volumeattachments.storage.k8s.io")
-	if set.ID != "ref:storage.k8s.io/v1/VolumeAttachment" || set.Label != "volumeattachments" {
+	if set.ID != "ref:storage.k8s.io/v1/VolumeAttachment" || set.Label != "volumeattachments" || set.Type != "volumeattachments" {
 		t.Errorf("set = %+v", set)
 	}
 	if got := *(Ref{Name: "pv-1"}).Target("persistentvolumes"); got != (Target{Resource: "persistentvolumes", Filter: `o.metadata.name == "pv-1"`}) {
@@ -317,7 +317,7 @@ func TestChildTargetAndOwns(t *testing.T) {
 	c := Child{APIVersion: "apps/v1", Kind: "ReplicaSet", Namespace: "shop", LabelSelector: "app=web", OwnerUID: "d1"}
 	r := OwnedRelation(c, "replicasets.apps")
 	want := Target{Resource: "replicasets.apps", Namespace: "shop", LabelSelector: "app=web", Filter: `o.metadata.ownerReferences.exists(r, r.uid == "d1")`}
-	if r.Label != "replicasets" || *r.Target != want {
+	if r.Label != "replicasets" || r.Type != "replicasets" || *r.Target != want {
 		t.Errorf("relation = %+v target %+v", r, *r.Target)
 	}
 	owned := md("ReplicaSet", "apps/v1", "shop", "a", "a", nil)
@@ -346,6 +346,12 @@ func TestNamespace(t *testing.T) {
 	}
 	if got[0].Label != "pods in shop" || got[1].Label != "namespace object shop" {
 		t.Errorf("labels = %q, %q", got[0].Label, got[1].Label)
+	}
+	// the type is where each label starts (the menu sets it apart)
+	for _, r := range got {
+		if r.Type == "" || !strings.HasPrefix(r.Label, r.Type) {
+			t.Errorf("%s: type %q isn't the start of %q", r.ID, r.Type, r.Label)
+		}
 	}
 	if want := (Target{Resource: "namespaces", Filter: `o.metadata.name == "shop"`}); *got[1].Target != want {
 		t.Errorf("namespace object: %+v", *got[1].Target)

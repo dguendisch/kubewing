@@ -490,6 +490,8 @@ Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a co
 | **references** | pod → the claims its volumes use, each followed by its bound volume, and their volume attachments; stateful set → its claims (every ordinal, so claims left by a scale-down count too), their volumes and attachments; claim → volume ("not bound" while pending) → attachments; volume → claim and attachments; volume attachment → volume and node. Then every other object the row names in a field (see [Jumping from a field](#jumping-from-a-field-in-the-yaml)): a pod's node, service account, secrets and config maps, a binding's role, a shoot's seed … Each is looked up: one that doesn't exist is listed as **missing**; the same object named in several fields is listed once, with how often (`secret db 2×`) |
 | **events** | the row's events (see below) |
 
+Each entry starts with its resource type (**replicaset** web-7d4, **pods** in shop, **seed** soil), set apart from the name in the same color as the resource in a pane's header.
+
 `j`/`k` move (wrapping around), `⏎` jumps in place, `⇧⏎` opens the target in a split below, `Esc` closes.
 
 **Clusters of a shoot or seed.** In a pane on a garden, `⌘J` on a shoot, seed or managed seed row lists its clusters first, highlighted, each with the context name it will get (and its safety label). It opens like a pick in `⌘P` (see [Opening a cluster](#opening-a-cluster-p)): with nothing listed and `⌘O` over it, the shoot in all namespaces, the control plane in the shoot's namespace on its seed, a seed in all namespaces.

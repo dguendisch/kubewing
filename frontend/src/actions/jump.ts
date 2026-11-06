@@ -14,6 +14,8 @@ export interface JumpItem {
   id: string;
   section: JumpSection;
   label: string;
+  /** The start of label naming the resource type: set apart from the name. */
+  type?: string;
   /** Right-aligned: owner depth, count, "scan…". */
   detail?: string;
   /** Why it can't be jumped to; undefined = it can. */
@@ -69,6 +71,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     id: r.id,
     section: "field",
     label: r.label,
+    type: r.type,
     target: r.target,
     note: r.note,
     detail: r.places ? `${r.places}×` : undefined,
@@ -79,6 +82,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
     id: c.id,
     section: "clusters",
     label: c.label,
+    type: c.type,
     cluster: c.entry,
     detail: scan.resolving === c.id ? "resolving…" : c.entry.name,
     disabled: c.entry.disabled,
@@ -88,7 +92,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
   const refs: JumpItem[] = [];
   const events: JumpItem[] = [];
   for (const r of rel.items) {
-    const it: JumpItem = { id: r.id, section: r.section, label: r.label, target: r.target, note: r.note };
+    const it: JumpItem = { id: r.id, section: r.section, label: r.label, type: r.type, target: r.target, note: r.note };
     if (r.section === "owner") {
       it.indent = (r.depth ?? 1) - 1;
       if (r.controller) it.detail = "controller";
@@ -113,7 +117,7 @@ export function jumpItems(rel: Relations, scan: Pick<JumpState, "scanning" | "sc
       const known = new Set(rel.items.filter((r) => r.section === "owned" && r.target).map((r) => r.kind ?? r.target!.resource));
       for (const r of scan.scanned.items) {
         if (known.has(r.kind ?? r.target?.resource ?? "")) continue;
-        out.push({ id: r.id, section: "owned", label: r.label, detail: String(r.count ?? 0), target: r.target });
+        out.push({ id: r.id, section: "owned", label: r.label, type: r.type, detail: String(r.count ?? 0), target: r.target });
       }
       const summary = `scanned ${plural(scan.scanned.scanned, "type")}${scan.scanned.skipped ? `, ${scan.scanned.skipped} skipped (${scan.scanned.skipReason})` : ""}`;
       out.push({ id: "scan:done", section: "owned", label: scan.scanned.items.length ? "scan done" : "nothing else owned", disabled: summary });

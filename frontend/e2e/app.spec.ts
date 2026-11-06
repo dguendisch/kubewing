@@ -4376,6 +4376,9 @@ test.describe("jump to (⌘J)", () => {
         - separator "events"
         - menuitem "events 2"
     `);
+    // each entry's resource type stands out from its name (like the resource in a pane's header)
+    await expect(jump(page).locator('[data-part="type"]')).toHaveText(["rel-pods", "namespace", "everything", "replicaset", "deployment", "node", "events"]);
+    await expect(jump(page).locator('[data-part="type"]').first()).toHaveClass(/text-accent/);
     expect((await inspect(page)).focus).toBe("menu");
     // the highlight starts on the direct owner; j steps up the chain
     await expect(jump(page).locator("[data-active]")).toContainText("replicaset web-7d9f");

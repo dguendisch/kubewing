@@ -13,8 +13,10 @@ import (
 // shoot, control plane or seed, opened as a pick in the clusters dialog
 // (OpenCluster), only once chosen: resolving it may ask to log in.
 type ClusterJump struct {
-	ID    string       `json:"id"`
-	Label string       `json:"label"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	// Type is the start of Label naming the kind of cluster ("shoot", "control plane", "seed").
+	Type  string       `json:"type,omitempty"`
 	Entry ClusterEntry `json:"entry"`
 }
 
@@ -44,29 +46,29 @@ func (s *Service) clusterJumps(cluster string, obj *unstructured.Unstructured, k
 	if !ok {
 		return nil
 	}
-	shoot := func(namespace, name string, cp bool, label string) ClusterJump {
+	shoot := func(namespace, name string, cp bool, typ, label string) ClusterJump {
 		t := gardener.Target{Garden: g.Identity, Namespace: namespace, Shoot: name, ControlPlane: cp}
 		id := "cluster:shoot"
 		if cp {
 			id = "cluster:controlPlane"
 		}
-		return ClusterJump{ID: id, Label: label, Entry: s.entry(cfg, targetCluster(t), "jump")}
+		return ClusterJump{ID: id, Label: typ + label, Type: typ, Entry: s.entry(cfg, targetCluster(t), "jump")}
 	}
 	if seed == "" {
 		return []ClusterJump{
-			shoot(obj.GetNamespace(), obj.GetName(), false, "shoot "+obj.GetName()),
-			shoot(obj.GetNamespace(), obj.GetName(), true, "control plane of "+obj.GetName()),
+			shoot(obj.GetNamespace(), obj.GetName(), false, "shoot", " "+obj.GetName()),
+			shoot(obj.GetNamespace(), obj.GetName(), true, "control plane", " of "+obj.GetName()),
 		}
 	}
 	t := gardener.Target{Garden: g.Identity, Seed: seed}
-	out := []ClusterJump{{ID: "cluster:seed", Label: "seed " + seed, Entry: s.entry(cfg, targetCluster(t), "jump")}}
+	out := []ClusterJump{{ID: "cluster:seed", Label: "seed " + seed, Type: "seed", Entry: s.entry(cfg, targetCluster(t), "jump")}}
 	// a managed seed is a shoot (in project garden), whose control plane is on another seed
 	if kind == "ManagedSeed" {
 		name, _, _ := unstructured.NestedString(obj.Object, "spec", "shoot", "name")
 		if name == "" {
 			name = seed
 		}
-		out = append(out, shoot(obj.GetNamespace(), name, true, "control plane of shoot "+name))
+		out = append(out, shoot(obj.GetNamespace(), name, true, "control plane", " of shoot "+name))
 	}
 	return out
 }

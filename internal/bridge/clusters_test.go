@@ -158,7 +158,7 @@ func TestClusterJumps(t *testing.T) {
 
 	shoot := jumps("shoots", "shoot-baz", 3)
 	if len(shoot) != 2 || shoot[0].Label != "shoot baz" || shoot[0].Entry.Name != "tape-garden/shoot--foo--baz" || shoot[0].Entry.Rule.Label != "TG" || shoot[0].Entry.From != "jump" ||
-		shoot[1].Label != "control plane of baz" || !shoot[1].Entry.ControlPlane || shoot[1].Entry.Namespace != "garden-foo" {
+		shoot[1].Label != "control plane of baz" || shoot[0].Type != "shoot" || shoot[1].Type != "control plane" || !shoot[1].Entry.ControlPlane || shoot[1].Entry.Namespace != "garden-foo" {
 		t.Fatalf("shoot: %+v", shoot)
 	}
 	cp, err := svc.OpenCluster(shoot[1].Entry)
@@ -181,7 +181,7 @@ func TestClusterJumps(t *testing.T) {
 	}
 
 	seed := jumps("seeds", "seed-loam", 2)
-	if len(seed) != 1 || seed[0].Label != "seed loam" || seed[0].Entry.Seed != "loam" || seed[0].Entry.Name != "tape-garden/seed--loam" {
+	if len(seed) != 1 || seed[0].Label != "seed loam" || seed[0].Type != "seed" || seed[0].Entry.Seed != "loam" || seed[0].Entry.Name != "tape-garden/seed--loam" {
 		t.Fatalf("seed: %+v", seed)
 	}
 	o, err := svc.OpenCluster(seed[0].Entry)

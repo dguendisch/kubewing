@@ -32,6 +32,14 @@ describe("jump menu items", () => {
     expect(firstJumpable(jumpItems(pod))).toBe(2);
   });
 
+  it("keeps each entry's resource type (set apart from the name in the menu)", () => {
+    const typed: Relations = { ...pod, items: [{ ...pod.items[2]!, type: "replicaset" }] };
+    const clusters: Relations = { ...pod, items: [], clusters: [{ id: "cluster:seed", label: "seed loam", type: "seed", entry: { name: "g/seed--loam" } as ClusterEntry }] };
+    expect(jumpItems(typed).find((i) => i.id === "owner:rs")?.type).toBe("replicaset");
+    expect(jumpItems(clusters).find((i) => i.id === "cluster:seed")?.type).toBe("seed");
+    expect(jumpItems(typed).find((i) => i.id === "scan")?.type).toBeUndefined();
+  });
+
   it("events come last, after the scan's entries; zero events can still be watched", () => {
     const ev = (count: number) => ({ id: "events", section: "events" as const, label: "events", count, target: { resource: "events", namespace: "shop", fieldSelector: "involvedObject.kind=Pod,involvedObject.name=web-7d9f-a" } });
     const rel = { ...pod, items: [ev(0), ...pod.items] };

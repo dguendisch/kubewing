@@ -477,6 +477,8 @@ export interface Relation {
   id: string;
   section: "field" | "namespace" | "owner" | "owned" | "reference" | "events";
   label: string;
+  /** The start of label naming the resource type ("replicaset" of "replicaset web-7d4"), set apart in the menu. */
+  type?: string;
   kind?: string;
   name?: string;
   /** Owners: 1 = direct, 2 = the owner's owner … */
@@ -520,6 +522,8 @@ export interface Relations {
 export interface ClusterJump {
   id: string;
   label: string;
+  /** The start of label naming the kind of cluster ("shoot", "control plane", "seed"). */
+  type?: string;
   entry: ClusterEntry;
 }
 

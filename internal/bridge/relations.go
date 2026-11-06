@@ -518,7 +518,7 @@ func eventResource(rel source.Relator, cluster string) string {
 // metadata-only list.
 func eventsRelation(ctx context.Context, rel source.Relator, cluster string, obj *unstructured.Unstructured) relations.Relation {
 	t := relations.Events(obj, eventResource(rel, cluster))
-	r := relations.Relation{ID: "events", Section: relations.SectionEvents, Label: "events", Kind: "Event", Target: &t}
+	r := relations.Relation{ID: "events", Section: relations.SectionEvents, Label: "events", Type: "events", Kind: "Event", Target: &t}
 	list, err := rel.ListMetadata(ctx, cluster, t.Resource, t.Namespace, "", t.FieldSelector)
 	if err != nil {
 		r.Note = "not counted: " + shortErr(err)

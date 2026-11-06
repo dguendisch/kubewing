@@ -51,8 +51,12 @@ type Relation struct {
 	ID      string  `json:"id"`
 	Section Section `json:"section"`
 	Label   string  `json:"label"`
-	Kind    string  `json:"kind,omitempty"`
-	Name    string  `json:"name,omitempty"`
+	// Type is the start of Label that names the resource type ("replicaset"
+	// of "replicaset web-7d4", all of "pods"): the menu sets it apart from
+	// the name. Empty for labels without one.
+	Type string `json:"type,omitempty"`
+	Kind string `json:"kind,omitempty"`
+	Name string `json:"name,omitempty"`
 	// Depth of an owner: 1 = a direct owner, 2 = its owner …
 	Depth      int  `json:"depth,omitempty"`
 	Controller bool `json:"controller,omitempty"`
@@ -120,10 +124,10 @@ func Namespace(obj *unstructured.Unstructured, p pipeline.Pipeline, plural, nsRe
 	if p.Source.AllNamespaces() && !strings.EqualFold(p.Source.Resource, allResources) {
 		t := FromPipeline(p)
 		t.Namespace = ns
-		out = append(out, Relation{ID: "ns:here", Section: SectionNamespace, Label: plural + " in " + ns, Name: ns, Target: &t})
+		out = append(out, Relation{ID: "ns:here", Section: SectionNamespace, Label: plural + " in " + ns, Type: plural, Name: ns, Target: &t})
 	}
 	out = append(out, Relation{
-		ID: "ns:object", Section: SectionNamespace, Label: "namespace object " + ns, Kind: "Namespace", Name: ns,
+		ID: "ns:object", Section: SectionNamespace, Label: "namespace object " + ns, Type: "namespace", Kind: "Namespace", Name: ns,
 		Target: &Target{Resource: nsResource, Filter: NameFilter(ns)},
 	})
 	if p.Source.Namespace == ns && strings.EqualFold(p.Source.Resource, allResources) {
@@ -138,7 +142,7 @@ const allResources = "all"
 // AllIn is the jump to everything in a namespace: a listing of every
 // namespaced type there (see source.AllResources).
 func AllIn(ns string) Relation {
-	return Relation{ID: "ns:all", Section: SectionNamespace, Label: "everything in " + ns, Name: ns, Target: &Target{Resource: allResources, Namespace: ns}}
+	return Relation{ID: "ns:all", Section: SectionNamespace, Label: "everything in " + ns, Type: "everything", Name: ns, Target: &Target{Resource: allResources, Namespace: ns}}
 }
 
 // Owner is one ownerReference.
@@ -168,7 +172,8 @@ func OwnerRelation(o Owner, depth int) Relation {
 	if o.UID == "" {
 		id = "owner:" + o.APIVersion + "/" + o.Kind + "/" + o.Name
 	}
-	return Relation{ID: id, Section: SectionOwner, Label: strings.ToLower(o.Kind) + " " + o.Name, Kind: o.Kind, Name: o.Name, Depth: depth, Controller: o.Controller}
+	kind := strings.ToLower(o.Kind)
+	return Relation{ID: id, Section: SectionOwner, Label: kind + " " + o.Name, Type: kind, Kind: o.Kind, Name: o.Name, Depth: depth, Controller: o.Controller}
 }
 
 // OwnerTarget is the pane showing one owner.
@@ -215,7 +220,7 @@ func (c Child) Owns(obj *unstructured.Unstructured) bool {
 // OwnedRelation is the entry for a child kind (resource as resolved).
 func OwnedRelation(c Child, resource string) Relation {
 	label, _, _ := strings.Cut(resource, ".")
-	return Relation{ID: "owned:" + c.APIVersion + "/" + c.Kind, Section: SectionOwned, Label: label, Kind: c.Kind, Target: c.Target(resource)}
+	return Relation{ID: "owned:" + c.APIVersion + "/" + c.Kind, Section: SectionOwned, Label: label, Type: label, Kind: c.Kind, Target: c.Target(resource)}
 }
 
 var (
@@ -491,14 +496,17 @@ func (r Ref) Target(resource string) *Target {
 func RefRelation(r Ref, resource string) Relation {
 	id := "ref:" + r.APIVersion + "/" + r.Kind
 	label, _, _ := strings.Cut(resource, ".")
+	typ := label
 	switch {
 	case r.Name != "":
 		id += "/" + r.Namespace + "/" + r.Name
-		label = strings.ToLower(r.Kind) + " " + r.Name
+		typ = strings.ToLower(r.Kind)
+		label = typ + " " + r.Name
 	case r.Missing != "":
-		label = strings.ToLower(r.Kind)
+		typ = strings.ToLower(r.Kind)
+		label = typ
 	}
-	rel := Relation{ID: id, Section: SectionReference, Label: label, Kind: r.Kind, Name: r.Name, Gone: r.Missing}
+	rel := Relation{ID: id, Section: SectionReference, Label: label, Type: typ, Kind: r.Kind, Name: r.Name, Gone: r.Missing}
 	if r.Places > 1 {
 		rel.Places = r.Places
 	}
@@ -543,7 +551,7 @@ func ScaleSelector(obj *unstructured.Unstructured, path string) (string, bool) {
 func ScanRelation(resource, kind, namespace, uid string, count int) Relation {
 	label, _, _ := strings.Cut(resource, ".")
 	return Relation{
-		ID: "scan:" + resource, Section: SectionOwned, Label: label, Kind: kind, Count: &count,
+		ID: "scan:" + resource, Section: SectionOwned, Label: label, Type: label, Kind: kind, Count: &count,
 		Target: &Target{Resource: resource, Namespace: namespace, Filter: OwnedFilter(uid)},
 	}
 }
