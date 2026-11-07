@@ -75,7 +75,9 @@ client-go/informers, `k8s.io/kubectl` packages (apply, diff, printers, exec, por
 
 ### User config: `~/.kubewing/`
 
-Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing only reads `config.yaml`, `keybindings.yaml`, `refs.yaml` and `themes/`; it writes its own `history.yaml`, `columns.yaml` and `clusters.yaml` (into the state directory, by default the same). Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
+Plain YAML, hand-editable, git-friendly (can be versioned or dotfile-synced). kubewing reads `config.yaml`, `keybindings.yaml`, `refs.yaml` and `themes/`; it writes its own `history.yaml`, `columns.yaml` and `clusters.yaml` (into the state directory, by default the same). The one exception is `config.yaml` saved from the settings editor (`⌘,`): written atomically (temp file + rename) through a symlink, keeping the file's mode.
+
+The settings reference is `internal/config/reference.yaml`, embedded: a valid `config.yaml` with every setting, its default (or an example) and a comment. It's not written into the user's file as comments; a file that exists is the user's, and a reference merged into it would go stale with every release. It's shown beside the editor instead. Only a new file starts from it, every line commented out (`config.Starter`), so `⌘/` brings back a setting exactly as documented. Tests keep it honest: it must load without problems and contain every JSON field of `config.Config` (walked by reflection), so a new setting can't be forgotten. The live check (`CheckConfig`) runs the same `load` as startup over the unsaved text (the other files read from disk) and returns `config.yaml`'s problems only. Saving is `WriteFile` + `ReloadConfig`, so it applies like `⌘⇧,`; a file with problems is still saved, as a hand edit would be. Planned: `views/*.yaml` (saved pipelines), `aliases.yaml`, `favorites.yaml` (bookmarked clusters).
 
 ## Watches and the source layer
 

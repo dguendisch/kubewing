@@ -11,6 +11,8 @@ interface Props {
   onChange: (text: string) => void;
   /** ⌘⏎ in the editor (⏎ is a newline here). */
   onSubmit?: () => void;
+  /** ⌘S in the editor. */
+  onSave?: () => void;
   label: string;
   /** Takes the keyboard focus on mount, and again when it becomes true (its pane focused again). */
   autoFocus?: boolean;
@@ -30,13 +32,13 @@ interface Props {
  * Editable YAML in Monaco (the ops pod dialog's "show YAML"), themed like
  * the read-only Viewer. Esc reaches the dialog (closes the YAML), unless
  * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
- * ⌥↑/⌥↓ move it.
+ * ⌥↑/⌥↓ move it, ⌘/ comments it in or out.
  */
-export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, onFocus, slot, refs, at, viewState }: Props) {
+export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus = true, onFocus, slot, refs, at, viewState }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
-  const cb = useRef({ onChange, onSubmit, onFocus, refs });
-  cb.current = { onChange, onSubmit, onFocus, refs };
+  const cb = useRef({ onChange, onSubmit, onSave, onFocus, refs });
+  cb.current = { onChange, onSubmit, onSave, onFocus, refs };
   const editor = useRef<{ focus(): void }>(undefined);
 
   useEffect(() => {
@@ -73,6 +75,8 @@ export function Editor({ initial, onChange, onSubmit, label, autoFocus = true, o
       });
       const focusSub = ed.onDidFocusEditorText(() => cb.current.onFocus?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.Enter, () => cb.current.onSubmit?.());
+      // only where there's something to save: elsewhere ⌘S stays the app's (the object editor's apply)
+      if (onSave) ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => cb.current.onSave?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
       dispose = () => {
         if (viewState) viewState.state = ed.saveViewState();

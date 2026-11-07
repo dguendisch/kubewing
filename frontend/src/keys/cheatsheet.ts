@@ -196,6 +196,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("switch the pane between a Gardener shoot and its control plane", "cluster.otherPlane"),
       row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
       row("list everything in a namespace again (open it as resource all)", "source.refresh"),
+      row("edit the settings (config.yaml), the reference beside them", "config.edit"),
       row("reload the config", "config.reload"),
       row("check for updates (unbound: the app menu has it)", "update.check"),
       row("this cheat sheet", "help.toggle"),

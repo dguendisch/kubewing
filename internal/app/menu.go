@@ -26,6 +26,11 @@ const CommandEvent = "kw:command"
 // UpdateCommand is the app menu's "Check for Updates…" (frontend: keys/keymap.ts).
 const UpdateCommand = "update.check"
 
+// AppMenuTitle is the title of the frontend's menu whose items go into the
+// app menu (after "Check for Updates…": "Settings…") instead of a menu of
+// their own (frontend: keys/appMenu.ts APP_MENU).
+const AppMenuTitle = "kubewing"
+
 // BaseMenu is the macOS menu before the frontend sends its own, and the frame
 // around it after: app menu (with "Check for Updates…"), Edit (text fields need its ⌘C/⌘V/⌘A/⌘Z in
 // WKWebView) and Window. Wails' default would add ⌘W "Close Window" (quitting
@@ -39,6 +44,12 @@ func BaseMenu(commands []Menu, emit func(name string, data any)) *application.Me
 	app.AddRole(application.About)
 	app.Add("Check for Updates…").OnClick(func(*application.Context) { emit(CommandEvent, UpdateCommand) })
 	app.AddSeparator()
+	for _, c := range commands {
+		if c.Title == AppMenuTitle {
+			addItems(app, c.Items, emit)
+			app.AddSeparator()
+		}
+	}
 	app.AddRole(application.ServicesMenu)
 	app.AddSeparator()
 	app.AddRole(application.Hide)
@@ -48,18 +59,8 @@ func BaseMenu(commands []Menu, emit func(name string, data any)) *application.Me
 	app.AddRole(application.Quit)
 	m.AddRole(application.EditMenu)
 	for _, c := range commands {
-		sub := m.AddSubmenu(c.Title)
-		for _, it := range c.Items {
-			if it == nil {
-				sub.AddSeparator()
-				continue
-			}
-			item := sub.Add(it.Label)
-			if it.Accelerator != "" {
-				item.SetAccelerator(it.Accelerator)
-			}
-			cmd := it.Command
-			item.OnClick(func(*application.Context) { emit(CommandEvent, cmd) })
+		if c.Title != AppMenuTitle {
+			addItems(m.AddSubmenu(c.Title), c.Items, emit)
 		}
 	}
 	window := m.AddSubmenu("Window")
@@ -68,4 +69,19 @@ func BaseMenu(commands []Menu, emit func(name string, data any)) *application.Me
 	window.AddSeparator()
 	window.AddRole(application.ToggleFullscreen)
 	return m
+}
+
+func addItems(sub *application.Menu, items []*MenuItem, emit func(name string, data any)) {
+	for _, it := range items {
+		if it == nil {
+			sub.AddSeparator()
+			continue
+		}
+		item := sub.Add(it.Label)
+		if it.Accelerator != "" {
+			item.SetAccelerator(it.Accelerator)
+		}
+		cmd := it.Command
+		item.OnClick(func(*application.Context) { emit(CommandEvent, cmd) })
+	}
 }

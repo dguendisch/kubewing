@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accelerator, menuSpec, type MenuItem } from "./appMenu";
+import { accelerator, APP_MENU, menuSpec, type MenuItem } from "./appMenu";
 import { defaultBindings, mergeBindings } from "./keymap";
 
 const items = (bindings = defaultBindings) =>
@@ -38,6 +38,11 @@ describe("native menu", () => {
     // ⌘C is the native copy in fields, Monaco and terminals
     expect(i["table.copy"]).toEqual({ label: "Copy  (⌘C)", command: "table.copy" });
     expect(i["filter.focus"]!.accelerator).toBeUndefined(); // ⌘F is Monaco's find in the detail view
+  });
+
+  it("puts the settings into the app menu, as macOS apps have them", () => {
+    const app = menuSpec().find((m) => m.title === APP_MENU)!;
+    expect(app.items).toEqual([{ label: "Settings…", command: "config.edit", accelerator: "CmdOrCtrl+," }]);
   });
 
   it("follows keybindings.yaml: rebound, unbound", () => {

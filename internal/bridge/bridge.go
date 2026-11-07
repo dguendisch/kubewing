@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -178,6 +179,49 @@ func (s *Service) ReloadConfig() config.Effective {
 	s.reg.SetLimits(s.historyLimits())
 	s.emit.Emit(ConfigEvent, cfg)
 	return cfg
+}
+
+// ConfigFile is config.yaml for the editor (⌘,): its text and path, or
+// for a new file the starter (every setting commented out); the reference
+// (every setting with its default) either way.
+type ConfigFile struct {
+	Path      string `json:"path"`
+	Text      string `json:"text"`
+	Exists    bool   `json:"exists"`
+	Reference string `json:"reference"`
+}
+
+// ConfigFile reads config.yaml (see type ConfigFile). Without a config
+// directory (headless without -config) there is nothing to edit: an error.
+func (s *Service) ConfigFile() (ConfigFile, error) {
+	dir := s.opts.ConfigDir
+	text, exists, err := config.ReadFile(dir)
+	if err != nil {
+		return ConfigFile{}, err
+	}
+	if !exists {
+		text = config.Starter()
+	}
+	return ConfigFile{Path: filepath.Join(dir, config.File), Text: text, Exists: exists, Reference: config.Reference}, nil
+}
+
+// CheckConfig reports the problems config.yaml would have with text as its
+// content (the editor's live check); empty = none.
+func (s *Service) CheckConfig(text string) []string {
+	errs := config.Check(s.opts.ConfigDir, text)
+	if errs == nil {
+		errs = []string{}
+	}
+	return errs
+}
+
+// SaveConfig writes config.yaml and reloads the configuration (as ⌘⇧,):
+// what it brings, problems included, comes back and as ConfigEvent.
+func (s *Service) SaveConfig(text string) (config.Effective, error) {
+	if err := config.WriteFile(s.opts.ConfigDir, text); err != nil {
+		return config.Effective{}, err
+	}
+	return s.ReloadConfig(), nil
 }
 
 // Reconnect drops the connection to a cluster ("" = current) and restarts

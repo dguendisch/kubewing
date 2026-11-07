@@ -332,6 +332,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void switchPlane(s.overlay?.kind === "open" ? (s.panes[s.overlay.pane] ?? pane) : pane);
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
+    case "config.edit":
+      return void openConfigEditor(pane.id);
     case "source.reconnect":
       return void reconnect(pane.id);
     case "source.refresh":
@@ -1651,6 +1653,17 @@ function pickField(paneId: string, at: string | undefined) {
   if (!t || t.serverId !== p?.serverId) return flash(paneId, "the table this object came from is gone", true);
   setUI((x) => (p!.object?.split ? S.focusPane(x, t.id) : S.leaveObject(x, paneId)));
   void travel(t.id, { to: at });
+}
+
+/** ⌘,: config.yaml in an editor (loaded first, so it opens with the text); again closes it. */
+export async function openConfigEditor(paneId: string) {
+  if (useUI.getState().overlay?.kind === "config") return setUI(S.closeOverlay);
+  try {
+    const file = await bridge().configFile();
+    setUI((x) => (x.overlay?.kind === "config" ? x : S.openOverlay(S.closeOverlay(x), { kind: "config", pane: paneId, configFile: file })));
+  } catch (e) {
+    flash(paneId, `settings: ${String((e as Error)?.message ?? e)}`, true);
+  }
 }
 
 /**

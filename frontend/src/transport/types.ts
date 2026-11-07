@@ -399,6 +399,16 @@ export interface Config {
   errors: string[];
 }
 
+/** Mirrors bridge.ConfigFile: config.yaml for the editor (⌘,). */
+export interface ConfigFile {
+  path: string;
+  /** The file's text; a new file's starter (every setting commented out) while it doesn't exist. */
+  text: string;
+  exists: boolean;
+  /** Every setting with its default (or an example) and what it does. */
+  reference: string;
+}
+
 /** Mirrors config.Debug: defaults of the debug dialog. */
 export interface DebugConfig {
   image?: string;
@@ -969,6 +979,12 @@ export interface Transport {
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
   reloadConfig(): Promise<Config>;
+  /** config.yaml for the editor (rejects without a config directory). */
+  configFile(): Promise<ConfigFile>;
+  /** The problems config.yaml would have with this text; empty = none. */
+  checkConfig(text: string): Promise<string[]>;
+  /** Writes config.yaml and reloads the config (as ⌘⇧,); resolves to it, problems included. */
+  saveConfig(text: string): Promise<Config>;
   /** Drops the connection to a cluster ("" = current) and restarts its watches; resolves to how many restarted. */
   reconnect(cluster: string): Promise<number>;
   /** Lists a listing pane's source again (refused for live panes). */

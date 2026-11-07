@@ -1657,6 +1657,64 @@ test.describe("config (testdata/config)", () => {
     expect(s.dir).toBe("testdata/config");
     await expect(page.getByRole("alert", { name: "config errors" })).toHaveCount(0);
   });
+
+  // the file is the shared fixture: edits are dropped, and only its own text is saved back
+  test("⌘, edits config.yaml: the reference beside it, problems while typing, ⌘S saves and applies", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+,");
+    const dialog = page.getByRole("dialog", { name: "settings" });
+    await expect(dialog).toContainText("testdata/config/config.yaml");
+    await expect.poll(async () => (await inspect(page)).overlays).toEqual(["config"]);
+    const editor = dialog.locator("[data-editor=yaml]");
+    await expect(editor.locator(".view-lines")).toContainText("theme: e2e");
+    // an existing file has the reference beside it, every setting with its default
+    const reference = dialog.getByRole("textbox", { name: "reference" });
+    await expect(reference).toHaveCount(1);
+    await expect(dialog).toContainText("every setting with its default");
+    // the toggle leaves the focus in the editor (WKWebView doesn't focus a clicked button: Esc would reach nothing)
+    await dialog.getByRole("textbox", { name: "config.yaml" }).focus();
+    await dialog.getByRole("button", { name: "reference" }).click();
+    await expect(reference).toHaveCount(0);
+    await dialog.getByRole("button", { name: "reference" }).click();
+    await expect(reference).toHaveCount(1);
+    expect(await page.evaluate(() => !!document.activeElement?.closest("[data-editor]"))).toBe(true);
+    // the reference hidden while it has the focus: the dialog takes it, Esc still closes
+    await reference.focus();
+    await dialog.getByRole("button", { name: "reference" }).click();
+    await expect(reference).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await page.keyboard.press("ControlOrMeta+,");
+    await expect(editor.locator(".view-lines")).toContainText("theme: e2e");
+    await expect(reference).toHaveCount(1);
+
+    // a typo shows while typing, as Go would load it
+    const textarea = dialog.getByRole("textbox", { name: "config.yaml" });
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.insertText("\nbogus: 1");
+    await expect(dialog).toContainText("edited");
+    await expect(dialog.getByRole("alert", { name: "config problems" })).toContainText('unknown field "bogus"');
+    // Esc on edits asks first, a second one drops them
+    await page.keyboard.press("Escape");
+    await expect(dialog).toContainText("esc again drops the edits");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+
+    // reopened, the file is as it was; ⌘S writes it back unchanged and applies it
+    await page.keyboard.press("ControlOrMeta+,");
+    await expect(editor.locator(".view-lines")).toContainText("theme: e2e");
+    await expect(dialog.getByRole("alert", { name: "config problems" })).toHaveCount(0);
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+S");
+    await expect(dialog).toContainText("saved and applied");
+    await expect(page.getByRole("alert", { name: "config errors" })).toHaveCount(0);
+    // saved: Esc closes at once
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
 });
 
 // Safety model (testdata/config/config.yaml): "tape-dev" is DEV (delete confirms),

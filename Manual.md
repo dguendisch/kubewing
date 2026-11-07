@@ -822,6 +822,17 @@ A context no rule matches is writable, and only delete and rollout restart ask.
 
 Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All files are optional plain YAML. `⌘⇧,` reloads them; problems show in a banner and fall back to defaults. [testdata/config/](testdata/config/) has a commented example.
 
+### Editing the settings (`⌘,`)
+
+`⌘,` (or **kubewing → Settings…**) opens `config.yaml` in an editor, with a reference beside it: every setting with its default (or an example) and what it does. Copy what you need from there; **reference** shows or hides it.
+
+- Without a `config.yaml` yet, the editor starts with the reference commented out, so nothing changes until you uncomment a line (`⌘/` comments lines in and out).
+- Problems show below the editor as you type, as kubewing would read the file.
+- `⌘S` saves and applies at once, like `⌘⇧,`. If the file still has problems, it's saved anyway and those parts fall back to defaults (and show in the banner).
+- `Esc` closes. With unsaved edits it asks first; a second `Esc` drops them.
+
+A symlinked `config.yaml` (dotfiles) is saved where the link points. The other files (`keybindings.yaml`, `refs.yaml`, themes) are edited outside kubewing.
+
 | File | Content |
 |---|---|
 | `config.yaml` | settings (below) |
@@ -931,7 +942,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |

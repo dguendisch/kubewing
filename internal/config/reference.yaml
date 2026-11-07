@@ -1,0 +1,47 @@
+# Every setting, with its default (or an example where there is none). All of them are optional.
+
+theme: default              # themes/<name>.yaml; "default" (or none) is the built-in theme
+
+diff:
+  ignore:                   # noise rules on top of the built-in ones (resourceVersion, managedFields, heartbeats …)
+    - path: metadata.annotations.example\.com/last-sync   # "*" matches any list element / map key, "\." a literal dot
+      kinds: [Deployment]   # only for these kinds; none: every kind
+
+contexts:                   # safety rules per kubeconfig context, the first match wins; none by default
+  - match: "*-prod"         # glob on the context name
+    label: PROD             # shown on the pane frame, header and tab
+    color: prod             # a theme token (prod, changed, added …) or a color (#e5534b, rgb(…), oklch(…))
+    readOnly: false         # true: every mutation is refused
+    confirm: [delete, exec, debug, opspod, edit, terminal, label, annotate, scale, restart]   # need a confirmation (delete and restart always do)
+    strict: false           # true: a confirmation needs the object's name typed
+
+debug:                      # debug containers (b)
+  image: nicolaka/netshoot  # prefilled; none: the last image that started
+  profile: general          # general, baseline, restricted, netadmin, sysadmin
+
+opsPod:                     # node shells (⌘⌥O): until a pod ran, then the last used ones
+  image: europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest   # prefilled; none: the last image that started
+  namespace: default        # where the pod is created
+  chroot: false             # the shell runs in /host, i.e. on the node (implies hostRoot)
+  hostRoot: true            # the node's / mounted at /host
+  hostNetwork: true         # the node's network namespace
+
+terminal:
+  scrollback: 10000         # lines kept beyond the screen, 100 … 1000000
+
+logs:
+  tail: 100                 # lines per container before following, 1 … 10000
+  maxStreams: 50            # containers followed at once, 1 … 500
+  buffer: 50000             # lines kept per log pane, 1000 … 5000000
+
+history:
+  budget: 512Mi             # memory for recorded changes per source, 1Mi … 64Gi; the oldest go first
+
+launch:
+  wait: false               # true: stay in the foreground when launched from a terminal (-wait overrides it)
+
+update:
+  checkDays: 1              # days between update checks, 0 = off (Check for Updates… still works), at most 365
+  prereleases: false        # true: offer release candidates too
+
+focusFollowsMouse: false    # true: the pane under the mouse gets the focus, no click needed

@@ -29,8 +29,13 @@ type Entry = [label: string, command: CommandId] | null;
 
 const tabJumps = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Entry => [n === 9 ? "Last Tab" : `Tab ${n}`, `tab.goto${n}`]);
 
+/** The app menu's title: Go merges this menu's items into it (after "Check for Updates…") instead of adding a menu. */
+export const APP_MENU = "kubewing";
+
 /** Menu layout; every app-level command a user would look for in a menu bar. */
 const layout: { title: string; entries: Entry[] }[] = [
+  // where macOS apps have their settings (⌘,)
+  { title: APP_MENU, entries: [["Settings…", "config.edit"]] },
   {
     title: "File",
     entries: [["New Tab", "tab.new"], ["Open…", "source.open"], ["Open Cluster…", "cluster.open"], ["Shoot ⇄ Control Plane", "cluster.otherPlane"], null, ["Close Tab", "tab.close"], ["Close Pane", "pane.close"], null, ["Refresh Listing", "source.refresh"], ["Reconnect", "source.reconnect"], ["Reload Config", "config.reload"]],

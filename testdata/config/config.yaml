@@ -1,6 +1,8 @@
 # Example ~/.kubewing/config.yaml (also the headless E2E config, see playwright.config.ts).
-# kubewing only reads these files; the one it writes there is its own history.yaml
+# kubewing only reads these files, except config.yaml when saved from ⌘, (E2E saves it back
+# unchanged); the one it writes there is its own history.yaml
 # (recent debug images; E2E writes it elsewhere, see -state in playwright.config.ts).
+# Every setting with its default: internal/config/reference.yaml (⌘, shows it).
 
 # themes/<name>.yaml; omit (or "default") for the built-in theme
 theme: e2e

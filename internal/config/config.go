@@ -1,13 +1,14 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
-// (config.yaml, keybindings.yaml, refs.yaml, themes/*.yaml). kubewing only reads them:
-// the files it writes there are its own history.yaml (see HistoryStore) and
-// columns.yaml (see ColumnStore).
+// (config.yaml, keybindings.yaml, refs.yaml, themes/*.yaml). kubewing only reads them,
+// except config.yaml saved from the settings editor (see WriteFile): the files it
+// writes there are its own history.yaml (see HistoryStore) and columns.yaml (see ColumnStore).
 // Missing files mean defaults;
 // invalid parts fall back to defaults and are reported in Effective.Errors,
 // so one typo never prevents the app from starting.
 package config
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,6 +18,7 @@ import (
 	"regexp"
 	"slices"
 	"sort"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
@@ -261,8 +263,53 @@ func Defaults(dir string) Effective {
 	}
 }
 
+// File is the settings file's name (config.yaml), the one ⌘, edits.
+const File = "config.yaml"
+
+// Reference is a config.yaml with every setting, its default (or an
+// example) and what it does: the reference shown beside the editor, and
+// commented out, the start of a new file (see Starter).
+//
+//go:embed reference.yaml
+var Reference string
+
+// Starter is a new config.yaml: Reference with every setting commented
+// out, so it changes nothing; uncommenting a line (⌘/ in the editor)
+// brings back the reference's line as it was.
+func Starter() string {
+	lines := strings.Split(strings.TrimRight(Reference, "\n"), "\n")
+	for i, l := range lines {
+		if t := strings.TrimSpace(l); t != "" && !strings.HasPrefix(t, "#") {
+			lines[i] = "# " + l
+		}
+	}
+	return "# kubewing settings: uncomment a line (⌘/) to change it, ⌘S saves and applies.\n" + strings.Join(lines, "\n") + "\n"
+}
+
+// Check reports the problems config.yaml would have with text as its
+// content (as Load reports them, without the file name): nil = none.
+func Check(dir, text string) []string {
+	e := load(dir, func(file string) ([]byte, error) {
+		if file == File {
+			return []byte(text), nil
+		}
+		return os.ReadFile(filepath.Join(dir, file))
+	})
+	var errs []string
+	for _, err := range e.Errors {
+		if rest, ok := strings.CutPrefix(err, File+": "); ok {
+			errs = append(errs, rest)
+		}
+	}
+	return errs
+}
+
 // Load reads dir. dir == "" means no config at all (defaults, no errors).
 func Load(dir string) Effective {
+	return load(dir, func(file string) ([]byte, error) { return os.ReadFile(filepath.Join(dir, file)) })
+}
+
+func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 	e := Defaults(dir)
 	if dir == "" {
 		return e
@@ -270,9 +317,10 @@ func Load(dir string) Effective {
 	errf := func(file, format string, args ...any) {
 		e.Errors = append(e.Errors, file+": "+fmt.Sprintf(format, args...))
 	}
+	read := func(file string, v any) bool { return decode(readFile, file, v, errf) }
 
 	var c Config
-	if read(dir, "config.yaml", &c, errf) {
+	if read(File, &c) {
 		for i, r := range c.Diff.Ignore {
 			if r.Path == "" {
 				errf("config.yaml", "diff.ignore[%d]: path is required", i)
@@ -336,7 +384,7 @@ func Load(dir string) Effective {
 	}
 
 	var bs []Binding
-	if read(dir, "keybindings.yaml", &bs, errf) {
+	if read("keybindings.yaml", &bs) {
 		for i, b := range bs {
 			if b.Key == "" || b.Command == "" {
 				errf("keybindings.yaml", "[%d]: key and command are required", i)
@@ -347,7 +395,7 @@ func Load(dir string) Effective {
 	}
 
 	var refs relations.RulesFile
-	if read(dir, "refs.yaml", &refs, errf) {
+	if read("refs.yaml", &refs) {
 		rs, errs := relations.Compile(refs)
 		for _, err := range errs {
 			errf("refs.yaml", "%v", err)
@@ -360,7 +408,7 @@ func Load(dir string) Effective {
 		var tokens map[string]string
 		if _, err := os.Stat(filepath.Join(dir, file)); errors.Is(err, fs.ErrNotExist) {
 			errf("config.yaml", "theme %q: %s not found", t, file)
-		} else if read(dir, file, &tokens, errf) {
+		} else if read(file, &tokens) {
 			for _, k := range sortedKeys(tokens) {
 				switch v := tokens[k]; {
 				case !tokenName.MatchString(k):
@@ -399,11 +447,11 @@ func validRule(r ContextRule) error {
 	return nil
 }
 
-// read decodes dir/file into v. A missing file is not an error (returns
-// false). Unknown fields are reported, and the file is then read leniently
-// so the known parts still apply.
-func read(dir, file string, v any, errf func(file, format string, args ...any)) bool {
-	b, err := os.ReadFile(filepath.Join(dir, file))
+// decode reads file and decodes it into v. A missing file is not an error
+// (returns false). Unknown fields are reported, and the file is then read
+// leniently so the known parts still apply.
+func decode(readFile func(string) ([]byte, error), file string, v any, errf func(file, format string, args ...any)) bool {
+	b, err := readFile(file)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false
 	}

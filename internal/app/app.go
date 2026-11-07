@@ -89,6 +89,15 @@ func (a *App) ReloadConfig() config.Effective {
 	a.configureUpdater(cfg)
 	return cfg
 }
+func (a *App) ConfigFile() (bridge.ConfigFile, error) { return a.svc.ConfigFile() }
+func (a *App) CheckConfig(text string) []string       { return a.svc.CheckConfig(text) }
+func (a *App) SaveConfig(text string) (config.Effective, error) {
+	cfg, err := a.svc.SaveConfig(text)
+	if err == nil {
+		a.configureUpdater(cfg)
+	}
+	return cfg, err
+}
 func (a *App) Reconnect(cluster string) int                      { return a.svc.Reconnect(cluster) }
 func (a *App) Refresh(pane string) error                         { return a.svc.Refresh(pane) }
 func (a *App) Skipped(pane string) ([]source.SkippedType, error) { return a.svc.Skipped(pane) }

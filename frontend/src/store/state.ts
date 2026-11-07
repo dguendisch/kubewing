@@ -1,5 +1,5 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { Batch, ColumnChoices, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import type { Place } from "../editor/Viewer";
@@ -232,8 +232,10 @@ export interface Overlay {
    *  cells: which of the selected row's cells to copy;
    *  field: a field's values over time (⇧H in an object view);
    *  renameTab / renamePane: the name field of a tab (tabId) or pane, in place;
-   *  logs: containers, history and follow of a log tail, before it starts. */
-  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "update";
+   *  logs: containers, history and follow of a log tail, before it starts;
+   *  update: the release notes of a new version;
+   *  config: config.yaml in an editor (⌘,), the reference beside it. */
+  kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "update" | "config";
   /** history: which one. */
   dir?: "back" | "forward";
   /** clusters: where it opens at first, in place of the last choice (a broken pane's hint: here). */
@@ -285,6 +287,8 @@ export interface Overlay {
   columns?: ColumnChoices;
   /** field: a field's values over time (⇧H in the YAML); ⏎ takes the pane there. */
   field?: FieldHistory;
+  /** config: the file as it was when the editor opened. */
+  configFile?: ConfigFile;
   /** logs: tail every pod the pane shows (⌥⌘L), not the row's (key). */
   whole?: boolean;
   /** Focus restored when the overlay closes. */
@@ -1071,6 +1075,8 @@ const overlayFocus: Record<Overlay["kind"], FocusContext> = {
   logs: "dialog",
   // the release notes: Esc and its buttons, handled in the dialog
   update: "dialog",
+  // a YAML editor in a dialog: its keys are Monaco's, Esc and ⌘S the dialog's
+  config: "dialog",
 };
 
 /** ⌘⏎ menu entries that open another menu in its place, at its anchor: the menu stays until they do. */

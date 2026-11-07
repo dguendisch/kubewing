@@ -1,4 +1,5 @@
 import { ConfigErrors } from "./components/ConfigErrors";
+import { ConfigEditor } from "./components/ConfigEditor";
 import { Confirm, ConfirmClosePane, ConfirmCloseTab } from "./components/Confirm";
 import { ContainerPicker } from "./components/ContainerPicker";
 import { CellPicker } from "./components/CellPicker";
@@ -156,6 +157,7 @@ export function App() {
       <TabSwitcher />
       <Help />
       <UpdateDialog />
+      <ConfigEditor />
       <DragPreview />
     </div>
   );

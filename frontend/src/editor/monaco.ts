@@ -2,7 +2,7 @@
  * Monaco, trimmed to a YAML/text viewer, diff viewer and the YAML editor: the
  * core API plus only the contributions we use (find, folding, sticky scroll,
  * bracket matching, copy, line operations: ⌥↑/⌥↓ move a line, ⌘D deletes it
- * in the editor; word operations: ⌥←/⌥→ step a word, ⇧ selecting) and the YAML tokenizer (and a small JSON one, see json.ts), instead of editor.main's
+ * in the editor, ⌘/ comments it in or out; word operations: ⌥←/⌥→ step a word, ⇧ selecting) and the YAML tokenizer (and a small JSON one, see json.ts), instead of editor.main's
  * ~80 languages; YAML gets its own folding ranges (see yamlFoldingRanges),
  * which sticky scroll follows too. Loaded lazily (see loadMonaco); workers
  * are bundled by Vite, nothing is fetched from a CDN.
@@ -18,6 +18,7 @@ import "monaco-editor/editor/contrib/bracketMatching/browser/bracketMatching.js"
 import "monaco-editor/editor/contrib/clipboard/browser/clipboard.js";
 import "monaco-editor/editor/contrib/linesOperations/browser/linesOperations.js";
 import "monaco-editor/editor/contrib/wordOperations/browser/wordOperations.js";
+import "monaco-editor/editor/contrib/comment/browser/comment.js";
 import "monaco-editor/editor/contrib/contextmenu/browser/contextmenu.js";
 import "monaco-editor/editor/contrib/wordHighlighter/browser/wordHighlighter.js";
 import "monaco-editor/editor/common/standaloneStrings.js";

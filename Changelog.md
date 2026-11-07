@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+### Added
+- `⌘,` (**kubewing → Settings…**) edits `config.yaml` in the app: a reference of every setting beside it, problems shown as you type, `⌘S` saves and applies
 
 ## [0.2.0] - 2026-11-07
 ### Added
