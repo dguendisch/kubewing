@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+
+## [0.2.0] - 2026-11-07
 ### Added
 - auto-updates: kubewing checks for a new version daily (`update.checkDays`, `0` = off), shows its release notes, and installs it on request; also **kubewing → Check for Updates…**
 
