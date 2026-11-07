@@ -50,9 +50,20 @@ type Options struct {
 	StateDir string
 	Emit     func(name string, data any)
 	Now      func() time.Time
-	// Installer swaps the app for a downloaded version; nil = never in place
-	// (headless, tests): Update opens the release page instead.
-	Installer *Installer
+	// Installer swaps the app for a downloaded version (*Installer, or
+	// Simulated for trying the dialog); nil = never in place (headless,
+	// tests): Update opens the release page instead.
+	Installer AppInstaller
+}
+
+// AppInstaller installs a release in place of the running app.
+type AppInstaller interface {
+	// Blocked says why it can't install, "" if it can.
+	Blocked() string
+	// Install installs r; progress reports the phase ("download" with 0..1,
+	// "verify", "install", "restart"). It returns once it failed or the app is
+	// about to quit.
+	Install(ctx context.Context, r Release, progress func(phase string, p float64)) error
 }
 
 // Updater checks the feed on a schedule and on request.

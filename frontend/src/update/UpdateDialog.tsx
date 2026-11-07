@@ -129,18 +129,18 @@ function Dialog() {
               type="button"
               disabled={installing || busy}
               title={st.cannotInstall ? `${st.cannotInstall}: opens the release page` : undefined}
-              className="rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15 disabled:opacity-50"
+              className="shrink-0 whitespace-nowrap rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15 disabled:opacity-50"
               onClick={update}
             >
               {st.cannotInstall ? "download…" : confirming ? "restart and update" : `update to ${offer.version}${offer.size ? ` (${megabytes(offer.size)})` : ""}`}
             </button>
             {!installing && offer.version !== st.skipped ? (
-              <button type="button" className="rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={() => void bridge().skipUpdate(offer.version).then(close, () => {})}>
+              <button type="button" className="shrink-0 whitespace-nowrap rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={() => void bridge().skipUpdate(offer.version).then(close, () => {})}>
                 skip this version
               </button>
             ) : null}
             {!installing ? (
-              <button type="button" className="rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={close}>
+              <button type="button" className="shrink-0 whitespace-nowrap rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={close}>
                 later
               </button>
             ) : null}
@@ -151,17 +151,17 @@ function Dialog() {
               ref={primary}
               type="button"
               disabled={st?.checking}
-              className="rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15 disabled:opacity-50"
+              className="shrink-0 whitespace-nowrap rounded border border-accent px-3 py-0.5 text-accent outline-none focus:bg-accent/15 disabled:opacity-50"
               onClick={() => void bridge().checkUpdate().then((s) => useUpdate.setState({ status: s }), () => {})}
             >
               check again
             </button>
-            <button type="button" className="rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={close}>
+            <button type="button" className="shrink-0 whitespace-nowrap rounded border border-border px-3 py-0.5 text-fg-muted outline-none focus:border-accent" onClick={close}>
               close
             </button>
           </>
         )}
-        <span className="ml-auto text-fg-muted">
+        <span className="ml-auto min-w-0 truncate text-fg-muted" title={(st?.cannotInstall && offer ? `${st.cannotInstall} · ` : "") + (st ? scheduleText(st.checkDays) : "") + " · esc"}>
           {st?.cannotInstall && offer ? `${st.cannotInstall} · ` : ""}
           {st ? scheduleText(st.checkDays) : ""} · esc
         </span>

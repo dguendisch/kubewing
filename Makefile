@@ -26,7 +26,7 @@ RELEASE_KEY := $(shell cat build/release-key.pub 2>/dev/null)
 LDFLAGS := -X github.com/dguendisch/kubewing/internal/app.Version=$(VERSION) -X github.com/dguendisch/kubewing/internal/update.PublicKey=$(RELEASE_KEY)
 DIST := bin/kubewing-$(VERSION)-macos-arm64.zip
 
-.PHONY: deps frontend build app dist sign release icon run headless test test-go test-fe e2e golden-update lint
+.PHONY: deps frontend build app dist sign release icon run try-update headless test test-go test-fe e2e golden-update lint
 
 deps:
 	go mod download all
@@ -76,6 +76,13 @@ release:
 
 run: app
 	./$(APP)/Contents/MacOS/kubewing -wait
+
+# The update UI without publishing releases: a fake release list (RELEASES), posing as version CURRENT,
+# installs only pretended. A kubewing of its own, beside an installed one.
+RELEASES ?= testdata/releases.json
+CURRENT  ?= 0.1.0
+try-update: app
+	./$(APP)/Contents/MacOS/kubewing -wait -new-process -releases $(RELEASES) -releases-current $(CURRENT)
 
 # Headless backend for browser dev / E2E: replays testdata/tapes (or uses kubeconfig without TAPES=).
 TAPES ?= testdata/tapes

@@ -92,7 +92,9 @@ go run ./internal/update/cmd/releasesign -keygen
 
 ### Trying the updater
 
-`make headless` and the E2E backend don't touch GitHub. `-releases testdata/releases.json` reads a fake release list, and `-releases-current 0.1.0` poses as an installed 0.1.0. They check only on request (the menu's command: `__kw.dispatch("update.check")` in the browser console) and never install. To try a real install: build the app with an older `VERSION=` (and the release key), copy it to a folder you own, and start it from there.
+`make try-update` starts the app with a fake release list, so you don't need to publish releases to see the update UI. The app poses as 0.1.0 and reads `testdata/releases.json`; `CURRENT=` and `RELEASES=` change either. It runs as a kubewing of its own (`-new-process`), beside an installed one. The automatic check runs 10 s after the start, and **kubewing → Check for Updates…** works too. Update goes through the dialog's confirmation and a pretend download, verify and install, then fails with "simulated", leaving everything untouched. The skipped version and last check are kept in memory only, so `update.json` stays as it was. To see candidates offered, set `update.prereleases: true` in the config.
+
+The flags behind it are `-releases <file>` and `-releases-current <version>`. The headless backend (`make headless`, E2E) takes them too, but checks only on request (`__kw.dispatch("update.check")` in the browser console) and offers "download…" only. To try a real install: build the app with an older `VERSION=` (and the release key), copy it to a folder you own, and start it from there.
 
 ## Docs
 

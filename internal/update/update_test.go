@@ -525,3 +525,18 @@ func TestGitHubFeed(t *testing.T) {
 		t.Fatalf("rate limit: %v", err)
 	}
 }
+
+func TestSimulatedInstall(t *testing.T) {
+	var phases []string
+	err := Simulated{Step: time.Millisecond}.Install(context.Background(), Release{}, func(phase string, _ float64) {
+		if len(phases) == 0 || phases[len(phases)-1] != phase {
+			phases = append(phases, phase)
+		}
+	})
+	if err == nil || !strings.Contains(err.Error(), "simulated") {
+		t.Fatalf("err %v", err)
+	}
+	if got := strings.Join(phases, ","); got != "download,verify,install,restart" {
+		t.Fatalf("phases %s", got)
+	}
+}

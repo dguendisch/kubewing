@@ -46,7 +46,7 @@ func main() {
 	newProcess := flag.Bool("new-process", false, "start a kubewing of its own; default: open a new tab in the one already running on this config directory, if any")
 	gardenHome := flag.String("garden", "", "gardenctl's directory with gardenctl-v2.yaml (default: $GCTL_HOME, else ~/.garden); headless: none unless given, and session targets from its sessions/")
 	wait := flag.Bool("wait", false, "from a terminal: stay in the foreground, logging there (default: launch.wait in config.yaml, else detach and log to kubewing.log in the state directory)")
-	releases := flag.String("releases", "", "headless only: the update check reads this file (GitHub's release list as JSON, e.g. testdata/releases.json) instead of GitHub")
+	releases := flag.String("releases", "", "try the updates: the update check reads this file (GitHub's release list as JSON, e.g. testdata/releases.json) instead of GitHub; the app only pretends to install and keeps no update state")
 	releasesCurrent := flag.String("releases-current", "", "with -releases: the version the update check takes as running (default: this build's)")
 	version := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
@@ -140,7 +140,16 @@ func main() {
 	svc := bridge.New(source.NewRegistry(opener), emit, opts)
 	api := app.New(svc)
 	installer := &update.Installer{Bundle: update.RunningBundle(), PublicKey: update.PublicKey}
-	api.Updater = update.New(update.Options{Current: app.Version, Feed: update.GitHub{}, StateDir: *stateDir, Emit: emit.Emit, Installer: installer})
+	if *releases != "" {
+		// trying the update UI: a fake feed, a pretend install, the skip and last check in memory only
+		current := *releasesCurrent
+		if current == "" {
+			current = app.Version
+		}
+		api.Updater = update.New(update.Options{Current: current, Feed: update.File(*releases), Emit: emit.Emit, Installer: update.Simulated{}})
+	} else {
+		api.Updater = update.New(update.Options{Current: app.Version, Feed: update.GitHub{}, StateDir: *stateDir, Emit: emit.Emit, Installer: installer})
+	}
 	var win *application.WebviewWindow
 	var single *application.SingleInstanceOptions
 	if !*newProcess {
