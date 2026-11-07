@@ -12,5 +12,6 @@
 # Tests
 
 - e2e (Playwright): run only `make e2e` from the repo root, outside the sandbox. Chromium needs Mach ports, so it can't run inside the macOS sandbox.
+- After a fix, rerun only what's affected instead of the whole suite: `make e2e GREP='<title regex>'`, `make e2e FAILED=1` (the last run's failures) or `make e2e ARGS=e2e/app.spec.ts:<line>`. Adding `ARGS=--list` only lists the matching tests, which also works inside the sandbox.
 - Never call `npx playwright test` or `npx playwright install` directly. The browsers are already in `.cache/ms-playwright`, and only the Makefile points Playwright there (`PLAYWRIGHT_BROWSERS_PATH`). Without it, Playwright wrongly reports the browsers as missing.
 - Unit tests (`npx vitest run` in `frontend/`) run fine inside the sandbox.

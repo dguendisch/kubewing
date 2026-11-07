@@ -12,6 +12,9 @@ make run               # build and start the app (as bin/kubewing.app, for the D
 make app               # build bin/kubewing.app only
 make test              # lint + Go (race) + frontend unit tests
 make e2e               # Playwright (Chromium) against the headless backend replaying testdata/tapes
+make e2e GREP='ctrl.tab'   # only tests whose title (incl. describe) matches the regex
+make e2e FAILED=1      # only the last run's failures (none: passes)
+make e2e ARGS=e2e/app.spec.ts:123   # anything else for `playwright test` (a line, --headed, --debug, …)
 make headless          # backend over WebSocket on :7777 replaying tapes + testdata/catalog.yaml (TAPES= for your real kubeconfig)
 make golden-update     # regenerate the view goldens, then review the diff on its own
 make icon              # regenerate the app icon from build/appicon.svg

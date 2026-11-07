@@ -100,8 +100,12 @@ test-fe:
 	cd frontend && ./node_modules/.bin/tsc -b && ./node_modules/.bin/vitest run
 
 # Chromium needs Mach ports, so this cannot run inside the macOS sandbox.
+# A targeted rerun: GREP= (a regex on test titles), FAILED=1 (only the last run's failures),
+# ARGS= (anything else for `playwright test`, e.g. ARGS=e2e/app.spec.ts:123 or ARGS=--headed).
+# GREP goes through the environment, so quotes and spaces in it need no escaping.
+export E2E_GREP := $(GREP)
 e2e:
-	cd frontend && ./node_modules/.bin/playwright test
+	cd frontend && ./node_modules/.bin/playwright test $(if $(GREP),--grep "$$E2E_GREP") $(if $(FAILED),--last-failed --pass-with-no-tests) $(ARGS)
 
 # Goldens are the spec: regenerate deliberately and review the diff on its own.
 golden-update:
