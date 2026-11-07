@@ -13,11 +13,24 @@ export interface LogForm {
   history: string;
   follow: boolean;
   timestamps: boolean;
+  /** A log pane per pod instead of one tail over all (offered with 2 or more pods). */
+  perPod: boolean;
+  /** With perPod: the panes in a new tab, not below. */
+  newTab: boolean;
+}
+
+/** At most this many panes for a pane per pod (as debug containers at once). */
+export const maxLogPanes = 8;
+
+/** Why a pane per pod isn't offered for these many pods (undefined = it is). */
+export function perPodUnavailable(pods: number): string | undefined {
+  if (pods < 2) return "one pod";
+  if (pods > maxLogPanes) return `${pods} pods, at most ${maxLogPanes} panes`;
 }
 
 /** The dialog's defaults: every container, the configured tail, following, no timestamps. */
 export function initialLogForm(containers: string[], tail: number): LogForm {
-  return { containers, picked: [...containers], history: String(tail), follow: true, timestamps: false };
+  return { containers, picked: [...containers], history: String(tail), follow: true, timestamps: false, perPod: false, newTab: false };
 }
 
 /** Toggles one container; the others keep their state. */

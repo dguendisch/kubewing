@@ -210,11 +210,11 @@ func (a *App) PortForwardStart(pane, key string, ports []string) (bridge.PortFor
 }
 func (a *App) PortForwards() []bridge.PortForwardInfo { return a.svc.PortForwards() }
 func (a *App) PortForwardStop(id string) error        { return a.svc.PortForwardStop(id) }
-func (a *App) LogsTargets(pane, key string, whole bool) (bridge.LogsTargets, error) {
-	return a.svc.LogsTargets(pane, key, whole)
+func (a *App) LogsTargets(pane, key, scope string) (bridge.LogsTargets, error) {
+	return a.svc.LogsTargets(pane, key, scope)
 }
-func (a *App) LogsStart(pane, key string, whole bool, o bridge.LogsOptions) (bridge.LogsResult, error) {
-	return a.svc.LogsStart(pane, key, whole, o)
+func (a *App) LogsStart(pane, key, scope string, o bridge.LogsOptions) (bridge.LogsResult, error) {
+	return a.svc.LogsStart(pane, key, scope, o)
 }
 
 // StartUpdater applies the config to the updater and runs its schedule until ctx ends.

@@ -279,13 +279,14 @@ Some actions work on many rows at once: copy name, label, annotate, scale, rollo
 
 Marked rows have a blue tint and a bar on their left edge, and the status line counts them (**3 marked**). Only live rows that are shown can be marked: a mark goes away when a filter hides its row or the object is deleted, so an action never hits a row you can't see. Opening another resource or namespace starts with no marks.
 
-With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, logs, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; rollout restart: deployments, stateful sets, daemon sets; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
+With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; rollout restart: deployments, stateful sets, daemon sets; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
 
 - **Copy name** copies the names, separated by spaces, so they paste into `kubectl get pod web-0 web-1`.
 - **Label / annotate**: one dialog for all. It lists every key of the marked rows, with how many rows have it (`app=web 3/3`) and its value if they all share it (else how many values). The changes go to each row. Setting a key to the value all rows already have is no change. A key that differs, or that only some rows have, can be set or removed (`key-`).
 - **Scale**: one number for all, each row's current replicas listed.
 - **Rollout restart**: always confirmed, listing the workloads.
 - **Delete**: always confirmed, listing the objects.
+- **Logs**: one tail over the pods of every marked row (see [Logs](#12-logs)).
 - **Debug container**: one dialog for all pods, at most 8. The target is empty for each pod's own default container, `-` for none, or a container every marked pod has. Each pod gets its debug container in a pane of its own, all in a new tab named **debug ×N**, stacked one below the other (more than 3: in two columns).
 
 Each object still gets its own safety check, its UID precondition and its own request (at most 8 at once). The confirmation, if the context's rule asks for one, is one for all, and names the objects. With a `strict` rule you type the number of objects instead of a name, and a delete of more than 20 objects always asks for their number. Afterwards the status line says how many went through and names the first failures (`deleted 4 of 5 objects — web-2: forbidden`). The marks stay, so the failed rows can be retried; after a delete that removed every marked row, they're cleared.
@@ -634,11 +635,14 @@ kubewing has a stern-like multi-pod log tail.
 ### Starting a tail
 
 - `⌘L` on a row follows its pods: a pod row follows that pod (by name, so a recreated StatefulSet pod carries on); a workload, node or namespace row follows all of its pods, keeping up as pods come and go.
+- `⌘L` with rows marked follows the pods of all marked rows together, in one tail: marked pods by name, marked workloads, nodes or namespaces with all their pods. A pod that two marked rows cover (a deployment and one of its pods) is followed once. Rows without pods (a config map) are skipped, and the dialog names them. At most 20 marked workloads, nodes or namespaces at once (any number of pods).
 - `⌥⌘L` (or **logs of pane**) follows every pod the pods pane currently shows, with its namespace, selectors, grep and CEL applied (a snapshot: later edits to the pane don't change it).
 
 A dialog asks first: which containers (all checked), how much history per container (the last lines, `100` by default from `logs.tail`; since a duration like `10m` or `1h30m`; or `all`), follow (on) and timestamps (off). `⏎` starts from anywhere in it, so `⌘L ⏎` takes the defaults. Without follow, each container's log is read once and the tail ends.
 
 The log pane opens below.
+
+**A pane per pod.** When the tail covers several pods (a workload, marked rows, the whole pane), the dialog also offers **a pane per pod**: each pod gets a log pane of its own, with the same options, stacked one below the other under the pane (it keeps half its height, the log panes share the rest). **in a new tab** puts them in a tab of their own instead, named **logs ×N**. It takes the pods there are when the tail starts, up to 8; a pod that appears later gets no pane. Each pane follows its pod by name, so a recreated StatefulSet pod carries on.
 
 - Each line is prefixed with what tells it apart, colored per pod: `pod/container`, just the container when all lines come from one pod, just the pod when every pod has a single container of the same name, nothing for a single container.
 - Up to `logs.maxStreams` (default 50) containers are followed at once; the rest are listed as "not followed (limit)".

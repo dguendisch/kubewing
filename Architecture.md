@@ -181,7 +181,7 @@ Who set each line of an object's YAML (`b`, `⌘B` in the editor), as kubectl-bl
 
 ## Logs
 
-`internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` (and a tape fake) behind it. One follower per pod container (shared on the pane's watch for a whole-pane tail), `logs.maxStreams` concurrent, restart-resume via the RFC 3339 timestamp. The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`).
+`internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` (and a tape fake) behind it. A tail has one or more sources, each a pods watch with what picks pods from it (the pane's stages for a whole-pane tail, the owner UID for a workload, names for marked pods). A marked tail has one source for all marked pods (the pane's watch) and one per marked workload/node/namespace (its pods child). Each source keeps its picked set; their union by pod UID is fed to the tailer as a relist (once every source has listed, so no pod is ended as missing meanwhile). A pane per pod is one tail per pod: the same scope narrowed by `LogsOptions.Only` (every source keeps just that pod), the pods listed by `LogsTargets.Pods`. The headless WebSocket server closes the log tails a connection started when it goes away, as it closes its panes (a tail holds a pods watch). One follower per pod container, `logs.maxStreams` concurrent, restart-resume via the RFC 3339 timestamp. The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`).
 
 ## Port-forward to services
 

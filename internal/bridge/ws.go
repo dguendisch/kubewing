@@ -55,10 +55,12 @@ func (h *Hub) Emit(event string, data any) {
 }
 
 // API is the object served over WebSocket (app.App, the same object Wails
-// binds); its exported methods are called by name via Dispatch. Close is
-// used to stop panes opened over a connection when it goes away.
+// binds); its exported methods are called by name via Dispatch. Close and
+// SessionClose stop the panes and log tails opened over a connection when
+// it goes away.
 type API interface {
 	Close(pane string) error
+	SessionClose(id string) error
 }
 
 // Handler serves api over WebSocket.
@@ -75,14 +77,20 @@ func (h *Hub) Handler(api API) http.Handler {
 		h.mu.Lock()
 		h.clients[c] = out
 		h.mu.Unlock()
-		// panes opened over this connection are closed when it goes away
+		// panes and log tails opened over this connection are closed when it
+		// goes away (a tail holds a pods watch: left running, it would outlive
+		// the page)
 		opened := map[string]bool{}
+		tails := map[string]bool{}
 		defer func() {
 			h.mu.Lock()
 			delete(h.clients, c)
 			h.mu.Unlock()
 			for id := range opened {
 				_ = api.Close(id)
+			}
+			for id := range tails {
+				_ = api.SessionClose(id)
 			}
 			c.CloseNow()
 		}()
@@ -107,6 +115,9 @@ func (h *Hub) Handler(api API) http.Handler {
 			res, err := Dispatch(api, req.Method, req.Args)
 			if or, ok := res.(OpenResult); ok && err == nil {
 				opened[or.Pane] = true
+			}
+			if lr, ok := res.(LogsResult); ok && err == nil {
+				tails[lr.Session] = true
 			}
 			if req.Method == "Close" && len(req.Args) > 0 {
 				var id string

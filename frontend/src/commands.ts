@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, Batch, ClusterEntry, ColumnSpec, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, OpsPodOptions, Pending } from "./transport/types";
+import type { ActionKind, Batch, ClusterEntry, ColumnSpec, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, LogsScope, OpsPodOptions, Pending, PodRef } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -236,9 +236,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.openOverlay(x, { kind: "portforward", pane: pane.id, key }));
     }
     case "object.logs":
-      return openLogsDialog(pane, false);
+      return void openLogsDialog(pane, "row");
     case "view.logs":
-      return openLogsDialog(pane, true);
+      return void openLogsDialog(pane, "pane");
     case "logs.focusFilter":
       return setUI((x) => (x.focus === "logs" ? { ...x, focus: "logsfilter" } : x));
     case "logs.blurFilter":
@@ -436,14 +436,16 @@ export type LogScroll = "lineDown" | "lineUp" | "pageDown" | "pageUp" | "top" | 
 export const scrollers = new Map<string, (to: LogScroll) => void>();
 
 /**
- * ⌘L / ⌥⌘L: the log dialog for a row's pods (whole = every pod the pods pane
- * shows); it starts the tail (startLogs).
+ * ⌘L / ⌥⌘L: the log dialog for a row's pods, or with rows marked for theirs
+ * together (scope "pane" = every pod the pods pane shows); it starts the tail
+ * (startLogs).
  */
-function openLogsDialog(pane: S.PaneState, whole: boolean) {
+async function openLogsDialog(pane: S.PaneState, scope: LogsScope) {
   if (!pane.serverId || pane.term || pane.logs) return;
-  const key = whole ? undefined : selectedKey(pane);
-  if (!whole && !key) return;
-  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "logs", pane: pane.id, key, whole }));
+  if (scope === "row" && !pane.object && (await hasMarks(pane))) scope = "marked";
+  const key = scope === "row" ? selectedKey(pane) : undefined;
+  if (scope === "row" && !key) return;
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "logs", pane: pane.id, key, scope }));
 }
 
 /**
@@ -452,16 +454,37 @@ function openLogsDialog(pane: S.PaneState, whole: boolean) {
  * pane that can't produce logs (no pods) is refused by Go. Returns the error
  * to show in the dialog, if any.
  */
-export async function startLogs(paneId: string, key: string | undefined, whole: boolean, opts: LogsOptions, timestamps: boolean): Promise<string | undefined> {
+export async function startLogs(paneId: string, key: string | undefined, scope: LogsScope, opts: LogsOptions, timestamps: boolean): Promise<string | undefined> {
   const pane = useUI.getState().panes[paneId];
   if (!pane?.serverId) return "the pane is gone";
   try {
-    const r = await bridge().logsStart(pane.serverId, key ?? "", whole, opts);
+    const r = await bridge().logsStart(pane.serverId, key ?? "", scope, opts);
     const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps, follow: opts.follow, prefix: true };
     setUI((x) => S.openLogs(x, logs, pane.id));
   } catch (e) {
     return errorText(e);
   }
+}
+
+/**
+ * The log dialog's submit with a pane per pod: a tail of each pod (the
+ * same options), stacked below the pane or in a new tab (logs ×N). Tails
+ * that started open even if others failed (the error names those).
+ */
+export async function startLogPanes(paneId: string, key: string | undefined, scope: LogsScope, opts: LogsOptions, timestamps: boolean, pods: PodRef[], newTab: boolean): Promise<string | undefined> {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane?.serverId) return "the pane is gone";
+  const serverId = pane.serverId;
+  const out = await Promise.allSettled(pods.map((only) => bridge().logsStart(serverId, key ?? "", scope, { ...opts, only })));
+  const logs: S.Logs[] = [];
+  const failed: string[] = [];
+  out.forEach((o, i) => {
+    if (o.status === "fulfilled") logs.push({ session: o.value.session, title: o.value.title, context: o.value.context, filter: "", timestamps, follow: opts.follow, prefix: true });
+    else failed.push(`${pods[i]!.name}: ${errorText(o.reason)}`);
+  });
+  if (logs.length) setUI((x) => S.openLogPanes(x, logs, newTab ? `logs ×${logs.length}` : undefined, pane.id));
+  if (failed.length && logs.length) flash(paneId, `logs of ${failed.length} pods failed — ${failed[0]}`, true);
+  if (!logs.length) return failed[0];
 }
 
 /**

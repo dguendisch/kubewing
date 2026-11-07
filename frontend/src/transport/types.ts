@@ -477,6 +477,8 @@ export interface MarkedRow {
   annotations?: Record<string, string>;
   /** Why it can't be restarted; undefined = it can (as RowInfo.restart). */
   restart?: string;
+  /** It has pods to tail (as RowInfo.logs). */
+  logs?: boolean;
 }
 
 /** Mirrors safety.Batch + bridge.MarkedBatch: one action prepared for the marked rows, a token each (pending[i] for rows[i]). */
@@ -820,6 +822,8 @@ export interface LogsOptions {
   /** The whole log. */
   all?: boolean;
   follow: boolean;
+  /** Narrows the tail to one of its pods (a pane per pod). */
+  only?: PodRef;
 }
 
 /** Mirrors bridge.LogsTargets: what the dialog offers for a tail. */
@@ -828,7 +832,20 @@ export interface LogsTargets {
   containers: string[];
   /** The configured logs.tail. */
   tail: number;
+  /** Marked rows left out of a marked tail (no pods to tail). */
+  skipped?: string[];
+  /** The pods it would follow now, sorted (a pane per pod). */
+  pods: PodRef[];
 }
+
+/** Mirrors bridge.PodRef. */
+export interface PodRef {
+  namespace: string;
+  name: string;
+}
+
+/** What a log tail follows: the row's pods, every pod the pods pane shows, or the marked rows' pods. */
+export type LogsScope = "row" | "pane" | "marked";
 
 /** Mirrors bridge.LogsResult. */
 export interface LogsResult {
@@ -989,10 +1006,10 @@ export interface Transport {
   portForwardStart(pane: string, key: string, ports: string[]): Promise<PortForward>;
   portForwards(): Promise<PortForward[]>;
   portForwardStop(id: string): Promise<void>;
-  /** What a log tail of a row (or the whole pods pane) would follow: its containers. */
-  logsTargets(pane: string, key: string, whole: boolean): Promise<LogsTargets>;
-  /** Starts a log tail of a row's pods; whole = every pod the (pods) pane shows. */
-  logsStart(pane: string, key: string, whole: boolean, opts: LogsOptions): Promise<LogsResult>;
+  /** What a log tail would follow (scope: the row's pods, the whole pods pane, the marked rows'): its containers. */
+  logsTargets(pane: string, key: string, scope: LogsScope): Promise<LogsTargets>;
+  /** Starts a log tail: the row's pods, every pod the (pods) pane shows, or the marked rows' pods together. */
+  logsStart(pane: string, key: string, scope: LogsScope, opts: LogsOptions): Promise<LogsResult>;
   /** Puts text on the system clipboard. */
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;

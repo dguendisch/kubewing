@@ -61,10 +61,6 @@ type Stream struct {
 // Options configure a tailer.
 type Options struct {
 	Cluster string
-	// OwnerUID, if set, restricts following to pods with an ownerReference to
-	// it (a label selector can over-match; the bridge sets this for a
-	// workload row). "" = follow every pod the events carry.
-	OwnerUID string
 	// Tail is how many lines to fetch before following; <=0 = DefaultTail.
 	// Pods that appear later are read from their start (0 tail), as stern does.
 	Tail int64
@@ -195,9 +191,6 @@ func (t *Tailer) Apply(ev source.Event) {
 // followed, updates their running flag, and marks ended any that vanished
 // from the spec.
 func (t *Tailer) reconcilePod(obj *unstructured.Unstructured) {
-	if t.opts.OwnerUID != "" && !ownedBy(obj, t.opts.OwnerUID) {
-		return
-	}
 	uid := string(obj.GetUID())
 	pod, ns := obj.GetName(), obj.GetNamespace()
 	deleting := obj.GetDeletionTimestamp() != nil

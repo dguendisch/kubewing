@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { checkLogForm, initialLogForm, parseHistory, toggleAllContainers, toggleContainer } from "./options";
+import { checkLogForm, initialLogForm, maxLogPanes, parseHistory, perPodUnavailable, toggleAllContainers, toggleContainer } from "./options";
 
 describe("log dialog form", () => {
   it("defaults to every container, the configured tail, following", () => {
     const f = initialLogForm(["app", "side"], 100);
-    expect(f).toEqual({ containers: ["app", "side"], picked: ["app", "side"], history: "100", follow: true, timestamps: false });
+    expect(f).toEqual({ containers: ["app", "side"], picked: ["app", "side"], history: "100", follow: true, timestamps: false, perPod: false, newTab: false });
     // all checked: no names sent, so a later pod's containers are followed too
     expect(checkLogForm(f)).toEqual({ tail: 100, containers: undefined, follow: true });
   });
@@ -32,6 +32,13 @@ describe("log dialog form", () => {
     expect(f.picked).toEqual([]);
     expect(checkLogForm(f)).toBe("pick at least one container");
     expect(toggleAllContainers(f).picked).toEqual(["app", "side", "init"]);
+  });
+
+  it("offers a pane per pod for 2 to 8 pods", () => {
+    expect(perPodUnavailable(1)).toBe("one pod");
+    expect(perPodUnavailable(2)).toBeUndefined();
+    expect(perPodUnavailable(maxLogPanes)).toBeUndefined();
+    expect(perPodUnavailable(9)).toBe("9 pods, at most 8 panes");
   });
 
   it("no containers known yet (no pods): nothing to pick, the tail still starts", () => {

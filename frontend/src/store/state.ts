@@ -1,9 +1,9 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, LogsScope, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import type { Place } from "../editor/Viewer";
-import { grid, insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, valid, type Direction, type Layout, type Side } from "./layout";
+import { grid, insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, stackBelow, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -289,8 +289,8 @@ export interface Overlay {
   field?: FieldHistory;
   /** config: the file as it was when the editor opened. */
   configFile?: ConfigFile;
-  /** logs: tail every pod the pane shows (⌥⌘L), not the row's (key). */
-  whole?: boolean;
+  /** logs: what the tail follows: the row's pods (key), every pod the pane shows (⌥⌘L) or the marked rows' pods. */
+  scope?: LogsScope;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;
 }
@@ -548,6 +548,24 @@ export function openLogs(s: UIState, logs: Logs, from = activeTab(s).focused): U
     focus: "logs",
     overlay: undefined,
   };
+}
+
+/**
+ * Opens log panes at once (a pane per pod): stacked below the pane they come
+ * from, or in a new tab of their own (tab: its name), stacked; the first is
+ * focused.
+ */
+export function openLogPanes(s: UIState, logs: Logs[], tab?: string, from = activeTab(s).focused): UIState {
+  if (!logs.length) return s;
+  const src = s.panes[from] ?? focusedPane(s);
+  const ids = logs.map((_, i) => `v${s.nextId + i}`);
+  const panes = { ...s.panes };
+  logs.forEach((l, i) => (panes[ids[i]!] = { id: ids[i]!, spec: { ...src.spec }, selected: 0, logs: l, context: l.context }));
+  const stacked = ids.length === 1 ? leaf(ids[0]!) : ({ type: "split", dir: "column", children: ids.map(leaf) } as Layout);
+  const next = tab
+    ? { ...s, tabs: [...s.tabs, { id: `t${s.nextId}`, layout: stacked, focused: ids[0]!, name: tab }], activeTab: s.tabs.length }
+    : withTab(s, (t) => ({ ...t, layout: stackBelow(t.layout, from, ids), focused: ids[0]! }));
+  return { ...next, nextId: s.nextId + logs.length, panes, focus: "logs", overlay: undefined };
 }
 
 /** Updates the focused log pane's filter. */

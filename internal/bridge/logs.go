@@ -1,8 +1,10 @@
 package bridge
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -60,101 +62,316 @@ type LogsOptions struct {
 	Since      string   `json:"since,omitempty"`
 	All        bool     `json:"all,omitempty"`
 	Follow     bool     `json:"follow"`
+	// Only narrows the tail to one of its pods (namespace/name): a pane per
+	// pod. That pod by name, so a recreated StatefulSet pod carries on.
+	Only *PodRef `json:"only,omitempty"`
 }
 
-// LogsTargets describes what a log tail of a row (or the whole pane) would
-// follow, for the dialog: its title and the container names its pods have.
+// PodRef names a pod.
+type PodRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// LogsTargets describes what a log tail would follow, for the dialog: its
+// title and the container names its pods have.
 type LogsTargets struct {
 	Title      string   `json:"title"`
 	Containers []string `json:"containers"`
 	// Tail is the configured logs.tail, the dialog's default.
 	Tail int `json:"tail"`
+	// Skipped names marked rows left out of a marked tail (no pods to tail).
+	Skipped []string `json:"skipped,omitempty"`
+	// Pods are the pods it would follow now, by namespace and name (a pane
+	// per pod: LogsOptions.Only).
+	Pods []PodRef `json:"pods"`
 }
 
-// logsTarget is a resolved tail target: the pods watch to subscribe to, and
-// what picks the pods from it.
-type logsTarget struct {
+// What a tail follows (LogsTargets, LogsStart): the row's pods, every pod
+// the pods pane shows, or the pods of the marked rows.
+const (
+	LogsRow    = "row"
+	LogsPane   = "pane"
+	LogsMarked = "marked"
+)
+
+// logsMaxWatches caps the pods watches of a marked tail: one per marked
+// workload, node or namespace (marked pods share one).
+const logsMaxWatches = 20
+
+// logsSource is one pods watch of a tail and what picks pods from it.
+type logsSource struct {
 	src source.Key
-	// stages are applied to the watch to pick pods (whole pane); nil for a row
-	stages   []pipeline.Stage
+	// stages are applied to the watch to pick pods (whole pane)
+	stages []pipeline.Stage
+	// ownerUID keeps only pods owned by it (a workload's: a selector can over-match)
 	ownerUID string
-	title    string
+	// names keeps only pods of these namespace/name (marked pods)
+	names map[string]bool
+	// only keeps just this namespace/name (a pane per pod)
+	only string
 }
 
-func (s *Service) logsTarget(pn *pane, key string, whole bool) (logsTarget, error) {
+// logsTarget is a resolved tail target: its sources, whose picked pods are
+// followed together (a pod picked by two counts once).
+type logsTarget struct {
+	sources []logsSource
+	title   string
+	skipped []string
+}
+
+func (s *Service) logsTarget(pn *pane, key, scope string) (logsTarget, error) {
+	switch scope {
+	case LogsPane:
+		src, stages, title, err := s.wholePaneSource(pn)
+		return logsTarget{sources: []logsSource{{src: src, stages: stages}}, title: title}, err
+	case LogsMarked:
+		return s.markedTarget(pn)
+	case LogsRow, "":
+		src, ownerUID, title, err := s.rowSource(pn, key)
+		return logsTarget{sources: []logsSource{{src: src, ownerUID: ownerUID}}, title: title}, err
+	}
+	return logsTarget{}, fmt.Errorf("unknown log scope %q", scope)
+}
+
+// markedTarget tails the pods of a pane's marked rows: marked pods by name on
+// one watch (the pane's), each workload, node or namespace on its pods
+// child's watch. Rows without pods are skipped.
+func (s *Service) markedTarget(pn *pane) (logsTarget, error) {
+	rows, err := s.markedRows(pn.id)
+	if err != nil {
+		return logsTarget{}, err
+	}
+	if len(rows) == 0 {
+		return logsTarget{}, ErrNoMarks
+	}
 	var (
-		g   logsTarget
-		err error
+		g     logsTarget
+		pods  *logsSource
+		named []string
 	)
-	if whole {
-		g.src, g.stages, g.title, err = s.wholePaneSource(pn)
-	} else {
-		g.src, g.ownerUID, g.title, err = s.rowSource(pn, key)
+	for _, r := range rows {
+		if r.isPod() {
+			if pods == nil {
+				// the pane's own watch when it is a pods pane (tapes resolve it);
+				// a mixed pane's pods go by their own type
+				res := pn.p.Source.Resource
+				if pn.snapshot() {
+					res = r.typed
+				}
+				pods = &logsSource{src: source.Key{Cluster: pn.p.Source.Cluster, Resource: res, Namespace: pn.p.Source.Namespace}, names: map[string]bool{}}
+			}
+			pods.names[r.namespace()+"/"+r.name()] = true
+			named = append(named, r.name())
+			continue
+		}
+		c := podChild(r.item.Object)
+		if c == nil {
+			g.skipped = append(g.skipped, r.name())
+			continue
+		}
+		g.sources = append(g.sources, logsSource{src: source.Key{
+			Cluster: pn.p.Source.Cluster, Resource: c.Resource, Namespace: c.Namespace,
+			LabelSelector: c.LabelSelector, FieldSelector: c.FieldSelector,
+		}, ownerUID: c.OwnerUID})
+		named = append(named, strings.ToLower(r.kind())+"/"+r.name())
 	}
-	return g, err
+	if len(g.sources) > logsMaxWatches {
+		return logsTarget{}, fmt.Errorf("logs of %d marked workloads, nodes or namespaces: at most %d at once", len(g.sources), logsMaxWatches)
+	}
+	if pods != nil {
+		g.sources = append([]logsSource{*pods}, g.sources...)
+	}
+	if len(g.sources) == 0 {
+		return logsTarget{}, fmt.Errorf("none of the %d marked rows has pods to tail", len(rows))
+	}
+	g.title = markedTitle(named)
+	return g, nil
 }
 
-// apply feeds ev through the target's filters (v, nil for a row tail) and
-// returns the event the tailer applies.
-func (g logsTarget) apply(v *view.View, ev source.Event) source.Event {
+// markedTitle names a marked tail: up to 3 names, else the first 2 and how many more.
+func markedTitle(names []string) string {
+	if len(names) <= 3 {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s +%d", strings.Join(names[:2], ", "), len(names)-2)
+}
+
+// pick keeps the pods of a Relist event this source follows.
+func (c logsSource) pick(v *view.View, ev source.Event) []source.Item {
+	items := ev.Items
 	if v != nil {
-		return matchedEvent(v, ev)
+		items = matchedEvent(v, ev).Items
 	}
-	return ev
+	if c.ownerUID == "" && c.names == nil && c.only == "" {
+		return items
+	}
+	var out []source.Item
+	for _, it := range items {
+		o := it.Object
+		if o == nil {
+			continue
+		}
+		key := o.GetNamespace() + "/" + o.GetName()
+		if !(relations.Child{OwnerUID: c.ownerUID}).Owns(o) || c.names != nil && !c.names[key] || c.only != "" && key != c.only {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
 }
 
-// logsView is a private view applying a whole-pane target's filters; nil for a row.
-func (s *Service) logsView(g logsTarget, sub *source.Subscription) *view.View {
-	if len(g.stages) == 0 {
+// logsView is a private view applying a whole-pane source's filters; nil otherwise.
+func (s *Service) logsView(c logsSource, sub *source.Subscription) *view.View {
+	if len(c.stages) == 0 {
 		return nil
 	}
 	v, _ := view.New(pipeline.Pipeline{Source: pipeline.Source{
-		Cluster: g.src.Cluster, Resource: g.src.Resource, Namespace: g.src.Namespace,
-		LabelSelector: g.src.LabelSelector, FieldSelector: g.src.FieldSelector,
-	}, Stages: g.stages}, s.viewOptions(sub, true))
+		Cluster: c.src.Cluster, Resource: c.src.Resource, Namespace: c.src.Namespace,
+		LabelSelector: c.src.LabelSelector, FieldSelector: c.src.FieldSelector,
+	}, Stages: c.stages}, s.viewOptions(sub, true))
 	return v
 }
 
-// logsTargetsWait bounds how long LogsTargets waits for the pods watch's
+// podSet tracks one source's pods from its watch events, so its current set
+// is known for the merge.
+type podSet struct {
+	c     logsSource
+	v     *view.View
+	items map[string]source.Item // by UID
+}
+
+func newPodSet(c logsSource, v *view.View) *podSet {
+	return &podSet{c: c, v: v, items: map[string]source.Item{}}
+}
+
+// apply takes a watch event; ok is false for events that change nothing
+// (errors, progress). Every change re-picks from the whole set, so the
+// filters (owner, names, the pane's view) see a Relist.
+func (p *podSet) apply(ev source.Event) bool {
+	switch ev.Type {
+	case source.Relist:
+		all := ev.Items
+		p.items = map[string]source.Item{}
+		for _, it := range p.c.pick(p.v, source.Event{Type: source.Relist, Items: all}) {
+			p.items[string(it.Object.GetUID())] = it
+		}
+		return true
+	case source.Added, source.Modified, source.Deleted:
+		if p.v != nil {
+			// the view keeps the watch's state: feed it the event, take what it matches
+			p.items = map[string]source.Item{}
+			for _, it := range matchedEvent(p.v, ev).Items {
+				p.items[string(it.Object.GetUID())] = it
+			}
+			return true
+		}
+		if ev.Item.Object == nil {
+			return false
+		}
+		uid := string(ev.Item.Object.GetUID())
+		if ev.Type == source.Deleted {
+			delete(p.items, uid)
+			return true
+		}
+		if picked := p.c.pick(nil, source.Event{Type: source.Relist, Items: []source.Item{ev.Item}}); len(picked) > 0 {
+			p.items[uid] = ev.Item
+		} else {
+			delete(p.items, uid)
+		}
+		return true
+	}
+	return false
+}
+
+// mergePods is the union of the sources' pods as one Relist: a pod picked by
+// several sources (a marked deployment and one of its pods) counts once.
+func mergePods(sets []*podSet) source.Event {
+	seen := map[string]bool{}
+	var items []source.Item
+	for _, p := range sets {
+		for uid, it := range p.items {
+			if !seen[uid] {
+				seen[uid] = true
+				items = append(items, it)
+			}
+		}
+	}
+	return source.Event{Type: source.Relist, Items: items}
+}
+
+// logsTargetsWait bounds how long LogsTargets waits for a pods watch's
 // first list (a shared watch already synced answers at once).
 const logsTargetsWait = 5 * time.Second
 
-// LogsTargets lists the containers a tail of the row (or whole pane) would
-// follow, from the pods it would pick right now, for the log dialog.
-func (s *Service) LogsTargets(paneID, key string, whole bool) (LogsTargets, error) {
+// LogsTargets lists the containers a tail would follow, from the pods it
+// would pick right now, for the log dialog. scope: LogsRow (key's pods),
+// LogsPane or LogsMarked.
+func (s *Service) LogsTargets(paneID, key, scope string) (LogsTargets, error) {
 	pn, err := s.pane(paneID)
 	if err != nil {
 		return LogsTargets{}, err
 	}
-	g, err := s.logsTarget(pn, key, whole)
+	g, err := s.logsTarget(pn, key, scope)
 	if err != nil {
 		return LogsTargets{}, err
 	}
-	out := LogsTargets{Title: g.title, Containers: []string{}, Tail: s.Config().Config.Logs.Tail}
+	out := LogsTargets{Title: g.title, Containers: []string{}, Tail: s.Config().Config.Logs.Tail, Skipped: g.skipped}
 	pods, err := s.logsPods(g)
 	if err != nil {
 		return LogsTargets{}, err
 	}
-	if names := logs.ContainerNames(pods, g.ownerUID); names != nil {
+	if names := logs.ContainerNames(pods); names != nil {
 		out.Containers = names
 	}
+	out.Pods = podRefs(pods)
 	return out, nil
 }
 
-// logsPods is the target's current pods: the first list of its watch, through
-// the whole-pane filters.
+// podRefs names pods, sorted by namespace and name (the table's usual order).
+func podRefs(pods []source.Item) []PodRef {
+	out := []PodRef{}
+	for _, it := range pods {
+		if it.Object != nil {
+			out = append(out, PodRef{Namespace: it.Object.GetNamespace(), Name: it.Object.GetName()})
+		}
+	}
+	slices.SortFunc(out, func(a, b PodRef) int {
+		return cmp.Or(cmp.Compare(a.Namespace, b.Namespace), cmp.Compare(a.Name, b.Name))
+	})
+	return out
+}
+
+// only narrows a target to one pod: every source keeps only it.
+func (g logsTarget) only(p PodRef) logsTarget {
+	key := p.Namespace + "/" + p.Name
+	out := logsTarget{title: p.Name}
+	for _, c := range g.sources {
+		c.only = key
+		out.sources = append(out.sources, c)
+	}
+	return out
+}
+
+// logsPods is the target's current pods: the first list of each source's
+// watch, picked and merged.
 func (s *Service) logsPods(g logsTarget) ([]source.Item, error) {
-	sub, err := s.reg.SubscribeWith(g.src, s.normalizer())
-	if err != nil {
-		return nil, err
+	var sets []*podSet
+	for _, c := range g.sources {
+		sub, err := s.reg.SubscribeWith(c.src, s.normalizer())
+		if err != nil {
+			return nil, err
+		}
+		p := newPodSet(c, s.logsView(c, sub))
+		ev, err := firstList(sub, logsTargetsWait)
+		sub.Close()
+		if err != nil {
+			return nil, err
+		}
+		p.apply(ev)
+		sets = append(sets, p)
 	}
-	defer sub.Close()
-	v := s.logsView(g, sub)
-	ev, err := firstList(sub, logsTargetsWait)
-	if err != nil {
-		return nil, err
-	}
-	return g.apply(v, ev).Items, nil
+	return mergePods(sets).Items, nil
 }
 
 // firstList waits, up to wait, for the first list of a pods watch (a
@@ -179,12 +396,20 @@ func firstList(sub *source.Subscription, wait time.Duration) (source.Event, erro
 	}
 }
 
-// LogsStart tails the logs of a row's pods (stern-like). It needs no safety
-// token: reading logs doesn't change the cluster, so it works on read-only
-// contexts, like Describe and PortForwardStart. whole tails every pod the
-// pane currently shows (its filters applied), for a pods pane; otherwise the
-// selected row: a pod, or the pods of a workload/node/namespace.
-func (s *Service) LogsStart(paneID, key string, whole bool, o LogsOptions) (LogsResult, error) {
+// logsEvent is a watch event of a tail's i-th source.
+type logsEvent struct {
+	i  int
+	ev source.Event
+	ok bool
+}
+
+// LogsStart tails the logs of pods (stern-like). It needs no safety token:
+// reading logs doesn't change the cluster, so it works on read-only
+// contexts, like Describe and PortForwardStart. scope LogsRow tails the
+// row's pods (a pod, or the pods of a workload/node/namespace); LogsPane
+// every pod a pods pane currently shows (its filters applied); LogsMarked
+// the pods of the marked rows together.
+func (s *Service) LogsStart(paneID, key, scope string, o LogsOptions) (LogsResult, error) {
 	if s.opts.Actor == nil {
 		return LogsResult{}, fmt.Errorf("logs are not available")
 	}
@@ -205,41 +430,88 @@ func (s *Service) LogsStart(paneID, key string, whole bool, o LogsOptions) (Logs
 	opts.Cluster = cluster
 	opts.MaxStreams = cfg.MaxStreams
 
-	g, err := s.logsTarget(pn, key, whole)
+	g, err := s.logsTarget(pn, key, scope)
 	if err != nil {
 		return LogsResult{}, err
 	}
-	opts.OwnerUID = g.ownerUID
-
-	sub, err := s.reg.SubscribeWith(g.src, s.normalizer())
-	if err != nil {
-		return LogsResult{}, err
+	if o.Only != nil {
+		g = g.only(*o.Only)
+	}
+	subs := make([]*source.Subscription, 0, len(g.sources))
+	closeAll := func() {
+		for _, sub := range subs {
+			sub.Close()
+		}
+	}
+	for _, c := range g.sources {
+		sub, err := s.reg.SubscribeWith(c.src, s.normalizer())
+		if err != nil {
+			closeAll()
+			return LogsResult{}, err
+		}
+		subs = append(subs, sub)
 	}
 
 	id := s.startLogSession(func(ctx context.Context, sink logs.Sink) {
-		defer sub.Close()
+		// ending on its own (not following, a watch closed) stops the feeders too
+		ctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		defer closeAll()
 		t := logs.New(ctx, s.opts.Actor, opts, sink)
 		defer t.Close()
-		v := s.logsView(g, sub)
+		sets := make([]*podSet, len(g.sources))
+		for i, c := range g.sources {
+			sets[i] = newPodSet(c, s.logsView(c, subs[i]))
+		}
+		// one goroutine per watch feeds a single loop, which owns the sets
+		events := make(chan logsEvent)
+		for i, sub := range subs {
+			go func() {
+				for {
+					select {
+					case ev, ok := <-sub.Events:
+						select {
+						case events <- logsEvent{i: i, ev: ev, ok: ok}:
+						case <-ctx.Done():
+							return
+						}
+						if !ok {
+							return
+						}
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+		}
+		listed := make([]bool, len(sets))
+		pending := len(sets) // sources whose first list hasn't come yet
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case ev, ok := <-sub.Events:
-				if !ok {
+			case e := <-events:
+				if !e.ok {
 					return
 				}
+				if !sets[e.i].apply(e.ev) {
+					continue
+				}
+				if !listed[e.i] && e.ev.Type == source.Relist {
+					listed[e.i] = true
+					pending--
+				}
+				if pending > 0 {
+					continue // start once every source has listed: no pod is dropped as missing meanwhile
+				}
 				if opts.NoFollow {
-					// not following: the pods of the first list, each read once
-					if ev.Type != source.Relist {
-						continue
-					}
-					sub.Close()
-					t.Apply(g.apply(v, ev))
+					// not following: the pods of the first lists, each read once
+					closeAll()
+					t.Apply(mergePods(sets))
 					t.Wait()
 					return
 				}
-				t.Apply(g.apply(v, ev))
+				t.Apply(mergePods(sets))
 			}
 		}
 	})

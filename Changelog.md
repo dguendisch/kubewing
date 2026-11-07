@@ -4,6 +4,8 @@
 - `⌘,` (**kubewing → Settings…**) edits `config.yaml` in the app: a reference of every setting beside it, problems shown as you type, `⌘S` saves and applies
 - `b` in the YAML view (`⌘B` in the editor) shows who set each line, like kubectl-blame: the field manager owning it and how long ago, beside the YAML
 - a **?** button at the right end of the tab bar opens the cheat sheet of keyboard shortcuts
+- `⌘L` with rows marked tails the logs of all marked pods, workloads, nodes or namespaces together in one log pane
+- the log dialog can open a log pane per pod when a tail covers several pods (up to 8): stacked below, or in a new tab
 
 ### Changed
 - the node shell dialog no longer opens with the node list expanded; type or press `↓` to list the nodes

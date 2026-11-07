@@ -28,6 +28,30 @@ export function split(l: Layout, target: string, dir: "row" | "column", newId: s
   return insert(l, target, dir === "row" ? "right" : "bottom", newId);
 }
 
+/**
+ * Stacks `newIds` below `target` (horizontal splits, in order): `target`
+ * keeps half of what it had, the new panes share the other half equally.
+ */
+export function stackBelow(l: Layout, target: string, newIds: string[]): Layout {
+  if (!newIds.length) return l;
+  if (l.type === "pane") {
+    if (l.id !== target) return l;
+    const n = newIds.length;
+    return { type: "split", dir: "column", children: [l, ...newIds.map(leaf)], sizes: [n, ...newIds.map(() => 1)] };
+  }
+  const idx = l.children.findIndex((c) => c.type === "pane" && c.id === target);
+  if (idx >= 0 && l.dir === "column") {
+    const children = [...l.children];
+    children.splice(idx + 1, 0, ...newIds.map(leaf));
+    const own = shares(l);
+    const half = own[idx]! / 2;
+    const sizes = [...own];
+    sizes.splice(idx, 1, half, ...newIds.map(() => half / newIds.length));
+    return withSizes({ ...l, children }, sizes);
+  }
+  return { ...l, children: l.children.map((c) => stackBelow(c, target, newIds)) };
+}
+
 /** A side of a pane (or of the whole tab) a pane can be put on. */
 export type Side = "left" | "right" | "top" | "bottom";
 

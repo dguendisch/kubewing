@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bottomCorners, edgeShare, grid, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, resize, sidePart, split, valid, type Layout } from "./layout";
+import { bottomCorners, edgeShare, grid, stackBelow, insert, insertEdge, leaf, nearestSide, neighbor, paneIds, rects, resize, sidePart, split, valid, type Layout } from "./layout";
 import * as S from "./state";
 import { paneTitle, resourceLabel, tabTitle } from "../components/tabTitle";
 
@@ -1335,6 +1335,49 @@ describe("debug containers in a tab of their own", () => {
     expect(ids(s).map((id) => s.panes[id]!.term?.pod)).toEqual(["a", "b", "c"]);
     expect(t.focused).toBe(ids(s)[0]);
     expect(s.focus).toBe("terminal");
+  });
+});
+
+describe("a log pane per pod", () => {
+  const logs = (session: string) => ({ session, title: session, context: "kind", filter: "", timestamps: false, follow: true, prefix: true });
+
+  it("stacks panes below a pane: it keeps half, the new ones share the rest", () => {
+    expect(stackBelow(leaf("a"), "a", ["x", "y"])).toEqual({ type: "split", dir: "column", children: [leaf("a"), leaf("x"), leaf("y")], sizes: [2, 1, 1] });
+    // in a column already: the target's share is split, the others keep theirs
+    const col: Layout = { type: "split", dir: "column", children: [leaf("a"), leaf("b")] };
+    const l = stackBelow(col, "a", ["x", "y"]);
+    expect(paneIds(l)).toEqual(["a", "x", "y", "b"]);
+    expect(l.type === "split" && l.sizes).toEqual([0.25, 0.125, 0.125, 0.5]);
+    // in a row: a column of its own inside it
+    const row: Layout = { type: "split", dir: "row", children: [leaf("a"), leaf("b")] };
+    const r = stackBelow(row, "b", ["x"]);
+    expect(valid(r)).toBe(true);
+    expect(r.type === "split" && r.children[1]).toEqual({ type: "split", dir: "column", children: [leaf("b"), leaf("x")], sizes: [1, 1] });
+  });
+
+  it("opens them below the pane, the first focused", () => {
+    const s0 = S.initialState("kind", "shop");
+    const from = S.activeTab(s0).focused;
+    const s = apply(s0, (x) => S.openLogPanes(x, [logs("s1"), logs("s2"), logs("s3")]));
+    invariants(s);
+    const t = S.activeTab(s);
+    expect(s.tabs).toHaveLength(1);
+    expect(paneIds(t.layout)).toEqual([from, ...ids(s).slice(1)]);
+    expect(ids(s).slice(1).map((id) => s.panes[id]!.logs?.session)).toEqual(["s1", "s2", "s3"]);
+    expect(s.panes[t.focused]!.logs?.session).toBe("s1");
+    expect(s.focus).toBe("logs");
+  });
+
+  it("or in a new named tab, stacked", () => {
+    const s0 = S.initialState("kind", "shop");
+    const s = apply(s0, (x) => S.openLogPanes(x, [logs("s1"), logs("s2")], "logs ×2"));
+    invariants(s);
+    const t = S.activeTab(s);
+    expect(s.tabs).toHaveLength(2);
+    expect(t.name).toBe("logs ×2");
+    expect(t.layout).toMatchObject({ type: "split", dir: "column" });
+    expect(paneIds(t.layout).map((id) => s.panes[id]!.logs?.session)).toEqual(["s1", "s2"]);
+    expect(s.focus).toBe("logs");
   });
 });
 

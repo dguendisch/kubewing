@@ -165,24 +165,6 @@ func TestInitialTailAndFollow(t *testing.T) {
 	}
 }
 
-func TestOwnerFilter(t *testing.T) {
-	fa := newFakeActor()
-	fa.follow = true
-	fa.streams["mine/app"] = []string{"hello"}
-	sink := &recordSink{}
-	tl := New(context.Background(), fa, Options{OwnerUID: "owner"}, sink)
-	defer tl.Close()
-
-	// a pod owned by someone else is ignored
-	tl.Apply(source.Event{Type: source.Added, Item: item(pod("other", "ns", "other", map[string]bool{"app": true}, "nope"))})
-	// one owned by us is followed
-	tl.Apply(source.Event{Type: source.Added, Item: item(pod("mine", "ns", "mine", map[string]bool{"app": true}, "owner"))})
-	eventually(t, func() bool { return len(sink.texts()) == 1 }, "one line from the owned pod")
-	if sink.streamCount() != 1 {
-		t.Errorf("streams = %d, want 1 (only the owned pod)", sink.streamCount())
-	}
-}
-
 func TestDeleteStopsFollower(t *testing.T) {
 	fa := newFakeActor()
 	fa.follow = true

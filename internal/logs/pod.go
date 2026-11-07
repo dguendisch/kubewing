@@ -66,12 +66,12 @@ func containers(obj *unstructured.Unstructured) []containerInfo {
 }
 
 // ContainerNames lists the distinct container names of pods (regular, init,
-// sidecar and ephemeral) in first-seen order, skipping pods not owned by
-// ownerUID when it is set: the containers a tailer of them could follow.
-func ContainerNames(pods []source.Item, ownerUID string) []string {
+// sidecar and ephemeral) in first-seen order: the containers a tailer of
+// them could follow.
+func ContainerNames(pods []source.Item) []string {
 	var out []string
 	for _, it := range pods {
-		if it.Object == nil || ownerUID != "" && !ownedBy(it.Object, ownerUID) {
+		if it.Object == nil {
 			continue
 		}
 		for _, c := range containers(it.Object) {
@@ -81,16 +81,6 @@ func ContainerNames(pods []source.Item, ownerUID string) []string {
 		}
 	}
 	return out
-}
-
-// ownedBy reports whether obj has an ownerReference with the given UID.
-func ownedBy(obj *unstructured.Unstructured, uid string) bool {
-	for _, r := range obj.GetOwnerReferences() {
-		if string(r.UID) == uid {
-			return true
-		}
-	}
-	return false
 }
 
 // lineWriter turns the raw byte stream of one container's logs into lines,

@@ -42,6 +42,8 @@ type MarkedRow struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	// Restart: why it can't be restarted ("" = it can), as RowInfo.Restart.
 	Restart string `json:"restart,omitempty"`
+	// Logs: it has pods to tail, as RowInfo.Logs.
+	Logs bool `json:"logs,omitempty"`
 }
 
 // Marked lists a pane's marked rows in display order.
@@ -88,6 +90,7 @@ func markedRow(r row) MarkedRow {
 	}
 	m.Labels, m.Annotations = r.item.Object.GetLabels(), r.item.Object.GetAnnotations()
 	m.Restart = restartable(r)
+	m.Logs = r.isPod() || podChild(r.item.Object) != nil
 	return m
 }
 

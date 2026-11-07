@@ -113,8 +113,8 @@ describe("diff entry", () => {
 
 describe("row actions menu with marked rows", () => {
   const marked: MarkedRow[] = [
-    { key: "u1", kind: "Pod", name: "web-0", restart: "pod can't be restarted" },
-    { key: "u3", kind: "Pod", name: "web-1", restart: "pod can't be restarted" },
+    { key: "u1", kind: "Pod", name: "web-0", restart: "pod can't be restarted", logs: true },
+    { key: "u3", kind: "Pod", name: "web-1", restart: "pod can't be restarted", logs: true },
     { key: "u2", kind: "ConfigMap", name: "cfg", restart: "configmap can't be restarted" },
   ];
 
@@ -127,6 +127,8 @@ describe("row actions menu with marked rows", () => {
     expect(m["object.debug"]).toMatchObject({ label: "debug containers in 2 pods…", disabled: undefined });
     expect(m["object.scale"]!.disabled).toBe("none of the 3 marked fits");
     expect(m["object.restart"]!.disabled).toBe("none of the 3 marked fits");
+    // logs: one tail over the marked rows with pods (the config map has none)
+    expect(m["object.logs"]).toMatchObject({ label: "logs of 2…", multi: true, disabled: undefined });
     const workloads = byCmd(menuFor(cm, undefined, defaultBindings, [...marked, { key: "d1", kind: "Deployment", name: "web" }, { key: "s1", kind: "StatefulSet", name: "db" }]));
     expect(workloads["object.restart"]).toMatchObject({ label: "rollout restart 2…", multi: true, disabled: undefined });
     // single-row actions keep the cursor row's availability

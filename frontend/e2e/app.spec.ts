@@ -5322,6 +5322,68 @@ test.describe("logs", () => {
     expect(await screen(page)).not.toContain("worker-0");
   });
 
+  test("⌘L with rows marked tails the marked pods together", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("Space");
+    await select(page, "lg-worker-0");
+    await page.keyboard.press("Space");
+    await expect.poll(async () => (await focused(page)).status?.marked).toBe(2);
+    // the cursor on api-1, which isn't marked: the marks win
+    await select(page, "lg-api-1");
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect(page.getByRole("dialog", { name: "logs" })).toContainText("logs of api-0, worker-0");
+    await page.keyboard.press("Escape");
+    await tail(page);
+    const pane = async () => Object.values((await inspect(page)).panes).find((p) => p.logs);
+    await expect.poll(async () => (await pane())?.logs?.title).toBe("api-0, worker-0");
+    await expect.poll(() => screen(page)).toContain("api-0 app ready");
+    await expect.poll(() => screen(page)).toContain("worker-0 app processing job 1");
+    expect(await screen(page)).not.toContain("api-1");
+  });
+
+  test("a pane per pod: below the pane, or in a new tab", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("Space");
+    await select(page, "lg-worker-0");
+    await page.keyboard.press("Space");
+    await expect.poll(async () => (await focused(page)).status?.marked).toBe(2);
+    const dialog = page.getByRole("dialog", { name: "logs" });
+    const perPod = dialog.getByRole("checkbox", { name: "a pane per pod" });
+    const newTab = dialog.getByRole("checkbox", { name: "in a new tab" });
+    const logPanes = async () => Object.values((await inspect(page)).panes).filter((p) => p.logs).map((p) => p.logs!.title).sort();
+
+    // below: one pane per pod, stacked under the table
+    await page.keyboard.press("ControlOrMeta+l");
+    await expect(perPod).toBeEnabled();
+    await expect(newTab).toBeDisabled(); // only with a pane per pod
+    await perPod.check();
+    await expect(newTab).toBeEnabled();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect.poll(logPanes).toEqual(["api-0", "worker-0"]);
+    let s = await inspect(page);
+    expect(s.tabs).toHaveLength(1);
+    expect(s.tabs[0]!.layout).toMatchObject({ type: "split", dir: "column" });
+    await expect.poll(() => inspect(page).then((x) => x.focus)).toBe("logs");
+
+    // a new tab: logs ×2, the panes stacked
+    // ⌥⌘↑ from the first log pane: back to the table, its marks still there
+    await page.keyboard.press("Alt+ControlOrMeta+ArrowUp");
+    await expect.poll(() => inspect(page).then((x) => x.focus)).toBe("table");
+    await page.keyboard.press("ControlOrMeta+l");
+    await perPod.check();
+    await newTab.check();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+    s = await inspect(page);
+    expect(s.activeTab).toBe(1);
+    const tab = s.tabs[1]!;
+    expect(tab.layout).toMatchObject({ type: "split", dir: "column", children: [{ type: "pane" }, { type: "pane" }] });
+  });
+
   test("the live filter hides non-matching lines and ! excludes", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-1");

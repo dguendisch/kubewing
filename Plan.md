@@ -17,7 +17,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 - **Time travel:** pinning objects or views against eviction (within budget); linking the moment of splits (pods and nodes at the same time).
 - **Logs:** a whole-pane tail for non-pod panes (the union of their pods); previous-container logs (`--previous`); saving a tail to a file; an optional timestamp column.
 - **Decode:** a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
-- **Marked rows:** logs of the marked rows (one tail over their pods); exec into several pods; input typed once to all debug panes of a batch (like iTerm's broadcast); edit of many objects (one YAML stream).
+- **Marked rows:** exec into several pods; input typed once to all debug panes of a batch (like iTerm's broadcast); edit of many objects (one YAML stream).
 - **Edit:** server-side apply (field manager `kubewing`, conflicts listed with their owners, force); recreate for immutable fields (delete + create, confirmed as delete); applying from files (see Scratch apply).
 - **Jump menu references:** svc → pods (by selector: not a field rule); a dependency tree view.
 - **Jump menu clusters:** a garden recognized when not opened by `⌘P` nor matching a gardenctl garden's API server (e.g. `Shoot` rows of a virtual garden reached through a port-forward); a shoot's or seed's other clusters from inside the cluster (a shoot's `kube-system/shoot-info` config map, a seed's `garden` namespace); `⌘J` on a project row → the project in the garden.

@@ -1,24 +1,32 @@
 import { useEffect, useRef, useState } from "react";
-import { startLogs } from "../commands";
+import { startLogPanes, startLogs } from "../commands";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
-import { checkLogForm, initialLogForm, toggleAllContainers, toggleContainer, type LogForm } from "./options";
+import type { LogsScope, PodRef } from "../transport/types";
+import { checkLogForm, initialLogForm, perPodUnavailable, toggleAllContainers, toggleContainer, type LogForm } from "./options";
 
 /**
- * ⌘L / ⌥⌘L: what a log tail shows, before it starts. The containers its pods
+ * ⌘L / ⌥⌘L: what a log tail shows, before it starts (of a row, the marked
+ * rows or the whole pane). The containers its pods
  * have (all checked), how much history (the last lines, since a duration ago,
- * or all), whether to follow, and timestamps. ⏎ from anywhere in it starts,
+ * or all), whether to follow, and timestamps. With several pods: a pane
+ * per pod instead of one tail, below or in a new tab. ⏎ from anywhere in it starts,
  * so ⌘L ⏎ is the defaults.
  */
 export function LogsDialog() {
   const o = useUI((s) => (s.overlay?.kind === "logs" ? s.overlay : undefined));
   const serverId = useUI((s) => (s.overlay?.kind === "logs" ? s.panes[s.overlay.pane]?.serverId : undefined));
   if (!o || !serverId) return null;
-  return <Dialog key={`${o.pane}/${o.key ?? ""}/${!!o.whole}`} paneId={o.pane} serverId={serverId} rowKey={o.key} whole={!!o.whole} />;
+  const scope = o.scope ?? "row";
+  return <Dialog key={`${o.pane}/${o.key ?? ""}/${scope}`} paneId={o.pane} serverId={serverId} rowKey={o.key} scope={scope} />;
 }
 
-function Dialog({ paneId, serverId, rowKey, whole }: { paneId: string; serverId: string; rowKey?: string; whole: boolean }) {
+function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId: string; rowKey?: string; scope: LogsScope }) {
   const [title, setTitle] = useState<string>();
+  const [skipped, setSkipped] = useState<string[]>();
+  const [pods, setPods] = useState<PodRef[]>([]);
+  // why a pane per pod isn't offered (one pod, too many)
+  const perPodOff = perPodUnavailable(pods.length);
   const [form, setForm] = useState<LogForm>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -26,15 +34,17 @@ function Dialog({ paneId, serverId, rowKey, whole }: { paneId: string; serverId:
 
   useEffect(() => {
     bridge()
-      .logsTargets(serverId, rowKey ?? "", whole)
+      .logsTargets(serverId, rowKey ?? "", scope)
       .then(
         (t) => {
           setTitle(t.title);
+          setSkipped(t.skipped);
+          setPods(t.pods ?? []);
           setForm(initialLogForm(t.containers, t.tail));
         },
         (e) => setError(String((e as Error)?.message ?? e)),
       );
-  }, [serverId, rowKey, whole]);
+  }, [serverId, rowKey, scope]);
 
   // the history field has the focus once the form is there: ⏎ starts, typing changes it
   useEffect(() => {
@@ -50,7 +60,8 @@ function Dialog({ paneId, serverId, rowKey, whole }: { paneId: string; serverId:
     const opts = checkLogForm(form);
     if (typeof opts === "string") return setError(opts);
     setBusy(true);
-    void startLogs(paneId, rowKey, whole, opts, form.timestamps).then((err) => {
+    const started = form.perPod && !perPodOff ? startLogPanes(paneId, rowKey, scope, opts, form.timestamps, pods, form.newTab) : startLogs(paneId, rowKey, scope, opts, form.timestamps);
+    void started.then((err) => {
       setBusy(false);
       if (err) setError(err);
     });
@@ -81,6 +92,11 @@ function Dialog({ paneId, serverId, rowKey, whole }: { paneId: string; serverId:
       <div className="text-fg">
         logs of <span className="font-semibold">{title ?? "…"}</span>
       </div>
+      {skipped?.length ? (
+        <div className="text-fg-muted">
+          skipped (no pods): {skipped.length > 3 ? `${skipped.slice(0, 3).join(", ")} +${skipped.length - 3}` : skipped.join(", ")}
+        </div>
+      ) : null}
       {form ? (
         <>
           {form.containers.length ? (
@@ -139,6 +155,34 @@ function Dialog({ paneId, serverId, rowKey, whole }: { paneId: string; serverId:
               timestamps
             </label>
           </div>
+          {pods.length > 1 ? (
+            <div className="flex gap-4">
+              <label className={`flex items-center gap-1.5 ${perPodOff ? "text-fg-muted" : "text-fg"}`} title={perPodOff}>
+                <input
+                  type="checkbox"
+                  aria-label="a pane per pod"
+                  checked={form.perPod && !perPodOff}
+                  disabled={!!perPodOff}
+                  onChange={(e) => update({ ...form, perPod: e.target.checked })}
+                  onKeyDown={enterSubmits}
+                  className="accent-accent"
+                />
+                a pane per pod ({perPodOff ?? pods.length})
+              </label>
+              <label className={`flex items-center gap-1.5 ${form.perPod && !perPodOff ? "text-fg" : "text-fg-muted"}`}>
+                <input
+                  type="checkbox"
+                  aria-label="in a new tab"
+                  checked={form.newTab}
+                  disabled={!form.perPod || !!perPodOff}
+                  onChange={(e) => update({ ...form, newTab: e.target.checked })}
+                  onKeyDown={enterSubmits}
+                  className="accent-accent"
+                />
+                in a new tab
+              </label>
+            </div>
+          ) : null}
         </>
       ) : !error ? (
         <div className="text-fg-muted">listing the pods…</div>
