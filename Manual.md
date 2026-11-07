@@ -53,7 +53,15 @@ kubewing checks for a new version once a day. When one is out, **⬆ 0.3.0** app
 
 Where kubewing can't replace itself, the button reads **download…** and opens the release page, and the dialog says why. That happens when the app runs from a folder you can't write to, or wasn't moved out of Downloads (macOS then runs it from a temporary copy). Development builds (built from source) aren't offered updates.
 
-Set how often kubewing checks with `update.checkDays` in [`config.yaml`](#configyaml): `7` checks weekly, `0` turns automatic checks off (**Check for Updates…** still works). Release candidates are offered only with `update.prereleases: true`. The check asks GitHub for the list of releases and sends nothing about you or your clusters.
+Both settings go in [`config.yaml`](#configyaml), under `update:`:
+
+```yaml
+update:
+  checkDays: 7        # days between checks; 0 turns automatic checks off (Check for Updates… still works)
+  prereleases: true   # offer release candidates too
+```
+
+The check asks GitHub for the list of releases and sends nothing about you or your clusters.
 
 ### Building from source
 
