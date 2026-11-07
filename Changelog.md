@@ -5,6 +5,9 @@
 - `b` in the YAML view (`⌘B` in the editor) shows who set each line, like kubectl-blame: the field manager owning it and how long ago, beside the YAML
 - a **?** button at the right end of the tab bar opens the cheat sheet of keyboard shortcuts
 
+### Changed
+- the node shell dialog no longer opens with the node list expanded; type or press `↓` to list the nodes
+
 ## [0.2.0] - 2026-11-07
 ### Added
 - auto-updates: kubewing checks for a new version daily (`update.checkDays`, `0` = off), shows its release notes, and installs it on request; also **kubewing → Check for Updates…**

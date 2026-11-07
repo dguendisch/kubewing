@@ -689,7 +689,7 @@ With pods marked, `b` starts a debug container in each, a pane each in a new tab
 
 A privileged pod on a node, like ops-toolbelt's `hacks/ops-pod`. `⌥⌘O` from anywhere, or **node shell…** in the row menu of a node or pod.
 
-- The **node** is prefilled from the selected row (the node, or the node a pod runs on). The context's nodes are listed with pool, zone and state (not ready, cordoned).
+- The **node** is prefilled from the selected row (the node, or the node a pod runs on). Typing or `↓` lists the context's nodes with pool, zone and state (not ready, cordoned); `⏎` takes the prefilled one.
 - The **image** shares its history with debug containers (default `opsPod.image`).
 - The **namespace** completes from the context's namespaces (empty = `default`). Note that PodSecurity's `baseline` (as on `default`) rejects such pods; use e.g. `kube-system`.
 - Checkboxes: **chroot** into `/host` (the shell runs on the node; implies host root), **host root** (the node's `/` at `/host`), **host network**. Host root and host network are on by default.

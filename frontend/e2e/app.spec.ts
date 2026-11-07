@@ -3211,7 +3211,7 @@ test.describe("object actions", () => {
 
   // ⌥⌘O: ops pod on a node. Nodes complete from the nodes tape (Go's shared nodes watch); the tape
   // fake runs the echo shell (prompt node:ops-pod-…), names the shell command and fails images "fail/…".
-  test("⌥⌘O on a pod: its node is prefilled, nodes listed, checkboxes set the pod; the shell opens below", async ({ page }) => {
+  test("⌥⌘O on a pod: its node is prefilled, ↓ lists nodes, checkboxes set the pod; the shell opens below", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3"); // runs on ip-10-0-2-22 (nodes.yaml)
     await page.keyboard.press("ControlOrMeta+Alt+O");
@@ -3220,15 +3220,15 @@ test.describe("object actions", () => {
     await expect(node).toHaveValue("ip-10-0-2-22.ec2.internal");
     await expect(node).toBeFocused();
     expect((await inspect(page)).focus).toBe("dialog");
-    // the nodes are listed right away, with pool, zone and state; nothing highlighted (⏎ takes the prefilled one)
+    // the list isn't open at first (⏎ takes the prefilled one); ↓ lists the nodes with pool, zone and state
     const list = dialog.getByRole("listbox", { name: "node suggestions" });
+    await expect(list).toHaveCount(0);
+    await page.keyboard.press("ArrowDown");
     await expect(list.getByRole("option")).toHaveCount(3);
-    await expect(list.getByRole("option", { selected: true })).toHaveCount(0);
     await expect(list).toContainText("worker-a · eu-1b · cordoned");
     await expect(list).toContainText("not ready (unknown) · etcd · eu-1c");
-    // highlighting the prefilled node and pressing ⏎ only takes it (closes the list), doesn't launch
-    await page.keyboard.press("ArrowDown");
     await expect(list.getByRole("option", { selected: true })).toHaveText(/ip-10-0-1-11/);
+    // highlighting the prefilled node and pressing ⏎ only takes it (closes the list), doesn't launch
     await node.fill("ip-10-0-2-22.ec2.internal"); // back to the prefilled one; it's the highlighted option
     await page.keyboard.press("ArrowDown");
     await expect(list.getByRole("option", { selected: true })).toContainText("ip-10-0-2-22.ec2.internal");
@@ -3297,7 +3297,9 @@ test.describe("object actions", () => {
     const dialog = page.getByRole("dialog", { name: "node shell" });
     const node = dialog.getByRole("combobox", { name: "node" });
     await expect(node).toHaveValue("");
-    await expect(dialog.getByRole("listbox", { name: "node suggestions" }).getByRole("option")).toHaveCount(3); // listed right away
+    await node.press("ArrowDown");
+    await expect(dialog.getByRole("listbox", { name: "node suggestions" }).getByRole("option")).toHaveCount(3);
+    await node.press("Escape");
     // checked in the dialog once the nodes are listed (before that Go refuses it: "no node … on tape")
     await expect(dialog.getByRole("status", { name: "node completion status" })).toHaveCount(0);
     await node.fill("nope");

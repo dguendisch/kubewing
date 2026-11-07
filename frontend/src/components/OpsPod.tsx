@@ -183,8 +183,6 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
                 label="node"
                 autoFocus
                 value={node}
-                // ⌘⌥O opens with the nodes listed; ⏎ still takes the prefilled one (nothing highlighted)
-                openOnMount
                 onChange={(v) => {
                   setError(undefined);
                   setNode(v);
