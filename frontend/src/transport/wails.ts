@@ -53,6 +53,7 @@ export function wailsTransport(): Transport {
     rowIndex: (p, k) => call("RowIndex", p, k),
     relations: (p, k) => call("Relations", p, k),
     fieldRefs: (p, t) => call("FieldRefs", p, t),
+    blame: (p, k, t) => call("Blame", p, k, t),
     fieldRelations: (p, t, l) => call("FieldRelations", p, t, l),
     ownedScan: (p, k) => call("OwnedScan", p, k),
     eventsTarget: (p, k) => call("EventsTarget", p, k),

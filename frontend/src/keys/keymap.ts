@@ -61,6 +61,7 @@ export type CommandId =
   | "detail.showYaml"
   | "detail.refresh"
   | "detail.toggleWrap"
+  | "detail.toggleBlame"
   | "detail.decode"
   | "diff.next"
   | "diff.prev"
@@ -153,7 +154,7 @@ export const commandIds: readonly CommandId[] = [
   "filter.focus", "filter.focusLabels", "filter.focusCel", "filter.toggleHealthy", "filter.blur", "filter.fromDetail", "filter.fromDetailNot",
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "mark.toggle", "mark.down", "mark.up", "mark.pageDown", "mark.pageUp", "mark.first", "mark.last", "mark.all",
-  "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
+  "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.toggleBlame", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "config.edit", "source.reconnect", "source.refresh",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
@@ -284,6 +285,9 @@ export const defaultBindings: Binding[] = [
   { key: "Y", command: "detail.showYaml", when: ["detail"] },
   { key: "R", command: "detail.refresh", when: ["detail"] },
   { key: "W", command: "detail.toggleWrap", when: ["detail"] },
+  // who set each line (kubectl-blame): the field manager owning it, in the gutter; ⌘B in the editor (b is text there)
+  { key: "B", command: "detail.toggleBlame", when: ["detail"] },
+  { key: "Meta+B", command: "detail.toggleBlame", when: ["edit"] },
   // next/previous change in a diff (vim-like, as in the table); no-ops elsewhere
   { key: "J", command: "diff.next", when: ["detail", "editpreview"] },
   { key: "K", command: "diff.prev", when: ["detail", "editpreview"] },

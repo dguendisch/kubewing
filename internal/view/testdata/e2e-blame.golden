@@ -1,0 +1,33 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAME"
+    }
+  ],
+  "total": 2,
+  "offset": 0,
+  "order": [
+    "b-bare",
+    "b-web"
+  ],
+  "rows": [
+    {
+      "key": "b-bare",
+      "cells": [
+        "bare"
+      ]
+    },
+    {
+      "key": "b-web",
+      "cells": [
+        "web"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 2
+  }
+}

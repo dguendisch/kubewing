@@ -10,6 +10,7 @@ A vibe-coded, keyboard-driven, desktop UI for Kubernetes matching most features 
 - **Time travel.** Record changes and scrub the whole table back in time (similar to `viddy` but based on resource field changes, not line/text changes), deleted objects included. Ask any YAML field "when did you change?" (`⇧H`), step through an object's versions with the changes listed as field paths (`spec.containers[name=app].image: "web:1" → "web:2"`).
 - **Three filters.** fzf-style grep, label selectors with value completion, and CEL over the whole object, completed from the live objects' fields.
 - **Decode anything.** `⏎` on a YAML value unwraps base64 → gzip/brotli → YAML/JSON, renders certificates, keys (matched to their certificate), JWTs, and goes deeper level by level: secret → kubeconfig → CA → certificate. Decoded diffs show what changed inside a managed resource's compressed blob.
+- **Blame.** `kubectl blame` like view in the yaml viewer/editor, showing who changed a field (based on managedFields).
 - **Jump between related resources** (`⌘J`): owners up the chain, what a workload runs, a pod's claims → volumes → attachments, events; from a garden's shoot or seed straight into its cluster or control plane. From the YAML, `⌘`-click a `secretName`, `roleRef` or `seedName` to land on the object it names (rules extendable in `refs.yaml`). Back and forward like a browser.
 - **Pod logs** with a live fzf-like filter
 - **port-forwards** to pods and services with completion on available ports

@@ -99,9 +99,17 @@ func (s Step) Offset() (time.Duration, error) {
 	return time.ParseDuration(s.At)
 }
 
+// Item is the object as a watch delivers it: managedFields stripped, as
+// the cluster sources do.
 func (o Object) Item() source.Item {
-	u := &unstructured.Unstructured{Object: deepCopy(o.Object)}
+	u := o.Full()
+	source.StripManagedFields(u)
 	return source.Item{Object: u, Cells: o.Cells}
+}
+
+// Full is the object as the tape has it, managedFields included (a GET's).
+func (o Object) Full() *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: deepCopy(o.Object)}
 }
 
 func items(objs []Object) []source.Item {

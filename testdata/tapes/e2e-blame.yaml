@@ -1,0 +1,67 @@
+# E2E tape for the blame (b in the YAML view, ⌘B in the editor): objects
+# with managedFields, which the watch strips and the blame reads with a GET
+# of its own. web: applied by kubectl, its replicas scaled by an autoscaler,
+# a sidecar injected by a webhook, its status written by the controller.
+# bare: no managedFields (an API server that doesn't track them). Out of
+# the relation kinds: another Deployment tape mustn't change the jump tests.
+lookupOnly: true
+pipeline:
+  source: {resource: deployments, namespace: blame}
+columns:
+  - {name: Name, type: string, priority: 0}
+initial:
+  - object:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: web
+        namespace: blame
+        uid: b-web
+        resourceVersion: "4"
+        creationTimestamp: "2026-01-01T10:00:00Z"
+        labels: {app: web}
+        managedFields:
+          - manager: kubectl-client-side-apply
+            operation: Update
+            time: "2026-01-01T10:00:00Z"
+            fieldsType: FieldsV1
+            fieldsV1:
+              f:metadata: {f:labels: {.: {}, f:app: {}}}
+              f:spec:
+                f:template:
+                  f:spec:
+                    f:containers:
+                      'k:{"name":"app"}': {.: {}, f:image: {}, f:name: {}}
+          - manager: sidecar-injector
+            operation: Update
+            time: "2026-01-02T10:00:00Z"
+            fieldsType: FieldsV1
+            fieldsV1:
+              f:spec:
+                f:template:
+                  f:spec:
+                    f:containers:
+                      'k:{"name":"proxy"}': {.: {}, f:image: {}, f:name: {}}
+          - manager: autoscaler
+            operation: Update
+            subresource: scale
+            time: "2026-01-03T10:00:00Z"
+            fieldsType: FieldsV1
+            fieldsV1: {f:spec: {f:replicas: {}}}
+          - manager: kube-controller-manager
+            operation: Update
+            subresource: status
+            time: "2026-01-04T10:00:00Z"
+            fieldsType: FieldsV1
+            fieldsV1: {f:status: {f:readyReplicas: {}}}
+      spec:
+        replicas: 3
+        template:
+          spec:
+            containers:
+              - {name: app, image: "nginx:1.27"}
+              - {name: proxy, image: "envoy:1.30"}
+      status: {readyReplicas: 3}
+    cells: [web]
+  - object: {apiVersion: apps/v1, kind: Deployment, metadata: {name: bare, namespace: blame, uid: b-bare, creationTimestamp: "2026-01-01T10:00:00Z"}, spec: {replicas: 1}}
+    cells: [bare]

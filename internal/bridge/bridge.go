@@ -262,6 +262,8 @@ type pane struct {
 	closed  bool
 	// full: a snapshot's full objects of opened rows (see fullCache)
 	full fullCache
+	// blame: the managedFields of rows blamed lately (see blameCache)
+	blame blameCache
 	// seq numbers frames per pane, monotonic across view rebuilds (Update),
 	// so clients can drop stale frames.
 	seq uint64

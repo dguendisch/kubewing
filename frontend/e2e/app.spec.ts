@@ -4149,6 +4149,95 @@ test.describe("object actions", () => {
   });
 });
 
+test.describe("blame (b)", () => {
+  async function openBlame(page: Page) {
+    await openTape(page, "e2e-blame", 2);
+  }
+  async function select(page: Page, key: string) {
+    const rows = (await focused(page)).rows;
+    await page.keyboard.press("g");
+    for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
+  }
+  /** The gutter's label of the line with text (the line numbers' column, in the same order as the lines). */
+  async function labelOf(page: Page, scope: string, text: string) {
+    return page.locator(scope).evaluate((el, t) => {
+      const lines = [...el.querySelectorAll(".view-line")] as HTMLElement[];
+      const nums = [...el.querySelectorAll(".margin-view-overlays .line-numbers")] as HTMLElement[];
+      const top = (e: HTMLElement) => parseFloat(e.parentElement!.style.top || e.style.top || "0");
+      const line = lines.find((l) => l.textContent?.replace(/\u00a0/g, " ").trim() === t);
+      if (!line) return undefined;
+      return nums.find((n) => top(n) === top(line))?.textContent ?? "";
+    }, text);
+  }
+
+  test("b names each line's field manager beside the YAML, for the session; ⌘B in the editor follows the text as typed", async ({ page }) => {
+    await openBlame(page);
+    await select(page, "b-web");
+    await page.keyboard.press("Enter");
+    const yaml = '[data-viewer="single"]';
+    await expect(page.locator(yaml).locator(".view-lines")).toContainText("replicas: 3");
+    // off: line numbers
+    await expect.poll(() => labelOf(page, yaml, "replicas: 3")).toMatch(/^\d+$/);
+    await page.keyboard.press("b");
+    await expect(page.getByRole("status", { name: "blame" })).toHaveText("blame");
+    await expect.poll(() => labelOf(page, yaml, "replicas: 3")).toMatch(/^autoscaler \d+d$/);
+    expect(await labelOf(page, yaml, "name: proxy")).toMatch(/^sidecar-injector /);
+    expect(await labelOf(page, yaml, "readyReplicas: 3")).toMatch(/^kube-controller-manager /);
+    // a line nobody owns as a whole: blank
+    expect(await labelOf(page, yaml, "spec:")).toBe("");
+    // the gutter is read-only: dimmed, not text
+    await expect(page.locator(yaml).locator(".monaco-editor.kw-blame")).toHaveCount(1);
+
+    // the session's: on for the next object too, which has no managedFields
+    await page.keyboard.press("Escape");
+    await select(page, "b-bare");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("status", { name: "blame" })).toHaveText("blame: no managedFields on this object");
+    await page.keyboard.press("Escape");
+
+    // the editor: ⌘B (b is text); an edited value keeps its owner until applied, a new line has none
+    await select(page, "b-web");
+    await page.keyboard.press("e");
+    const ed = "[data-editor=yaml]";
+    await expect(page.getByRole("region", { name: "edit object" }).getByRole("status", { name: "blame" })).toBeVisible();
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toMatch(/^autoscaler /);
+    await page.keyboard.press("ControlOrMeta+B");
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toMatch(/^\d+$/);
+    await page.keyboard.press("ControlOrMeta+B");
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toMatch(/^autoscaler /);
+    // typing a line moves the owners below it with their lines: a new line after spec.replicas
+    // (the first: hasText is case-blind, status.readyReplicas matches too)
+    await page.locator(ed).locator(".view-line", { hasText: "replicas: 3" }).first().click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("paused: true");
+    await expect(page.locator(ed).locator(".view-lines")).toContainText("paused: true");
+    await expect.poll(() => labelOf(page, ed, "paused: true")).toBe("");
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toMatch(/^autoscaler /);
+    // YAML that doesn't parse (mid-typing): no owners rather than ones on the wrong lines, and why
+    const note = page.getByRole("region", { name: "edit object" }).getByRole("status", { name: "blame" });
+    await page.keyboard.type(": x");
+    await expect(note).toContainText("blame: yaml:");
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toBe("");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await expect(note).toHaveText("blame");
+    await expect.poll(() => labelOf(page, ed, "replicas: 3")).toMatch(/^autoscaler /);
+    // applied: the field is kubewing's
+    await page.keyboard.press("ControlOrMeta+S");
+    await expect(page.getByRole("region", { name: "edit object" })).toContainText("preview (server dry run");
+    await page.keyboard.press("Enter");
+    await expect(page.getByLabel("message")).toHaveText("edited e2e-blame/web");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(yaml).locator(".view-lines")).toContainText("paused: true");
+    await expect.poll(() => labelOf(page, yaml, "paused: true")).toMatch(/^kubewing \d+s$/);
+    // off again for what follows
+    await page.keyboard.press("b");
+    await expect(page.getByRole("status", { name: "blame" })).toHaveCount(0);
+  });
+});
+
 test.describe("context menu (⌘⏎, right-click)", () => {
   async function openStatic(page: Page, context = "") {
     await ready(page);

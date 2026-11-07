@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
 import { dispatch, flash, jumpToField } from "../commands";
 import { Editor } from "../editor/Editor";
+import type { BlameState } from "../editor/blame";
 import { setDiffRange, useDiffNavOf, viewSlot, Viewer, type ContextAction, type FieldRefs, type ViewState } from "../editor/Viewer";
 import { prettyKey } from "../keys/keymap";
 import { bridge, setUI, useUI } from "../store/store";
@@ -248,6 +249,9 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
 
   const fieldKey = useKey("travel.field");
   const decodeKey = useKey("detail.decode");
+  const blameKey = useKey("detail.toggleBlame");
+  const blaming = useUI((s) => !!s.blame);
+  const [blamed, setBlamed] = useState<BlameState>({});
   const diff = !!o.diff;
   // the field at the cursor: its values over time (needs recorded history)
   const field = !describe && st?.recording;
@@ -261,6 +265,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
     "y: yaml",
     "e: edit",
     "w: wrap",
+    !describe && !diff && blameKey ? `${prettyKey(blameKey)}: blame` : "",
     o.split ? "esc: close" : "esc: back",
   ]
     .filter(Boolean)
@@ -285,6 +290,7 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
               : "yaml"}
         </span>
         {data && "deleted" in data && data.deleted ? <span className="shrink-0 text-deleted">deleted</span> : null}
+        {blaming && !describe && !diff ? <BlameNote state={blamed} /> : null}
         {diff && !describe && info ? <VersionNav paneId={pane.id} info={info} /> : null}
         {diff && !describe && data && "yaml" in data && !info ? (
           <span className="shrink-0" title="record changes (status line, or ⇧R in the table) keeps this source's versions, within its memory budget, to step through with [ / ]">
@@ -324,10 +330,23 @@ function DetailView({ pane, o, focused }: { pane: S.PaneState; o: S.ObjectView; 
           // one diff editor across versions and followed rows: the models are swapped, the scroll position stays
           <Viewer key="diff" label="diff" original={data.prevNorm} value={data.curNorm} contextActions={actions} refs={refs} {...viewer} />
         ) : (
-          <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={actions} refs={refs} {...viewer} />
+          <Viewer key="yaml" label="yaml" value={data.yaml} contextActions={actions} refs={refs} blame={serverId ? { serverId, key: data.key } : undefined} onBlame={setBlamed} {...viewer} />
         )}
       </div>
     </div>
+  );
+}
+
+/** Beside "yaml" while blame is on: what the gutter shows, or why it's empty. */
+function BlameNote({ state, editing }: { state: BlameState; editing?: boolean }) {
+  const what = state.error ? `blame: ${state.error}` : state.missing ? "blame: no managedFields on this object" : "blame";
+  const title = editing
+    ? "each line's field manager as it is on the server (from managedFields); a line typed in has none until applied; hover a name for all owners"
+    : "each line's field manager (from managedFields) and how long ago it wrote; hover a name for all owners. The object as it is now, also while showing the past";
+  return (
+    <span role="status" aria-label="blame" title={title} className={`min-w-0 truncate ${state.error ? "text-deleted" : "text-accent"}`}>
+      {what}
+    </span>
   );
 }
 
@@ -591,13 +610,17 @@ function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; foc
   if (view.current?.session !== e.session) view.current = { session: e.session, state: {} };
   const focus = () => setUI((s) => S.focusPane(s, pane.id));
   const refs = useFieldRefs(pane);
+  const blameKey = useKey("detail.toggleBlame");
+  const blaming = useUI((s) => !!s.blame);
+  const [blamed, setBlamed] = useState<BlameState>({});
   return (
     <div role="region" aria-label="edit object" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 whitespace-nowrap border-b border-border px-2 py-0.5 text-fg-muted">
         <span className="text-fg">{e.title}</span>
         <span>{preview ? "preview (server dry run: current → after the edit)" : e.yaml !== e.opened ? "edit (changed)" : "edit"}</span>
+        {blaming && !preview ? <BlameNote state={blamed} editing /> : null}
         {preview ? <DiffNav paneId={pane.id} slot={`${pane.id}/edit`} /> : null}
-        <span className="ml-auto min-w-0 truncate">{preview ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing" : "⌘S / ⌘⏎: preview · ⌘J: jump (split right) · esc: close"}</span>
+        <span className="ml-auto min-w-0 truncate">{preview ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing" : `⌘S / ⌘⏎: preview · ⌘J: jump (split right)${blameKey ? ` · ${prettyKey(blameKey)}: blame` : ""} · esc: close`}</span>
       </div>
       <div className="min-h-0 flex-1">
         {preview ? (
@@ -614,6 +637,8 @@ function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; foc
             onFocus={focus}
             slot={`${pane.id}/edit`}
             refs={refs}
+            blame={pane.serverId ? { serverId: pane.serverId, key: e.key } : undefined}
+            onBlame={setBlamed}
             onChange={(yaml) => setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, yaml, discarding: false })))}
           />
         )}

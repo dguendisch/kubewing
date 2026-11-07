@@ -417,6 +417,17 @@ A click on the timeline goes to that moment.
 
 In the object view: `⌘F` finds, `w` toggles wrapping of long lines (on by default; holds for the session). The cursor moves as in VS Code: `⌥←`/`⌥→` a word (`⇧` selects), `⌘←`/`⌘→` start/end of line, and `⌃←`/`⌃→` fold/unfold the section at the cursor (in the editor too). A held `Esc` (key repeat) stops at the top of an object view; only a fresh press leaves it.
 
+### Who set this? `b`
+
+`b` in the YAML view shows **who set each line**, like [kubectl-blame](https://github.com/knight42/kubectl-blame): beside the YAML, in place of the line numbers, the field manager that owns the field there and how long ago it last wrote (`kube-controller-manager 3d`, `helm 5h`). It's dimmed and read-only, only there to look at.
+
+- `b` again turns it off. It holds for the session: on, it shows for every object and in the editor too.
+- Hover a name for every manager owning that field, each with its operation (Apply or Update), subresource (`status`, `scale`) and time. `+1` after a name means one more owner.
+- Blank lines have no owner of their own: a map such as `spec:` that nobody set as a whole, or a field the server defaulted.
+- It reads the object's `managedFields` fresh from the API server. The YAML still doesn't show them (they're noise everywhere else). An object without any says so in the header.
+- In the editor `⌘B` toggles it (`b` is text there). It follows what you type: owners stay with their lines, a line you add has none until it's applied, and once applied the fields you changed are `kubewing`'s. While the YAML doesn't parse (mid-typing), the names are blank and the header says why.
+- It shows the object as it is now, also in a pane showing the past (time travel).
+
 ### Object diff: `d`
 
 `d` in the YAML view (or **diff** in the row menu) shows a side-by-side diff of the previous vs. current object (normalized as for the table), following new versions as they come in.
@@ -489,7 +500,9 @@ What's sent:
 
 Anything refused (invalid YAML, a webhook, a conflict, "no changes") shows below the editor with your text kept.
 
-The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent, `⌥←`/`⌥→` a word, `⌃←`/`⌃→` fold/unfold). Only `Esc`, `⌘S` and `⌘⏎` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
+The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent, `⌥←`/`⌥→` a word, `⌃←`/`⌃→` fold/unfold). Only `Esc`, `⌘S`, `⌘⏎`, `⌘J` and `⌘B` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
+
+`⌘B` shows who set each line beside the text, as `b` does in the YAML view (see [Who set this?](#who-set-this-b)).
 
 Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a context rule asks after the preview.
 
@@ -945,7 +958,7 @@ The most used keys:
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
-| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
+| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |
 | History | `⌘←` back · `⌘→` forward |

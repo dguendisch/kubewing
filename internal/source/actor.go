@@ -26,6 +26,8 @@ type Actor interface {
 	Delete(ctx context.Context, cluster string, res Resolved, namespace, name string, uid k8stypes.UID) error
 	// Get reads one object fresh from the API server, without managedFields.
 	Get(ctx context.Context, cluster string, res Resolved, namespace, name string) (*unstructured.Unstructured, error)
+	// GetManaged is Get with metadata.managedFields kept (the blame).
+	GetManaged(ctx context.Context, cluster string, res Resolved, namespace, name string) (*unstructured.Unstructured, error)
 	// Patch sends a JSON merge patch and returns the object as stored; with
 	// dryRun the server only reports what it would store.
 	Patch(ctx context.Context, cluster string, res Resolved, namespace, name string, patch []byte, dryRun bool) (*unstructured.Unstructured, error)

@@ -143,6 +143,7 @@ const sections: { title: string; rows: Row[] }[] = [
       rowIn("detail", "jump: what the field at the cursor refers to, then namespace / owner / owned (⌘-click a marked value: straight there)", "object.jump"),
       rowIn("detail", "events of the object", "object.events"),
       row("wrap long lines on / off", "detail.toggleWrap"),
+      row("blame on / off: who set each line (its field manager), beside the YAML; also in the editor", "detail.toggleBlame"),
       row("next / previous change (diff)", "diff.next", "diff.prev"),
       row("older / newer version (diff)", "diff.older", "diff.newer"),
       row("filter: field under cursor == / != its value", "filter.fromDetail", "filter.fromDetailNot"),

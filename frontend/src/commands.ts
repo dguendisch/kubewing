@@ -319,6 +319,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return setUI((x) => S.stepVersion(x, pane.id, cmd === "diff.older" ? -1 : 1, useDiffRange.getState()[viewSlot(pane.id, !!pane.object?.decode)]));
     case "detail.toggleWrap":
       return setUI((x) => ({ ...x, wrap: !x.wrap }));
+    case "detail.toggleBlame":
+      return setUI((x) => ({ ...x, blame: !x.blame }));
     case "detail.refresh":
       // re-run describe: the last run becomes the baseline of the diff
       return setUI((x) => S.setObject(x, pane.id, (o) => (o.view === "describe" ? { ...o, describeGen: (o.describeGen ?? 0) + 1 } : o)));

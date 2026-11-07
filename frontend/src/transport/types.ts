@@ -552,6 +552,22 @@ export interface FieldMark {
   label: string;
 }
 
+/** Mirrors blame.Owner: a field manager owning a field on a line. */
+export interface BlameOwner {
+  manager: string;
+  /** Apply or Update. */
+  operation: string;
+  subresource?: string;
+  /** When it last wrote any of its fields (RFC 3339). */
+  time?: string;
+}
+
+/** Mirrors bridge.BlameResult: the owners of each line (0-based) of a YAML text, most recent first; missing: the object has no managedFields. */
+export interface BlameResult {
+  lines: { line: number; owners: BlameOwner[] }[];
+  missing?: boolean;
+}
+
 /** Mirrors bridge.Relations: the jump menu of one row. */
 export interface Relations {
   kind: string;
@@ -928,6 +944,8 @@ export interface Transport {
   relations(pane: string, key: string): Promise<Relations>;
   /** The reference values in an object's YAML (as shown), to mark and ⌘-click. */
   fieldRefs(pane: string, text: string): Promise<FieldMark[]>;
+  /** Which field manager owns the fields on each line of text (the row's YAML as shown or typed); text that doesn't parse is an error. */
+  blame(pane: string, key: string, text: string): Promise<BlameResult>;
   /** The jump menu's field section: what the field at line (0-based) of text refers to, looked up. */
   fieldRelations(pane: string, text: string, line: number): Promise<Relation[]>;
   /** Where v goes: the events about the row's object (read-only; refused for an event). */

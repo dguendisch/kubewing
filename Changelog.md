@@ -2,6 +2,7 @@
 ## [Unreleased]
 ### Added
 - `⌘,` (**kubewing → Settings…**) edits `config.yaml` in the app: a reference of every setting beside it, problems shown as you type, `⌘S` saves and applies
+- `b` in the YAML view (`⌘B` in the editor) shows who set each line, like kubectl-blame: the field manager owning it and how long ago, beside the YAML
 
 ## [0.2.0] - 2026-11-07
 ### Added

@@ -349,6 +349,8 @@ export interface UIState {
   switcher?: { index: number; restore: FocusContext };
   /** Detail view (Monaco) wraps long lines; session-wide, toggled with w. */
   wrap: boolean;
+  /** Object YAML (viewer and editor) shows each line's field manager in the gutter; session-wide, toggled with b (⌘B in the editor). */
+  blame?: boolean;
 }
 
 /** Namespace a context starts in: the kubeconfig's, else "" (all). "" (or "@1/") = the current context. */

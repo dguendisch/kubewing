@@ -152,6 +152,9 @@ func (a *App) Relations(pane, key string) (bridge.Relations, error) {
 func (a *App) FieldRefs(pane, text string) ([]bridge.FieldMark, error) {
 	return a.svc.FieldRefs(pane, text)
 }
+func (a *App) Blame(pane, key, text string) (bridge.BlameResult, error) {
+	return a.svc.Blame(pane, key, text)
+}
 func (a *App) FieldRelations(pane, text string, line int) ([]relations.Relation, error) {
 	return a.svc.FieldRelations(pane, text, line)
 }

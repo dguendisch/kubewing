@@ -3,6 +3,7 @@ import { create } from "zustand";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
 import { bridge, useUI } from "../store/store";
+import { showBlame, type BlameOf, type BlameState } from "./blame";
 import { changeIndex } from "./diffnav";
 import { claimFocus } from "./focus";
 import { loadMonaco, type MonacoApi } from "./load";
@@ -156,6 +157,10 @@ interface Props {
   viewState?: ViewState;
   /** An object's YAML (the diff: its right side): its references are marked, ⌘-click jumps to one (see useFieldRefs). */
   refs?: FieldRefs;
+  /** The object's YAML (single viewer only): while blame is on (b), each line's field manager in the gutter. */
+  blame?: BlameOf;
+  /** What the blame found: no managedFields, or why it failed. */
+  onBlame?: (s: BlameState) => void;
 }
 
 /** What marks an object's references: the pane (Go matches the rules for its kind) and where a ⌘-click goes. */
@@ -224,7 +229,7 @@ function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAct
  * view. A new text in the same mode swaps the models: cursor and scroll
  * stay (a newer version, a followed row of the same shape).
  */
-export function Viewer({ value, original, language = "yaml", label, slot, autoFocus, contextActions, onFocus, viewState, refs }: Props) {
+export function Viewer({ value, original, language = "yaml", label, slot, autoFocus, contextActions, onFocus, viewState, refs, blame, onBlame }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const mode = original === undefined ? "single" : "diff";
@@ -233,8 +238,12 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
   const fields = language !== "plaintext";
   const editor = useRef<{ updateOptions(o: Monaco.editor.IEditorOptions): void; focus(): void }>(undefined);
   // the latest callbacks and texts, for the editor created once per mode
-  const live = useRef({ onFocus, value, original, refs });
-  live.current = { onFocus, value, original, refs };
+  const live = useRef({ onFocus, value, original, refs, onBlame });
+  live.current = { onFocus, value, original, refs, onBlame };
+  const blaming = useUI((s) => !!s.blame) && !!blame && original === undefined;
+  // the single viewer's editor and its text, for the blame toggled on and off without a new editor
+  const single = useRef<Monaco.editor.ICodeEditor>(undefined);
+  const blamed = useRef<ReturnType<typeof showBlame>>(undefined);
   // the latest pane and jump for the marks of the editor created once per mode
   const liveRefs: FieldRefs | undefined = refs && { serverId: refs.serverId, jump: (t, l, sp) => live.current.refs?.jump(t, l, sp) };
   const swap = useRef<(value: string, original?: string) => void>(undefined);
@@ -253,6 +262,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         let model = m.editor.createModel(live.current.value, language);
         const ed = m.editor.create(host.current, { ...common, ...wordWrap(useUI.getState().wrap), model, ariaLabel: label });
         editor.current = ed;
+        single.current = ed;
         if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
         if (autoFocus) ed.focus();
         if (fields) {
@@ -281,13 +291,16 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         const marked = liveRefs && markRefs(m, ed, liveRefs);
         marked?.update(live.current.value);
         const swapped = swap.current;
-        if (marked)
-          swap.current = (value) => {
-            swapped(value);
-            marked.update(value);
-          };
+        swap.current = (value) => {
+          swapped(value);
+          marked?.update(value);
+          blamed.current?.update(value);
+        };
+        setBlaming.current?.();
         dispose = () => {
           marked?.dispose();
+          blamed.current?.dispose();
+          blamed.current = single.current = undefined;
           if (viewState) viewState.state = ed.saveViewState();
           if (cur.text === model.getValue()) cur.text = cur.at = cur.place = cur.selected = undefined;
           acts.forEach((a) => a.dispose());
@@ -393,6 +406,18 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
 
   // toggling wrap keeps the editor (cursor, scroll position)
   useEffect(() => editor.current?.updateOptions(wordWrap(wrap)), [wrap]);
+
+  // blame on / off (b), and for another row: the gutter of the same editor
+  const setBlaming = useRef<() => void>(undefined);
+  setBlaming.current = () => {
+    const ed = single.current;
+    blamed.current?.dispose();
+    blamed.current = undefined;
+    if (!ed || !blaming || !blame) return live.current.onBlame?.({});
+    blamed.current = showBlame(ed, blame, (st) => live.current.onBlame?.(st));
+    blamed.current.update(ed.getModel()?.getValue() ?? "");
+  };
+  useEffect(() => setBlaming.current?.(), [blaming, blame?.serverId, blame?.key]);
 
   useEffect(() => {
     if (themeGen) void loadMonaco().then(defineTheme);

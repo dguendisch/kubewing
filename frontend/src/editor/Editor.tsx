@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
+import { useUI } from "../store/store";
+import { showBlame, type BlameOf, type BlameState } from "./blame";
 import { claimFocus } from "./focus";
 import { loadMonaco } from "./load";
 import { common, cursorOf, cursorPoint, defineTheme, goTo, markRefs, type FieldRefs, type Place, type ViewState } from "./Viewer";
@@ -26,6 +28,10 @@ interface Props {
   at?: Place;
   /** The cursor and scroll position, kept across remounts (back from the edit's preview): restored when it opens, saved when it closes. */
   viewState?: ViewState;
+  /** The object edited: while blame is on (⌘B), each line's field manager in the gutter, following the text as typed. */
+  blame?: BlameOf;
+  /** What the blame found: no managedFields, or why the text can't be blamed (it doesn't parse). */
+  onBlame?: (s: BlameState) => void;
 }
 
 /**
@@ -34,12 +40,23 @@ interface Props {
  * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
  * ⌥↑/⌥↓ move it, ⌘/ comments it in or out.
  */
-export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus = true, onFocus, slot, refs, at, viewState }: Props) {
+export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus = true, onFocus, slot, refs, at, viewState, blame, onBlame }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
-  const cb = useRef({ onChange, onSubmit, onSave, onFocus, refs });
-  cb.current = { onChange, onSubmit, onSave, onFocus, refs };
-  const editor = useRef<{ focus(): void }>(undefined);
+  const cb = useRef({ onChange, onSubmit, onSave, onFocus, refs, onBlame });
+  cb.current = { onChange, onSubmit, onSave, onFocus, refs, onBlame };
+  const editor = useRef<Monaco.editor.IStandaloneCodeEditor>(undefined);
+  const blaming = useUI((s) => !!s.blame) && !!blame;
+  const blamed = useRef<ReturnType<typeof showBlame>>(undefined);
+  const setBlaming = useRef<() => void>(undefined);
+  setBlaming.current = () => {
+    const ed = editor.current;
+    blamed.current?.dispose();
+    blamed.current = undefined;
+    if (!ed || !blaming || !blame) return cb.current.onBlame?.({});
+    blamed.current = showBlame(ed, blame, (st) => cb.current.onBlame?.(st));
+    blamed.current.update(ed.getModel()?.getValue() ?? "");
+  };
 
   useEffect(() => {
     let disposed = false;
@@ -68,7 +85,10 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
         if (cur) cur.text = text;
         cb.current.onChange(text);
         clearTimeout(typing);
-        if (marked) typing = setTimeout(() => marked.update(text), 300);
+        typing = setTimeout(() => {
+          marked?.update(text);
+          blamed.current?.update(text);
+        }, 300);
       });
       const cursorSub = ed.onDidChangeCursorPosition((e) => {
         if (cur) cur.line = e.position.lineNumber - 1;
@@ -78,7 +98,10 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
       // only where there's something to save: elsewhere ⌘S stays the app's (the object editor's apply)
       if (onSave) ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => cb.current.onSave?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
+      setBlaming.current?.();
       dispose = () => {
+        blamed.current?.dispose();
+        blamed.current = undefined;
         if (viewState) viewState.state = ed.saveViewState();
         clearTimeout(typing);
         marked?.dispose();
@@ -103,6 +126,8 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
     editor.current?.focus();
     return claimFocus(() => editor.current?.focus());
   }, [autoFocus]);
+
+  useEffect(() => setBlaming.current?.(), [blaming, blame?.serverId, blame?.key]);
 
   useEffect(() => {
     if (themeGen) void loadMonaco().then(defineTheme);

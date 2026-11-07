@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	jsonpatch "gopkg.in/evanphx/json-patch.v4"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -25,7 +26,7 @@ func (o *Opener) current(namespace, name string) (*unstructured.Unstructured, *T
 		if found == nil {
 			continue
 		}
-		it := found.Item().Object
+		it := found.Full()
 		o.mu.Lock()
 		defer o.mu.Unlock()
 		if o.deleted[string(it.GetUID())] {
@@ -42,8 +43,20 @@ func (o *Opener) current(namespace, name string) (*unstructured.Unstructured, *T
 	return nil, nil, false
 }
 
-// Get implements source.Actor.
-func (o *Opener) Get(_ context.Context, _ string, res source.Resolved, namespace, name string) (*unstructured.Unstructured, error) {
+// Get implements source.Actor, without managedFields like the API reads.
+func (o *Opener) Get(ctx context.Context, cluster string, res source.Resolved, namespace, name string) (*unstructured.Unstructured, error) {
+	u, err := o.GetManaged(ctx, cluster, res, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	source.StripManagedFields(u)
+	return u, nil
+}
+
+// GetManaged implements source.Actor: the object with the managedFields
+// its tape gives it (an edit keeps them and adds kubewing's, as the API
+// server's merge patch would).
+func (o *Opener) GetManaged(_ context.Context, _ string, res source.Resolved, namespace, name string) (*unstructured.Unstructured, error) {
 	u, _, ok := o.current(namespace, name)
 	if !ok {
 		return nil, fmt.Errorf("%s %q not found", strings.ToLower(res.Kind), name)
@@ -89,7 +102,9 @@ func (o *Opener) Patch(_ context.Context, _ string, res source.Resolved, namespa
 	}
 	n, _ := strconv.Atoi(cur.GetResourceVersion())
 	u.SetResourceVersion(strconv.Itoa(n + 1))
+	managePatch(u, patch, time.Now())
 	if dryRun {
+		source.StripManagedFields(u)
 		return u, nil
 	}
 	o.mu.Lock()
@@ -98,6 +113,7 @@ func (o *Opener) Patch(_ context.Context, _ string, res source.Resolved, namespa
 		o.edited = map[string]*unstructured.Unstructured{}
 	}
 	o.edited[string(u.GetUID())] = u.DeepCopy()
+	source.StripManagedFields(u)
 	ev := source.Event{Type: source.Modified, Item: source.Item{Object: u.DeepCopy()}}
 	for _, ch := range o.live[t] {
 		select {
@@ -120,4 +136,72 @@ func (o *Opener) Scale(ctx context.Context, cluster string, res source.Resolved,
 	}
 	_, err := o.Patch(ctx, cluster, res, namespace, name, fmt.Appendf(nil, `{"spec":{"replicas":%d}}`, replicas), false)
 	return err
+}
+
+// managePatch records the fields a merge patch sets as kubewing's (its
+// field manager), as an API server does: one Update entry, merged with
+// what kubewing set before, the others kept (a fake: they keep theirs).
+func managePatch(u *unstructured.Unstructured, patch []byte, at time.Time) {
+	var p map[string]any
+	if json.Unmarshal(patch, &p) != nil {
+		return
+	}
+	if md, ok := p["metadata"].(map[string]any); ok {
+		delete(md, "resourceVersion")
+		if len(md) == 0 {
+			delete(p, "metadata")
+		}
+	}
+	set := fieldsOf(p)
+	if len(set) == 0 {
+		return
+	}
+	mf, _, _ := unstructured.NestedSlice(u.Object, "metadata", "managedFields")
+	entry := map[string]any{"manager": "kubewing", "operation": "Update", "fieldsType": "FieldsV1", "time": at.UTC().Format(time.RFC3339)}
+	var out []any
+	for _, e := range mf {
+		if m, ok := e.(map[string]any); ok && m["manager"] == "kubewing" && m["operation"] == "Update" && m["subresource"] == nil {
+			if old, ok := m["fieldsV1"].(map[string]any); ok {
+				set = mergeFields(old, set)
+			}
+			continue
+		}
+		out = append(out, e)
+	}
+	entry["fieldsV1"] = set
+	_ = unstructured.SetNestedSlice(u.Object, append(out, entry), "metadata", "managedFields")
+}
+
+// fieldsOf is a merge patch's fields as a fieldsV1 set (a null: removed, not owned).
+func fieldsOf(p map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range p {
+		switch x := v.(type) {
+		case nil:
+		case map[string]any:
+			if c := fieldsOf(x); len(c) > 0 {
+				out["f:"+k] = c
+			}
+		default:
+			out["f:"+k] = map[string]any{}
+		}
+	}
+	return out
+}
+
+func mergeFields(a, b map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		am, ok1 := out[k].(map[string]any)
+		bm, ok2 := v.(map[string]any)
+		if ok1 && ok2 && len(am) > 0 && len(bm) > 0 {
+			out[k] = mergeFields(am, bm)
+		} else {
+			out[k] = v
+		}
+	}
+	return out
 }

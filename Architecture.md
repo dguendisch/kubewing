@@ -161,6 +161,16 @@ Which fields name another object (`secretName`, `roleRef`, a shoot's `seedName`)
 - **Direct only; derived references stay in Go.** A pod's claims → their bound volumes → attachments, a stateful set's claims by the controller's naming pattern, an ephemeral volume's claim `<pod>-<volume>` aren't one field each. `relations.References` keeps them; the rules add what it doesn't list, and on a duplicate the derived entry wins (it knows more: a checked UID, "deleted" vs. "missing"). Planned on top: reverse references (the rules read backwards, e.g. the pods using a secret) and configurable chains of rule ids (see Plan).
 - **Every target is looked up** (metadata only, so secrets aren't read): not there is **missing** (a field may name what was never created, unlike an owner, which is "deleted"); a failed lookup (forbidden) keeps the jump with "not checked".
 
+## Blame
+
+Who set each line of an object's YAML (`b`, `⌘B` in the editor), as kubectl-blame does, from `metadata.managedFields`.
+
+- **The text shown, walked with each manager's set.** `internal/blame` (pure) parses the text the viewer or the editor shows and walks its YAML nodes together with every manager's `fieldsV1` tree (`f:` fields, `k:{…}` list items by their keys, `v:` set items by value, `i:` by index). A field starting on a line is that line's: a scalar where it's in a manager's set, a map or list only where a manager owns it as a whole (`.`, or a list item with no children listed). So the lines are the text's own, as for the field references: the editor's text as typed is blamed as it is, nothing maps lines between two renderings. Owners are ordered newest first (`time`); the gutter shows the first.
+- **managedFields read on request.** The sources strip them (noise for the diff, the history and the YAML), so `Actor.GetManaged` reads the object with them. They're kept per pane and row (`blameCache`, ≤ 16) for the row's resourceVersion (5 s for a row without one): the editor asks on every pause in typing, the viewer as the object changes, and only a new version reads again. The YAML shown stays without them.
+- **The gutter is Monaco's line numbers.** A `lineNumbers` function renders each line's label (escaped: Monaco inserts it as HTML) with `lineNumbersMinChars` sized to the longest (≤ 30 characters), so it's read-only and scrolls, folds and wraps with the lines for free; a class (`kw-blame`) dims and left-aligns it. The hover contribution isn't bundled, so a line's owners are the label's native tooltip. Text that doesn't parse blanks the labels at the same width (the old ones would sit on the wrong lines).
+- **Now, not then.** A pane showing the past blames the object as it is now: the history keeps what the watch delivered, without managedFields.
+- **Tapes:** watch items are stripped like the cluster sources'; `GetManaged` returns the tape's managedFields, and a patch adds its fields to a `kubewing` Update entry, as an API server records an edit's field manager.
+
 ## Decoding
 
 `internal/decode` is pure. A request sends the levels (field paths resolved by Go on the first, chains after), and Go decodes from the object again each time: nothing decoded is kept. The value comes from the object at the line's field path (`fieldpath.AtLine`), not from the YAML text.
@@ -274,6 +284,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/expr` | CEL (cel-go, plus `sum()`) and dot paths |
 | `internal/normalize` | noise rules + content hash |
 | `internal/fieldpath` | field-path diff of two objects (lists matched by `name`/`type`/…), applied forward or in reverse; a YAML line → its field path; pure |
+| `internal/blame` | an object YAML's lines → the field managers owning them (managedFields' `fieldsV1` walked with the YAML nodes); pure |
 | `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; pure |
 | `internal/history` | per-object versions: newest object + reverse deltas; global memory budget; the table at a moment, changes over time, a field's values |
 | `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, edit, label/annotate patches, scale, exec, debug containers, node shells, local terminals, port-forward, logs) |

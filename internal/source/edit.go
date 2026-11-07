@@ -17,6 +17,15 @@ func (o *ClusterOpener) Get(ctx context.Context, cluster string, res Resolved, n
 	return c.Get(ctx, res, namespace, name)
 }
 
+// GetManaged implements Actor.
+func (o *ClusterOpener) GetManaged(ctx context.Context, cluster string, res Resolved, namespace, name string) (*unstructured.Unstructured, error) {
+	c, err := o.cluster(cluster)
+	if err != nil {
+		return nil, err
+	}
+	return c.GetManaged(ctx, res, namespace, name)
+}
+
 // Patch implements Actor.
 func (o *ClusterOpener) Patch(ctx context.Context, cluster string, res Resolved, namespace, name string, patch []byte, dryRun bool) (*unstructured.Unstructured, error) {
 	c, err := o.cluster(cluster)
@@ -29,6 +38,16 @@ func (o *ClusterOpener) Patch(ctx context.Context, cluster string, res Resolved,
 // Get reads one object from the API server (not a watch cache), without
 // managedFields.
 func (c *Cluster) Get(ctx context.Context, res Resolved, namespace, name string) (*unstructured.Unstructured, error) {
+	u, err := c.GetManaged(ctx, res, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+	StripManagedFields(u)
+	return u, nil
+}
+
+// GetManaged is Get with metadata.managedFields kept (for the blame).
+func (c *Cluster) GetManaged(ctx context.Context, res Resolved, namespace, name string) (*unstructured.Unstructured, error) {
 	rc, err := c.restClient(res.GVR.GroupVersion())
 	if err != nil {
 		return nil, err
@@ -41,7 +60,11 @@ func (c *Cluster) Get(ctx context.Context, res Resolved, namespace, name string)
 	if err != nil {
 		return nil, fmt.Errorf("get %s/%s: %w", res.GVR.Resource, name, statusError(b, err))
 	}
-	return decodeObject(b)
+	u := &unstructured.Unstructured{}
+	if err := kjson.Unmarshal(b, &u.Object); err != nil {
+		return nil, err
+	}
+	return u, nil
 }
 
 // Patch sends a JSON merge patch (RFC 7386) and returns the object as the

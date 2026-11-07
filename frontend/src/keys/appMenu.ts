@@ -81,6 +81,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Requests / Limits", "view.toggleAllocation"],
       null,
       ["Toggle Line Wrap", "detail.toggleWrap"],
+      ["Toggle Blame", "detail.toggleBlame"],
       null,
       ["Find in Terminal", "term.find"],
       ["Find Next", "term.findNext"],
