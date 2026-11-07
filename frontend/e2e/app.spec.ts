@@ -1210,6 +1210,19 @@ test("? shows the cheat sheet with the live keymap, esc closes it", async ({ pag
   expect((await focused(page)).selected).toBe(1);
 });
 
+test("the ? button at the right end of the tab bar toggles the cheat sheet", async ({ page }) => {
+  await openTape(page);
+  const button = page.getByRole("button", { name: "keyboard shortcuts" });
+  await expect(button).toHaveAttribute("title", "keyboard shortcuts (?)");
+  await button.click();
+  const sheet = page.getByRole("dialog", { name: "keyboard shortcuts" });
+  await expect(sheet).toContainText("split down");
+  expect((await inspect(page)).focus).toBe("help");
+  await button.click();
+  await expect(sheet).toHaveCount(0);
+  expect((await inspect(page)).overlays).toEqual([]);
+});
+
 test("? in the filter bar is typed, not a shortcut", async ({ page }) => {
   await openTape(page);
   await page.keyboard.press("/");

@@ -949,7 +949,7 @@ Paths are field names separated by dots, plus:
 
 ## 18. Keyboard reference
 
-`?` opens the cheat sheet: every shortcut by section, with the context it applies in, read from the live keymap (so your overrides show). `?` again or `Esc` closes it.
+`?` (or the **?** button at the right end of the tab bar) opens the cheat sheet: every shortcut by section, with the context it applies in, read from the live keymap (so your overrides show). `?` again, the button again, or `Esc` closes it.
 
 The most used keys:
 

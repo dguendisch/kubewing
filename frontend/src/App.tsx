@@ -44,6 +44,8 @@ export function App() {
   // the live key (keybindings.yaml may rebind or unbind it)
   const listKey = useConfig((c) => c.bindings.find((b) => b.command === "portforward.list"));
   const listKeyText = listKey && prettyKey(listKey.key);
+  const helpKey = useConfig((c) => c.bindings.find((b) => b.command === "help.toggle"));
+  const helpKeyText = helpKey && prettyKey(helpKey.key);
   const tab = tabs[active]!;
   const dragged = useTabDrag((d) => d.tab);
   const renaming = useUI((s) => (s.overlay?.kind === "renameTab" ? s.overlay.tabId : undefined));
@@ -110,7 +112,7 @@ export function App() {
         <button aria-label="new tab" data-new-tab className="px-2 py-1 text-fg-muted" onClick={() => setUI(S.newTab)}>
           +
         </button>
-        {/* the right end: a new version, the port-forwards */}
+        {/* the right end: a new version, the port-forwards, the cheat sheet */}
         <div className="ml-auto flex self-center" style={noDrag}>
           <UpdateHint />
           {forwards ? (
@@ -124,6 +126,15 @@ export function App() {
               ⇄ {forwards}
             </button>
           ) : null}
+          <button
+            type="button"
+            aria-label="keyboard shortcuts"
+            title={`keyboard shortcuts${helpKeyText ? ` (${helpKeyText})` : ""}`}
+            className="mr-1 flex size-5 items-center justify-center self-center rounded-full border border-fg-muted/60 text-[11px] leading-none text-fg-muted hover:border-fg hover:text-fg"
+            onClick={() => dispatch("help.toggle")}
+          >
+            ?
+          </button>
         </div>
       </nav>
       <ConfigErrors />
