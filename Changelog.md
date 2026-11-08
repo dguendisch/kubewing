@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+### Changed
+- kubewing now needs macOS 13 Ventura or later (it never ran on older versions; macOS now says so instead of the app failing to start)
 
 ## [0.3.0] - 2026-11-07
 ### Added

@@ -10,6 +10,12 @@ export GOBIN      := $(ROOT)/.cache/bin
 export GOFLAGS    := -modcacherw
 export npm_config_cache := $(ROOT)/.cache/npm
 export PLAYWRIGHT_BROWSERS_PATH := $(ROOT)/.cache/ms-playwright
+# The oldest macOS kubewing runs on: Go's runtime needs 13 (and builds for it). Without this, cgo
+# links for wails' 10.13 (11.0 on arm64) and builds our Objective-C for the SDK's own version, and ld
+# warns about both. Keep it in step with LSMinimumSystemVersion in build/darwin/Info.plist.
+MACOS_MIN := 13.0
+export CGO_CFLAGS  := -O2 -g -mmacosx-version-min=$(MACOS_MIN)
+export CGO_LDFLAGS := -O2 -g -mmacosx-version-min=$(MACOS_MIN)
 NPM_BIN := frontend/node_modules/.bin
 
 # The release tag is the only place the version lives (see scripts/release.sh): v0.2.0 → 0.2.0,
@@ -28,8 +34,10 @@ DIST := bin/kubewing-$(VERSION)-macos-arm64.zip
 
 .PHONY: deps outdated update frontend build app dist sign release icon run try-update headless test test-go test-fe e2e golden-update lint
 
+# `go mod download`, not `download all`: that adds go.sum lines for every module in the graph, also
+# those no build of kubewing loads (wails' own CLI tooling), which `go mod tidy` then removes again.
 deps:
-	go mod download all
+	go mod download
 	cd frontend && npm install
 	cd frontend && ./node_modules/.bin/playwright install chromium
 
@@ -37,7 +45,7 @@ deps:
 # outdated only reports (modules, toolchains, actions, vulnerabilities); update takes the safe part
 # (minors and patches, k8s.io within its minor, wails held, npm releases older than AGE=7 days) and tests it.
 outdated:
-	scripts/deps.sh outdated
+	AGE='$(AGE)' scripts/deps.sh outdated
 
 update:
 	AGE='$(AGE)' scripts/deps.sh update

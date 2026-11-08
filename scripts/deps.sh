@@ -2,7 +2,8 @@
 # The monthly dependency routine (Development.md, Dependencies). Needs network.
 #
 #   deps.sh outdated   report only: Go modules and toolchain, npm packages, Node, the workflow's
-#                      actions, and known vulnerabilities (govulncheck, npm audit); changes nothing
+#                      actions, and known vulnerabilities (govulncheck, npm audit); changes nothing.
+#                      The npm table says what `update` does with each (takes, cooldown, by hand).
 #   deps.sh update     the safe part: Go's direct modules to their latest (k8s.io only within its
 #                      minor, wails held), the Go toolchain to its latest patch, npm packages within
 #                      package.json's ranges (only releases older than AGE days), Playwright's
@@ -17,7 +18,8 @@ die() { echo "deps: $*" >&2; exit 1; }
 section() { printf '\n\033[1m== %s ==\033[0m\n' "$1"; }
 
 # Bumped only by hand: wails' Go module and its npm runtime (@wailsio/runtime, pinned exactly) must
-# match, and it's still pre-stable. k8s.io modules move together and only within their minor.
+# match, and internal/app/zoom_darwin.go calls private methods of it. k8s.io modules move together
+# and only within their minor.
 GO_HOLD=(github.com/wailsapp/wails/v3)
 GO_SAME_MINOR='^k8s\.io/'
 # npm releases younger than this are left out: a compromised release is usually caught within days.
@@ -99,6 +101,63 @@ actions() {
 	done
 }
 
+# npm outdated's table, with what make update does about each: "Wanted" (the newest in package.json's
+# range) may still be in its AGE-day cooldown, an exact version is held, a "Latest" beyond the range is
+# a major (or a 0.x minor).
+npm_outdated() {
+	(cd frontend && node - "$AGE") <<-'EOF'
+		const { execFileSync } = require("child_process");
+		const age = Number(process.argv[2]);
+		const day = 864e5;
+		const date = (t) => new Date(t).toISOString().slice(0, 10);
+		// as in update: releases before this day's start (UTC)
+		const cutoff = new Date(date(Date.now() - age * day)).getTime();
+		const npm = (...args) => {
+			try {
+				return execFileSync("npm", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+			} catch (e) {
+				return e.stdout; // npm outdated exits 1 when something is outdated
+			}
+		};
+		const json = (...args) => JSON.parse(npm(...args, "--json") || "null");
+		const pkg = require("./package.json");
+		const specs = { ...pkg.dependencies, ...pkg.devDependencies };
+		const outdated = json("outdated") || {};
+		const rows = [["Package", "Current", "Wanted", "Latest", "make update"]];
+		for (const [name, o] of Object.entries(outdated)) {
+			const spec = specs[name] || "";
+			const cur = o.current || "-";
+			const notes = [];
+			if (/^\d/.test(spec)) {
+				notes.push("held (exact version): by hand");
+			} else {
+				if (o.wanted !== o.current) {
+					const time = json("view", name, "time") || {};
+					// the versions in range, oldest first; the newest out of its cooldown is what update takes
+					const inRange = [].concat(json("view", `${name}@${spec}`, "version") || []);
+					const ok = inRange.filter((v) => time[v] && new Date(time[v]).getTime() < cutoff).pop();
+					// the first day the cutoff passes it: AGE + 1 days after its publishing day
+					const pub = time[o.wanted] && date(time[o.wanted]);
+					const from = pub ? date(new Date(pub).getTime() + (age + 1) * day) : "?";
+					const cooling = `${o.wanted} from ${from} (published ${pub || "?"})`;
+					if (ok === o.wanted) notes.push(`takes ${o.wanted}`);
+					else if (ok && ok !== o.current) notes.push(`takes ${ok}; cooldown: ${cooling}`);
+					else notes.push(`cooldown: ${cooling}`);
+				}
+				if (o.latest !== o.wanted) notes.push(`${o.latest} is beyond the range (major or 0.x minor): by hand`);
+			}
+			rows.push([name, cur, o.wanted, o.latest, notes.join("; ")]);
+		}
+		if (rows.length === 1) {
+			console.log("all up to date");
+		} else {
+			const w = rows[0].map((_, i) => Math.max(...rows.map((r) => r[i].length)));
+			for (const r of rows) console.log(r.map((c, i) => (i < r.length - 1 ? c.padEnd(w[i]) : c)).join("  "));
+			console.log(`(cooldown: make update takes only releases older than ${age} days; AGE=${age})`);
+		}
+	EOF
+}
+
 outdated() {
 	section "Go modules (direct)"
 	local out
@@ -117,8 +176,7 @@ outdated() {
 	go_toolchain
 
 	section "npm packages (frontend)"
-	(cd frontend && npm outdated) || true # exits 1 when something is outdated
-	echo "(an exact version in package.json is held: make update leaves it, as it does majors)"
+	npm_outdated
 
 	section "Node"
 	node_version
@@ -161,7 +219,17 @@ update() {
 	local before
 	before=$(node -e "console.log(new Date(Date.now() - $AGE * 864e5).toISOString().slice(0, 10))")
 	echo "within package.json's ranges, released before $before"
-	(cd frontend && npm update --before="$before" --no-audit --no-fund)
+	# Only the packages with a range: the exact (held) ones may be younger than AGE (a hand-made bump
+	# like wails'), and a plain `npm update --before` fails on any locked version newer than the date.
+	(
+		cd frontend
+		local ranged=() name
+		while read -r name; do ranged+=("$name"); done < <(node -e '
+			const p = require("./package.json");
+			for (const [n, v] of Object.entries({ ...p.dependencies, ...p.devDependencies }))
+				if (!/^\d/.test(v)) console.log(n);')
+		npm update "${ranged[@]}" --before="$before" --no-audit --no-fund
+	)
 
 	section "Playwright Chromium"
 	# a new @playwright/test wants its own browser build

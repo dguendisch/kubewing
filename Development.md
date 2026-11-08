@@ -75,6 +75,8 @@ make e2e               # outside the sandbox
 
 It refuses while `go.mod`, `go.sum` or `frontend/package*.json` have uncommitted changes, so its result is a diff of its own. It ends with the diff's stat and the vulnerabilities left.
 
+`make outdated`'s npm table says per package what `make update` does with it: takes the version, waits for its cooldown (with the day it's old enough), or leaves it to you (held, or beyond the range). Same `AGE=`.
+
 The monthly routine:
 
 1. `make outdated`: a look at what's behind, and whether anything is urgent (a vulnerability the code reaches can't wait for the month).
@@ -83,9 +85,9 @@ The monthly routine:
 4. Commit the safe updates on their own.
 5. What `make outdated` still lists, one change each (a branch, `make test`, `make e2e`, the app), whenever there's time:
    - Majors (npm's "Latest" beyond "Wanted"), and any `0.x` minor (it may break).
-   - The held ones: the exact versions in `package.json` (Monaco, xterm, dockview, glide-data-grid) and wails. Wails' Go module and `@wailsio/runtime` change together, to the same version (`go get github.com/wailsapp/wails/v3@vX` and `npm install --save-exact @wailsio/runtime@X`).
+   - The held ones: the exact versions in `package.json` (Monaco, xterm, dockview, glide-data-grid) and wails. Wails' Go module and `@wailsio/runtime` change together, to the same version (`go get github.com/wailsapp/wails/v3@vX` and `npm install --save-exact @wailsio/runtime@X`); its download needs to run outside the sandbox (the module ships `.vscode/` folders). `internal/app/zoom_darwin.go` calls two of wails' private Objective-C methods (`zoomAnimationIsRunning`, `stepZoomAnimationAtTime:`): check they still exist in the new version (`grep` its `pkg/application/webview_window_darwin.m`), and try maximising a window in the app.
    - A new Kubernetes minor: `go get k8s.io/api@v0.X k8s.io/apimachinery@v0.X …`, every `k8s.io/*` module in `go.mod` at once.
-   - Node: `.node-version` should be a supported release, an LTS (even majors). The report says when it's past its end of life. Install that Node locally too.
+   - Node: `.node-version` should be a supported release, an LTS (even majors). The report says when it's past its end of life. Install that Node locally too: with Homebrew, `brew upgrade node` while its `node` formula is that major, else the versioned formula (`brew install node@26`, then `brew unlink node && brew link --overwrite node@26`, since `node@` formulae are keg-only). The native modules in `node_modules` are prebuilt N-API binaries and survive the switch; still, `make deps`, `make test` and `make e2e` afterwards.
    - Actions: the report prints the new `uses:` line (commit and version comment) to paste into the workflow. Read the action's release notes first; a dispatched run of the workflow (Actions → release → Run workflow) tries it without a release.
    - A newer Go minor: `go` in `go.mod` (and `toolchain`).
 6. A dependency change gets a line in `Changelog.md` only if users notice it (a fixed bug, a security fix in what kubewing does, a new minimum macOS).

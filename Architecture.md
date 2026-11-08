@@ -46,7 +46,7 @@ client-go/informers, `k8s.io/kubectl` packages (apply, diff, printers, exec, por
 
 ### UI framework: Wails v3 (Go backend + system webview)
 
-- v3 over v2: multi-window (tear-off splits), improved bindings/events. Accepting pre-stable API churn.
+- v3 over v2: multi-window (tear-off splits), improved bindings/events. Adopted in its betas; stable since 3.0.0.
 - Platforms: macOS first; Linux via WebKitGTK accepted as good enough for now; Windows (WebView2) maybe later.
 - Why: off-the-shelf components cover most features (see the frontend stack below); CSS variables for theming and per-context colors; Vite hot-reload; small binary via the system webview.
 - Rejected: **Gio** — best raw throughput (no bridge), but terminal emulator, code editor, diff viewer and markdown would all be hand-built; pre-1.0 API. **Fyne** — retained-mode widgets are hard to make dense and fast for large live tables.
@@ -233,6 +233,7 @@ Rules are decided in Go (`internal/safety`); the frontend only shows what Go dec
 - **Candidates:** `vX.Y.Z-rc.N` → a GitHub pre-release, never "latest". The updater offers them only with `update.prereleases`.
 - **Unsigned by Apple:** no paid developer account, so no Developer ID and no notarization. The linker ad-hoc signs only the arm64 binary; `make dist` re-signs the whole bundle ad hoc (`codesign --deep -s -`), since a bundle whose seal doesn't cover `Info.plist` and its resources is reported as "damaged" after download, which users can't get past as easily as Gatekeeper's "unverified developer". The zip is made by `ditto`, which keeps the bundle's metadata and signature intact. A download carries the quarantine flag, so the first launch needs "Open Anyway"; files a program downloads itself (not a browser) don't get it, so the updater doesn't hit this again.
 - **arm64 only, zip only:** Wails needs cgo against Cocoa/WebKit, so the build runs on a macOS runner, not cross-compiled. Asset names are stable (`kubewing-<version>-macos-arm64.zip`) for the updater to find. macOS runners cost more on private repos, so CI runs on release tags only.
+- **Minimum macOS 13:** Go's runtime needs it, so the Makefile builds the cgo parts for it too (`MACOS_MIN`, as `-mmacosx-version-min` in `CGO_CFLAGS`/`CGO_LDFLAGS`; wails' own flags would say 10.13, and our Objective-C would target the build machine's SDK, so a newer macOS API there would go unnoticed), and `LSMinimumSystemVersion` in `Info.plist` says the same.
 - Actions are pinned by commit SHA, the job alone gets `contents: write`, and releases are made with the runner's `gh` rather than a third-party action.
 
 ## Updates

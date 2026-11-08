@@ -32,7 +32,7 @@ Key notation: `⌘` Command, `⌥` Option, `⌃` Control, `⇧` Shift, `⏎` Ret
 
 ### Installing
 
-kubewing runs on Macs with Apple silicon (macOS 11 or later). Download `kubewing-<version>-macos-arm64.zip` from the [releases](https://github.com/dguendisch/kubewing/releases), unpack it (double-click), and move `kubewing.app` to `/Applications`. Releases named `-rc.N` are release candidates: previews of the next version.
+kubewing runs on Macs with Apple silicon (macOS 13 Ventura or later). Download `kubewing-<version>-macos-arm64.zip` from the [releases](https://github.com/dguendisch/kubewing/releases), unpack it (double-click), and move `kubewing.app` to `/Applications`. Releases named `-rc.N` are release candidates: previews of the next version.
 
 kubewing isn't notarized by Apple, so macOS blocks the first launch ("Apple could not verify kubewing…"). Allow it once, either way:
 
