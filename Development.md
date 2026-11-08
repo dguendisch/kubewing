@@ -8,6 +8,8 @@ All toolchain caches live in `.cache/` inside the repo (Go modules and build cac
 
 ```sh
 make deps              # Go modules, npm packages, Playwright Chromium (needs network)
+make outdated          # what's behind and what's vulnerable, changes nothing (see Dependencies)
+make update            # the safe dependency updates, then make test (see Dependencies)
 make run               # build and start the app (as bin/kubewing.app, for the Dock icon), in the foreground (-wait)
 make app               # build bin/kubewing.app only
 make test              # lint + Go (race) + frontend unit tests
@@ -53,6 +55,47 @@ Scenario tapes (`testdata/tapes/*.yaml`) are scripted fake clusters: starting ob
 | Lint | `gofmt`, and no raw colors outside theme tokens (`frontend/scripts/lint-tokens.mjs`). | `make lint` |
 
 Inside a sandbox, Go needs a writable build cache: `GOCACHE=$TMPDIR/gocache go test ./internal/...`. The local-terminal PTY tests (`TestRunPTY*` in `internal/source`) skip where `/dev/ptmx` can't be opened (the macOS sandbox); run them outside it.
+
+## Dependencies
+
+Once a month, by hand: nothing updates the dependencies on its own. They live in `go.mod` (and its `toolchain` line), `frontend/package.json`, `.node-version`, and the actions pinned by commit in `.github/workflows/`. `scripts/deps.sh` is behind both commands; both need network.
+
+```sh
+make outdated          # report only: modules, toolchains, actions, vulnerabilities (govulncheck, npm audit)
+make update            # the safe updates below, then make frontend test; AGE=14 waits longer for npm releases
+make e2e               # outside the sandbox
+```
+
+`make update` takes:
+
+- Go's direct modules to their latest, `k8s.io/*` only within their minor (a new Kubernetes minor is a change of its own). The indirect ones follow from them, except a module govulncheck finds the code calling into a vulnerability of: that one is raised to the fixing version.
+- The Go toolchain (`toolchain` in `go.mod`) to the latest patch of `go`'s version, so the standard library's security fixes arrive too. Go downloads it into `.cache/` by itself.
+- npm packages within `package.json`'s ranges (`^`), only releases older than 7 days (`AGE=`): a compromised release is usually caught within days. An exact version is held.
+- Playwright's Chromium, for a new `@playwright/test`.
+
+It refuses while `go.mod`, `go.sum` or `frontend/package*.json` have uncommitted changes, so its result is a diff of its own. It ends with the diff's stat and the vulnerabilities left.
+
+The monthly routine:
+
+1. `make outdated`: a look at what's behind, and whether anything is urgent (a vulnerability the code reaches can't wait for the month).
+2. `make update`, then `make e2e`. If something breaks, find the package (`git diff frontend/package-lock.json`, `go.mod`), hold it back (an exact version in `package.json`; `go get module@version` for Go) and note why in Plan.md.
+3. Run the app (`make run`) and click through: the tests don't cover Monaco, xterm, dockview and the grid's rendering everywhere.
+4. Commit the safe updates on their own.
+5. What `make outdated` still lists, one change each (a branch, `make test`, `make e2e`, the app), whenever there's time:
+   - Majors (npm's "Latest" beyond "Wanted"), and any `0.x` minor (it may break).
+   - The held ones: the exact versions in `package.json` (Monaco, xterm, dockview, glide-data-grid) and wails. Wails' Go module and `@wailsio/runtime` change together, to the same version (`go get github.com/wailsapp/wails/v3@vX` and `npm install --save-exact @wailsio/runtime@X`).
+   - A new Kubernetes minor: `go get k8s.io/api@v0.X k8s.io/apimachinery@v0.X …`, every `k8s.io/*` module in `go.mod` at once.
+   - Node: `.node-version` should be a supported release, an LTS (even majors). The report says when it's past its end of life. Install that Node locally too.
+   - Actions: the report prints the new `uses:` line (commit and version comment) to paste into the workflow. Read the action's release notes first; a dispatched run of the workflow (Actions → release → Run workflow) tries it without a release.
+   - A newer Go minor: `go` in `go.mod` (and `toolchain`).
+6. A dependency change gets a line in `Changelog.md` only if users notice it (a fixed bug, a security fix in what kubewing does, a new minimum macOS).
+
+Held on purpose:
+
+- `marked` on 4.x: glide-data-grid brings that version anyway, and its lexer is all the release notes need (see Architecture.md).
+- `dompurify` (an override in `package.json`): monaco-editor's, pinned to a fixed version. Raise it when `npm audit` reports it, and drop the override once Monaco brings a newer one itself (`npm ls dompurify`).
+- `npm outdated` lists vitest's "Latest" as 4.x: that's npm's `latest` tag lagging behind 5.x, not a downgrade.
+- `npm audit` fixes that "require `--force`" downgrade a dependency: don't. Note them and wait for the dependency's fix.
 
 ## Releases
 

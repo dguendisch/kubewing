@@ -26,12 +26,21 @@ RELEASE_KEY := $(shell cat build/release-key.pub 2>/dev/null)
 LDFLAGS := -X github.com/dguendisch/kubewing/internal/app.Version=$(VERSION) -X github.com/dguendisch/kubewing/internal/update.PublicKey=$(RELEASE_KEY)
 DIST := bin/kubewing-$(VERSION)-macos-arm64.zip
 
-.PHONY: deps frontend build app dist sign release icon run try-update headless test test-go test-fe e2e golden-update lint
+.PHONY: deps outdated update frontend build app dist sign release icon run try-update headless test test-go test-fe e2e golden-update lint
 
 deps:
 	go mod download all
 	cd frontend && npm install
 	cd frontend && ./node_modules/.bin/playwright install chromium
+
+# The monthly dependency routine (Development.md, Dependencies; scripts/deps.sh). Both need network.
+# outdated only reports (modules, toolchains, actions, vulnerabilities); update takes the safe part
+# (minors and patches, k8s.io within its minor, wails held, npm releases older than AGE=7 days) and tests it.
+outdated:
+	scripts/deps.sh outdated
+
+update:
+	AGE='$(AGE)' scripts/deps.sh update
 
 frontend:
 	cd frontend && ./node_modules/.bin/tsc -b && ./node_modules/.bin/vite build --mode production
