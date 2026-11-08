@@ -143,6 +143,12 @@ func (a *App) EditApply(token, session, yaml string) error {
 	return a.svc.EditApply(token, session, yaml)
 }
 func (a *App) EditClose(session string) { a.svc.EditClose(session) }
+func (a *App) EditDecode(req view.EditDecodeRequest) view.EditDecoded {
+	return a.svc.EditDecode(req)
+}
+func (a *App) EditEncode(req view.EditEncodeRequest) (string, error) {
+	return a.svc.EditEncode(req)
+}
 func (a *App) Describe(pane, key string) (bridge.DescribeResult, error) {
 	return a.svc.Describe(pane, key)
 }

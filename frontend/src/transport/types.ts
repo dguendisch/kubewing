@@ -106,6 +106,45 @@ export interface DecodeRequest {
   levels: DecodeLevel[];
 }
 
+/** Mirrors view.EditDecodeRequest: a field of an editor's text (the object's YAML, or a level's decoded text) to edit decoded. */
+export interface EditDecodeRequest {
+  text: string;
+  language: "yaml" | "json";
+  /** The field's line (0-based) while path is unset. */
+  line: number;
+  path?: PathStep[];
+  doc?: number;
+  /** null: detect the chain. */
+  steps: string[] | null;
+  /** text is the object's YAML (a Secret's data is base64 by definition). */
+  object?: boolean;
+}
+
+/** Mirrors view.EditDecoded: the field decoded for editing, or why it can't be. */
+export interface EditDecoded {
+  path: PathStep[];
+  doc: number;
+  label: string;
+  steps: string[];
+  kind: "yaml" | "json" | "pem" | "text" | "";
+  text: string;
+  language: "yaml" | "json" | "plaintext" | "";
+  compact?: boolean;
+  refused?: string;
+}
+
+/** Mirrors view.EditEncodeRequest: an edited level (value) put back into the text above, as it was encoded in opened. */
+export interface EditEncodeRequest {
+  text: string;
+  opened: string;
+  language: "yaml" | "json";
+  path: PathStep[];
+  doc?: number;
+  steps: string[];
+  object?: boolean;
+  value: string;
+}
+
 /** Mirrors view.Decoded: the last level's field decoded (and, for a diff, the version before's). */
 export interface Decoded {
   levels: DecodeLevel[];
@@ -965,6 +1004,10 @@ export interface Transport {
   /** Writes a prepared edit (the same patch editCheck dry-ran). */
   editApply(token: string, session: string, yaml: string): Promise<void>;
   editClose(session: string): Promise<void>;
+  /** A field of an editor's text decoded for editing (⌘E); stateless. */
+  editDecode(req: EditDecodeRequest): Promise<EditDecoded>;
+  /** An edited decoded level encoded back into the text above it; throws if it can't be (broken JSON …). */
+  editEncode(req: EditEncodeRequest): Promise<string>;
   /** Identity and capabilities of a row (context menu, port-forward defaults). */
   rowInfo(pane: string, key: string): Promise<RowInfo>;
   /** A row's position in the pane's current order (-1 = not shown). */

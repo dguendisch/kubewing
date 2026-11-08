@@ -63,6 +63,7 @@ export type CommandId =
   | "detail.toggleWrap"
   | "detail.toggleBlame"
   | "detail.decode"
+  | "edit.decode"
   | "diff.next"
   | "diff.prev"
   | "diff.older"
@@ -160,7 +161,7 @@ export const commandIds: readonly CommandId[] = [
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
-  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "update.check", "edit.submit", "edit.back",
+  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "update.check", "edit.submit", "edit.back", "edit.decode",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "view.toggleMetrics", "view.toggleAllocation", "history.toggleRecording",
   "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",
@@ -345,6 +346,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Enter", command: "edit.submit", when: ["edit", "editpreview"] },
   { key: "Enter", command: "edit.submit", when: ["editpreview"] },
   { key: "Escape", command: "edit.back", when: ["edit", "editpreview"] },
+  // the value at the cursor decoded, edited in a level of its own; esc encodes it back (⏎ is a newline here)
+  { key: "Meta+E", command: "edit.decode", when: ["edit"] },
   { key: "W", command: "detail.toggleWrap", when: ["editpreview"] },
   { key: "B", command: "object.debug", when: ["table"] },
   // from anywhere (also a terminal pane): the node is prefilled from the selected row, if any

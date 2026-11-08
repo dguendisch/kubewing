@@ -1,5 +1,5 @@
 import type { CommandId, FocusContext } from "../keys/keymap";
-import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, DecodeLevel, EditPreview, FieldHistory, JumpTarget, LogsScope, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
+import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, DecodeLevel, EditDecoded, EditPreview, FieldHistory, JumpTarget, LogsScope, MetaChanges, OpsPodDefaults, OpsPodOptions, Pending } from "../transport/types";
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import type { Place } from "../editor/Viewer";
@@ -328,6 +328,23 @@ export interface EditState {
   error?: string;
   /** Esc with changes asks once; the second Esc discards. */
   discarding?: boolean;
+  /** Values decoded for editing (⌘E), each in the one before (the first in yaml); the last is shown. */
+  levels?: EditLevel[];
+}
+
+/**
+ * A decoded value being edited (⌘E in the editor): Esc encodes it back into
+ * the text above (the object's, or the level before's) with the chain it was
+ * decoded with. Go keeps nothing: the encode sends the texts again.
+ */
+export interface EditLevel {
+  /** The field and how it was decoded (Go's answer). */
+  field: EditDecoded;
+  /** The text above as it was when this level opened (the field's encoded value is read from it). */
+  above: string;
+  /** As decoded, for "changed". */
+  opened: string;
+  text: string;
 }
 
 export type FilterField = "grep" | "labels" | "cel";
@@ -409,8 +426,44 @@ export function paneFocus(s: UIState): UIState {
 /** An object view's focus context: its viewer, or the editor (or the editor's dry-run diff). */
 const objectFocus = (o: ObjectView): FocusContext => (o.edit ? (o.edit.preview ? "editpreview" : "edit") : "detail");
 
-/** The edit in a pane's object view has changes not written yet. */
-export const unsaved = (p: PaneState | undefined) => !!p?.object?.edit && p.object.edit.yaml !== p.object.edit.opened;
+/** The edit in a pane's object view has changes not written yet (in the object's text, or a decoded level's). */
+export const unsaved = (p: PaneState | undefined) => {
+  const e = p?.object?.edit;
+  return !!e && (e.yaml !== e.opened || !!e.levels?.some((l) => l.text !== l.opened));
+};
+
+/** The editor's shown text: the last decoded level's, else the object's. */
+export const editText = (e: EditState) => e.levels?.at(-1)?.text ?? e.yaml;
+
+/** ⌘E: a decoded level on top of the editor. */
+export function pushEditLevel(s: UIState, paneId: string, session: string, l: EditLevel): UIState {
+  return setEdit(s, paneId, (e) => (e.session !== session ? e : { ...e, levels: [...(e.levels ?? []), l], error: undefined, discarding: false }));
+}
+
+/** The text of the editor's shown level as typed (the last level's, else the object's). */
+export function setEditText(s: UIState, paneId: string, text: string): UIState {
+  return setEdit(s, paneId, (e) => {
+    const ls = e.levels;
+    if (!ls?.length) return { ...e, yaml: text, discarding: false };
+    return { ...e, levels: [...ls.slice(0, -1), { ...ls.at(-1)!, text }], discarding: false };
+  });
+}
+
+/**
+ * Esc in a decoded level: it's gone, its text encoded into the level above
+ * (above: that text as encoded by Go). Only if the levels are still the
+ * ones encoded (n deep, the last one's text as sent); else unchanged.
+ */
+export function popEditLevel(s: UIState, paneId: string, session: string, n: number, sent: string, above: string): UIState {
+  return setEdit(s, paneId, (e) => {
+    const ls = e.levels;
+    if (e.session !== session || ls?.length !== n || ls.at(-1)!.text !== sent) return e;
+    const rest = ls.slice(0, -1);
+    if (!rest.length) return { ...e, levels: undefined, yaml: above, error: undefined };
+    return { ...e, levels: [...rest.slice(0, -1), { ...rest.at(-1)!, text: above }], error: undefined };
+  });
+}
+
 
 /** What the history keeps of an object view: not its editor (the session is gone once it's left). */
 const kept = (o: ObjectView | undefined): ObjectView | undefined => {

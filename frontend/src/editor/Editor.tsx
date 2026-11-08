@@ -3,13 +3,22 @@ import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
 import { useUI } from "../store/store";
 import { showBlame, type BlameOf, type BlameState } from "./blame";
+import { changedRange } from "./changed";
 import { claimFocus } from "./focus";
 import { loadMonaco } from "./load";
-import { common, cursorOf, cursorPoint, defineTheme, goTo, markRefs, type FieldRefs, type Place, type ViewState } from "./Viewer";
+import { addActions, common, cursorOf, cursorPoint, defineTheme, goTo, markRefs, type ContextAction, type FieldRefs, type Place, type ViewState } from "./Viewer";
 
 interface Props {
   /** The text it opens with; later changes of the prop don't reset what was typed. */
   initial: string;
+  /**
+   * The text set from outside (a decoded level encoded back into it): when it
+   * changes and differs from the editor's, it's applied as one edit (⌘Z takes
+   * it back), only the lines that differ replaced.
+   */
+  value?: string;
+  /** The language of the text (YAML unless set). */
+  language?: "yaml" | "json" | "plaintext";
   onChange: (text: string) => void;
   /** ⌘⏎ in the editor (⏎ is a newline here). */
   onSubmit?: () => void;
@@ -32,6 +41,8 @@ interface Props {
   blame?: BlameOf;
   /** What the blame found: no managedFields, or why the text can't be blamed (it doesn't parse). */
   onBlame?: (s: BlameState) => void;
+  /** Right-click menu entries (set when it opens). */
+  contextActions?: ContextAction[];
 }
 
 /**
@@ -40,7 +51,7 @@ interface Props {
  * Monaco's find widget is open. ⌘D deletes the line (Monaco's own ⌘⇧K too),
  * ⌥↑/⌥↓ move it, ⌘/ comments it in or out.
  */
-export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus = true, onFocus, slot, refs, at, viewState, blame, onBlame }: Props) {
+export function Editor({ initial, value, language = "yaml", onChange, onSubmit, onSave, label, autoFocus = true, onFocus, slot, refs, at, viewState, blame, onBlame, contextActions }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const themeGen = useConfig((s) => s.themeGen);
   const cb = useRef({ onChange, onSubmit, onSave, onFocus, refs, onBlame });
@@ -64,7 +75,7 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
     void loadMonaco().then((m) => {
       if (disposed || !host.current) return;
       defineTheme(m);
-      const model = m.editor.createModel(initial, "yaml");
+      const model = m.editor.createModel(initial, language);
       const ed = m.editor.create(host.current, { ...common, readOnly: false, domReadOnly: false, renderLineHighlight: "line", stickyScroll: { enabled: false }, tabSize: 2, model, ariaLabel: label });
       editor.current = ed;
       if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
@@ -99,7 +110,9 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
       if (onSave) ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyS, () => cb.current.onSave?.());
       ed.addCommand(m.KeyMod.CtrlCmd | m.KeyCode.KeyD, () => ed.trigger("keyboard", "editor.action.deleteLines", null));
       setBlaming.current?.();
+      const acts = addActions(ed, contextActions);
       dispose = () => {
+        for (const a of acts) a.dispose();
         blamed.current?.dispose();
         blamed.current = undefined;
         if (viewState) viewState.state = ed.saveViewState();
@@ -130,8 +143,21 @@ export function Editor({ initial, onChange, onSubmit, onSave, label, autoFocus =
   useEffect(() => setBlaming.current?.(), [blaming, blame?.serverId, blame?.key]);
 
   useEffect(() => {
+    const model = editor.current?.getModel();
+    if (value === undefined || !model) return;
+    const now = model.getValue();
+    if (now === value) return;
+    const r = changedRange(now, value);
+    const ed = editor.current!;
+    ed.pushUndoStop();
+    ed.executeEdits("kubewing", [{ range: { startLineNumber: r.from + 1, startColumn: 1, endLineNumber: r.to + 1, endColumn: model.getLineMaxColumn(r.to + 1) }, text: r.text }]);
+    ed.pushUndoStop();
+  }, [value]);
+
+  useEffect(() => {
     if (themeGen) void loadMonaco().then(defineTheme);
   }, [themeGen]);
 
   return <div ref={host} data-editor="yaml" className="h-full w-full" />;
 }
+

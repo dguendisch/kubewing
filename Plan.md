@@ -15,6 +15,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 - **Time travel:** pinning objects or views against eviction (within budget); linking the moment of splits (pods and nodes at the same time).
 - **Logs:** a whole-pane tail for non-pod panes (the union of their pods); previous-container logs (`--previous`); saving a tail to a file; an optional timestamp column.
+- **Editing decoded values (`⌘E`):** a readable preview: `EditCheck` also returns decoded diffs of the fields edited through a level (both sides with the same chain), offered beside the object diff (today it's one encoded value against another); blame and `⌘J` inside a decoded level; `Esc` from the preview back to the level it was submitted from (today: the object's editor).
 - **Decode:** a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
 - **Marked rows:** exec into several pods; input typed once to all debug panes of a batch (like iTerm's broadcast); edit of many objects (one YAML stream).
 - **Edit:** server-side apply (field manager `kubewing`, conflicts listed with their owners, force); recreate for immutable fields (delete + create, confirmed as delete); applying from files (see Scratch apply).
@@ -49,7 +50,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 ## P3 — "Operator power" (v1.0)
 
 1. RBAC views
-1. **Encoders:** like decoders, for editing: `⏎` on a value in the editor shows e.g. the base64-decoded text → edit it → applying base64-encodes it back into the YAML, where it can be applied. Same for further levels (e.g. brotli).
 1. From a node's describe output, recognize the pods listed there and allow navigating to them, with all pod operations (via the context menu)
 1. **Session recording + saving** — save a session (not every watch diff, but everything else displayed) for later forensics, when one doesn't recall what was actually done on a cluster
 1. **Persistent history** — on-disk history buffer (hours, survives restarts); requires secret encryption/exclusion first.

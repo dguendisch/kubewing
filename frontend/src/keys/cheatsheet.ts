@@ -155,7 +155,8 @@ const sections: { title: string; rows: Row[] }[] = [
     title: "edit",
     rows: [
       row("preview the change (server dry run), then apply", "edit.submit"),
-      row("back to editing / close", "edit.back"),
+      row("back to editing / close; in a decoded value: encode it back, up a level", "edit.back"),
+      row("edit the value at the cursor decoded (base64, brotli, gzip …); in it: deeper", "edit.decode"),
       rowIn("edit", "jump from the field at the cursor (into a split to the right; ⌘-click a marked value too)", "object.jump"),
     ],
   },

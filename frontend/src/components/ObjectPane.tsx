@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "zustand";
-import { dispatch, flash, jumpToField } from "../commands";
+import { dispatch, editSlot, editUp, flash, jumpToField } from "../commands";
 import { Editor } from "../editor/Editor";
 import type { BlameState } from "../editor/blame";
 import { setDiffRange, useDiffNavOf, viewSlot, Viewer, type ContextAction, type FieldRefs, type ViewState } from "../editor/Viewer";
@@ -135,6 +135,40 @@ function Breadcrumb({ pane, o, title }: { pane: S.PaneState; o: S.ObjectView; ti
           </button>
         </span>
       ))}
+    </nav>
+  );
+}
+
+/**
+ * The decoded levels being edited: each one's field and chain (base64 →
+ * brotli · yaml); a click on one goes back up to it, encoding the levels
+ * below into it as Esc does.
+ */
+function EditLevels({ pane, levels }: { pane: S.PaneState; levels: S.EditLevel[] }) {
+  const crumb = "min-w-0 truncate rounded px-1 font-mono hover:bg-bg-hover hover:text-fg";
+  const up = (to: number) => (ev: React.MouseEvent) => {
+    ev.preventDefault(); // the editor keeps the focus
+    void editUp(pane.id, to);
+  };
+  const last = levels.at(-1)!;
+  const chain = [...last.field.steps, last.field.kind].filter(Boolean).join(" → ");
+  return (
+    <nav aria-label="edit levels" className="flex min-w-0 shrink items-center gap-0.5">
+      <button type="button" className={crumb} title="back to the object, the values encoded into it" onMouseDown={up(0)}>
+        object
+      </button>
+      {levels.map((l, i) => (
+        <span key={i} className="flex min-w-0 items-center gap-0.5">
+          <span aria-hidden>›</span>
+          <button type="button" className={`${crumb} ${i === levels.length - 1 ? "text-fg" : ""}`} title={`${l.field.label}: ${[...l.field.steps, l.field.kind].join(" → ")}`} onMouseDown={up(i + 1)}>
+            {l.field.label}
+          </button>
+        </span>
+      ))}
+      <span aria-label="edit chain" className="ml-2 shrink-0 font-mono text-fg-muted">
+        {chain}
+        {last.text !== last.opened ? " · changed" : ""}
+      </span>
     </nav>
   );
 }
@@ -447,6 +481,7 @@ function DecodeView({ pane, o, d, focused }: { pane: S.PaneState; o: S.ObjectVie
   const views = useRef(new Map<string, ViewState>());
   const bound = useKey("detail.decode");
   const key = bound ? prettyKey(bound) : "";
+  const editKey = useKey("object.edit");
 
   useEffect(() => {
     if (!serverId) return;
@@ -509,6 +544,7 @@ function DecodeView({ pane, o, d, focused }: { pane: S.PaneState; o: S.ObjectVie
     d.diff ? "j/k: changes" : "",
     d.diff && info ? "[/]: versions" : "",
     !d.diff && key && fielded(loaded) ? `${key}: decode deeper` : "",
+    !d.diff && editKey ? `${prettyKey(editKey)}: edit` : "",
     "⇧⏎: split",
     "w: wrap",
     d.levels.length > 1 ? "esc: up" : "esc: back",
@@ -611,36 +647,72 @@ function EditView({ pane, e, focused }: { pane: S.PaneState; e: S.EditState; foc
   const focus = () => setUI((s) => S.focusPane(s, pane.id));
   const refs = useFieldRefs(pane);
   const blameKey = useKey("detail.toggleBlame");
+  const decodeKey = useKey("edit.decode");
   const blaming = useUI((s) => !!s.blame);
   const [blamed, setBlamed] = useState<BlameState>({});
+  const levels = e.levels ?? [];
+  const top = levels.at(-1);
+  const changed = S.unsaved(pane);
+  const decodeHint = decodeKey ? `${prettyKey(decodeKey)}: edit decoded` : "";
+  const hints = preview
+    ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing"
+    : top
+      ? [`⌘S / ⌘⏎: preview`, top.field.language === "plaintext" ? "" : decodeHint ? `${decodeHint} (deeper)` : "", "esc: encode back, up"].filter(Boolean).join(" · ")
+      : [`⌘S / ⌘⏎: preview`, decodeHint, "⌘J: jump (split right)", blameKey ? `${prettyKey(blameKey)}: blame` : "", "esc: close"].filter(Boolean).join(" · ");
+  const decodeAction: ContextAction[] | undefined = decodeKey && (!top || top.field.language !== "plaintext") ? [{ id: "kubewing.editDecoded", label: "edit decoded value", key: prettyKey(decodeKey), run: () => dispatch("edit.decode") }] : undefined;
   return (
     <div role="region" aria-label="edit object" className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 whitespace-nowrap border-b border-border px-2 py-0.5 text-fg-muted">
         <span className="text-fg">{e.title}</span>
-        <span>{preview ? "preview (server dry run: current → after the edit)" : e.yaml !== e.opened ? "edit (changed)" : "edit"}</span>
-        {blaming && !preview ? <BlameNote state={blamed} editing /> : null}
+        <span>{preview ? "preview (server dry run: current → after the edit)" : changed ? "edit (changed)" : "edit"}</span>
+        {top && !preview ? <EditLevels pane={pane} levels={levels} /> : null}
+        {blaming && !preview && !top ? <BlameNote state={blamed} editing /> : null}
         {preview ? <DiffNav paneId={pane.id} slot={`${pane.id}/edit`} /> : null}
-        <span className="ml-auto min-w-0 truncate">{preview ? "⏎ / ⌘⏎: apply · j/k: changes · w: wrap · esc: back to editing" : `⌘S / ⌘⏎: preview · ⌘J: jump (split right)${blameKey ? ` · ${prettyKey(blameKey)}: blame` : ""} · esc: close`}</span>
+        <span className="ml-auto min-w-0 truncate" title={hints}>
+          {hints}
+        </span>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="relative min-h-0 flex-1">
         {preview ? (
           <Viewer key="edit-preview" label="edit preview" original={preview.prevNorm} value={preview.curNorm} slot={`${pane.id}/edit`} autoFocus={focused} onFocus={focus} />
         ) : (
-          // the key remounts the editor with the current text when it comes back from the preview
-          <Editor
-            key={`edit-${e.session}`}
-            label="edit YAML"
-            initial={e.yaml}
-            at={e.at}
-            viewState={view.current.state}
-            autoFocus={focused}
-            onFocus={focus}
-            slot={`${pane.id}/edit`}
-            refs={refs}
-            blame={pane.serverId ? { serverId: pane.serverId, key: e.key } : undefined}
-            onBlame={setBlamed}
-            onChange={(yaml) => setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, yaml, discarding: false })))}
-          />
+          <>
+            {/* the levels below the shown one stay mounted: an encoded level goes into them as an edit ⌘Z takes back */}
+            <div className={top ? "hidden" : "h-full"}>
+              {/* the key remounts the editor with the current text when it comes back from the preview */}
+              <Editor
+                key={`edit-${e.session}`}
+                label="edit YAML"
+                initial={e.yaml}
+                value={e.yaml}
+                at={e.at}
+                viewState={view.current.state}
+                autoFocus={focused && !top}
+                onFocus={focus}
+                slot={`${pane.id}/edit`}
+                refs={refs}
+                blame={pane.serverId ? { serverId: pane.serverId, key: e.key } : undefined}
+                onBlame={setBlamed}
+                contextActions={decodeAction}
+                onChange={(yaml) => setUI((x) => S.setEditText(x, pane.id, yaml))}
+              />
+            </div>
+            {levels.map((l, i) => (
+              <div key={`level-${e.session}-${i}-${JSON.stringify(l.field.path)}-${l.field.doc}`} className={i === levels.length - 1 ? "h-full" : "hidden"} data-edit-level={i + 1}>
+                <Editor
+                  label="edit decoded value"
+                  language={l.field.language === "" ? "plaintext" : l.field.language}
+                  initial={l.text}
+                  value={l.text}
+                  autoFocus={focused && i === levels.length - 1}
+                  onFocus={focus}
+                  slot={editSlot(pane.id, i + 1)}
+                  contextActions={i === levels.length - 1 ? decodeAction : undefined}
+                  onChange={(text) => setUI((x) => (x.panes[pane.id]?.object?.edit?.levels?.length === i + 1 ? S.setEditText(x, pane.id, text) : x))}
+                />
+              </div>
+            ))}
+          </>
         )}
       </div>
       {e.discarding ? (

@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, Batch, ClusterEntry, ColumnSpec, EditableFile, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, LogsScope, OpsPodOptions, Pending, PodRef } from "./transport/types";
+import type { ActionKind, Batch, ClusterEntry, ColumnSpec, EditableFile, EditDecoded, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, LogsScope, OpsPodOptions, Pending, PodRef } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -207,10 +207,14 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void openEdit(true);
     case "edit.submit":
       return void submitEdit();
+    case "edit.decode":
+      return void editDecode(pane);
     case "edit.back": {
       const e = pane.object?.edit;
       if (!e) return;
       if (e.preview) return setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, preview: undefined })));
+      // a decoded level: encoded back into the one above, its changes kept
+      if (e.levels?.length) return void editUp(pane.id, e.levels.length - 1);
       // changes are work: the first esc only asks
       if (e.yaml !== e.opened && !e.discarding) return setUI((x) => S.setEdit(x, pane.id, (d) => ({ ...d, discarding: true })));
       return setUI((x) => closeEditor(x, pane.id)); // the session is closed once no pane holds it (store)
@@ -378,7 +382,7 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
 }
 
 /** Commands of the object view that don't apply to a decoded value (its keys are the object view's). */
-const decodeBlocked = new Set<CommandId>(["object.describe", "object.edit", "object.jump", "object.events", "detail.showYaml", "detail.toggleDiff", "detail.refresh", "filter.fromDetail", "filter.fromDetailNot", "travel.field"]);
+const decodeBlocked = new Set<CommandId>(["object.describe", "object.jump", "object.events", "detail.showYaml", "detail.toggleDiff", "detail.refresh", "filter.fromDetail", "filter.fromDetailNot", "travel.field"]);
 
 /** Row menu entries ⇧⏎ opens in a split: the views of the object. */
 const splitViews = new Map<CommandId, Pick<S.ObjectView, "view" | "diff">>([
@@ -776,7 +780,11 @@ async function proceed(paneId: string, key: string | undefined, pending: Pending
 async function openEdit(inSplit = false) {
   const s = useUI.getState();
   const pane = S.focusedPane(s);
-  if (pane.object?.edit || (pane.object?.decode && !inSplit)) return;
+  if (pane.object?.edit) return;
+  // e in a decoded value: the editor, down to the same value (⇧E: the object's editor in a split, as before)
+  const via = !inSplit ? pane.object?.decode : undefined;
+  if (via) return void openEditDecoded(pane, via);
+  if (pane.object?.decode && !inSplit) return;
   const key = pane.object?.key ?? selectedKey(pane);
   const before = pane.object;
   if (!pane.serverId || !key) return;
@@ -796,6 +804,46 @@ async function openEdit(inSplit = false) {
   }
 }
 
+/**
+ * e in a decoded value: the object read fresh into the editor (in place of
+ * the decoded value), then each decoded level opened in it for editing by
+ * its field, as far as they can be edited (a JWT, binary or a level never
+ * resolved stops there, saying why).
+ */
+async function openEditDecoded(pane: S.PaneState, d: S.DecodeState) {
+  const o = pane.object!;
+  if (!pane.serverId) return;
+  if (d.diff) return flash(pane.id, "the decoded diff can't be edited: esc to the YAML, then e", true);
+  const paneId = pane.id;
+  try {
+    const [es, info] = await Promise.all([bridge().editOpen(pane.serverId, o.key), bridge().rowInfo(pane.serverId, o.key)]);
+    const levels: S.EditLevel[] = [];
+    let text = es.yaml;
+    let why = "";
+    for (const l of d.levels) {
+      if (!l.path) break;
+      const top = levels.at(-1);
+      const language = top ? top.field.language : "yaml";
+      if (language !== "yaml" && language !== "json") break;
+      const r = await bridge().editDecode({ text, language, line: 0, path: l.path, doc: l.doc, steps: null, object: !top });
+      if (r.refused) {
+        why = r.refused;
+        break;
+      }
+      levels.push({ field: r, above: text, opened: r.text, text: r.text });
+      text = r.text;
+    }
+    const now = useUI.getState().panes[paneId];
+    if (!now?.object || now.object.key !== o.key || now.object.edit || now.object.decode !== d) return void bridge().editClose(es.session).catch(() => {});
+    const edit: S.EditState = { session: es.session, key: o.key, title: `${info.kind} ${info.name}`, opened: es.yaml, yaml: es.yaml, levels: levels.length ? levels : undefined };
+    // the decoded value closes: Esc from the editor goes back to the object's YAML
+    setUI((x) => S.setObject(x, paneId, (v) => ({ ...v, decode: undefined, edit, title: v.title ?? info.name })));
+    if (why) flash(paneId, why, true);
+  } catch (e) {
+    flash(paneId, errorText(e), true);
+  }
+}
+
 /** The object view's cursor (its YAML or diff), on the same line of the YAML opened for editing; none from the table, a decoded value or describe. */
 function carriedPlace(pane: S.PaneState, yaml: string): Place | undefined {
   const o = pane.object;
@@ -805,6 +853,69 @@ function carriedPlace(pane: S.PaneState, yaml: string): Place | undefined {
   if (!cur.text || !at) return undefined;
   const line = sameLine(cur.text, at.line, yaml);
   return { ...at, line, col: line === at.line && cur.text === yaml ? at.col : 0 };
+}
+
+/** The cursor slot of an editor's level: 0 the object's YAML, n the n-th decoded level. */
+export const editSlot = (paneId: string, level: number) => (level === 0 ? `${paneId}/edit` : `${paneId}/edit/${level}`);
+
+/**
+ * ⌘E in the editor: the value on the cursor's line decoded (base64, brotli,
+ * gzip …) into a level of its own, edited there; in a decoded YAML or JSON
+ * level, a level deeper. What can't be edited decoded (a map, binary, a JWT,
+ * plain text) says why in the status line.
+ */
+async function editDecode(pane: S.PaneState) {
+  const e = pane.object?.edit;
+  if (!e || e.preview) return;
+  const levels = e.levels ?? [];
+  const top = levels.at(-1);
+  if (top && top.field.language !== "yaml" && top.field.language !== "json") return flash(pane.id, "the decoded value isn't YAML or JSON: no field in it to decode", true);
+  const cur = cursorOf(editSlot(pane.id, levels.length));
+  const text = S.editText(e);
+  const language = top ? (top.field.language as "yaml" | "json") : "yaml";
+  const r = await bridge()
+    .editDecode({ text, language, line: cur.line, steps: null, object: !top })
+    .catch((err: unknown) => ({ refused: errorText(err) }) as EditDecoded);
+  if (r.refused) return flash(pane.id, r.refused, true);
+  const level: S.EditLevel = { field: r, above: text, opened: r.text, text: r.text };
+  // only onto the levels it was decoded from, with their text as sent
+  setUI((x) => {
+    const d = x.panes[pane.id]?.object?.edit;
+    if (d?.session !== e.session || (d.levels?.length ?? 0) !== levels.length || S.editText(d) !== text || d.preview) return x;
+    return S.pushEditLevel(x, pane.id, e.session, level);
+  });
+}
+
+/**
+ * Esc in a decoded level (or a click on a level above it): each level down
+ * to `to` (0: the object) encoded back into the one above, its changes kept.
+ * One that can't be (JSON that no longer parses) stays shown, with why. True
+ * if it got there.
+ */
+export async function editUp(paneId: string, to: number): Promise<boolean> {
+  for (;;) {
+    const e = useUI.getState().panes[paneId]?.object?.edit;
+    const ls = e?.levels;
+    if (!e || !ls?.length || ls.length <= to) return true;
+    const n = ls.length;
+    const l = ls[n - 1]!;
+    const above = n > 1 ? ls[n - 2]! : undefined;
+    const text = above ? above.text : e.yaml;
+    const language = above ? (above.field.language as "yaml" | "json") : "yaml";
+    let out: string;
+    try {
+      out = l.text === l.opened ? text : await bridge().editEncode({ text, opened: l.above, language, path: l.field.path, doc: l.field.doc, steps: l.field.steps, object: !above, value: l.text });
+    } catch (err) {
+      setUI((x) => S.setEdit(x, paneId, (d) => (d.session === e.session ? { ...d, error: `can't encode ${l.field.label} back: ${errorText(err)}` } : d)));
+      return false;
+    }
+    const before = useUI.getState();
+    const next = S.popEditLevel(before, paneId, e.session, n, l.text, out);
+    // changed meanwhile (typed into, another level): stop there
+    if (next === before) return false;
+    // the editor above stayed mounted: its cursor is where it was
+    setUI(() => next);
+  }
 }
 
 /** A failed write: back in the pane's editor (not its preview), with why. */
@@ -819,7 +930,11 @@ function reopenEdit(paneId: string, edit: S.EditState) {
  * context's rule asks for it.
  */
 async function submitEdit() {
-  const pane = S.focusedPane(useUI.getState());
+  let pane = S.focusedPane(useUI.getState());
+  if (!pane.object?.edit || !pane.serverId) return;
+  // decoded levels are encoded into the object first: the preview is the object's
+  if (pane.object.edit.levels?.length && !(await editUp(pane.id, 0))) return;
+  pane = useUI.getState().panes[pane.id] ?? pane;
   const e = pane.object?.edit;
   if (!e || !pane.serverId) return;
   const paneId = pane.id;

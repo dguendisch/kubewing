@@ -218,7 +218,7 @@ export function markRefs(m: MonacoApi, ed: Monaco.editor.ICodeEditor, refs: Fiel
 /** A viewer's cursor and scroll position (see Props.viewState). */
 export type ViewState = { state?: Monaco.editor.ICodeEditorViewState | Monaco.editor.IDiffEditorViewState | null };
 
-function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAction[] | undefined) {
+export function addActions(ed: Monaco.editor.IStandaloneCodeEditor, actions: ContextAction[] | undefined) {
   return (actions ?? []).map((a, i) =>
     ed.addAction({ id: a.id, label: a.key ? `${a.label} (${a.key})` : a.label, contextMenuGroupId: "kubewing", contextMenuOrder: i, run: a.run }),
   );

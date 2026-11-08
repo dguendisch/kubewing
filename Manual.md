@@ -501,11 +501,31 @@ What's sent:
 
 Anything refused (invalid YAML, a webhook, a conflict, "no changes") shows below the editor with your text kept.
 
-The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent, `⌥←`/`⌥→` a word, `⌃←`/`⌃→` fold/unfold). Only `Esc`, `⌘S`, `⌘⏎`, `⌘J` and `⌘B` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
+The editor is **modal**: keys go to the editor (`⌘D` deletes the line, `⌥↑`/`⌥↓` move it, `⌥⇧↑`/`⌥⇧↓` copy it, `⌘[`/`⌘]` indent, `⌥←`/`⌥→` a word, `⌃←`/`⌃→` fold/unfold). Only `Esc`, `⌘S`, `⌘⏎`, `⌘E`, `⌘J` and `⌘B` reach the app, plus the keys that move focus to another pane or tab, and `⌘⇧⏎` to maximize the pane. An edit left that way stays in its pane, marked **● unsaved**, and closing that pane or tab asks first. `Esc` with changes asks once; a second `Esc` discards them.
 
 `⌘B` shows who set each line beside the text, as `b` does in the YAML view (see [Who set this?](#who-set-this-b)).
 
 Read-only contexts refuse `e` before the editor opens. `confirm: [edit]` in a context rule asks after the preview.
+
+### Editing decoded values: `⌘E`
+
+`⌘E` in the editor (or **edit decoded value** in its right-click menu) decodes the value at the cursor, as `⏎` does in the YAML view (see [Decoding values](#8-decoding-values)), and opens it for editing in place of the object. When you're done, it's encoded back the way it was encoded, so a secret's password, a managed resource's brotli manifests or a kubeconfig inside them can be edited as text.
+
+- The header shows the levels (`object › data["data.yaml.br"] › doc 2: data.kubeconfig`) and how the value is encoded (`base64 → brotli → yaml`), with **changed** once you've edited it.
+- `⌘E` in decoded YAML or JSON goes a level **deeper**.
+- `Esc` goes **up** a level and keeps your changes: the value is encoded back into the level above (or the object). That's one edit there, so `⌘Z` takes it back. A click on a level in the header goes up to it the same way.
+- `⌘S` / `⌘⏎` encodes every level back into the object and previews the edit as usual (the preview shows the encoded value).
+- `e` in a decoded value (the YAML view's `⏎`) opens the editor at that value.
+
+What you edit:
+
+- Text, YAML, and certificates and keys as their PEM text.
+- JSON that was on one line is shown indented and written back on one line again.
+- A YAML or JSON value that isn't encoded (a config map's `config.yaml: |`) can be edited this way too, with YAML or JSON colors; it's written back as a block (`|`).
+- The encoding stays as it was: base64's alphabet, padding, line wrapping and final line break; gzip and brotli are compressed again. A value you didn't change keeps its exact bytes.
+- Only that value changes in the text above: its other lines, comments and formatting stay.
+
+Binary values and JWTs (whose signature an edit would break) can't be edited decoded; the status line says why. If an edited value can't be encoded (JSON that no longer parses), you stay on its level, with why below the editor.
 
 ---
 
@@ -968,7 +988,7 @@ The most used keys:
 | Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
-| YAML view | `⏎` decode · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
+| YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |
 | History | `⌘←` back · `⌘→` forward |

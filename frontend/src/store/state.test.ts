@@ -1169,6 +1169,31 @@ describe("object views (⏎ in place, ⇧⏎ in a split)", () => {
     expect(s.panes.v1!.back!.at(-1)!.object).toEqual({ key: "u1", view: "yaml", split: false, from: undefined, follow: undefined, followOff: undefined });
   });
 
+  it("decoded levels stack on the editor: typed into the shown one, unsaved counts each, popped into the one above", () => {
+    const field = { path: [{ key: "data" }, { key: "pw" }], doc: 0, label: "data.pw", steps: ["base64"], kind: "text" as const, text: "old", language: "plaintext" as const };
+    const edit: S.EditState = { session: "e1", key: "u1", title: "Secret s", opened: "a", yaml: "a" };
+    let s = inPlace({ edit, viaEdit: true });
+    expect(S.unsaved(s.panes.v1)).toBe(false);
+    s = apply(s, (x) => S.pushEditLevel(x, "v1", "e1", { field, above: "a", opened: "old", text: "old" }));
+    expect(S.editText(s.panes.v1!.object!.edit!)).toBe("old");
+    // another session's level isn't pushed
+    expect(apply(s, (x) => S.pushEditLevel(x, "v1", "e2", { field, above: "a", opened: "x", text: "x" })).panes.v1!.object!.edit!.levels).toHaveLength(1);
+    s = apply(s, (x) => S.setEditText(x, "v1", "new"));
+    expect(s.panes.v1!.object!.edit!.yaml).toBe("a");
+    expect(S.unsaved(s.panes.v1)).toBe(true);
+    // a pop for text that changed meanwhile is dropped
+    expect(apply(s, (x) => S.popEditLevel(x, "v1", "e1", 1, "old", "a2"))).toEqual(s);
+    s = apply(s, (x) => S.popEditLevel(x, "v1", "e1", 1, "new", "a2"));
+    expect(s.panes.v1!.object!.edit).toMatchObject({ yaml: "a2", levels: undefined });
+    expect(s.focus).toBe("edit");
+    // two levels: the inner one goes into the outer one's text
+    s = apply(s, (x) => S.pushEditLevel(x, "v1", "e1", { field, above: "a2", opened: "m", text: "m" }));
+    s = apply(s, (x) => S.pushEditLevel(x, "v1", "e1", { field, above: "m", opened: "k", text: "k2" }));
+    s = apply(s, (x) => S.popEditLevel(x, "v1", "e1", 2, "k2", "m2"));
+    expect(s.panes.v1!.object!.edit!.levels!.map((l) => l.text)).toEqual(["m2"]);
+    expect(s.panes.v1!.object!.edit!.yaml).toBe("a2");
+  });
+
   it("an edit session no pane holds any more is closed; one being confirmed is kept", () => {
     const edit: S.EditState = { session: "e1", key: "u1", title: "Pod web", opened: "a", yaml: "b" };
     // a split never takes the editor along (the session is the pane's it was opened in)

@@ -104,6 +104,8 @@ export function wsTransport(url: string): Transport {
     editCheck: (s, y) => call("EditCheck", s, y),
     editApply: (t, s, y) => call("EditApply", t, s, y),
     editClose: (s) => call("EditClose", s),
+    editDecode: (r) => call("EditDecode", r),
+    editEncode: (r) => call("EditEncode", r),
     rowInfo: (p, k) => call("RowInfo", p, k),
     rowIndex: (p, k) => call("RowIndex", p, k),
     relations: (p, k) => call("Relations", p, k),

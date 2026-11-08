@@ -179,6 +179,15 @@ Who set each line of an object's YAML (`b`, `⌘B` in the editor), as kubectl-bl
 - The decoded diff decodes the field in both versions with the same chain.
 - Out of scope: etcd/auger (protobuf as stored in etcd; kubewing only sees the API server's objects).
 
+### Encoding (editing decoded values)
+
+Editing a decoded value (`⌘E` in the editor) is text editing inside the edit session: the levels are encoded back into the object's YAML before the usual check, preview and merge patch, so the safety model doesn't change.
+
+- **Stateless, from the text as typed.** `view.EditDecode` decodes a field of the editor's text (the object's YAML, or a level's decoded YAML/JSON, one document of it), not of the stored object. `view.EditEncode` takes a level back: the original value is read from the text above as it was when the level opened (`EditLevel.above`), encoded, and set into the text above as it is now. Go keeps nothing; the frontend holds each level's texts (`EditState.levels`).
+- **`decode.Edit` / `decode.Encode`.** Edit gives the bytes the chain leads to, not the decode view's rendering (PEM as text; JWT and binary refused; one-line JSON indented, marked `Compact`). Encode undoes each step in the original's variant (base64 alphabet, padding, wrap width, trailing newline; gzip/brotli at best compression) and checks the round trip. Text still as decoded returns the original value, since compressing again would give other bytes for nothing.
+- **`fieldpath.Replace`** sets a string at a path in YAML/JSON text by replacing only the value's characters: the scalar's span is found from yaml.v3's node position and its style (quoted, plain and its continuation lines, block scalar to its last content line). A multi-line value becomes a literal block at the old block's indentation or the collection's + 2; JSON gets a JSON string. Comments, formatting and key order stay, so the preview diff is the value alone.
+- **The editor stack.** All levels' editors stay mounted, only the top one shown, so the editor above keeps its cursor and undo history. The encoded text reaches it through `Editor`'s `value` prop, applied as one undoable edit over the lines that differ (`changedRange`).
+
 ## Logs
 
 `internal/logs` is the pure tailer; `internal/bridge/logs.go` wires it to a watch and the `kw:logs` batch events; `source.Actor.Logs` (and a tape fake) behind it. A tail has one or more sources, each a pods watch with what picks pods from it (the pane's stages for a whole-pane tail, the owner UID for a workload, names for marked pods). A marked tail has one source for all marked pods (the pane's watch) and one per marked workload/node/namespace (its pods child). Each source keeps its picked set; their union by pod UID is fed to the tailer as a relist (once every source has listed, so no pod is ended as missing meanwhile). A pane per pod is one tail per pod: the same scope narrowed by `LogsOptions.Only` (every source keeps just that pod), the pods listed by `LogsTargets.Pods`. The headless WebSocket server closes the log tails a connection started when it goes away, as it closes its panes (a tail holds a pods watch). One follower per pod container, `logs.maxStreams` concurrent, restart-resume via the RFC 3339 timestamp. The frontend renders into a read-only xterm from a bounded ring (`frontend/src/logs/`).
@@ -286,7 +295,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/normalize` | noise rules + content hash |
 | `internal/fieldpath` | field-path diff of two objects (lists matched by `name`/`type`/…), applied forward or in reverse; a YAML line → its field path; pure |
 | `internal/blame` | an object YAML's lines → the field managers owning them (managedFields' `fieldsV1` walked with the YAML nodes); pure |
-| `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; pure |
+| `internal/decode` | value decoding: base64/gzip/brotli chains, rendered as JWT, PEM/x509, JSON/YAML, text or hex dump; capped; and encoding an edited value back in the same chain; pure |
 | `internal/history` | per-object versions: newest object + reverse deltas; global memory budget; the table at a moment, changes over time, a field's values |
 | `internal/source` | Table list/watch, ref-counted shared registry (history recording per watch), namespace listings (`all`), discovery + metadata-only lists/watches/gets; metrics.k8s.io usage; actions (describe, delete, edit, label/annotate patches, scale, exec, debug containers, node shells, local terminals, port-forward, logs) |
 | `internal/logs` | multi-container log tailer; pure |

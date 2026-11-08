@@ -31,7 +31,7 @@ export function inspect() {
     objects: Object.fromEntries(
       paneIdsOf(tab).flatMap((id) => {
         const o = s.panes[id]?.object;
-        return o ? [[id, { key: o.key, view: o.view, diff: !!o.diff, split: !!o.split, from: o.from, follow: !!o.follow, followOff: o.followOff, decoded: o.decode?.levels.length ?? 0, editing: !!o.edit, title: o.title }]] : [];
+        return o ? [[id, { key: o.key, view: o.view, diff: !!o.diff, split: !!o.split, from: o.from, follow: !!o.follow, followOff: o.followOff, decoded: o.decode?.levels.length ?? 0, editing: !!o.edit, editLevels: o.edit?.levels?.length ?? 0, title: o.title }]] : [];
       }),
     ),
     mru: s.mru,

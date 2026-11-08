@@ -5,7 +5,7 @@ type Inspect = {
   focusedPane: string;
   overlays: string[];
   /** The active tab's object views, by pane. */
-  objects: Record<string, { key: string; view: string; diff: boolean; split: boolean; from?: string; follow: boolean; followOff?: string; decoded: number; editing: boolean; title?: string }>;
+  objects: Record<string, { key: string; view: string; diff: boolean; split: boolean; from?: string; follow: boolean; followOff?: string; decoded: number; editing: boolean; editLevels: number; title?: string }>;
   cursor: number;
   decodeCursor: number;
   editCursor: number;
@@ -2316,7 +2316,7 @@ test("diff versions: record changes (⇧R), then [ / ] step through it, the chan
   await expect(versions).toHaveCount(0);
 });
 
-// e2e-secrets: a managed resource's brotli manifests (scaled 1 → 2 at 1s), a TLS pair and a token.
+// e2e-secrets: a managed resource's brotli manifests (scaled 1 → 2 at 1s), a copy of them to write edits to, a TLS pair and a token.
 // Each test opens its own namespace (its own watch, so the tape starts over), sorted by name.
 test.describe("decode (⏎ in the YAML)", () => {
   async function openSecrets(page: Page, record = false) {
@@ -2334,7 +2334,7 @@ test.describe("decode (⏎ in the YAML)", () => {
         const p = await focused(page);
         return p.spec.resource === "e2e-secrets" && !!p.serverId && p.status?.synced ? p.total : -1;
       })
-      .toBe(3);
+      .toBe(4);
   }
   /** Selects a row by name and opens its YAML. */
   async function yamlOf(page: Page, name: string) {
@@ -2410,6 +2410,116 @@ test.describe("decode (⏎ in the YAML)", () => {
     await page.keyboard.press("Escape");
     expect((await inspect(page)).objects).toEqual({});
     expect((await inspect(page)).focus).toBe("table");
+  });
+
+  test.describe("editing decoded values (⌘E in the editor)", () => {
+    const editor = (page: Page) => page.getByRole("region", { name: "edit object" });
+    const levels = (page: Page) => page.getByRole("navigation", { name: "edit levels" });
+    const shown = (page: Page) => editor(page).locator("[data-edit-level]:not(.hidden) .view-lines");
+    const objectText = (page: Page) => editor(page).locator("[data-editor=yaml]").first().locator(".view-lines");
+    const levelCount = async (page: Page) => {
+      const s = await inspect(page);
+      return s.objects[s.focusedPane]?.editLevels ?? -1;
+    };
+    /** Clicks the line of the shown editor (the top level's, else the object's) holding text. */
+    async function clickLine(page: Page, text: string) {
+      const n = await levelCount(page);
+      const ed = n ? editor(page).locator(`[data-edit-level="${n}"]`) : editor(page).locator("[data-editor=yaml]").first();
+      await ed.locator(".view-line", { hasText: text }).first().click();
+    }
+    /** Selects text in the shown editor (find) and types over it. */
+    async function retype(page: Page, from: string, to: string) {
+      await page.keyboard.press("ControlOrMeta+F");
+      await page.keyboard.insertText(from);
+      await page.keyboard.press("Escape");
+      await expect(editor(page).locator(".find-widget.visible")).toHaveCount(0);
+      await page.keyboard.type(to);
+    }
+
+    test("a managed resource's kubeconfig two levels down: edited, esc encodes it back up, ⌘S previews and ⏎ writes it", async ({ page }) => {
+      await openSecrets(page);
+      await yamlOf(page, "managedresource-edit");
+      await page.keyboard.press("e");
+      await expect(editor(page)).toContainText("Secret managedresource-edit");
+      await clickLine(page, "data.yaml.br:");
+      await page.keyboard.press("ControlOrMeta+E");
+      await expect(levels(page)).toContainText('data["data.yaml.br"]');
+      await expect(levels(page).getByLabel("edit chain")).toHaveText("base64 → brotli → yaml");
+      await expect(shown(page)).toContainText("name: vpn-shoot");
+      await expect.poll(() => levelCount(page)).toBe(1);
+      expect((await inspect(page)).focus).toBe("edit");
+      // deeper: doc 2's kubeconfig
+      await clickLine(page, "kubeconfig:");
+      await page.keyboard.press("ControlOrMeta+E");
+      await expect(levels(page)).toContainText("doc 2: data.kubeconfig");
+      await expect(shown(page)).toContainText("server: https://api.shoot.example.com");
+      // a plain value can't go deeper: it says so, the level stays
+      await clickLine(page, "server:");
+      await page.keyboard.press("ControlOrMeta+E");
+      await expect(page.getByRole("status", { name: "object status" })).toContainText("plain text");
+      await expect.poll(() => levelCount(page)).toBe(2);
+      await retype(page, "api.shoot.example.com", "api.new.example.com");
+      await expect(shown(page)).toContainText("server: https://api.new.example.com");
+      await expect(levels(page)).toContainText("changed");
+      await expect(page.getByLabel("unsaved changes")).toBeVisible();
+      // esc: up a level, the change encoded into the manifests (no "discard?" on the way)
+      await page.keyboard.press("Escape");
+      await expect.poll(() => levelCount(page)).toBe(1);
+      await expect(levels(page)).toContainText("changed");
+      await expect(shown(page)).toContainText("name: vpn-shoot");
+      // ⌘S from a level: everything encoded into the object, then the server's dry run of it
+      await page.keyboard.press("ControlOrMeta+S");
+      await expect(editor(page)).toContainText("preview (server dry run");
+      await expect.poll(() => levelCount(page)).toBe(0);
+      const diff = editor(page).locator('[data-viewer="diff"]');
+      await expect(diff).toContainText("data.yaml.br");
+      await page.keyboard.press("Enter");
+      await expect(editor(page)).toHaveCount(0);
+      await expect(page.getByLabel("message").filter({ hasText: "edited" }).first()).toHaveText(/edited .*managedresource-edit/);
+      // the object as written decodes to the edit
+      await page.keyboard.press("Enter");
+      const dialog = page.getByRole("region", { name: "object detail" });
+      await dialog.locator(".view-line", { hasText: "data.yaml.br:" }).click();
+      await page.keyboard.press("Enter");
+      await decoded(page).locator(".view-line", { hasText: "kubeconfig:" }).click();
+      await page.keyboard.press("Enter");
+      await expect(decoded(page).locator(".view-lines")).toContainText("server: https://api.new.example.com");
+    });
+
+    test("e in a decoded value opens the editor down to it; esc up keeps the change, ⌘Z there takes it back; a JWT can't be edited", async ({ page }) => {
+      await openSecrets(page);
+      const dialog = await yamlOf(page, "e2e-token");
+      await dialog.locator(".view-line", { hasText: ".dockerconfigjson:" }).click();
+      await page.keyboard.press("Enter");
+      await expect(decoded(page).locator(".view-lines")).toContainText("registry.example.com");
+      await expect(decoded(page)).toContainText("e: edit");
+      // e: the editor, at the same value
+      await page.keyboard.press("e");
+      await expect(levels(page)).toContainText(".dockerconfigjson");
+      await expect.poll(() => levelCount(page)).toBe(1);
+      // one-line JSON: indented to edit
+      await expect(shown(page)).toContainText('"registry.example.com": {');
+      await retype(page, "registry.example.com", "registry.other.com");
+      await page.keyboard.press("Escape");
+      await expect.poll(() => levelCount(page)).toBe(0);
+      await expect(objectText(page)).not.toContainText("eyJhdXRocyI6eyJyZWdpc3RyeS5leGFtcGxlLmNvbSI6");
+      await expect(page.getByLabel("unsaved changes")).toBeVisible();
+      // the encode is one edit in the object's editor: ⌘Z takes it back
+      await page.keyboard.press("ControlOrMeta+Z");
+      await expect(objectText(page)).toContainText("eyJhdXRocyI6eyJyZWdpc3RyeS5leGFtcGxlLmNvbSI6");
+      await expect(page.getByLabel("unsaved changes")).toHaveCount(0);
+      // a JWT: its signature would break
+      await clickLine(page, "token:");
+      await page.keyboard.press("ControlOrMeta+E");
+      await expect(page.getByRole("status", { name: "object status" })).toContainText("JWT");
+      await expect.poll(() => levelCount(page)).toBe(0);
+      // a click on "object" in the header goes up from any level
+      await clickLine(page, ".dockerconfigjson:");
+      await page.keyboard.press("ControlOrMeta+E");
+      await expect.poll(() => levelCount(page)).toBe(1);
+      await levels(page).getByRole("button", { name: "object" }).click();
+      await expect.poll(() => levelCount(page)).toBe(0);
+    });
   });
 
   test("a click on the object in the header goes back up from any level; ⇧⏎ puts the decoded value in a split", async ({ page }) => {

@@ -14,6 +14,7 @@ import (
 	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/dguendisch/kubewing/internal/safety"
+	"github.com/dguendisch/kubewing/internal/view"
 )
 
 // editKeep caps open edit sessions (one per editor; abandoned ones linger
@@ -239,6 +240,17 @@ func (s *Service) EditApply(token, session, yaml string) error {
 	s.EditClose(session)
 	s.refreshAfter(e.r)
 	return nil
+}
+
+// EditDecode decodes a field of an editor's text for editing (⌘E in the
+// editor); stateless: the encode sends the texts again (see view.EditDecode).
+func (s *Service) EditDecode(req view.EditDecodeRequest) view.EditDecoded {
+	return view.EditDecode(req)
+}
+
+// EditEncode puts an edited decoded level back into the text above it.
+func (s *Service) EditEncode(req view.EditEncodeRequest) (string, error) {
+	return view.EditEncode(req)
 }
 
 func newSessionID() string {
