@@ -14,9 +14,12 @@ import { defaultBindings, prettyKey, type Binding, type CommandId } from "./keym
 
 export interface MenuItem {
   label: string;
-  command: CommandId;
+  /** Unset on a submenu. */
+  command?: CommandId;
   /** Native key equivalent in Wails syntax ("CmdOrCtrl+Shift+d"). */
   accelerator?: string;
+  /** A submenu's items (null = separator). */
+  items?: (MenuItem | null)[];
 }
 
 export interface Menu {
@@ -25,7 +28,7 @@ export interface Menu {
   items: (MenuItem | null)[];
 }
 
-type Entry = [label: string, command: CommandId] | null;
+type Entry = [label: string, command: CommandId] | { submenu: string; entries: Entry[] } | null;
 
 const tabJumps = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): Entry => [n === 9 ? "Last Tab" : `Tab ${n}`, `tab.goto${n}`]);
 
@@ -34,8 +37,8 @@ export const APP_MENU = "kubewing";
 
 /** Menu layout; every app-level command a user would look for in a menu bar. */
 const layout: { title: string; entries: Entry[] }[] = [
-  // where macOS apps have their settings (⌘,)
-  { title: APP_MENU, entries: [["Settings…", "config.edit"]] },
+  // where macOS apps have their settings (⌘,): config.yaml and keybindings.yaml
+  { title: APP_MENU, entries: [{ submenu: "Settings", entries: [["General…", "config.edit"], ["Keyboard Shortcuts…", "config.editKeys"]] }] },
   {
     title: "File",
     entries: [["New Tab", "tab.new"], ["Open…", "source.open"], ["Open Cluster…", "cluster.open"], ["Shoot ⇄ Control Plane", "cluster.otherPlane"], null, ["Close Tab", "tab.close"], ["Close Pane", "pane.close"], null, ["Refresh Listing", "source.refresh"], ["Reconnect", "source.reconnect"], ["Reload Config", "config.reload"]],
@@ -123,10 +126,9 @@ const layout: { title: string; entries: Entry[] }[] = [
 
 /** The menu bar for a keymap. Pure. */
 export function menuSpec(bindings: Binding[] = defaultBindings): Menu[] {
-  return layout.map((m) => ({
-    title: m.title,
-    items: m.entries.map((e) => (e ? item(e[0], e[1], bindings) : null)),
-  }));
+  const items = (entries: Entry[]): (MenuItem | null)[] =>
+    entries.map((e) => (!e ? null : Array.isArray(e) ? item(e[0], e[1], bindings) : { label: e.submenu, items: items(e.entries) }));
+  return layout.map((m) => ({ title: m.title, items: items(m.entries) }));
 }
 
 function item(label: string, command: CommandId, bindings: Binding[]): MenuItem {

@@ -9,7 +9,7 @@
 import { defaultBindings, prettyKey, type Binding, type CommandId, type FocusContext } from "./keymap";
 
 /** One line of the sheet; several commands share a line when they're a pair (next/previous). */
-interface Row {
+export interface Row {
   label: string;
   commands: CommandId[];
   /** Show the keys as a range ("⌘1–⌘9") instead of listing all of them. */
@@ -198,6 +198,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
       row("list everything in a namespace again (open it as resource all)", "source.refresh"),
       row("edit the settings (config.yaml), the reference beside them", "config.edit"),
+      row("edit the key bindings (keybindings.yaml), every default beside them", "config.editKeys"),
       row("reload the config", "config.reload"),
       row("check for updates (unbound: the app menu has it)", "update.check"),
       row("this cheat sheet", "help.toggle"),
@@ -206,6 +207,9 @@ const sections: { title: string; rows: Row[] }[] = [
     ],
   },
 ];
+
+/** The sheet's sections and rows as laid out (the keybindings reference follows them). */
+export const cheatsheetLayout: readonly { title: string; rows: readonly Row[] }[] = sections;
 
 /** Every command the sheet shows; used by the completeness test. */
 export const listedCommands: readonly CommandId[] = sections.flatMap((s) => s.rows.flatMap((r) => r.commands));

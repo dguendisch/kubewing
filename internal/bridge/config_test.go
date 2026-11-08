@@ -93,3 +93,45 @@ func TestReloadConfigAppliesDiffRulesToNewPanes(t *testing.T) {
 		t.Errorf("Config(): %+v", got)
 	}
 }
+
+// The settings editor's files: config.yaml with its starter and reference,
+// keybindings.yaml as it is; nothing else in the directory.
+func TestConfigFiles(t *testing.T) {
+	dir := t.TempDir()
+	log := &eventLog{events: map[string][]any{}}
+	svc := New(source.NewRegistry(hiddenOpener{}), log, Options{ConfigDir: dir})
+
+	f, err := svc.ConfigFile(config.File)
+	if err != nil || f.Exists || f.Text != config.Starter() || f.Reference != config.Reference || f.File != config.File {
+		t.Fatalf("new config.yaml: %+v %v", f, err)
+	}
+	k, err := svc.ConfigFile(config.KeysFile)
+	if err != nil || k.Exists || k.Text != "" || k.Reference != "" || k.Path != filepath.Join(dir, config.KeysFile) {
+		t.Fatalf("new keybindings.yaml: %+v %v", k, err)
+	}
+	if _, err := svc.ConfigFile("refs.yaml"); err == nil {
+		t.Error("refs.yaml: not editable")
+	}
+
+	c, err := svc.CheckConfig(config.KeysFile, "- {key: cmd+k, command: row.down}\n- {key: x}\n")
+	if err != nil || len(c.Problems) != 1 || len(c.Keybindings) != 2 || c.Keybindings[0].Command != "row.down" {
+		t.Fatalf("check keybindings.yaml: %+v %v", c, err)
+	}
+	if c, _ := svc.CheckConfig(config.File, "theme: blue\n"); c.Problems == nil || len(c.Problems) != 0 || c.Keybindings == nil {
+		t.Errorf("check config.yaml: %+v (empty lists, never null)", c)
+	}
+	if _, err := svc.CheckConfig("../x", ""); err == nil {
+		t.Error("check ../x: not editable")
+	}
+
+	cfg, err := svc.SaveConfig(config.KeysFile, "- {key: cmd+k, command: row.down}\n")
+	if err != nil || len(cfg.Keybindings) != 1 {
+		t.Fatalf("save: %+v %v", cfg, err)
+	}
+	if ev := log.get(ConfigEvent); len(ev) != 1 {
+		t.Errorf("config events: %v", ev)
+	}
+	if k, _ := svc.ConfigFile(config.KeysFile); !k.Exists || k.Text != "- {key: cmd+k, command: row.down}\n" {
+		t.Errorf("saved keybindings.yaml: %+v", k)
+	}
+}

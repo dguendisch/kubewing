@@ -1728,6 +1728,47 @@ test.describe("config (testdata/config)", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   });
+
+  // the file is the shared fixture: edits are dropped, and only its own text is saved back
+  test("⌥⌘, edits keybindings.yaml: every default beside it, unknown commands while typing, ⌘S saves and applies", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+Alt+,");
+    const dialog = page.getByRole("dialog", { name: "keyboard shortcuts" });
+    await expect(dialog).toContainText("testdata/config/keybindings.yaml");
+    await expect.poll(async () => (await inspect(page)).overlays).toEqual(["config"]);
+    const editor = dialog.locator("[data-editor=yaml]");
+    await expect(editor.locator(".view-lines")).toContainText("row.down");
+    // the reference: every default binding as an entry
+    await expect(dialog.getByRole("textbox", { name: "reference" })).toHaveCount(1);
+    await expect(dialog).toContainText("every default binding");
+
+    // an unknown command shows while typing, numbered as in the file
+    const textarea = dialog.getByRole("textbox", { name: "keybindings.yaml" });
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.insertText('\n- {key: "cmd+k", command: row.dwn}');
+    await expect(dialog.getByRole("alert", { name: "config problems" })).toContainText('[1] (cmd+k): unknown command "row.dwn"');
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect.poll(async () => (await inspect(page)).focus).toBe("table");
+
+    // reopened as it was; ⌘S writes it back unchanged and applies it
+    await page.keyboard.press("ControlOrMeta+Alt+,");
+    await expect(dialog.getByRole("alert", { name: "config problems" })).toHaveCount(0);
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+S");
+    await expect(dialog).toContainText("saved and applied");
+    await expect(page.getByRole("alert", { name: "config errors" })).toHaveCount(0);
+    // outside the editor (whose keys are Monaco's): ⌘, doesn't switch files (edits would go unasked), ⌥⌘, again closes it
+    await dialog.focus();
+    await page.keyboard.press("ControlOrMeta+,");
+    await expect(page.getByRole("dialog", { name: "settings" })).toHaveCount(0);
+    await expect(dialog).toHaveCount(1);
+    await page.keyboard.press("ControlOrMeta+Alt+,");
+    await expect(dialog).toHaveCount(0);
+  });
 });
 
 // Safety model (testdata/config/config.yaml): "tape-dev" is DEV (delete confirms),

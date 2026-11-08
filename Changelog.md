@@ -3,9 +3,15 @@
 ### Added
 - a built-in blue theme (`theme: blue` in `config.yaml`)
 - drop shadows below menus and dialogs, in every theme; the `shadow` theme color sets or turns them off
+- keybinding editor: `⌥⌘,` (**kubewing → Settings → Keyboard Shortcuts…**) edits `keybindings.yaml` in the app: every default binding beside it, unknown commands, keys and contexts shown as you type, `⌘S` saves and applies
 
 ### Changed
+- the app menu's settings are a **Settings** submenu: **General…** (`⌘,`, `config.yaml`) and **Keyboard Shortcuts…** (`⌥⌘,`, `keybindings.yaml`)
 - kubewing now needs macOS 13 Ventura or later (it never ran on older versions; macOS now says so instead of the app failing to start)
+
+### Fixed
+- `home` and `end` in `keybindings.yaml` are recognized as keys
+- a problem in `keybindings.yaml` after an entry missing its key or command names the right entry
 
 ## [0.3.0] - 2026-11-07
 ### Added

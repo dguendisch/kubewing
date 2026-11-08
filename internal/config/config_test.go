@@ -214,7 +214,8 @@ terminal: {scrollback: 5}
 	if diff := cmp.Diff([]normalize.Rule{{Path: "status.ok"}}, got.Config.Diff.Ignore); diff != "" {
 		t.Error(diff)
 	}
-	if diff := cmp.Diff([]Binding{{Key: "Meta+K", Command: "row.up"}}, got.Keybindings); diff != "" {
+	// the incomplete entry stays (reported here, skipped by the frontend): its problems keep their numbers
+	if diff := cmp.Diff([]Binding{{Key: "", Command: "row.up"}, {Key: "Meta+K", Command: "row.up"}}, got.Keybindings); diff != "" {
 		t.Error(diff)
 	}
 	if len(got.Theme) != 0 {

@@ -89,10 +89,12 @@ func (a *App) ReloadConfig() config.Effective {
 	a.configureUpdater(cfg)
 	return cfg
 }
-func (a *App) ConfigFile() (bridge.ConfigFile, error) { return a.svc.ConfigFile() }
-func (a *App) CheckConfig(text string) []string       { return a.svc.CheckConfig(text) }
-func (a *App) SaveConfig(text string) (config.Effective, error) {
-	cfg, err := a.svc.SaveConfig(text)
+func (a *App) ConfigFile(file string) (bridge.ConfigFile, error) { return a.svc.ConfigFile(file) }
+func (a *App) CheckConfig(file, text string) (bridge.ConfigCheck, error) {
+	return a.svc.CheckConfig(file, text)
+}
+func (a *App) SaveConfig(file, text string) (config.Effective, error) {
+	cfg, err := a.svc.SaveConfig(file, text)
 	if err == nil {
 		a.configureUpdater(cfg)
 	}

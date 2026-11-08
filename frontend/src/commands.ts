@@ -1,6 +1,6 @@
 import type { CommandId } from "./keys/keymap";
 import { bridge, paneData, setUI, useColumns, usePortForwards, useUI } from "./store/store";
-import type { ActionKind, Batch, ClusterEntry, ColumnSpec, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, LogsScope, OpsPodOptions, Pending, PodRef } from "./transport/types";
+import type { ActionKind, Batch, ClusterEntry, ColumnSpec, EditableFile, MarkOp, MetricsPlace, DebugOptions, JumpTarget, Launch, LogsOptions, LogsScope, OpsPodOptions, Pending, PodRef } from "./transport/types";
 import { useMenu } from "./actions/registry";
 import { jumpItems, jumpable, useJump, type JumpState } from "./actions/jump";
 import { celFromLeaf, yamlLeaf } from "./complete/cel";
@@ -335,7 +335,9 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "config.reload":
       return void bridge().reloadConfig().catch(() => {}); // applied via the kw:config event
     case "config.edit":
-      return void openConfigEditor(pane.id);
+      return void openConfigEditor(pane.id, "config.yaml");
+    case "config.editKeys":
+      return void openConfigEditor(pane.id, "keybindings.yaml");
     case "source.reconnect":
       return void reconnect(pane.id);
     case "source.refresh":
@@ -1680,11 +1682,16 @@ function pickField(paneId: string, at: string | undefined) {
   void travel(t.id, { to: at });
 }
 
-/** ⌘,: config.yaml in an editor (loaded first, so it opens with the text); again closes it. */
-export async function openConfigEditor(paneId: string) {
-  if (useUI.getState().overlay?.kind === "config") return setUI(S.closeOverlay);
+/**
+ * ⌘, / ⌥⌘,: config.yaml / keybindings.yaml in an editor (loaded first, so it
+ * opens with the text); the same key again closes it. The other key while one
+ * is open does nothing: switching would drop its edits unasked.
+ */
+export async function openConfigEditor(paneId: string, name: EditableFile) {
+  const open = useUI.getState().overlay;
+  if (open?.kind === "config") return open.configFile?.file === name ? setUI(S.closeOverlay) : undefined;
   try {
-    const file = await bridge().configFile();
+    const file = await bridge().configFile(name);
     setUI((x) => (x.overlay?.kind === "config" ? x : S.openOverlay(S.closeOverlay(x), { kind: "config", pane: paneId, configFile: file })));
   } catch (e) {
     flash(paneId, `settings: ${String((e as Error)?.message ?? e)}`, true);

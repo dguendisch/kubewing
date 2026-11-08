@@ -1,6 +1,6 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
 // (config.yaml, keybindings.yaml, refs.yaml, themes/*.yaml). kubewing only reads them,
-// except config.yaml saved from the settings editor (see WriteFile): the files it
+// except config.yaml and keybindings.yaml saved from the settings editor (see WriteFile): the files it
 // writes there are its own history.yaml (see HistoryStore) and columns.yaml (see ColumnStore).
 // Missing files mean defaults;
 // invalid parts fall back to defaults and are reported in Effective.Errors,
@@ -225,6 +225,7 @@ type ContextRule struct {
 
 // Binding mirrors one keybindings.yaml entry. Command "none" unbinds the
 // key; command ids and contexts are validated by the frontend, which owns them.
+// Effective.Keybindings has every entry, incomplete ones (reported here) too.
 type Binding struct {
 	Key     string   `json:"key"`
 	Command string   `json:"command"`
@@ -265,6 +266,10 @@ func Defaults(dir string) Effective {
 
 // File is the settings file's name (config.yaml), the one ⌘, edits.
 const File = "config.yaml"
+
+// KeysFile is the key overrides' file name (keybindings.yaml), the one
+// Settings ▸ Keyboard Shortcuts… edits.
+const KeysFile = "keybindings.yaml"
 
 // Reference is a config.yaml with every setting, its default (or an
 // example) and what it does: the reference shown beside the editor, and
@@ -312,22 +317,25 @@ func Starter() string {
 	return "# kubewing settings: uncomment a line (⌘/) to change it, ⌘S saves and applies.\n" + strings.Join(lines, "\n") + "\n"
 }
 
-// Check reports the problems config.yaml would have with text as its
-// content (as Load reports them, without the file name): nil = none.
-func Check(dir, text string) []string {
-	e := load(dir, func(file string) ([]byte, error) {
-		if file == File {
+// Check loads dir as if file had text as its content: the problems of that
+// file (as Load reports them, without the file name; nil = none) and the
+// configuration it would give. The keybindings' command ids and contexts are
+// the frontend's to check (see Binding).
+func Check(dir, file, text string) ([]string, Effective) {
+	e := load(dir, func(f string) ([]byte, error) {
+		if f == file {
 			return []byte(text), nil
 		}
-		return os.ReadFile(filepath.Join(dir, file))
+		return os.ReadFile(filepath.Join(dir, f))
 	})
 	var errs []string
 	for _, err := range e.Errors {
-		if rest, ok := strings.CutPrefix(err, File+": "); ok {
+		// "config.yaml: …", "keybindings.yaml: [0]: …"
+		if rest, ok := strings.CutPrefix(err, file+": "); ok {
 			errs = append(errs, rest)
 		}
 	}
-	return errs
+	return errs, e
 }
 
 // Load reads dir. dir == "" means no config at all (defaults, no errors).
@@ -410,13 +418,16 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 	}
 
 	var bs []Binding
-	if read("keybindings.yaml", &bs) {
+	if read(KeysFile, &bs) {
+		// every entry, incomplete ones too: the frontend numbers its problems by position
+		// (and skips those reported here)
 		for i, b := range bs {
 			if b.Key == "" || b.Command == "" {
-				errf("keybindings.yaml", "[%d]: key and command are required", i)
-				continue
+				errf(KeysFile, "[%d]: key and command are required", i)
 			}
-			e.Keybindings = append(e.Keybindings, b)
+		}
+		if bs != nil {
+			e.Keybindings = bs
 		}
 	}
 

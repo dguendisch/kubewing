@@ -181,44 +181,66 @@ func (s *Service) ReloadConfig() config.Effective {
 	return cfg
 }
 
-// ConfigFile is config.yaml for the editor (⌘,): its text and path, or
-// for a new file the starter (every setting commented out); the reference
-// (every setting with its default) either way.
+// ConfigFile is a config file for the settings editor: config.yaml (⌘,)
+// or keybindings.yaml (⌥⌘,), its text and path. A config.yaml that doesn't
+// exist yet comes as the starter (every setting commented out), with the
+// reference (every setting with its default) either way; keybindings.yaml
+// comes without either: the frontend owns the keymap they're made of.
 type ConfigFile struct {
+	File      string `json:"file"`
 	Path      string `json:"path"`
 	Text      string `json:"text"`
 	Exists    bool   `json:"exists"`
-	Reference string `json:"reference"`
+	Reference string `json:"reference,omitempty"`
 }
 
-// ConfigFile reads config.yaml (see type ConfigFile). Without a config
-// directory (headless without -config) there is nothing to edit: an error.
-func (s *Service) ConfigFile() (ConfigFile, error) {
+// ConfigFile reads file (config.Editable; see type ConfigFile). Without a
+// config directory (headless without -config) there is nothing to edit: an error.
+func (s *Service) ConfigFile(file string) (ConfigFile, error) {
 	dir := s.opts.ConfigDir
-	text, exists, err := config.ReadFile(dir)
+	text, exists, err := config.ReadFile(dir, file)
 	if err != nil {
 		return ConfigFile{}, err
 	}
-	if !exists {
-		text = config.Starter()
+	f := ConfigFile{File: file, Path: filepath.Join(dir, file), Text: text, Exists: exists}
+	if file == config.File {
+		f.Reference = config.Reference
+		if !exists {
+			f.Text = config.Starter()
+		}
 	}
-	return ConfigFile{Path: filepath.Join(dir, config.File), Text: text, Exists: exists, Reference: config.Reference}, nil
+	return f, nil
 }
 
-// CheckConfig reports the problems config.yaml would have with text as its
-// content (the editor's live check); empty = none.
-func (s *Service) CheckConfig(text string) []string {
-	errs := config.Check(s.opts.ConfigDir, text)
-	if errs == nil {
-		errs = []string{}
-	}
-	return errs
+// ConfigCheck is what a config file's text would bring (the editor's live
+// check): its problems as kubewing would load it (empty = none), and for
+// keybindings.yaml its entries, whose command ids and contexts the frontend
+// checks.
+type ConfigCheck struct {
+	Problems    []string         `json:"problems"`
+	Keybindings []config.Binding `json:"keybindings"`
 }
 
-// SaveConfig writes config.yaml and reloads the configuration (as ⌘⇧,):
-// what it brings, problems included, comes back and as ConfigEvent.
-func (s *Service) SaveConfig(text string) (config.Effective, error) {
-	if err := config.WriteFile(s.opts.ConfigDir, text); err != nil {
+// CheckConfig checks text as the content of file (see ConfigCheck).
+func (s *Service) CheckConfig(file, text string) (ConfigCheck, error) {
+	if !config.Editable(file) {
+		return ConfigCheck{}, fmt.Errorf("%q is not an editable config file", file)
+	}
+	errs, e := config.Check(s.opts.ConfigDir, file, text)
+	c := ConfigCheck{Problems: errs, Keybindings: []config.Binding{}}
+	if c.Problems == nil {
+		c.Problems = []string{}
+	}
+	if file == config.KeysFile {
+		c.Keybindings = e.Keybindings
+	}
+	return c, nil
+}
+
+// SaveConfig writes file (config.Editable) and reloads the configuration
+// (as ⌘⇧,): what it brings, problems included, comes back and as ConfigEvent.
+func (s *Service) SaveConfig(file, text string) (config.Effective, error) {
+	if err := config.WriteFile(s.opts.ConfigDir, file, text); err != nil {
 		return config.Effective{}, err
 	}
 	return s.ReloadConfig(), nil

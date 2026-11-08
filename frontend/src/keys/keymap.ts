@@ -72,6 +72,7 @@ export type CommandId =
   | "cluster.otherPlane"
   | "config.reload"
   | "config.edit"
+  | "config.editKeys"
   | "source.reconnect"
   | "source.refresh"
   | "object.delete"
@@ -155,7 +156,7 @@ export const commandIds: readonly CommandId[] = [
   "row.down", "row.up", "row.pageDown", "row.pageUp", "row.first", "row.last",
   "mark.toggle", "mark.down", "mark.up", "mark.pageDown", "mark.pageUp", "mark.first", "mark.last", "mark.all",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.toggleBlame", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
-  "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "config.edit", "source.reconnect", "source.refresh",
+  "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "config.edit", "config.editKeys", "source.reconnect", "source.refresh",
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
@@ -223,6 +224,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Shift+,", command: "config.reload" },
   // the macOS settings key: config.yaml in an editor, the reference beside it
   { key: "Meta+,", command: "config.edit" },
+  // its sibling in the app menu's Settings: keybindings.yaml, every default binding beside it
+  { key: "Alt+Meta+,", command: "config.editKeys" },
   // the focused pane's context: a fresh connection and fresh lists (after the network was down, a stuck watch);
   // global, as the browser's hard reload (and ⌘R is the webview's, suppressed)
   { key: "Meta+Shift+R", command: "source.reconnect" },
@@ -549,6 +552,8 @@ export function mergeBindings(defaults: Binding[], user: UserBinding[]): { bindi
   let bindings = [...defaults];
   const added: Binding[] = [];
   user.forEach((u, i) => {
+    // incomplete: Go reported it already (kept, so the others keep their numbers)
+    if (!u.key || !u.command) return;
     const where = `keybindings.yaml[${i}] (${u.key})`;
     const key = canonicalKey(u.key);
     if (!key) return errors.push(`${where}: invalid key`);
@@ -588,7 +593,7 @@ export function canonicalKey(k: string): string | undefined {
     if (!m) return undefined;
     mods.add(m);
   }
-  const named: Record<string, string> = { esc: "Escape", escape: "Escape", enter: "Enter", return: "Enter", tab: "Tab", space: "Space", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", pageup: "PageUp", pagedown: "PageDown", backspace: "Backspace", delete: "Delete", del: "Delete" };
+  const named: Record<string, string> = { esc: "Escape", escape: "Escape", enter: "Enter", return: "Enter", tab: "Tab", space: "Space", up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight", pageup: "PageUp", pagedown: "PageDown", home: "Home", end: "End", backspace: "Backspace", delete: "Delete", del: "Delete" };
   const k2 = key.length === 1 ? key.toUpperCase() : (named[key.toLowerCase()] ?? key);
   return [...modOrder.filter((m) => mods.has(m)), k2].join("+");
 }

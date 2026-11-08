@@ -287,7 +287,7 @@ export interface Overlay {
   columns?: ColumnChoices;
   /** field: a field's values over time (⇧H in the YAML); ⏎ takes the pane there. */
   field?: FieldHistory;
-  /** config: the file as it was when the editor opened. */
+  /** config: the file as it was when the editor opened (config.yaml or keybindings.yaml). */
   configFile?: ConfigFile;
   /** logs: what the tail follows: the row's pods (key), every pod the pane shows (⌥⌘L) or the marked rows' pods. */
   scope?: LogsScope;

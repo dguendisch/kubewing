@@ -76,11 +76,11 @@ func TestSetMenu(t *testing.T) {
 	a.SetMenu([]Menu{{Title: "x"}}) // MenuFn nil: must not panic
 	var got []Menu
 	a.MenuFn = func(m []Menu) { got = m }
-	args := []json.RawMessage{json.RawMessage(`[{"title":"Pane","items":[{"label":"Split Down","command":"pane.splitDown","accelerator":"CmdOrCtrl+d"},null]}]`)}
+	args := []json.RawMessage{json.RawMessage(`[{"title":"Pane","items":[{"label":"Split Down","command":"pane.splitDown","accelerator":"CmdOrCtrl+d"},null,{"label":"Settings","items":[{"label":"General…","command":"config.edit"}]}]}]`)}
 	if _, err := bridge.Dispatch(a, "SetMenu", args); err != nil {
 		t.Fatal(err)
 	}
-	want := []Menu{{Title: "Pane", Items: []*MenuItem{{Label: "Split Down", Command: "pane.splitDown", Accelerator: "CmdOrCtrl+d"}, nil}}}
+	want := []Menu{{Title: "Pane", Items: []*MenuItem{{Label: "Split Down", Command: "pane.splitDown", Accelerator: "CmdOrCtrl+d"}, nil, {Label: "Settings", Items: []*MenuItem{{Label: "General…", Command: "config.edit"}}}}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}

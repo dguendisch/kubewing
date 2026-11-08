@@ -218,6 +218,8 @@ describe("user keybindings", () => {
     expect(canonicalKey("ctrl+esc")).toBe("Ctrl+Escape");
     expect(canonicalKey("cmd+backspace")).toBe("Meta+Backspace");
     expect(canonicalKey("del")).toBe("Delete");
+    expect(canonicalKey("shift+home")).toBe("Shift+Home");
+    expect(canonicalKey("end")).toBe("End");
     expect(canonicalKey("j")).toBe("J");
     expect(canonicalKey("hyper+j")).toBeUndefined();
     expect(canonicalKey("cmd+")).toBeUndefined();

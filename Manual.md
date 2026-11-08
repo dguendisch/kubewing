@@ -802,7 +802,7 @@ A pane's name shows in its header, and in the tab while the tab has no name of i
 
 ### Menu bar
 
-The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload" (⌘⇧R reconnects the pane's context).
+The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. The app menu has **Settings ▸ General…** (`⌘,`) and **Settings ▸ Keyboard Shortcuts…** (`⌥⌘,`). There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload" (⌘⇧R reconnects the pane's context).
 
 ---
 
@@ -841,14 +841,18 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 
 ### Editing the settings (`⌘,`)
 
-`⌘,` (or **kubewing → Settings…**) opens `config.yaml` in an editor, with a reference beside it: every setting with its default (or an example) and what it does. Copy what you need from there; **reference** shows or hides it.
+`⌘,` (or **kubewing → Settings → General…**) opens `config.yaml` in an editor, with a reference beside it: every setting with its default (or an example) and what it does. Copy what you need from there; **reference** shows or hides it.
 
 - Without a `config.yaml` yet, the editor starts with the reference commented out, so nothing changes until you uncomment a line (`⌘/` comments lines in and out).
 - Problems show below the editor as you type, as kubewing would read the file.
 - `⌘S` saves and applies at once, like `⌘⇧,`. If the file still has problems, it's saved anyway and those parts fall back to defaults (and show in the banner).
 - `Esc` closes. With unsaved edits it asks first; a second `Esc` drops them.
 
-A symlinked `config.yaml` (dotfiles) is saved where the link points. The other files (`keybindings.yaml`, `refs.yaml`, themes) are edited outside kubewing.
+`⌥⌘,` (or **kubewing → Settings → Keyboard Shortcuts…**) opens `keybindings.yaml` the same way, with every default binding beside it, by section, written as an entry would be: copy a line and change its key. Problems (an unknown command, key or context, an entry without a key or command) show as you type, numbered by entry. A new file starts with a commented example.
+
+Both keys work while the editor's text doesn't have the focus (in the text, keys are the editor's); the other one doesn't switch files while one is open, so edits are never dropped unasked.
+
+A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the link points. The other files (`refs.yaml`, themes) are edited outside kubewing.
 
 | File | Content |
 |---|---|
@@ -911,7 +915,7 @@ focusFollowsMouse: false    # true: the pane under the mouse gets the focus, no 
 - {key: "cmd+shift+d", command: none}       # unbind
 ```
 
-Keys are modifiers `cmd`/`ctrl`/`alt` (`opt`)/`shift` joined with `+`. An entry overrides the defaults for that key in the given contexts (all contexts without `when`). The cheat sheet (`?`) and the menu bar show your bindings as they are. Command ids are listed in [frontend/src/keys/keymap.ts](frontend/src/keys/keymap.ts).
+Edit it in the app with `⌥⌘,` (see [Editing the settings](#editing-the-settings-)). Keys are modifiers `cmd`/`ctrl`/`alt` (`opt`)/`shift` joined with `+`. An entry overrides the defaults for that key in the given contexts (all contexts without `when`). The cheat sheet (`?`) and the menu bar show your bindings as they are. The editor's reference lists every command id with its default keys (and the commands without one).
 
 ### `refs.yaml`
 

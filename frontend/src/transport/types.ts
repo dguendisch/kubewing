@@ -399,14 +399,26 @@ export interface Config {
   errors: string[];
 }
 
-/** Mirrors bridge.ConfigFile: config.yaml for the editor (⌘,). */
+/** The files the settings editor edits: config.yaml (⌘,) and keybindings.yaml (⌥⌘,). */
+export type EditableFile = "config.yaml" | "keybindings.yaml";
+
+/** Mirrors bridge.ConfigFile: a config file for the settings editor. */
 export interface ConfigFile {
+  file: EditableFile;
   path: string;
-  /** The file's text; a new file's starter (every setting commented out) while it doesn't exist. */
+  /** The file's text; for a new config.yaml the starter (every setting commented out), a new keybindings.yaml is empty. */
   text: string;
   exists: boolean;
-  /** Every setting with its default (or an example) and what it does. */
-  reference: string;
+  /** config.yaml: every setting with its default (or an example) and what it does; keybindings.yaml has none (the frontend's keymap). */
+  reference?: string;
+}
+
+/** Mirrors bridge.ConfigCheck: what a config file's text would bring. */
+export interface ConfigCheck {
+  /** As kubewing would load it; empty = none. */
+  problems: string[];
+  /** keybindings.yaml: its entries, for the frontend's checks (commands, keys, contexts). */
+  keybindings: UserBinding[];
 }
 
 /** Mirrors config.Debug: defaults of the debug dialog. */
@@ -1014,12 +1026,12 @@ export interface Transport {
   copyText(text: string): Promise<void>;
   config(): Promise<Config>;
   reloadConfig(): Promise<Config>;
-  /** config.yaml for the editor (rejects without a config directory). */
-  configFile(): Promise<ConfigFile>;
-  /** The problems config.yaml would have with this text; empty = none. */
-  checkConfig(text: string): Promise<string[]>;
-  /** Writes config.yaml and reloads the config (as ⌘⇧,); resolves to it, problems included. */
-  saveConfig(text: string): Promise<Config>;
+  /** A config file for the editor (rejects without a config directory). */
+  configFile(file: EditableFile): Promise<ConfigFile>;
+  /** What the file would bring with this text: its problems, keybindings.yaml's entries. */
+  checkConfig(file: EditableFile, text: string): Promise<ConfigCheck>;
+  /** Writes the file and reloads the config (as ⌘⇧,); resolves to it, problems included. */
+  saveConfig(file: EditableFile, text: string): Promise<Config>;
   /** Drops the connection to a cluster ("" = current) and restarts its watches; resolves to how many restarted. */
   reconnect(cluster: string): Promise<number>;
   /** Lists a listing pane's source again (refused for live panes). */

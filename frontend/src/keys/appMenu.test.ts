@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { accelerator, APP_MENU, menuSpec, type MenuItem } from "./appMenu";
 import { defaultBindings, mergeBindings } from "./keymap";
 
-const items = (bindings = defaultBindings) =>
-  Object.fromEntries(menuSpec(bindings).flatMap((m) => m.items.filter((i): i is MenuItem => !!i).map((i) => [i.command, i])));
+/** Every command item, submenus' too. */
+const flat = (items: (MenuItem | null)[]): MenuItem[] => items.flatMap((i) => (!i ? [] : i.items ? flat(i.items) : [i]));
+const items = (bindings = defaultBindings) => Object.fromEntries(menuSpec(bindings).flatMap((m) => flat(m.items).map((i) => [i.command, i])));
 
 describe("native menu", () => {
   it("translates chords to Wails accelerators", () => {
@@ -40,9 +41,17 @@ describe("native menu", () => {
     expect(i["filter.focus"]!.accelerator).toBeUndefined(); // ⌘F is Monaco's find in the detail view
   });
 
-  it("puts the settings into the app menu, as macOS apps have them", () => {
+  it("puts the settings into the app menu, as macOS apps have them: a submenu with both files", () => {
     const app = menuSpec().find((m) => m.title === APP_MENU)!;
-    expect(app.items).toEqual([{ label: "Settings…", command: "config.edit", accelerator: "CmdOrCtrl+," }]);
+    expect(app.items).toEqual([
+      {
+        label: "Settings",
+        items: [
+          { label: "General…", command: "config.edit", accelerator: "CmdOrCtrl+," },
+          { label: "Keyboard Shortcuts…", command: "config.editKeys", accelerator: "OptionOrAlt+CmdOrCtrl+," },
+        ],
+      },
+    ]);
   });
 
   it("follows keybindings.yaml: rebound, unbound", () => {
@@ -65,7 +74,7 @@ describe("native menu", () => {
   });
 
   it("assigns no accelerator twice", () => {
-    const accels = menuSpec().flatMap((m) => m.items.flatMap((i) => (i?.accelerator ? [i.accelerator] : [])));
+    const accels = menuSpec().flatMap((m) => flat(m.items).flatMap((i) => (i.accelerator ? [i.accelerator] : [])));
     expect(accels.filter((a, i) => accels.indexOf(a) !== i)).toEqual([]);
   });
 });

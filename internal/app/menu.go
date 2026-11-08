@@ -2,11 +2,13 @@ package app
 
 import "github.com/wailsapp/wails/v3/pkg/application"
 
-// MenuItem is one command entry of the native menu (frontend: keys/appMenu.ts).
+// MenuItem is one command entry of the native menu (frontend: keys/appMenu.ts),
+// or with Items a submenu of them (its Command unused).
 type MenuItem struct {
-	Label       string `json:"label"`
-	Command     string `json:"command"`
-	Accelerator string `json:"accelerator,omitempty"`
+	Label       string      `json:"label"`
+	Command     string      `json:"command,omitempty"`
+	Accelerator string      `json:"accelerator,omitempty"`
+	Items       []*MenuItem `json:"items,omitempty"`
 }
 
 // Menu is one top-level menu; a nil item is a separator.
@@ -27,7 +29,7 @@ const CommandEvent = "kw:command"
 const UpdateCommand = "update.check"
 
 // AppMenuTitle is the title of the frontend's menu whose items go into the
-// app menu (after "Check for Updates…": "Settings…") instead of a menu of
+// app menu (after "Check for Updates…": the Settings submenu) instead of a menu of
 // their own (frontend: keys/appMenu.ts APP_MENU).
 const AppMenuTitle = "kubewing"
 
@@ -75,6 +77,10 @@ func addItems(sub *application.Menu, items []*MenuItem, emit func(name string, d
 	for _, it := range items {
 		if it == nil {
 			sub.AddSeparator()
+			continue
+		}
+		if len(it.Items) > 0 {
+			addItems(sub.AddSubmenu(it.Label), it.Items, emit)
 			continue
 		}
 		item := sub.Add(it.Label)
