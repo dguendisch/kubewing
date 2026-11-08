@@ -864,7 +864,7 @@ A symlinked `config.yaml` (dotfiles) is saved where the link points. The other f
 ### `config.yaml`
 
 ```yaml
-theme: mytheme              # themes/mytheme.yaml; omit for the built-in theme
+theme: mytheme              # blue (built in) or themes/mytheme.yaml; omit for the default theme
 
 diff:
   ignore:                   # extra noise rules for the diff ("*" matches any list element / map key)
@@ -947,7 +947,9 @@ Paths are field names separated by dots, plus:
 
 ### Themes
 
-`themes/<name>.yaml` overrides the tokens in [theme.css](frontend/src/theme.css) (colors such as `prod`, `changed`, `added`, `deleted`, `match`); select it with `theme: <name>`.
+Two themes are built in: the default one (dark grey with an orange accent) and `blue` (navy with a blue accent); select it with `theme: blue`. Both draw drop shadows below menus and dialogs.
+
+`themes/<name>.yaml` overrides the tokens in [theme.css](frontend/src/theme.css) (colors such as `prod`, `changed`, `added`, `deleted`, `match`); select it with `theme: <name>`. A `themes/blue.yaml` changes single tokens of the built-in blue theme. The `shadow` token colors the drop shadow below menus and dialogs; `shadow: "#0000"` turns it off.
 
 ---
 

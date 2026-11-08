@@ -1,5 +1,9 @@
 # Changelog
 ## [Unreleased]
+### Added
+- a built-in blue theme (`theme: blue` in `config.yaml`)
+- drop shadows below menus and dialogs, in every theme; the `shadow` theme color sets or turns them off
+
 ### Changed
 - kubewing now needs macOS 13 Ventura or later (it never ran on older versions; macOS now says so instead of the app failing to start)
 

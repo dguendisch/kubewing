@@ -142,7 +142,7 @@ export function FieldList() {
   if (o?.kind !== "field" || !o.field) return null;
   const f = o.field;
   return (
-    <div role="dialog" aria-label="field history" className="absolute inset-x-24 top-16 z-30 flex max-h-[70vh] flex-col border border-accent bg-bg-elev shadow-2xl">
+    <div role="dialog" aria-label="field history" className="absolute inset-x-24 top-16 z-30 flex max-h-[70vh] flex-col border border-accent bg-bg-elev shadow-dialog">
       <div className="flex gap-3 border-b border-border px-3 py-1 text-fg-muted">
         <span className="font-mono text-fg">{f.path}</span>
         <span className="ml-auto">j/k · ⏎: the table then · esc: back</span>

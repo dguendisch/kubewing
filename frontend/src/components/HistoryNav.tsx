@@ -125,7 +125,7 @@ export function HistoryList() {
       ref={el}
       role="menu"
       aria-label={`${o.dir} history`}
-      className="absolute z-40 flex max-h-[70vh] w-96 flex-col overflow-y-auto border border-accent bg-bg-elev py-1 shadow-2xl"
+      className="absolute z-40 flex max-h-[70vh] w-96 flex-col overflow-y-auto border border-accent bg-bg-elev py-1 shadow-menu"
       style={pos ? { left: pos.x, top: pos.y } : { visibility: "hidden" }}
       // the pane under it must not take the press (it would refocus and close this)
       onMouseDown={(e) => {

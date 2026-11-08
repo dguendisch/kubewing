@@ -95,7 +95,7 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
       role="menu"
       aria-label={`actions for ${row?.name ?? "…"}`}
       data-placement={pos ? (pos.above ? "above" : "below") : undefined}
-      className={`absolute z-40 flex w-80 flex-col border border-accent bg-bg-elev py-1 shadow-2xl ${pos ? "" : "top-24 left-1/2 -translate-x-1/2"}`}
+      className={`absolute z-40 flex w-80 flex-col border border-accent bg-bg-elev py-1 shadow-menu ${pos ? "" : "top-24 left-1/2 -translate-x-1/2"}`}
       style={pos ? { left: pos.x, top: pos.y } : undefined}
     >
       <div className="border-b border-border px-3 pb-1 text-fg-muted">

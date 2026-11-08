@@ -190,7 +190,7 @@ export function useFieldCompletion({
 /** The suggestion list under a field completed by useFieldCompletion. */
 export function Suggestions({ list, accept, label }: { list: CompletionList; accept: (c: Candidate) => void; label: string }) {
   return (
-    <ul role="listbox" aria-label={label} className="absolute top-full left-0 z-40 mt-px max-h-64 min-w-64 overflow-y-auto border border-border bg-bg-elev">
+    <ul role="listbox" aria-label={label} className="absolute top-full left-0 z-40 mt-px max-h-64 min-w-64 overflow-y-auto border border-border bg-bg-elev shadow-menu">
       {list.matches.map((m, i) => (
         <li
           key={m.candidate.value + m.candidate.label}

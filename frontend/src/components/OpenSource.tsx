@@ -52,7 +52,7 @@ function OpenDialog({ pane }: { pane: S.PaneState }) {
     <form
       role="dialog"
       aria-label="open source"
-      className="absolute top-16 left-1/2 z-30 flex w-[28rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex w-[28rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         submit();

@@ -1,0 +1,19 @@
+# The built-in "blue" theme (theme: blue): a navy UI with a blue accent and
+# shadows below menus and dialogs. Tokens not listed keep their default.
+# A themes/blue.yaml of your own changes single tokens on top of it.
+bg: "#1e1e1e"
+bg-elev: "#252526"
+bg-hover: "#3c3c3c"
+border: "#3c3c3c"
+fg: "#d3dced"
+fg-muted: "#7f8fab"
+accent: "#689ad2"
+added: "#7fd1a0"
+connected: "#6cbfa0"
+deleted: "#ff6b6b"
+changed: "#e8c47c"
+hidden: "#c79bf2"
+match: "#5f8fd6"
+marked: "#e0883a"
+prod: "#ff6b6b"
+shadow: "#02050cd9"

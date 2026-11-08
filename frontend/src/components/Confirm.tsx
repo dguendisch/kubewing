@@ -39,7 +39,7 @@ function ConfirmBatch() {
       role="alertdialog"
       aria-label={`confirm ${b.kind}`}
       aria-describedby="confirm-summary"
-      className="absolute top-24 left-1/2 z-40 flex w-[32rem] -translate-x-1/2 flex-col gap-3 border-2 bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-24 left-1/2 z-40 flex w-[32rem] -translate-x-1/2 flex-col gap-3 border-2 bg-bg-elev p-3 shadow-dialog"
       style={{ borderColor: color ?? "var(--color-deleted)" }}
       onSubmit={(e) => {
         e.preventDefault();
@@ -107,7 +107,7 @@ function ConfirmDialog() {
       role="alertdialog"
       aria-label={`confirm ${p.action.kind}`}
       aria-describedby="confirm-summary"
-      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 bg-bg-elev p-3 shadow-dialog"
       style={{ borderColor: color ?? "var(--color-deleted)" }}
       onSubmit={(e) => {
         e.preventDefault();
@@ -168,7 +168,7 @@ export function ConfirmCloseTab() {
     <form
       role="alertdialog"
       aria-label="confirm close tab"
-      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         dispatch("confirm.accept");
@@ -195,7 +195,7 @@ export function ConfirmClosePane() {
     <form
       role="alertdialog"
       aria-label="confirm close pane"
-      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-24 left-1/2 z-40 flex w-[30rem] -translate-x-1/2 flex-col gap-3 border-2 border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         dispatch("confirm.accept");

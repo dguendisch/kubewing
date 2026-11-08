@@ -129,7 +129,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
     <form
       role="dialog"
       aria-label="columns"
-      className="absolute top-16 left-1/2 z-30 flex max-h-[80vh] w-[40rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex max-h-[80vh] w-[40rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         save();

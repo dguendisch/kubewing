@@ -21,6 +21,7 @@ export const themeTokens = [
   "match",
   "marked",
   "prod",
+  "shadow",
 ] as const;
 
 export interface ConfigState {

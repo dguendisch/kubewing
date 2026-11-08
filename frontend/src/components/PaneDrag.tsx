@@ -214,7 +214,7 @@ export function DragPreview() {
       ) : null}
       <div
         aria-label="moving pane"
-        className="absolute border border-accent bg-bg-elev px-2 py-0.5 text-fg shadow-lg"
+        className="absolute border border-accent bg-bg-elev px-2 py-0.5 text-fg shadow-menu"
         style={{ left: drag.x + 12, top: drag.y + 12 }}
       >
         {pane?.name ?? (pane?.term ? `${pane.term.pod}/${pane.term.container}` : paneTitle(pane))}

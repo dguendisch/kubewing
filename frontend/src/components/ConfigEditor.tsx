@@ -110,7 +110,7 @@ function Dialog({ file }: { file: ConfigFile }) {
       aria-label="settings"
       // focusable: a click on its empty parts keeps the keys in the dialog
       tabIndex={-1}
-      className="absolute outline-none top-10 left-1/2 z-30 flex h-[calc(100vh-6rem)] w-[min(112rem,96vw)] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute outline-none top-10 left-1/2 z-30 flex h-[calc(100vh-6rem)] w-[min(112rem,96vw)] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           // Monaco's find widget closes first

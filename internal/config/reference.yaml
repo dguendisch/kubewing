@@ -1,6 +1,6 @@
 # Every setting, with its default (or an example where there is none). All of them are optional.
 
-theme: default              # themes/<name>.yaml; "default" (or none) is the built-in theme
+theme: default              # "default" (or none), "blue" (built in), or themes/<name>.yaml
 
 diff:
   ignore:                   # noise rules on top of the built-in ones (resourceVersion, managedFields, heartbeats …)

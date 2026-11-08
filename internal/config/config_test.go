@@ -264,6 +264,44 @@ func TestBadTheme(t *testing.T) {
 	}
 }
 
+func TestBuiltinTheme(t *testing.T) {
+	if diff := cmp.Diff([]string{"blue"}, BuiltinThemes()); diff != "" {
+		t.Error(diff)
+	}
+	blue, _ := builtinTheme("blue")
+	got := Load(write(t, map[string]string{"config.yaml": "theme: blue\n"}))
+	if len(got.Errors) != 0 {
+		t.Errorf("errors:\n%s", strings.Join(got.Errors, "\n"))
+	}
+	if diff := cmp.Diff(blue, got.Theme); diff != "" {
+		t.Error(diff)
+	}
+	if got.Theme["accent"] == "" || got.Theme["shadow"] == "" {
+		t.Errorf("blue sets no accent or shadow: %v", got.Theme)
+	}
+
+	// a themes/blue.yaml of one's own changes single tokens of the built-in one
+	got = Load(write(t, map[string]string{"config.yaml": "theme: blue\n", "themes/blue.yaml": "accent: \"#ff0000\"\nshadow: \"#0000\"\n"}))
+	want := map[string]string{}
+	for k, v := range blue {
+		want[k] = v
+	}
+	want["accent"], want["shadow"] = "#ff0000", "#0000"
+	if diff := cmp.Diff(want, got.Theme); diff != "" || len(got.Errors) != 0 {
+		t.Errorf("%s %v", diff, got.Errors)
+	}
+	// a fresh copy each time: the override didn't leak into the built-in
+	if again, _ := builtinTheme("blue"); again["accent"] != blue["accent"] {
+		t.Error("built-in theme changed")
+	}
+
+	// an unknown name lists the built-in ones
+	got = Load(write(t, map[string]string{"config.yaml": "theme: nope\n"}))
+	if len(got.Errors) != 1 || !strings.Contains(got.Errors[0], "(built-in: blue)") {
+		t.Errorf("errors: %v", got.Errors)
+	}
+}
+
 func TestHistoryLimits(t *testing.T) {
 	dir := t.TempDir()
 	write := func(s string) {

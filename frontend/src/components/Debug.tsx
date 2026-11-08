@@ -79,7 +79,7 @@ function Dialog({ serverId, rowKey, pod, batch }: { serverId?: string; rowKey?: 
     <form
       role="dialog"
       aria-label={batch ? "debug containers" : "debug container"}
-      className="absolute top-16 left-1/2 z-30 flex w-[30rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex w-[30rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         submit(opts);

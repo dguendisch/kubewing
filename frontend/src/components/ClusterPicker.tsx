@@ -126,7 +126,7 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
     <div
       role="dialog"
       aria-label="open cluster"
-      className="absolute top-16 left-1/2 z-30 flex max-h-[70vh] w-[44rem] max-w-[90vw] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex max-h-[70vh] w-[44rem] max-w-[90vw] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-dialog"
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           e.preventDefault();

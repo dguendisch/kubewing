@@ -8,7 +8,7 @@
 package config
 
 import (
-	_ "embed"
+	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -41,7 +41,7 @@ func Dir() string {
 
 // Config mirrors config.yaml.
 type Config struct {
-	// Theme names themes/<name>.yaml; "" or "default" uses the built-in theme.
+	// Theme names themes/<name>.yaml or a built-in theme (BuiltinThemes); "" or "default" uses the default theme.
 	Theme string `json:"theme,omitempty"`
 	Diff  Diff   `json:"diff"`
 	// Contexts are per-context safety rules; the first matching rule wins.
@@ -273,6 +273,32 @@ const File = "config.yaml"
 //go:embed reference.yaml
 var Reference string
 
+//go:embed themes/*.yaml
+var builtinThemes embed.FS
+
+// BuiltinThemes names the themes shipped with kubewing (besides the default), sorted.
+func BuiltinThemes() []string {
+	entries, _ := builtinThemes.ReadDir("themes")
+	var names []string
+	for _, e := range entries {
+		names = append(names, strings.TrimSuffix(e.Name(), ".yaml"))
+	}
+	return names
+}
+
+// builtinTheme returns a fresh copy of a built-in theme's tokens.
+func builtinTheme(name string) (map[string]string, bool) {
+	b, err := builtinThemes.ReadFile("themes/" + name + ".yaml")
+	if err != nil {
+		return nil, false
+	}
+	var tokens map[string]string
+	if err := yaml.UnmarshalStrict(b, &tokens); err != nil {
+		panic(fmt.Sprintf("built-in theme %s: %v", name, err))
+	}
+	return tokens, true
+}
+
 // Starter is a new config.yaml: Reference with every setting commented
 // out, so it changes nothing; uncommenting a line (⌘/ in the editor)
 // brings back the reference's line as it was.
@@ -405,19 +431,35 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 
 	if t := e.Config.Theme; t != "" && t != "default" {
 		file := "themes/" + t + ".yaml"
+		builtin, isBuiltin := builtinTheme(t)
+		_, statErr := os.Stat(filepath.Join(dir, file))
+		missing := errors.Is(statErr, fs.ErrNotExist)
+		// a built-in theme first, a file of the same name changes single tokens on top of it
 		var tokens map[string]string
-		if _, err := os.Stat(filepath.Join(dir, file)); errors.Is(err, fs.ErrNotExist) {
-			errf("config.yaml", "theme %q: %s not found", t, file)
-		} else if read(file, &tokens) {
-			for _, k := range sortedKeys(tokens) {
-				switch v := tokens[k]; {
-				case !tokenName.MatchString(k):
-					errf(file, "%q: not a token name", k)
-				case !color.MatchString(v):
-					errf(file, "%s: %q is not a color", k, v)
-				default:
-					e.Theme[k] = v
+		if isBuiltin {
+			tokens = builtin
+		}
+		if missing && !isBuiltin {
+			errf("config.yaml", "theme %q: %s not found (built-in: %s)", t, file, strings.Join(BuiltinThemes(), ", "))
+		} else if !missing {
+			var own map[string]string
+			if read(file, &own) {
+				if tokens == nil {
+					tokens = map[string]string{}
 				}
+				for k, v := range own {
+					tokens[k] = v
+				}
+			}
+		}
+		for _, k := range sortedKeys(tokens) {
+			switch v := tokens[k]; {
+			case !tokenName.MatchString(k):
+				errf(file, "%q: not a token name", k)
+			case !color.MatchString(v):
+				errf(file, "%s: %q is not a color", k, v)
+			default:
+				e.Theme[k] = v
 			}
 		}
 	}

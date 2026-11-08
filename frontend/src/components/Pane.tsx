@@ -608,7 +608,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         />
         {/* same drop-down hint as the label and CEL drafts */}
         {held && filterField === "grep" ? (
-          <div role="status" aria-label="grep draft" className="absolute top-full right-0 z-30 mt-px whitespace-nowrap border border-border bg-bg-elev px-1 text-fg-muted">
+          <div role="status" aria-label="grep draft" className="absolute top-full right-0 z-30 mt-px whitespace-nowrap border border-border bg-bg-elev px-1 text-fg-muted shadow-menu">
             {held} · ⏎ apply
           </div>
         ) : null}

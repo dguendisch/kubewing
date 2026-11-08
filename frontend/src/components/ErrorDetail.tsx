@@ -107,7 +107,7 @@ export function ErrorDetail() {
       role="dialog"
       aria-label="error detail"
       tabIndex={-1}
-      className="absolute z-40 flex max-h-[60vh] w-[36rem] max-w-[calc(100vw-8px)] flex-col border border-deleted bg-bg-elev shadow-2xl outline-none"
+      className="absolute z-40 flex max-h-[60vh] w-[36rem] max-w-[calc(100vw-8px)] flex-col border border-deleted bg-bg-elev shadow-menu outline-none"
       style={pos ? { left: pos.left, bottom: pos.bottom } : { visibility: "hidden" }}
       onMouseDown={(e) => e.stopPropagation()} // a press here is a selection, not a pane focus
       onKeyDown={(e) => {

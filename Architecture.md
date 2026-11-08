@@ -293,7 +293,7 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
 | `scripts/release.sh`, `.github/workflows/release.yml` | tagging the next release; building and publishing it on the tag's push |
 | `internal/update` | the update check (GitHub's release list), the offer and its notes, release signatures, the in-place install; `cmd/releasesign` signs release zips |
-| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
+| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes, the built-in themes embedded from `themes/`; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
 | `internal/gardener` | gardenctl-v2 config and patterns, target resolution in the garden (shoot, control plane, project), gardenlogin kubeconfigs, gardenctl session targets; no Gardener Go deps |
 | `internal/safety` | per-context rules, two-phase mutations (prepare → single-use token → execute) |
 | `internal/view` | pipeline over events → keyed diff → viewport frames |

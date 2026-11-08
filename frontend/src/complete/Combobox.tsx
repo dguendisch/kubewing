@@ -145,7 +145,7 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, conti
           role="listbox"
           aria-label={`${label} suggestions`}
           // at least as wide as the field, wider for long details (narrow fields), never scrolling sideways
-          className="absolute top-full left-0 z-40 mt-px max-h-64 w-max max-w-[min(32rem,90vw)] min-w-full overflow-x-hidden overflow-y-auto border border-border bg-bg-elev"
+          className="absolute top-full left-0 z-40 mt-px max-h-64 w-max max-w-[min(32rem,90vw)] min-w-full overflow-x-hidden overflow-y-auto border border-border bg-bg-elev shadow-menu"
         >
           {matches.map((m, i) => (
             <li

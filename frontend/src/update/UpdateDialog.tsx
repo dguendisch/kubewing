@@ -80,7 +80,7 @@ function Dialog() {
       aria-modal="true"
       aria-label="update"
       tabIndex={-1}
-      className="absolute top-12 left-1/2 z-40 flex max-h-[calc(100%-6rem)] w-[44rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col border-2 border-accent bg-bg-elev shadow-2xl outline-none"
+      className="absolute top-12 left-1/2 z-40 flex max-h-[calc(100%-6rem)] w-[44rem] max-w-[calc(100vw-2rem)] -translate-x-1/2 flex-col border-2 border-accent bg-bg-elev shadow-dialog outline-none"
       onKeyDown={(e) => {
         if (e.key !== "Escape") return;
         e.stopPropagation();

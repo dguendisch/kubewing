@@ -23,7 +23,7 @@ function Sheet() {
   useEffect(() => body.current?.focus(), []);
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="keyboard shortcuts" className="absolute inset-6 z-40 flex flex-col border border-accent bg-bg-elev shadow-2xl">
+    <div role="dialog" aria-modal="true" aria-label="keyboard shortcuts" className="absolute inset-6 z-40 flex flex-col border border-accent bg-bg-elev shadow-dialog">
       <h2 className="shrink-0 border-b border-border px-3 py-1 font-semibold text-fg">keyboard shortcuts</h2>
       <div
         ref={body}

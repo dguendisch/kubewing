@@ -104,7 +104,7 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
     <form
       role="dialog"
       aria-label="port-forward"
-      className="absolute top-16 left-1/2 z-30 flex w-[28rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex w-[28rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         void submit();
@@ -206,7 +206,7 @@ function Dialog({ paneId, serverId, context, rowKey }: { paneId: string; serverI
           className="rounded border border-border bg-bg px-2 py-1 text-fg outline-none focus:border-accent"
         />
         {matches.length ? (
-          <ul role="listbox" aria-label="declared ports" className="absolute top-full right-0 left-0 z-40 mt-px max-h-64 overflow-y-auto border border-border bg-bg-elev">
+          <ul role="listbox" aria-label="declared ports" className="absolute top-full right-0 left-0 z-40 mt-px max-h-64 overflow-y-auto border border-border bg-bg-elev shadow-menu">
             {matches.map((m) => (
               <li
                 key={m.candidate.value}
@@ -279,7 +279,7 @@ export function PortForwardList() {
   if (overlay?.kind !== "forwards") return null;
   const sel = Math.min(overlay.index ?? 0, Math.max(0, list.length - 1));
   return (
-    <div role="dialog" aria-label="port-forwards" className="absolute top-16 left-1/2 z-30 flex w-[36rem] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-2xl">
+    <div role="dialog" aria-label="port-forwards" className="absolute top-16 left-1/2 z-30 flex w-[36rem] -translate-x-1/2 flex-col border border-accent bg-bg-elev shadow-dialog">
       <div className="border-b border-border px-3 py-1 text-fg">port-forwards</div>
       {list.length === 0 ? (
         <div className="px-3 py-2 text-fg-muted">none · f on a pod or service starts one</div>

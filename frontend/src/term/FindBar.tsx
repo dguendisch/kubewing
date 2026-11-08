@@ -55,7 +55,7 @@ export function FindBar({ paneId, result, kind = "term" }: { paneId: string; res
     <div
       role="search"
       aria-label="find in terminal"
-      className="absolute top-1 right-4 z-10 flex items-center gap-1 border border-border bg-bg-elev px-1.5 py-1 shadow-lg"
+      className="absolute top-1 right-4 z-10 flex items-center gap-1 border border-border bg-bg-elev px-1.5 py-1 shadow-menu"
       onMouseDown={() => setUI((s) => ({ ...S.focusPane(s, paneId), focus: findCtx }))}
     >
       <input

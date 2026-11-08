@@ -26,7 +26,7 @@ export function TabSwitcher() {
     <div
       role="listbox"
       aria-label="tab switcher"
-      className="absolute top-1/3 left-1/2 z-50 flex min-w-72 -translate-x-1/2 flex-col border border-accent bg-bg-elev py-1 shadow-2xl"
+      className="absolute top-1/3 left-1/2 z-50 flex min-w-72 -translate-x-1/2 flex-col border border-accent bg-bg-elev py-1 shadow-menu"
     >
       {mru.map((id, i) => {
         const tab = tabs.find((t) => t.id === id);

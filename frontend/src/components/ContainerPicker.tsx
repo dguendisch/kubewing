@@ -16,7 +16,7 @@ export function ContainerPicker() {
     <div
       role="menu"
       aria-label={`exec into ${o.pending.action.name}`}
-      className="absolute top-24 left-1/2 z-40 flex w-80 -translate-x-1/2 flex-col border border-accent bg-bg-elev py-1 shadow-2xl"
+      className="absolute top-24 left-1/2 z-40 flex w-80 -translate-x-1/2 flex-col border border-accent bg-bg-elev py-1 shadow-menu"
     >
       <div className="border-b border-border px-3 pb-1 text-fg-muted">
         exec into <span className="text-fg">{o.pending.action.name}</span>

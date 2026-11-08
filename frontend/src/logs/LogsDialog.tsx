@@ -80,7 +80,7 @@ function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId:
     <form
       role="dialog"
       aria-label="logs"
-      className="absolute top-16 left-1/2 z-30 flex w-[30rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl"
+      className="absolute top-16 left-1/2 z-30 flex w-[30rem] -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog"
       onSubmit={(e) => {
         e.preventDefault();
         submit();

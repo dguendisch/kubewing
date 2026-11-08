@@ -33,7 +33,7 @@ export function MetaDialog() {
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 const field = "rounded border border-border bg-bg px-2 py-1 text-fg outline-none focus:border-accent";
-const frame = "absolute top-16 left-1/2 z-30 flex -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl";
+const frame = "absolute top-16 left-1/2 z-30 flex -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog";
 
 function Meta({ kind, serverId, rowKey, name }: { kind: "label" | "annotate"; serverId: string; rowKey: string; name: string }) {
   const [current, setCurrent] = useState<Record<string, string>>();

@@ -154,7 +154,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
     <form
       role="dialog"
       aria-label="node shell"
-      className={`absolute top-16 left-1/2 z-30 flex ${yaml ? "w-[min(76rem,96vw)]" : "w-[34rem]"} -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-2xl`}
+      className={`absolute top-16 left-1/2 z-30 flex ${yaml ? "w-[min(76rem,96vw)]" : "w-[34rem]"} -translate-x-1/2 flex-col gap-2 border border-accent bg-bg-elev p-3 shadow-dialog`}
       onSubmit={(e) => {
         e.preventDefault();
         submit(node, opts);
