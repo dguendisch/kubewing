@@ -1,5 +1,5 @@
 /**
- * ⌘P: the clusters dialog's list, pure (unit-tested). What's typed ranks the
+ * ⌘⇧O: the clusters dialog's list, pure (unit-tested). What's typed ranks the
  * recent clusters and gardens (complete.ts rank); a text gardenctl's patterns
  * match (a dashboard URL …) adds its targets on top, a path a kubeconfig file.
  */
@@ -17,7 +17,7 @@ export interface Item {
   hits: number[];
 }
 
-/** ⌘P's toggle: a shoot line opens the shoot or its control plane. */
+/** ⌘⇧O's toggle: a shoot line opens the shoot or its control plane. */
 export type Plane = "shoot" | "controlPlane";
 
 /** The entry a line opens on a plane: a shoot's (or control plane's) other plane is its alt. */

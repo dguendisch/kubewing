@@ -37,6 +37,19 @@ describe("cheat sheet", () => {
     expect(edit.when).toEqual(["detail"]);
   });
 
+  it("starts with the global keys, the ways in first: ⌘O opens in the cluster, ⌘⇧O a cluster", () => {
+    const global = cheatsheet()[0]!;
+    expect(global.title).toBe("global");
+    expect(global.entries.slice(0, 3).map((e) => [e.keys, e.when])).toEqual([
+      [["⌘O"], []],
+      [["⌘⇧O"], []],
+      [["⌘⇧P"], ["table", "detail", "dialog"]],
+    ]);
+    // the app's own keys are in it too (no section of their own)
+    expect(global.entries.map((e) => e.label)).toContain("this cheat sheet");
+    expect(cheatsheet().map((s) => s.title)).not.toContain("app");
+  });
+
   it("collapses the nine tab jumps into a range", () => {
     expect(flat()["go to tab 1–9 (9 = last)"]!.keys).toEqual(["⌘1–⌘9"]);
   });

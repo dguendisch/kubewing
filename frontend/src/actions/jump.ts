@@ -5,7 +5,7 @@ import type { ClusterEntry, OwnedScan, Relation, Relations } from "../transport/
  * The jump menu (⌘J): where a row leads, as Go computed it (see
  * internal/relations). Each entry carries a pipeline target; the dispatcher
  * applies it in place (Esc goes back) or in a split (⇧⏎). A cluster entry
- * (a Gardener shoot's, control plane's, seed's) carries a ⌘P entry instead,
+ * (a Gardener shoot's, control plane's, seed's) carries a ⌘⇧O entry instead,
  * opened as a pick there: here, in a split or (⌘⏎) in a new tab.
  */
 export type JumpSection = Relation["section"] | "clusters";

@@ -72,7 +72,7 @@ make deps   # once
 make run    # builds bin/kubewing.app and starts it in the foreground
 ```
 
-The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces. Without a kubeconfig, or with none of its contexts set as current, it opens with `⌘P` instead, over an empty pane (new tabs start empty too). Other clusters, Gardener shoots included, are a `⌘P` away (see [Opening a cluster](#opening-a-cluster-p)).
+The app opens on your kubeconfig (`$KUBECONFIG`, else `~/.kube/config`) at its current context, on pods. A context that sets a namespace starts in it; one without starts in all namespaces. Without a kubeconfig, or with none of its contexts set as current, it opens with `⌘⇧O` instead, over an empty pane (new tabs start empty too). Other clusters, Gardener shoots included, are a `⌘⇧O` away (see [Opening a cluster](#opening-a-cluster-o)).
 
 ### Launching from a terminal
 
@@ -125,11 +125,11 @@ Under the hood each pane is a *pipeline* (`source → stages → render`), which
 
 Completion comes from a per-context **catalog** (resource types and namespaces), fetched in the background once a pane is open on that context. kubewing never connects to a context on its own, so it never triggers an exec-plugin login you didn't ask for. The catalog follows CRD and namespace changes and refreshes every 5 minutes. A partly broken discovery (an aggregated API down) or a forbidden namespace list shows a hint instead of failing.
 
-### Opening a cluster: `⌘P`
+### Opening a cluster: `⌘⇧O`
 
-`⌘P` (File → Open Cluster…) opens another cluster in a new tab, a new pane or the focused pane, without going through a terminal. It has one field and a list:
+`⌘⇧O` (File → Open Cluster…) opens another cluster in a new tab, a new pane or the focused pane, without going through a terminal. (`⌘O` opens what's in a cluster, `⌘⇧O` a cluster itself.) It has one field and a list:
 
-- **Empty field:** the clusters you opened recently (up to 100, the latest first), then your gardens. A cluster counts as opened once a pane showed it, whichever way it got there (launch, `⌘O`, `⌘P`). The targets of your gardenctl sessions (each terminal's `gardenctl target`) are listed too, marked `gardenctl`, so the list isn't empty on the first day. `✕` forgets a cluster.
+- **Empty field:** the clusters you opened recently (up to 100, the latest first), then your gardens. A cluster counts as opened once a pane showed it, whichever way it got there (launch, `⌘O`, `⌘⇧O`). The targets of your gardenctl sessions (each terminal's `gardenctl target`) are listed too, marked `gardenctl`, so the list isn't empty on the first day. `✕` forgets a cluster.
 - **Typing** ranks the list by shoot, project, garden, context name and kubeconfig file (`shoot--foo--bar` finds the shoot `bar` of project `foo`).
 - **Pasting a Gardener dashboard URL** (or an API server host, or `garden/shoot--project--name`) shows what gardenctl's patterns make of it: the shoot (see the toggle below for its control plane). A dashboard URL of a project (no shoot) is the project in its garden.
 - **A path** (`/…`, `~/…`) opens that kubeconfig file at its current context; `⌘O` then lists its other contexts.
@@ -141,7 +141,7 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 Entries that can't be opened (a garden whose kubeconfig is missing) are greyed out, with the reason. Safety labels show next to the entries already, as far as the name is known. `✕` on a shoot forgets both its shoot and its control plane.
 
-**Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘P`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘P` or `⌘J`, also right after opening, with `⌘O` still over the empty pane (it then stays open over the other plane). It also works on clusters opened from a terminal with gardenctl's kubeconfigs (`gardenctl target`, then `kubewing`), as their kubeconfig says which shoot or control plane they are. On a seed, the shoot is the one whose namespace the pane shows (`shoot--<project>--<name>`), else the one whose control plane was opened there last (a pane on nodes, or on all namespaces). Elsewhere it says so in the status line.
+**Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘⇧O`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘⇧O` or `⌘J`, also right after opening, with `⌘O` still over the empty pane (it then stays open over the other plane). It also works on clusters opened from a terminal with gardenctl's kubeconfigs (`gardenctl target`, then `kubewing`), as their kubeconfig says which shoot or control plane they are. On a seed, the shoot is the one whose namespace the pane shows (`shoot--<project>--<name>`), else the one whose control plane was opened there last (a pane on nodes, or on all namespaces). Elsewhere it says so in the status line.
 
 **Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on your shell's `PATH` (see [Launching from the Dock or Finder](#launching-from-the-dock-or-finder)).
 
@@ -548,12 +548,12 @@ Each entry starts with its resource type (**replicaset** web-7d4, **pods** in sh
 
 `j`/`k` move (wrapping around), `⏎` jumps in place, `⇧⏎` opens the target in a split below, `Esc` closes.
 
-**Clusters of a shoot or seed.** In a pane on a garden, `⌘J` on a shoot, seed or managed seed row lists its clusters first, highlighted, each with the context name it will get (and its safety label). It opens like a pick in `⌘P` (see [Opening a cluster](#opening-a-cluster-p)): with nothing listed and `⌘O` over it, the shoot in all namespaces, the control plane in the shoot's namespace on its seed, a seed in all namespaces.
+**Clusters of a shoot or seed.** In a pane on a garden, `⌘J` on a shoot, seed or managed seed row lists its clusters first, highlighted, each with the context name it will get (and its safety label). It opens like a pick in `⌘⇧O` (see [Opening a cluster](#opening-a-cluster-o)): with nothing listed and `⌘O` over it, the shoot in all namespaces, the control plane in the shoot's namespace on its seed, a seed in all namespaces.
 
 - `⏎` opens it in the pane (`⌘←` goes back to the rows), `⇧⏎` in a split below, `⌘⏎` in a new tab.
 - Only picking an entry looks it up in the garden, which may ask you to log in; the entry says **resolving…** meanwhile. An error (no access, a seed without a login secret) shows on the entry, and the menu stays open.
-- The garden is one of gardenctl's (see [Gardener targets](#opening-a-cluster-p)): opened with `⌘P`, or from any kubeconfig whose context points at the same API server.
-- `⌘⇧P` switches a shoot or control plane opened this way, as one opened with `⌘P`. Opened clusters are remembered in `⌘P`'s list.
+- The garden is one of gardenctl's (see [Gardener targets](#opening-a-cluster-o)): opened with `⌘⇧O`, or from any kubeconfig whose context points at the same API server.
+- `⌘⇧P` switches a shoot or control plane opened this way, as one opened with `⌘⇧O`. Opened clusters are remembered in `⌘⇧O`'s list.
 
 ### Jumping from a field in the YAML
 
@@ -728,8 +728,8 @@ A shell on your Mac, on the cluster the focused pane shows: `⌃T` opens it in a
 
 - It's your login shell (`$SHELL -l`, like a new Terminal tab), starting in your home directory, so your profile's `PATH`, aliases and prompt are there even when kubewing was started from the Dock.
 - `$KUBECONFIG` points at a kubeconfig of the shell's own: its current context is the pane's, in the pane's namespace (with all namespaces, the context's own). `kubectl get pods` lists what the pane lists.
-- That kubeconfig is a small file in front of your usual kubeconfig files, holding only the current context. Credentials aren't copied, and `kubectl config use-context` or `kubens` in the shell change only this shell, not `~/.kube/config` or other terminals. A Gardener cluster opened with `⌘P` has no kubeconfig file, so its kubeconfig is written in full. The file is removed when the shell ends.
-- **gardenctl** is targeted too: on a Gardener cluster the shell's gardenctl target is the pane's, so `gardenctl provider-env zsh`, `gardenctl ssh` or `gardenctl kubectl-env zsh` work right away. A shoot is targeted as the shoot, a control plane as the control plane, a seed as the seed (a shoot's namespace on it: that shoot's control plane), and a garden with the project of the pane's namespace. This works for clusters opened with `⌘P` or `⌘J`, gardenctl's kubeconfigs and a garden's own kubeconfig. Every terminal has a gardenctl session of its own (`$GCTL_SESSION_ID`), so `gardenctl target` in it moves neither the terminal kubewing was launched from nor other kubewing terminals. The session is removed when the shell ends.
+- That kubeconfig is a small file in front of your usual kubeconfig files, holding only the current context. Credentials aren't copied, and `kubectl config use-context` or `kubens` in the shell change only this shell, not `~/.kube/config` or other terminals. A Gardener cluster opened with `⌘⇧O` has no kubeconfig file, so its kubeconfig is written in full. The file is removed when the shell ends.
+- **gardenctl** is targeted too: on a Gardener cluster the shell's gardenctl target is the pane's, so `gardenctl provider-env zsh`, `gardenctl ssh` or `gardenctl kubectl-env zsh` work right away. A shoot is targeted as the shoot, a control plane as the control plane, a seed as the seed (a shoot's namespace on it: that shoot's control plane), and a garden with the project of the pane's namespace. This works for clusters opened with `⌘⇧O` or `⌘J`, gardenctl's kubeconfigs and a garden's own kubeconfig. Every terminal has a gardenctl session of its own (`$GCTL_SESSION_ID`), so `gardenctl target` in it moves neither the terminal kubewing was launched from nor other kubewing terminals. The session is removed when the shell ends.
 - It works from tables, YAML and describe views, log panes and ended shells. Inside a running shell `⌃T` is the shell's own key (transpose, fzf's file picker); move to another pane first (`⌥⌘` arrows).
 - The header says **terminal**, with the context and namespace. `exit` or `⌃D` ends it, and the pane goes with it.
 - The shell has `$TERM_PROGRAM` set to `kubewing`. A profile that sets `KUBECONFIG` itself (e.g. `eval $(gardenctl kubectl-env zsh)`) replaces kubewing's; skip that part when `[[ $TERM_PROGRAM == kubewing ]]`.
@@ -849,7 +849,7 @@ contexts:
 A context no rule matches is writable, and only delete and rollout restart ask.
 
 - Rules match the context name only, whichever kubeconfig it comes from.
-- Gardener clusters picked in `⌘P` are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-p)). A glob's `*` doesn't match `/`, so a rule for a landscape is `{match: "sap-landscape-live/*", …}`, one for every control plane `{match: "*/seed--*", …}`, and the garden itself is matched by its name.
+- Gardener clusters picked in `⌘⇧O` are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-o)). A glob's `*` doesn't match `/`, so a rule for a landscape is `{match: "sap-landscape-live/*", …}`, one for every control plane `{match: "*/seed--*", …}`, and the garden itself is matched by its name.
 - A rule with an error (no `match`, a broken glob, an unknown color or action) shows in the config banner and is skipped, so its contexts fall through to the next rule. Check the banner after editing.
 - The rules are enforced in the backend, not the UI. Every mutation needs a single-use token, valid for 60 s and bound to that exact action and object (including its UID), so no path (key, menu, context menu) gets around a rule, and a confirmation can't act on another object than the one it showed. Reloading the config drops outstanding tokens.
 
@@ -882,7 +882,7 @@ A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the li
 | `themes/<name>.yaml` | theme token overrides |
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
 | `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
-| `clusters.yaml` | written by kubewing: the recently opened clusters (`⌘P`), the latest first, at most 100 |
+| `clusters.yaml` | written by kubewing: the recently opened clusters (`⌘⇧O`), the latest first, at most 100 |
 | `update.json` | written by kubewing: when it last checked for updates, and the version you skipped |
 
 ### `config.yaml`
@@ -979,13 +979,13 @@ Two themes are built in: the default one (dark grey with an orange accent) and `
 
 ## 18. Keyboard reference
 
-`?` (or the **?** button at the right end of the tab bar) opens the cheat sheet: every shortcut by section, with the context it applies in, read from the live keymap (so your overrides show). `?` again, the button again, or `Esc` closes it.
+`?` (or the **?** button at the right end of the tab bar) opens the cheat sheet: every shortcut by section (the global keys first), with the context it applies in, read from the live keymap (so your overrides show). `?` again, the button again, or `Esc` closes it.
 
 The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘P` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
@@ -1001,7 +1001,7 @@ The most used keys:
 - **The update fails.** The dialog shows why. A download that doesn't match its signature or GitHub's checksum is never installed: try again later, or download the release by hand (see [Installing](#installing)). "Rate limit" means GitHub is limiting checks from your network for the hour.
 - **Where's the log?** `kubewing.log` in the state directory (default `~/.kubewing/`), rotated to `kubewing.log.1` at 10 MiB. Or start with `-wait` to see it in the terminal.
 - **A pane shows an error.** Click the status line's error to see the full message, including what the server answered.
-- **A pane says `connection refused` on `127.0.0.1` or `localhost`.** The context points at a local cluster (kind, minikube, …) that's stopped, or that's gone while its kubeconfig entry stayed behind. The pane says so, and its button opens `⌘P` to replace the pane with another cluster. Start the cluster again, or remove its context (`kind delete cluster` does both: cluster and context). `kubectl config unset current-context` makes kubewing start with `⌘P`.
+- **A pane says `connection refused` on `127.0.0.1` or `localhost`.** The context points at a local cluster (kind, minikube, …) that's stopped, or that's gone while its kubeconfig entry stayed behind. The pane says so, and its button opens `⌘⇧O` to replace the pane with another cluster. Start the cluster again, or remove its context (`kind delete cluster` does both: cluster and context). `kubectl config unset current-context` makes kubewing start with `⌘⇧O`.
 - **A pane says disconnected, or looks stuck.** Press `⌘⇧R` (or click the connection state) to reconnect its context.
 - **Completion doesn't know a resource.** The catalog loads once a pane is open on that context and follows CRD changes; unknown text in `⌘O` still opens as typed.
 - **A config change has no effect.** Press `⌘⇧,` and check the banner: invalid parts are reported and skipped.

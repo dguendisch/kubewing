@@ -76,7 +76,7 @@ func (s *Service) gardenctlSession(cluster, namespace string) (string, func()) {
 // gardenctlTarget is the Gardener target a pane (cluster, namespace) shows,
 // as `gardenctl target` would name it: a shoot; a control plane (also a
 // shoot's namespace on a seed); a seed; a garden, with the project of the
-// pane's namespace. Found as ⌘⇧P finds it (opened by ⌘P or ⌘J, else by its
+// pane's namespace. Found as ⌘⇧P finds it (opened by ⌘⇧O or ⌘J, else by its
 // kubeconfig), a garden also by its API server.
 func (s *Service) gardenctlTarget(cluster, namespace string) (gardener.Target, bool) {
 	s.mu.Lock()

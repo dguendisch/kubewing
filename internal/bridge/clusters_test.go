@@ -101,8 +101,8 @@ func TestClusters(t *testing.T) {
 	if _, err := svc.OtherPlane(o.Cluster, "kube-system"); err == nil || !strings.Contains(err.Error(), "soil") {
 		t.Errorf("other plane: %v", err)
 	}
-	if _, err := svc.OtherPlane("@99/elsewhere", ""); err == nil || !strings.Contains(err.Error(), "⌘P") {
-		t.Errorf("other plane of a cluster ⌘P didn't open: %v", err)
+	if _, err := svc.OtherPlane("@99/elsewhere", ""); err == nil || !strings.Contains(err.Error(), "⌘⇧O") {
+		t.Errorf("other plane of a cluster ⌘⇧O didn't open: %v", err)
 	}
 	// both planes opened: one entry at the latest one's place, the other its alt; forgotten together
 	_ = svc.opts.Clusters.Add(config.Cluster{Garden: "tape-garden", Namespace: "garden-foo", Shoot: "bar", ControlPlane: true, Used: at.Add(-time.Hour)})
@@ -135,7 +135,7 @@ func TestClusters(t *testing.T) {
 	}
 }
 
-// ⌘J's clusters: a shoot row of a garden ⌘P opened leads to the shoot and
+// ⌘J's clusters: a shoot row of a garden ⌘⇧O opened leads to the shoot and
 // its control plane, a seed row to the seed (a managed one: its shoot's
 // kubeconfig, which is also the control planes' connection there), a managed
 // seed row also to its shoot's control plane. Rows of other clusters and
@@ -182,7 +182,7 @@ func TestClusterJumps(t *testing.T) {
 	if _, ctx := source.SplitCluster(cp.Cluster); err != nil || ctx != "tape-garden/seed--loam" || cp.Namespace != "shoot--foo--baz" {
 		t.Fatalf("control plane: %+v %v", cp, err)
 	}
-	// ⌘⇧P works on what ⌘J opened, as on a ⌘P pick
+	// ⌘⇧P works on what ⌘J opened, as on a ⌘⇧O pick
 	if o, err := svc.OtherPlane(cp.Cluster, cp.Namespace); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
 		t.Errorf("other plane: %+v %v", o, err)
 	}
@@ -205,7 +205,7 @@ func TestClusterJumps(t *testing.T) {
 	if err != nil || o.Cluster != cp.Cluster || o.Namespace != "" {
 		t.Fatalf("seed opened: %+v %v (control plane %s)", o, err, cp.Cluster)
 	}
-	// remembered, and ⌘P lists it by its name
+	// remembered, and ⌘⇧O lists it by its name
 	if l := svc.Clusters(); len(l.Recent) == 0 || l.Recent[0].Seed != "loam" || l.Recent[0].Name != "tape-garden/seed--loam" {
 		t.Errorf("recent: %+v", l.Recent)
 	}

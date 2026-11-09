@@ -36,7 +36,7 @@ type Tape struct {
 	// without metrics-server.
 	Metrics map[string]Usage `json:"metrics,omitempty"`
 	// LookupOnly keeps the tape out of the relation kinds (the jump menu's
-	// owned scan, ResolveKind): it only serves gardener lookups (the ⌘P
+	// owned scan, ResolveKind): it only serves gardener lookups (the ⌘⇧O
 	// test garden), so relation tests don't depend on it.
 	LookupOnly bool `json:"lookupOnly,omitempty"`
 	// ListDelay delays the initial list (e.g. "1s"), as a large cluster's

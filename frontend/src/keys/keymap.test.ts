@@ -154,7 +154,7 @@ describe("edit", () => {
   });
   it("the editor and its preview are modal: no global keys that change anything behind them", () => {
     for (const ctx of ["edit", "editpreview"] as const)
-      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+O", "Meta+I"]) expect(resolve(k, ctx)).toBeUndefined();
+      for (const k of ["Meta+D", "Meta+Shift+D", "Meta+W", "Meta+T", "Meta+O", "Meta+Shift+O", "Meta+I"]) expect(resolve(k, ctx)).toBeUndefined();
     expect(resolve("Meta+D", "table")).toBe("pane.splitDown");
     expect(resolve("Meta+D", "detail")).toBe("pane.splitDown");
   });
@@ -193,11 +193,11 @@ describe("default keymap", () => {
     expect(collisions([...defaultBindings, { key: "J", command: "row.up", when: ["table"] }])).toHaveLength(1);
   });
   it("suppressed webview defaults are either bound or explicitly unbound", () => {
-    // Meta+P is the clusters dialog, Meta+F ours (Monaco's find in the detail view), Meta+R a listing's refresh, Meta+Shift+R
+    // Meta+F ours (Monaco's find in the detail view), Meta+R a listing's refresh, Meta+Shift+R
     // the reconnect, Meta+S the editor's preview/apply; the rest must not be bound to a command by accident (that would make
     // suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
-    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+P", "Meta+F", "Meta+R", "Meta+Shift+R", "Meta+S"]);
+    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+R", "Meta+Shift+R", "Meta+S"]);
   });
   it("pretty-prints chords", () => {
     expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");

@@ -7,6 +7,7 @@
 - drop shadows below menus and dialogs, in every theme; the `shadow` theme color sets or turns them off
 
 ### Changed
+- opening a cluster moved from `⌘P` to `⌘⇧O`: `⌘O` opens what's in the pane's cluster, `⌘⇧O` a cluster; the cheat sheet lists both first, as global keys
 - the app menu's settings are a **Settings** submenu: **General…** (`⌘,`, `config.yaml`) and **Keyboard Shortcuts…** (`⌥⌘,`, `keybindings.yaml`)
 - kubewing now needs macOS 13 Ventura or later (it never ran on older versions; macOS now says so instead of the app failing to start)
 

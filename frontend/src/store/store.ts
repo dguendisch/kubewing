@@ -115,7 +115,7 @@ export function connect(t: Transport) {
  * Loads the kubeconfig contexts. Called once before the first render: the
  * first pane then starts in the current context's namespace, if it sets one.
  * Without a current context (no kubeconfig, or none set as current, as a
- * Dock launch may have), the first pane lists nothing and ⌘P picks a cluster.
+ * Dock launch may have), the first pane lists nothing and ⌘⇧O picks a cluster.
  */
 export async function loadContexts() {
   const list = await bridge().contexts("").catch(() => undefined);

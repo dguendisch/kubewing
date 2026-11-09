@@ -1403,7 +1403,7 @@ export async function runJump(index: number, where: S.ClusterTarget) {
 }
 
 /**
- * ⌘J on a Gardener row: its shoot, control plane or seed, resolved as a ⌘P
+ * ⌘J on a Gardener row: its shoot, control plane or seed, resolved as a ⌘⇧O
  * pick (the garden may ask to log in: the menu says resolving… meanwhile,
  * errors stay on the entry) and opened as one: here (⌘← goes back), in a
  * split below or a new tab, listing nothing yet with ⌘O over it.
@@ -1422,7 +1422,7 @@ async function jumpToCluster(paneId: string, id: string, entry: ClusterEntry, wh
     const o = await bridge().openCluster(entry);
     if (!still()) return; // closed or moved on meanwhile
     // a jump knows the shoot's project: several choices can't happen, but say so if they do
-    if (o.choices?.length) return update({ resolving: undefined, clusterError: { id, message: `${entry.shoot} exists in several projects: pick it in ⌘P` } });
+    if (o.choices?.length) return update({ resolving: undefined, clusterError: { id, message: `${entry.shoot} exists in several projects: pick it in ⌘⇧O` } });
     update({ resolving: undefined });
     setUI(S.closeOverlay);
     await openCluster(paneId, o.cluster, o.namespace ?? "", where);
@@ -1465,7 +1465,7 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
 }
 
 /**
- * ⌘P ⏎: a cluster opened (Go resolved it: a kubeconfig's context, a
+ * ⌘⇧O ⏎: a cluster opened (Go resolved it: a kubeconfig's context, a
  * Gardener target's kubeconfig) where the dialog says: in a new tab, in a
  * new pane below the pane (⌘D) or in the pane, as a ⌘O context switch is.
  * It lists nothing yet: ⌘O opens over it, to pick what.
@@ -1483,7 +1483,7 @@ export async function openCluster(paneId: string, cluster: string, namespace: st
 
 /**
  * ⌘⇧P: the focused pane from a shoot to its control plane or back (Go
- * knows which target the pane's cluster is, once ⌘P or ⌘J resolved it). The
+ * knows which target the pane's cluster is, once ⌘⇧O or ⌘J resolved it). The
  * pane stays as it is (the resource, its view) on the other cluster; ⌘O open
  * over it (it lists nothing yet) is open over the other plane then.
  */
@@ -1588,7 +1588,7 @@ const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 export async function applySpec(paneId: string, spec: S.PaneSpec, keepReselect = false) {
   const p = useUI.getState().panes[paneId];
   if (!p) return;
-  // nothing to list yet (⌘P's new pane): the pane only holds the cluster, for ⌘O
+  // nothing to list yet (⌘⇧O's new pane): the pane only holds the cluster, for ⌘O
   if (S.emptySpec(spec)) return setUI((x) => S.updatePane(x, paneId, ({ object: _, ...q }) => ({ ...q, spec, error: undefined, selected: 0, serverId: undefined, leased: undefined, context: S.splitCluster(spec.context).context || undefined, kind: undefined, type: undefined, opening: false })));
   // a borrowed server pane (a split object view's) is the table's: never changed from here
   const keep = !!p.serverId && !p.leased && S.sameSource(p.spec, spec);

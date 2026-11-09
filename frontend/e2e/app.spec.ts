@@ -1199,6 +1199,11 @@ test("? shows the cheat sheet with the live keymap, esc closes it", async ({ pag
   await expect(sheet).toContainText("split down");
   await expect(sheet).toContainText("⌘1–⌘9");
   await expect(sheet.getByText("exec shell")).toBeVisible();
+  // longer than the window: it scrolls down, never sideways (two columns, not more to the right)
+  const scroller = sheet.locator("[tabindex='-1']");
+  const size = await scroller.evaluate((el) => ({ sw: el.scrollWidth, cw: el.clientWidth, sh: el.scrollHeight, ch: el.clientHeight }));
+  expect(size.sw).toBeLessThanOrEqual(size.cw);
+  expect(size.sh).toBeGreaterThan(size.ch);
   // ? toggles it back off, leaving the table as it was
   await page.keyboard.press("?");
   expect((await inspect(page)).overlays).toEqual([]);
@@ -5677,7 +5682,7 @@ test.describe("logs", () => {
   });
 });
 
-test.describe("⌘P: open a cluster", () => {
+test.describe("⌘⇧O: open a cluster", () => {
   const dialog = (page: Page) => page.getByRole("dialog", { name: "open cluster" });
   const options = (page: Page) => dialog(page).getByRole("option");
   // e2e-static's object count depends on the delete tests before: synced is enough
@@ -5694,7 +5699,7 @@ test.describe("⌘P: open a cluster", () => {
 
   test("lists gardenctl's session targets and gardens; a dashboard URL resolves to its shoot, opened in the pane and remembered", async ({ page }) => {
     await openStatic(page);
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await expect(dialog(page)).toBeVisible();
     expect((await inspect(page)).overlays).toEqual(["clusters"]);
     await expect(page.getByRole("combobox", { name: "cluster" })).toBeFocused();
@@ -5752,7 +5757,7 @@ test.describe("⌘P: open a cluster", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
 
     // remembered: first in the list next time, with a ✕ to forget it; where it opens too
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await expect(dialog(page).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
     await expect(options(page).first()).toContainText("bar");
     await expect(options(page).first()).toContainText("just now");
@@ -5766,9 +5771,9 @@ test.describe("⌘P: open a cluster", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌘⇧P only on what ⌘P opened", async ({ page }) => {
+  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌘⇧P only on what ⌘⇧O opened", async ({ page }) => {
     await openStatic(page);
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     const field = page.getByRole("combobox", { name: "cluster" });
     // where it opens is kept while kubewing runs (an earlier test may have changed it): new tab
     await dialog(page).getByRole("radio", { name: "new tab" }).dispatchEvent("mousedown");
@@ -5789,13 +5794,13 @@ test.describe("⌘P: open a cluster", () => {
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
     await page.keyboard.press("Escape");
 
-    // back in the first tab: ⌘⇧P on a cluster ⌘P didn't open says so
+    // back in the first tab: ⌘⇧P on a cluster ⌘⇧O didn't open says so
     await page.keyboard.press("ControlOrMeta+1");
     const from = (await inspect(page)).focusedPane;
     await page.keyboard.press("ControlOrMeta+Shift+P");
-    await expect(page.locator(`section[data-pane="${from}"]`).getByLabel("message")).toContainText("⌘P");
+    await expect(page.locator(`section[data-pane="${from}"]`).getByLabel("message")).toContainText("⌘⇧O");
     // ⌃⇧⏎: a new pane below the focused one, the toggle unchanged
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await field.fill("tg/shoot--foo--bar");
     await expect(options(page)).toHaveCount(1);
     await page.keyboard.press("Control+Shift+Enter");
@@ -5806,7 +5811,7 @@ test.describe("⌘P: open a cluster", () => {
     expect(s.overlays).toEqual(["open"]);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
     await page.keyboard.press("Escape");
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await expect(dialog(page).getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
   });
 
@@ -5825,7 +5830,7 @@ test.describe("⌘P: open a cluster", () => {
     };
     await ready(page);
     // the test garden, here (the toggle is kept: an earlier test may have changed it)
-    await page.keyboard.press("ControlOrMeta+P");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
     await dialog(page).getByRole("radio", { name: "here" }).dispatchEvent("mousedown");
     // the garden's own line (its shoots, remembered by earlier tests, match the text too)
@@ -5900,8 +5905,8 @@ test.describe("⌘P: open a cluster", () => {
     expect(s.tabs).toHaveLength(tabs + 1);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", namespace: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/) });
     await page.keyboard.press("Escape");
-    // remembered: ⌘P lists the seed
-    await page.keyboard.press("ControlOrMeta+P");
+    // remembered: ⌘⇧O lists the seed
+    await page.keyboard.press("ControlOrMeta+Shift+O");
     await page.getByRole("combobox", { name: "cluster" }).fill("seed--loam");
     await expect(options(page).first()).toHaveText(/^seed loam.*tape-garden/);
     await page.keyboard.press("Escape");
@@ -5910,7 +5915,7 @@ test.describe("⌘P: open a cluster", () => {
 
 // e2e-batch, by name: b-del-0, b-del-1, b-pod-0, b-pod-1, b-scale-0, b-scale-1. Deletes and
 // patches persist for the backend's lifetime: each test acts on its own rows.
-test("without a current context, kubewing starts with ⌘P open over a pane listing nothing", async ({ page }) => {
+test("without a current context, kubewing starts with ⌘⇧O open over a pane listing nothing", async ({ page }) => {
   // the backend's kubeconfig as a Dock launch without one sees it: no current context
   const opened: string[] = [];
   await page.routeWebSocket(/\/kw-ws$/, (ws) => {
@@ -5935,7 +5940,7 @@ test("without a current context, kubewing starts with ⌘P open over a pane list
   const s = await inspect(page);
   expect(s.overlays).toEqual(["clusters"]);
   expect(s.panes[s.focusedPane]!.spec.resource).toBe("");
-  // Esc: the pane says there's no cluster, its button opens ⌘P again; nothing was ever opened (no localhost:8080)
+  // Esc: the pane says there's no cluster, its button opens ⌘⇧O again; nothing was ever opened (no localhost:8080)
   await page.keyboard.press("Escape");
   const pane = page.locator(`section[data-pane="${s.focusedPane}"]`);
   await expect(pane.getByRole("button", { name: "pick a cluster" })).toHaveText(/no cluster yet/);
@@ -5985,7 +5990,7 @@ test("a local cluster refusing the connection: the error hints at it, its button
   await expect(dialog).toBeVisible();
   // here, not the last choice: the broken pane is the one to replace
   await expect(dialog.getByRole("radiogroup", { name: "open in" }).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
-  // the test garden (the tape backend's own contexts aren't in a kubeconfig ⌘P can open)
+  // the test garden (the tape backend's own contexts aren't in a kubeconfig ⌘⇧O can open)
   await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
   await dialog.getByRole("option").filter({ hasText: /^tape-garden/ }).first().click();
   // the pane is on it, listing nothing yet (⌘O open over it), the error gone; one tab still

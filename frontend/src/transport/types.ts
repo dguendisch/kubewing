@@ -270,7 +270,7 @@ export interface ContextList {
   kubeconfig?: string[];
 }
 
-/** Mirrors bridge.ClusterEntry: a cluster the ⌘P dialog offers, a kubeconfig's context or a Gardener target. */
+/** Mirrors bridge.ClusterEntry: a cluster the ⌘⇧O dialog offers, a kubeconfig's context or a Gardener target. */
 export interface ClusterEntry {
   /** A kubeconfig's files (none: ~/.kube/config) and context ("" = its current one). */
   kubeconfig?: string[];
@@ -635,7 +635,7 @@ export interface Relations {
   clusters?: ClusterJump[];
 }
 
-/** Mirrors bridge.ClusterJump: ⌘J to a shoot, its control plane or a seed, opened as a ⌘P pick (resolved only when chosen). */
+/** Mirrors bridge.ClusterJump: ⌘J to a shoot, its control plane or a seed, opened as a ⌘⇧O pick (resolved only when chosen). */
 export interface ClusterJump {
   id: string;
   label: string;
@@ -966,7 +966,7 @@ export interface Transport {
   contexts(cluster: string): Promise<ContextList>;
   /** Never connects; empty until a pane opened on the context. Poll while loading. */
   catalog(context: string): Promise<Catalog>;
-  /** ⌘P: recently opened clusters (and gardenctl sessions' targets) and gardens; connects nowhere. */
+  /** ⌘⇧O: recently opened clusters (and gardenctl sessions' targets) and gardens; connects nowhere. */
   clusters(): Promise<ClusterList>;
   /** The Gardener targets gardenctl's patterns make of a text (dashboard URL, API host, shoot--p--s); connects nowhere. */
   matchTarget(text: string): Promise<ClusterEntry[]>;
@@ -974,7 +974,7 @@ export interface Transport {
   openCluster(e: ClusterEntry): Promise<ClusterOpen>;
   /** Removes a cluster from the recent ones. */
   forgetCluster(e: ClusterEntry): Promise<void>;
-  /** ⌘⇧P: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘P opened); may ask to log in. */
+  /** ⌘⇧P: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘⇧O opened); may ask to log in. */
   otherPlane(cluster: string, namespace: string): Promise<ClusterOpen>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;

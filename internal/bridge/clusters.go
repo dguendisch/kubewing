@@ -192,7 +192,7 @@ func (s *Service) OtherPlane(cluster, namespace string) (ClusterOpen, error) {
 		t, ok = targetOfKubeconfig(cluster)
 	}
 	if !ok {
-		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane: neither opened with ⌘P or ⌘J nor a gardenlogin kubeconfig")
+		return ClusterOpen{}, errors.New("not a Gardener shoot or control plane: neither opened with ⌘⇧O or ⌘J nor a gardenlogin kubeconfig")
 	}
 	switch {
 	case t.Seed == "" || t.ControlPlane:

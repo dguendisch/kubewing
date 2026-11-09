@@ -28,24 +28,28 @@ function Sheet() {
       <div
         ref={body}
         tabIndex={-1}
-        className="min-h-0 flex-1 gap-8 overflow-auto p-3 outline-none columns-2"
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-3 outline-none"
         onKeyDown={(e) => {
           const step = e.key === "J" || e.key === "j" ? 1 : e.key === "K" || e.key === "k" ? -1 : 0;
           if (step) body.current?.scrollBy({ top: step * 48 });
         }}
       >
-        {sections.map((s) => (
-          <section key={s.title} className="mb-4 break-inside-avoid">
-            <h3 className="mb-0.5 border-b border-border text-accent">{s.title}</h3>
-            {s.entries.map((e) => (
-              // where a key works is a hover hint: inline it would crowd out the label
-              <div key={e.label} title={e.when.length ? `works in: ${e.when.join(", ")}` : "works everywhere"} className="flex items-baseline gap-3 py-px">
-                <span className="text-fg">{e.label}</span>
-                <kbd className="ml-auto shrink-0 whitespace-nowrap text-accent">{e.keys.join(" ")}</kbd>
-              </div>
-            ))}
-          </section>
-        ))}
+        {/* the columns grow with their content: on the scroller itself, its fixed height would overflow into
+            extra columns to the right (horizontal scrolling) instead of scrolling down */}
+        <div className="columns-2 gap-8">
+          {sections.map((s) => (
+            <section key={s.title} className="mb-4 break-inside-avoid">
+              <h3 className="mb-0.5 border-b border-border text-accent">{s.title}</h3>
+              {s.entries.map((e) => (
+                // where a key works is a hover hint: inline it would crowd out the label
+                <div key={e.label} title={e.when.length ? `works in: ${e.when.join(", ")}` : "works everywhere"} className="flex items-baseline gap-3 py-px">
+                  <span className="text-fg">{e.label}</span>
+                  <kbd className="ml-auto shrink-0 whitespace-nowrap text-accent">{e.keys.join(" ")}</kbd>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
       </div>
       <div className="shrink-0 border-t border-border px-3 py-1 text-fg-muted">esc close · rebind any of these in {dir ? `${dir}/keybindings.yaml` : "keybindings.yaml"}</div>
     </div>

@@ -1,4 +1,4 @@
-# The test garden's managed seeds (⌘P, ⌘J's clusters): loam is shoot
+# The test garden's managed seeds (⌘⇧O, ⌘J's clusters): loam is shoot
 # garden/loam (garden-shoots). soil has none, and no login secret either.
 lookupOnly: true
 pipeline:

@@ -1,4 +1,4 @@
-# Gardener projects for the clusters dialog (⌘P).
+# Gardener projects for the clusters dialog (⌘⇧O).
 lookupOnly: true
 pipeline:
   source: {resource: projects}

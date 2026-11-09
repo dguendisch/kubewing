@@ -217,7 +217,7 @@ export interface Tab {
 }
 
 export interface Overlay {
-  /** open: ⌘O; clusters: ⌘P (a cluster for the pane or a new tab); confirm: a prepared action;
+  /** open: ⌘O; clusters: ⌘⇧O (a cluster for the pane or a new tab); confirm: a prepared action;
    *  portforward: ports dialog for a row's pod or service; forwards: list of port-forwards;
    *  help: the keyboard cheat sheet; closeTab: ⌘W on a tab with several panes, or unsaved edits;
    *  closePane: closing a pane with unsaved edits;
@@ -835,11 +835,11 @@ export function failedPanes(s: UIState, cluster: string): string[] {
     .map((p) => p.id);
 }
 
-/** Where ⌘P opens a cluster: in the focused pane, a new pane next to it, a new tab. */
+/** Where ⌘⇧O opens a cluster: in the focused pane, a new pane next to it, a new tab. */
 export type ClusterTarget = "here" | "pane" | "tab";
 
 /**
- * ⌘P ⏎: a pane on another cluster, in the namespace it starts in, listing
+ * ⌘⇧O ⏎: a pane on another cluster, in the namespace it starts in, listing
  * nothing yet: ⌘O (opened over it) picks what. A ⌘O context switch, as it
  * keeps nothing of the pane's view.
  */
@@ -847,7 +847,7 @@ export function clusterSpec(cluster: string, namespace = ""): PaneSpec {
   return { ...initialSpec(cluster, namespace), resource: "" };
 }
 
-/** A pane listing nothing (opened by ⌘P, before ⌘O picked a resource). */
+/** A pane listing nothing (opened by ⌘⇧O, before ⌘O picked a resource). */
 export const emptySpec = (spec: PaneSpec) => !spec.resource;
 
 /** The resource of a listing: everything in a namespace, listed once (not kubectl's `all` category). */
@@ -856,7 +856,7 @@ export const isAll = (resource: string) => resource.trim().toLowerCase() === all
 
 /**
  * The start without a current context (no kubeconfig, or none set as
- * current): a pane listing nothing with ⌘P open over it, not client-go's
+ * current): a pane listing nothing with ⌘⇧O open over it, not client-go's
  * fallback (localhost:8080, connection refused). New tabs, and the pane left
  * when the last tab closes, start empty too.
  */

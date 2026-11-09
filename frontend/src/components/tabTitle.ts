@@ -18,7 +18,7 @@ export function resourceLabel(p: Pick<PaneState, "spec" | "type" | "ambiguous">)
 /** A pane's title: its context label (safety rule), then its name, else its resource and namespace. */
 export const paneTitle = (p: PaneState | undefined, rule?: SafetyRule) => {
   if (!p) return "…";
-  // ⌘P's pane listing nothing yet: its cluster
+  // ⌘⇧O's pane listing nothing yet: its cluster
   if (!p.spec.resource && !p.term && !p.logs) return `${rule?.label ? `${rule.label} · ` : ""}${p.name ?? (clusterLabel(p.spec.context) || "…")}`;
   const r = resourceLabel(p);
   return `${rule?.label ? `${rule.label} · ` : ""}${p.name ?? `${r.name}${r.group}${p.spec.namespace ? ` · ${p.spec.namespace}` : ""}`}`;

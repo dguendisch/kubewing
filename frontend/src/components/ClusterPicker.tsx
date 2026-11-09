@@ -6,7 +6,7 @@ import type { ClusterEntry, ClusterList } from "../transport/types";
 import { item as listItem, items as listItems, keepIndex, type Item, type Plane } from "./clusterList";
 import { Badges } from "./Pane";
 
-/** ⌘P: a cluster for a new tab, a new pane or the focused pane. */
+/** ⌘⇧O: a cluster for a new tab, a new pane or the focused pane. */
 export function ClusterPicker() {
   const overlay = useUI((s) => s.overlay);
   if (overlay?.kind !== "clusters") return null;

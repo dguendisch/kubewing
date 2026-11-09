@@ -1,4 +1,4 @@
-# Gardener objects for the clusters dialog (⌘P) and ⌘J's clusters: a
+# Gardener objects for the clusters dialog (⌘⇧O) and ⌘J's clusters: a
 # garden's shoots, its projects and the shoots' CA config maps, looked up by
 # gardener.Resolver. bar's seed soil isn't in the garden (its control plane
 # fails); baz's seed loam is the managed seed of shoot garden/loam.

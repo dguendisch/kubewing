@@ -13,7 +13,7 @@ import { prettyKey } from "../keys/keymap";
  * ⏎ shows it in this pane (Esc in the table goes back), ⇧⏎ in a split
  * below. The owned scan (any kind owned by this UID) runs only on request.
  * A Gardener row of a garden first lists its clusters (shoot, control plane,
- * seed), opened as a ⌘P pick: resolved only when chosen, ⌘⏎ in a new tab.
+ * seed), opened as a ⌘⇧O pick: resolved only when chosen, ⌘⏎ in a new tab.
  */
 export function JumpMenu() {
   const overlay = useUI((s) => s.overlay);

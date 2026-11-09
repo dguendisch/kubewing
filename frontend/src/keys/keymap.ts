@@ -217,8 +217,8 @@ export const defaultBindings: Binding[] = [
   { key: "Enter", command: "tab.switcherCommit", when: ["switcher"] },
   { key: "Ctrl+Enter", command: "tab.switcherCommit", when: ["switcher"] },
   { key: "Meta+O", command: "source.open" },
-  // ⌘P: the webview's print otherwise (suppressed); a cluster from recent ones, gardenctl, a dashboard URL
-  { key: "Meta+P", command: "cluster.open" },
+  // a layer above ⌘O: a cluster from recent ones, gardenctl, a dashboard URL (⌘P stays suppressed: the webview's print)
+  { key: "Meta+Shift+O", command: "cluster.open" },
   // the focused pane from a shoot to its control plane (the seed, in the shoot's namespace) and back;
   // in ⌘O too (only there of the dialogs): a cluster just opened has it open over it
   { key: "Meta+Shift+P", command: "cluster.otherPlane", when: ["table", "detail", "dialog"] },

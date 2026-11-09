@@ -1407,7 +1407,7 @@ describe("a log pane per pod", () => {
 });
 
 describe("start without a current context", () => {
-  it("lists nothing and opens ⌘P; new tabs and the last tab's replacement list nothing either", () => {
+  it("lists nothing and opens ⌘⇧O; new tabs and the last tab's replacement list nothing either", () => {
     const s = S.pickClusterState();
     invariants(s);
     expect(S.emptySpec(S.focusedPane(s).spec)).toBe(true);

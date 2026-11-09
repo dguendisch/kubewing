@@ -40,6 +40,24 @@ const tabJumps = ([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n): CommandId => `t
 
 const sections: { title: string; rows: Row[] }[] = [
   {
+    // first: the ways into everything else and the app's own keys, from anywhere
+    title: "global",
+    rows: [
+      row("open a resource, namespace or context in the pane's cluster", "source.open"),
+      row("open a cluster: recent, gardenctl, dashboard URL, kubeconfig file", "cluster.open"),
+      row("switch the pane between a Gardener shoot and its control plane", "cluster.otherPlane"),
+      row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
+      row("list everything in a namespace again (open it as resource all)", "source.refresh"),
+      row("edit the settings (config.yaml), the reference beside them", "config.edit"),
+      row("edit the key bindings (keybindings.yaml), every default beside them", "config.editKeys"),
+      row("reload the config", "config.reload"),
+      row("check for updates (unbound: the app menu has it)", "update.check"),
+      row("this cheat sheet", "help.toggle"),
+      row("run the prepared action", "confirm.accept"),
+      row("cancel the prepared action", "confirm.cancel"),
+    ],
+  },
+  {
     title: "panes",
     rows: [
       row("split down", "pane.splitDown"),
@@ -188,23 +206,6 @@ const sections: { title: string; rows: Row[] }[] = [
     rows: [
       row("list port-forwards", "portforward.list"),
       row("stop the highlighted one", "portforward.stop"),
-    ],
-  },
-  {
-    title: "app",
-    rows: [
-      row("open context / resource / ns", "source.open"),
-      row("open a cluster: recent, gardenctl, dashboard URL, kubeconfig file", "cluster.open"),
-      row("switch the pane between a Gardener shoot and its control plane", "cluster.otherPlane"),
-      row("reconnect the pane's context (fresh connection and lists)", "source.reconnect"),
-      row("list everything in a namespace again (open it as resource all)", "source.refresh"),
-      row("edit the settings (config.yaml), the reference beside them", "config.edit"),
-      row("edit the key bindings (keybindings.yaml), every default beside them", "config.editKeys"),
-      row("reload the config", "config.reload"),
-      row("check for updates (unbound: the app menu has it)", "update.check"),
-      row("this cheat sheet", "help.toggle"),
-      row("run the prepared action", "confirm.accept"),
-      row("cancel the prepared action", "confirm.cancel"),
     ],
   },
 ];

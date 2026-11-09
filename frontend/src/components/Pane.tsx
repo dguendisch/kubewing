@@ -415,9 +415,9 @@ function TablePane({
   );
 }
 
-/** ⌘P's pane before ⌘O picked what it lists: its cluster, and the key to pick (a click opens ⌘O too). */
+/** ⌘⇧O's pane before ⌘O picked what it lists: its cluster, and the key to pick (a click opens ⌘O too). */
 function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
-  // the current context of a kubeconfig without one: nothing to list from, ⌘P picks a cluster
+  // the current context of a kubeconfig without one: nothing to list from, ⌘⇧O picks a cluster
   const noCluster = useContexts((c) => !c.list?.current) && !S.splitCluster(pane.spec.context).context;
   const key = useConfig((c) => c.bindings.find((b) => b.command === (noCluster ? "cluster.open" : "source.open"))?.key);
   return (
@@ -451,7 +451,7 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
 /**
  * Under an open's error: a local cluster that refused the connection is
  * likely stopped (kind, minikube) or gone with its kubeconfig entry left
- * behind; a button picks another cluster (⌘P).
+ * behind; a button picks another cluster (⌘⇧O).
  */
 function LocalRefusedHint({ pane }: { pane: S.PaneState }) {
   const key = useConfig((c) => c.bindings.find((b) => b.command === "cluster.open")?.key);

@@ -73,7 +73,7 @@ func (s *Service) clusterJumps(cluster string, obj *unstructured.Unstructured, k
 	return out
 }
 
-// gardenOf is the garden of gardenctl's config a cluster is: the one ⌘P
+// gardenOf is the garden of gardenctl's config a cluster is: the one ⌘⇧O
 // opened (registered by its identity), else the one whose kubeconfig points
 // at the same API server (a garden opened from a kubeconfig of its own).
 func (s *Service) gardenOf(cfg gardener.Config, cluster string) (gardener.Garden, bool) {

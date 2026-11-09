@@ -133,7 +133,7 @@ func TestTrackFetchesInBackground(t *testing.T) {
 	}
 }
 
-// A context still loading has empty lists, never null ones: ⌘P opens ⌘O on
+// A context still loading has empty lists, never null ones: ⌘⇧O opens ⌘O on
 // a catalog that just started, and the dialog iterates them.
 func TestLoadingSnapshotHasEmptyLists(t *testing.T) {
 	f := newFake()
