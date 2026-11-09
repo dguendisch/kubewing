@@ -3365,12 +3365,12 @@ test.describe("object actions", () => {
     await expect(page.getByLabel("message")).toContainText("debug needs a pod, not configmap");
   });
 
-  // ⌥⌘O: ops pod on a node. Nodes complete from the nodes tape (Go's shared nodes watch); the tape
+  // n: ops pod on a node. Nodes complete from the nodes tape (Go's shared nodes watch); the tape
   // fake runs the echo shell (prompt node:ops-pod-…), names the shell command and fails images "fail/…".
-  test("⌥⌘O on a pod: its node is prefilled, ↓ lists nodes, checkboxes set the pod; the shell opens below", async ({ page }) => {
+  test("n on a pod: its node is prefilled, ↓ lists nodes, checkboxes set the pod; the shell opens below", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3"); // runs on ip-10-0-2-22 (nodes.yaml)
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     const dialog = page.getByRole("dialog", { name: "node shell" });
     const node = dialog.getByRole("combobox", { name: "node" });
     await expect(node).toHaveValue("ip-10-0-2-22.ec2.internal");
@@ -3431,7 +3431,7 @@ test.describe("object actions", () => {
     await page.keyboard.press("Control+D");
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     // the next dialog starts with what ran: namespace and checkboxes (history.yaml, so also after a restart)
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     await expect(ns).toHaveValue("kube-system");
     await expect(dialog.getByRole("checkbox", { name: "chroot into /host" })).toBeChecked();
     await expect(dialog.getByRole("checkbox", { name: "host root at /host" })).toBeChecked();
@@ -3444,12 +3444,10 @@ test.describe("object actions", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("⌥⌘O from a terminal pane: no row, an empty node; unknown nodes and empty images are refused in the dialog", async ({ page }) => {
+  test("n on a row without a node (a config map): an empty node; unknown nodes and empty images are refused in the dialog", async ({ page }) => {
     await openStatic(page);
-    await select(page, "s-web-3");
-    await page.keyboard.press("x"); // one container: straight to its shell
-    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await select(page, "s-cfg");
+    await page.keyboard.press("n");
     const dialog = page.getByRole("dialog", { name: "node shell" });
     const node = dialog.getByRole("combobox", { name: "node" });
     await expect(node).toHaveValue("");
@@ -3473,7 +3471,15 @@ test.describe("object actions", () => {
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    expect((await inspect(page)).focus).toBe("terminal"); // back to the shell
+    expect((await inspect(page)).focus).toBe("table");
+    // n is only the table's: in a shell it's typed
+    await select(page, "s-web-3");
+    await page.keyboard.press("x"); // one container: straight to its shell
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await page.keyboard.press("n");
+    await expect.poll(() => termText(page)).toContain("$ n"); // typed into the shell
+    await expect(dialog).toHaveCount(0);
+    await page.keyboard.press("Backspace"); // ⌃D ends the shell on an empty line only
     await page.keyboard.press("Control+D");
   });
 
@@ -3488,9 +3494,9 @@ test.describe("object actions", () => {
     await select(page, "n-1");
     // the context menu offers it on node rows
     await page.keyboard.press("ControlOrMeta+Enter");
-    await expect(menu(page).getByRole("menuitem", { name: "node shell… ⌥⌘O" })).toBeEnabled();
+    await expect(menu(page).getByRole("menuitem", { name: "node shell… n" })).toBeEnabled();
     await expect(menu(page).getByRole("menuitem", { name: /exec shell/ })).toBeDisabled();
-    await menu(page).getByRole("menuitem", { name: "node shell… ⌥⌘O" }).click();
+    await menu(page).getByRole("menuitem", { name: "node shell… n" }).click();
     const dialog = page.getByRole("dialog", { name: "node shell" });
     await expect(dialog).toContainText("of tape-dev");
     await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-1-11.ec2.internal");
@@ -3509,7 +3515,7 @@ test.describe("object actions", () => {
   test("ops pod with a persistent volume: bound ones complete, the claim's namespace is taken", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     const dialog = page.getByRole("dialog", { name: "node shell" });
     const pv = dialog.getByRole("combobox", { name: "persistent volume" });
     await pv.focus();
@@ -3555,7 +3561,7 @@ test.describe("object actions", () => {
   test("show YAML renders the pod; edited, it's what starts; edits that break the ops pod are refused", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     const dialog = page.getByRole("dialog", { name: "node shell" });
     await dialog.getByRole("combobox", { name: "image" }).fill("busybox:yaml");
     await dialog.getByRole("combobox", { name: "namespace" }).fill("ops");
@@ -3603,7 +3609,7 @@ test.describe("object actions", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
 
     // a broken edit: refused with the reason, the dialog and the YAML stay
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     await dialog.getByRole("button", { name: "show YAML…" }).click();
     await expect(editor).toContainText("nodeName: ip-10-0-2-22.ec2.internal");
     await append("  bogusField: 1");
@@ -3624,7 +3630,7 @@ test.describe("object actions", () => {
   test("ops pods are refused on read-only contexts, in the dialog", async ({ page }) => {
     await openStatic(page, "tape-prod");
     await select(page, "s-web-3");
-    await page.keyboard.press("ControlOrMeta+Alt+O");
+    await page.keyboard.press("n");
     const dialog = page.getByRole("dialog", { name: "node shell" });
     await expect(dialog.getByRole("combobox", { name: "node" })).toHaveValue("ip-10-0-2-22.ec2.internal");
     await page.keyboard.press("Enter");
@@ -4445,8 +4451,14 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - separator
         - menuitem "exec shell x"
         - menuitem "debug container… b"
-        - menuitem "node shell… ⌥⌘O"
+        - menuitem "node shell… n"
         - menuitem "port-forward… f"
+        - menuitem /^logs…/
+        - separator
+        - menuitem "label… ⇧L"
+        - menuitem "annotate… ⇧A"
+        - menuitem /^scale…/
+        - menuitem /^rollout restart…/
         - separator
         - menuitem "delete… ⌘⌫"
     `);

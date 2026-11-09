@@ -600,7 +600,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 
 ### The row menu: `⌘⏎`
 
-`⌘⏎` or a right-click on a row lists every operation on it, with its shortcut from the live keymap. Unavailable entries say why ("needs a pod", "read-only context", "no change seen yet"). `j`/`k` move (wrapping around), `⏎` runs, `Esc` closes. View YAML, edit YAML and describe show their split key too (`⇧⏎`, `⇧E`, `⇧D`), and `⇧⏎` on the entry runs the split variant.
+`⌘⏎` or a right-click on a row lists every operation on it, with its shortcut from the live keymap. The entries come in groups: viewing and copying (YAML, edit, describe, diff, copy, jump to), then shells, port-forward and logs, then changes (label, annotate, scale, rollout restart), and delete last. Unavailable entries say why ("needs a pod", "read-only context", "no change seen yet"). `j`/`k` move (wrapping around), `⏎` runs, `Esc` closes. View YAML, edit YAML and describe show their split key too (`⇧⏎`, `⇧E`, `⇧D`), and `⇧⏎` on the entry runs the split variant.
 
 | Key | Action |
 |---|---|
@@ -614,7 +614,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `⌘L` | logs… (`⌥⌘L` for the whole pane) |
 | `x` | exec shell |
 | `b` | debug container… |
-| `⌥⌘O` | node shell… |
+| `n` | node shell… |
 | `f` | port-forward… |
 | `⇧L` | label… |
 | `⇧A` | annotate… |
@@ -709,9 +709,9 @@ Starts an ephemeral debug container in the pod, as `kubectl debug -it` does. The
 
 With pods marked, `b` starts a debug container in each, a pane each in a new tab (see [Marking rows](#marking-rows)).
 
-### Node shell: `⌥⌘O`
+### Node shell: `n`
 
-A privileged pod on a node, like ops-toolbelt's `hacks/ops-pod`. `⌥⌘O` from anywhere, or **node shell…** in the row menu of a node or pod.
+A privileged pod on a node, like ops-toolbelt's `hacks/ops-pod`. `n` in a table, **node shell…** in the row menu of a node or pod, or **Object → Node Shell…** in the menu bar (also from a terminal pane).
 
 - The **node** is prefilled from the selected row (the node, or the node a pod runs on). Typing or `↓` lists the context's nodes with pool, zone and state (not ready, cordoned); `⏎` takes the prefilled one.
 - The **image** shares its history with debug containers (default `opsPod.image`).
@@ -987,7 +987,7 @@ The most used keys:
 |---|---|
 | Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
 | Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
-| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
+| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |

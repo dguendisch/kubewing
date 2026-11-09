@@ -38,7 +38,7 @@ describe("row actions menu", () => {
     // a node row: everything pod-only is off, the ops pod is on
     const node = byCmd(menuFor({ key: "n1", kind: "Node", name: "n1" }, undefined));
     expect(node["object.opsPod"]!.disabled).toBeUndefined();
-    expect(node["object.opsPod"]!.shortcut).toBe("⌥⌘O");
+    expect(node["object.opsPod"]!.shortcut).toBe("n");
     expect(node["object.exec"]!.disabled).toBe("needs a pod, not node");
     expect(m["object.diff"]!.disabled).toBe("no change seen yet");
     expect(m["object.describe"]!.disabled).toBeUndefined();

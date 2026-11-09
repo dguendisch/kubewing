@@ -1,5 +1,8 @@
 # Changelog
 ## [Unreleased]
+### Changed
+- the node shell moved from `⌥⌘O` to `n` in a table, like the other row keys; from a terminal pane it's in the menu bar (**Object → Node Shell…**)
+- the row menu (`⌘⏎`) is regrouped
 
 ## [0.4.0] - 2026-11-09
 ### Added

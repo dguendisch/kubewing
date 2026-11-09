@@ -350,8 +350,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+E", command: "edit.decode", when: ["edit"] },
   { key: "W", command: "detail.toggleWrap", when: ["editpreview"] },
   { key: "B", command: "object.debug", when: ["table"] },
-  // from anywhere (also a terminal pane): the node is prefilled from the selected row, if any
-  { key: "Alt+Meta+O", command: "object.opsPod" },
+  // the node is prefilled from the selected row (a node, or a pod's node), if any
+  { key: "N", command: "object.opsPod", when: ["table"] },
   // a local shell with the focused pane's kubeconfig context and namespace, in a split below / to the right.
   // Not in a running shell (⌃T is its own there: transpose, fzf's file picker), nor in text fields
   { key: "Ctrl+T", command: "terminal.splitDown", when: ["table", "detail", "ended", "logs"] },

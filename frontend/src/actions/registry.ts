@@ -16,7 +16,7 @@ export interface RowAction {
   command: CommandId;
   /** Or per row (the diff says how many changes it steps through). */
   label: string | ((row: RowInfo) => string);
-  group: "view" | "act" | "danger";
+  group: "view" | "connect" | "modify" | "danger";
   /** true, or why the action is unavailable for this row. */
   available: (row: RowInfo, rule: SafetyRule | undefined) => true | string;
   /** Mutations: refused on read-only contexts. */
@@ -51,22 +51,22 @@ export const rowActions: RowAction[] = [
   { command: "object.copyCell", label: "copy cell…", group: "view", available: () => true },
   // read-only and metadata only: also on tombstones (the last state still has its owners)
   { command: "object.jump", label: "jump to…", group: "view", available: () => true },
+  { command: "object.exec", label: "exec shell", group: "connect", available: pod, mutates: true },
+  { command: "object.debug", label: "debug container…", group: "connect", available: pod, mutates: true, multi: (r) => r.kind === "Pod", multiLabel: (n) => `debug containers in ${n} pods…` },
+  { command: "object.opsPod", label: "node shell…", group: "connect", available: onNode, mutates: true },
+  { command: "object.portForward", label: "port-forward…", group: "connect", available: forwardable },
   {
-    command: "object.logs", label: "logs…", group: "view", available: (r) => (r.deleted ? "deleted" : r.logs ? true : "no pods to tail"),
+    command: "object.logs", label: "logs…", group: "connect", available: (r) => (r.deleted ? "deleted" : r.logs ? true : "no pods to tail"),
     multi: (r) => !!r.logs, multiLabel: (n) => `logs of ${n}…`,
   },
-  { command: "object.exec", label: "exec shell", group: "act", available: pod, mutates: true },
-  { command: "object.debug", label: "debug container…", group: "act", available: pod, mutates: true, multi: (r) => r.kind === "Pod", multiLabel: (n) => `debug containers in ${n} pods…` },
-  { command: "object.opsPod", label: "node shell…", group: "act", available: onNode, mutates: true },
-  { command: "object.portForward", label: "port-forward…", group: "act", available: forwardable },
-  { command: "object.label", label: "label…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `label ${n}…` },
-  { command: "object.annotate", label: "annotate…", group: "act", available: live, mutates: true, multi: true, multiLabel: (n) => `annotate ${n}…` },
+  { command: "object.label", label: "label…", group: "modify", available: live, mutates: true, multi: true, multiLabel: (n) => `label ${n}…` },
+  { command: "object.annotate", label: "annotate…", group: "modify", available: live, mutates: true, multi: true, multiLabel: (n) => `annotate ${n}…` },
   {
-    command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "act", available: scalable, mutates: true,
+    command: "object.scale", label: (r) => (r.replicas !== undefined ? `scale… (${r.replicas})` : "scale…"), group: "modify", available: scalable, mutates: true,
     multi: (r) => r.replicas !== undefined, multiLabel: (n) => `scale ${n}…`,
   },
   {
-    command: "object.restart", label: "rollout restart…", group: "act", available: restartable, mutates: true,
+    command: "object.restart", label: "rollout restart…", group: "modify", available: restartable, mutates: true,
     multi: (r) => !r.restart, multiLabel: (n) => `rollout restart ${n}…`,
   },
   { command: "object.delete", label: "delete…", group: "danger", available: live, mutates: true, multi: true, multiLabel: (n) => `delete ${n}…` },
