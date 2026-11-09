@@ -10,6 +10,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8stypes "k8s.io/apimachinery/pkg/types"
 
 	"github.com/dguendisch/kubewing/internal/source"
@@ -49,13 +50,19 @@ func (o *Opener) Resolve(_, resource string) (source.Resolved, error) {
 	if !ok {
 		return source.Resolved{}, fmt.Errorf("the server doesn't have a resource type %q", resource)
 	}
-	kind := "Object"
+	kind, group := "Object", ""
 	if len(t.Initial) > 0 {
 		if k, ok := t.Initial[0].Object["kind"].(string); ok {
 			kind = k
 		}
+		// the group only (no resource: tapes have no GVR), for what goes by kind (health rules)
+		if av, ok := t.Initial[0].Object["apiVersion"].(string); ok {
+			if g, _, ok := strings.Cut(av, "/"); ok {
+				group = g
+			}
+		}
 	}
-	return source.Resolved{Kind: kind, Namespaced: !t.Filter || o.namespaced(resource)}, nil
+	return source.Resolved{Kind: kind, GVR: schema.GroupVersionResource{Group: group}, Namespaced: !t.Filter || o.namespaced(resource)}, nil
 }
 
 // Watch implements source.Opener.

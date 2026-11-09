@@ -2846,14 +2846,14 @@ test.describe("object actions", () => {
   });
 
   // e2e-deploys: api's rollout is complete, web is mid-rollout, worker has an unavailable replica
-  test("h hides deployments whose rollout is complete; kinds without a health check get no checkbox", async ({ page }) => {
+  test("h hides deployments whose rollout is complete; kinds without a health rule get no checkbox", async ({ page }) => {
     await openTape(page, "e2e-deploys");
     const box = page.getByRole("checkbox", { name: "hide healthy" });
     await expect(page.locator("label", { has: box })).toHaveAttribute("title", /deployments whose replicas/);
     await page.keyboard.press("h");
     await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toEqual(["d-web", "d-worker"]);
     await page.keyboard.press("ControlOrMeta+O");
-    await page.getByRole("combobox", { name: "resource" }).fill("nodes");
+    await page.getByRole("combobox", { name: "resource" }).fill("rel-configmaps");
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
     await expect(box).toHaveCount(0);
@@ -2861,7 +2861,24 @@ test.describe("object actions", () => {
     await page.keyboard.press("h");
     expect((await focused(page)).spec).not.toMatchObject({ hideHealthy: true });
     await page.keyboard.press("h");
-    await expect(page.getByLabel("message")).toContainText("hiding healthy works on pods, deployments");
+    await expect(page.getByLabel("message")).toContainText("no health rule for configmaps");
+  });
+
+  // e2e-managedresources: kube-proxy is healthy; coredns is progressing, vpn-shoot's apply failed, metrics-server isn't reconciled yet
+  test("h hides managed resources applied, healthy and not progressing (a rule of conditions)", async ({ page }) => {
+    await openTape(page, "e2e-managedresources", 4);
+    const box = page.getByRole("checkbox", { name: "hide healthy" });
+    await expect(page.locator("label", { has: box })).toHaveAttribute("title", "hide managed resources applied, healthy and not progressing (h)");
+    await page.keyboard.press("h");
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key).sort()).toEqual(["mr-failed", "mr-new", "mr-progressing"]);
+  });
+
+  // nodes: n-2 is cordoned, n-3 isn't Ready, so only n-1 is healthy
+  test("h hides nodes that are Ready and not cordoned", async ({ page }) => {
+    await openTape(page, "nodes", 3);
+    await expect(page.locator("label", { has: page.getByRole("checkbox", { name: "hide healthy" }) })).toHaveAttribute("title", /nodes that are Ready and not cordoned/);
+    await page.keyboard.press("h");
+    await expect.poll(async () => (await focused(page)).rows.map((r) => r.key)).toEqual(["n-2", "n-3"]);
   });
 
   test("d describes in Monaco; y back to yaml", async ({ page }) => {
@@ -5085,7 +5102,7 @@ test.describe("jump to (⌘J)", () => {
     // tape resource names; the pods are already listed above (same kind), so not repeated
     await expect(jump(page).getByRole("menuitem", { name: "rel-configmaps 2" })).toBeVisible();
     await expect(jump(page).getByRole("menuitem", { name: /^rel-pods/ })).toHaveCount(1); // the known entry only
-    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 13 types");
+    await expect(jump(page).getByRole("menuitem", { name: /scan done/ })).toContainText("scanned 14 types");
     await jump(page).getByRole("menuitem", { name: "rel-configmaps 2" }).click();
     await expect.poll(async () => {
       const p = await focused(page);

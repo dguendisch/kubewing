@@ -516,12 +516,13 @@ function filterFromDetail(op: "==" | "!=") {
   void applySpec(t.id, { ...t.spec, filter: expr });
 }
 
-/** h: hides (or shows again) the healthy pods and workloads (see S.healthKinds). */
+/** h: hides (or shows again) the healthy objects, as the pane's health rule says (its status names it, if any). */
 function toggleHealthy() {
   const pane = S.focusedPane(useUI.getState());
   if (pane.term) return;
-  if (pane.kind && !S.hasHealth(pane.kind) && !pane.spec.hideHealthy)
-    return flash(pane.id, "hiding healthy works on pods, deployments, statefulsets, replicasets and daemonsets", true);
+  const st = pane.serverId ? paneData.get(pane.serverId).status : undefined;
+  if (st && !st.healthy && !pane.spec.hideHealthy)
+    return flash(pane.id, `no health rule for ${pane.kind ? `${pane.kind.toLowerCase()}s` : "this resource type"}: add one in health.yaml`, true);
   void applySpec(pane.id, { ...pane.spec, hideHealthy: !pane.spec.hideHealthy });
 }
 

@@ -1,0 +1,61 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "HEALTHY"
+    }
+  ],
+  "total": 4,
+  "offset": 0,
+  "order": [
+    "mr-progressing",
+    "mr-ok",
+    "mr-new",
+    "mr-failed"
+  ],
+  "rows": [
+    {
+      "key": "mr-progressing",
+      "cells": [
+        "shoot--foo--bar",
+        "coredns",
+        "True"
+      ]
+    },
+    {
+      "key": "mr-ok",
+      "cells": [
+        "shoot--foo--bar",
+        "kube-proxy",
+        "True"
+      ]
+    },
+    {
+      "key": "mr-new",
+      "cells": [
+        "shoot--foo--bar",
+        "metrics-server",
+        ""
+      ]
+    },
+    {
+      "key": "mr-failed",
+      "cells": [
+        "shoot--foo--bar",
+        "vpn-shoot",
+        "True"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 4
+  }
+}

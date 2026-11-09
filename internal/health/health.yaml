@@ -1,0 +1,52 @@
+# Built-in health rules for "hide healthy" (see Rule in health.go;
+# health.yaml in the config directory adds rules, replaces them by id, or
+# disables them). The first rule whose kinds match an object decides; an
+# object being deleted is never healthy. Ids are stable: user files refer
+# to them.
+rules:
+  # pods and workloads: checks in Go (see builtins in builtin.go)
+  - {id: pod, kinds: [Pod], builtin: pod, title: pods that are Running with all containers ready}
+  - {id: deployment, kinds: [apps/Deployment, apps/StatefulSet], builtin: workload, title: "{kinds} whose replicas are all current, up to date, ready and available"}
+  - {id: replicaset, kinds: [apps/ReplicaSet], builtin: replicaset, title: "{kinds} whose replicas are all current, ready and available"}
+  - {id: daemonset, kinds: [apps/DaemonSet], builtin: daemonset, title: "daemonsets scheduled, up to date, ready and available on every node"}
+
+  - id: job
+    kinds: [batch/Job]
+    title: jobs that completed
+    conditions: {Complete: "True"}
+  - id: node
+    kinds: [Node]
+    title: nodes that are Ready and not cordoned
+    conditions: {Ready: "True"}
+    cel: "!has(o.spec) || !has(o.spec.unschedulable) || !o.spec.unschedulable"
+  - id: pvc
+    kinds: [PersistentVolumeClaim]
+    title: claims that are Bound
+    cel: o.status.phase == "Bound"
+
+  # Gardener
+  - id: managedresource
+    kinds: [resources.gardener.cloud/ManagedResource]
+    title: managed resources applied, healthy and not progressing
+    generation: true
+    conditions: {ResourcesApplied: "True", ResourcesHealthy: "True", ResourcesProgressing: "False"}
+  - id: gardener-extension
+    kinds: ["extensions.gardener.cloud/*"]
+    title: extension resources whose last operation succeeded
+    generation: true
+    cel: o.status.lastOperation.state == "Succeeded"
+  - id: shoot-seed
+    kinds: [core.gardener.cloud/Shoot, core.gardener.cloud/Seed]
+    title: "{kinds} whose last operation succeeded, with every condition True"
+    generation: true
+    cel: >-
+      o.status.lastOperation.state == "Succeeded" &&
+      (!has(o.status.conditions) || o.status.conditions.all(c, c.status == "True"))
+  - id: machine
+    kinds: [machine.sapcloud.io/Machine]
+    title: machines that are Running
+    cel: o.status.currentStatus.phase == "Running"
+  - id: etcd
+    kinds: [druid.gardener.cloud/Etcd]
+    title: etcds that are ready
+    cel: has(o.status.ready) && o.status.ready

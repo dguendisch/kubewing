@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/dguendisch/kubewing/internal/health"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/relations"
 )
@@ -353,5 +354,30 @@ disable: [node-name]
 	root, _ := relations.ParseYAML("spec: {configs: [{ref: a}], nodeName: n}")
 	if got := e.Rules().Match(root, "e2e.kubewing", "Widget", "shop"); len(got) != 1 || got[0].Name != "a" {
 		t.Errorf("refs = %+v", got)
+	}
+}
+
+func TestHealth(t *testing.T) {
+	if Load("").HealthRules() != health.Default {
+		t.Error("no config: the built-in rules")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, HealthFile), []byte(`rules:
+- {id: widget, kinds: [e2e.kubewing/Widget], conditions: {Ready: "True"}}
+- {id: broken, kinds: [Pod], cel: "o.status.("}
+disable: [node]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e := Load(dir)
+	if len(e.Errors) != 1 || !strings.Contains(e.Errors[0], "health.yaml: rules[1] (broken)") {
+		t.Errorf("errors %v", e.Errors)
+	}
+	w := map[string]any{"apiVersion": "e2e.kubewing/v1", "kind": "Widget", "status": map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}}}
+	if !e.HealthRules().Healthy(w) {
+		t.Error("widget not healthy")
+	}
+	if e.HealthRules().Title("", "Node") != "" {
+		t.Error("node rule not disabled")
 	}
 }

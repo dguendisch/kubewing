@@ -1,5 +1,9 @@
 # Changelog
 ## [Unreleased]
+### Added
+- hide healthy (`h`) works on more kinds: Gardener managed resources (applied, healthy and not progressing), nodes (Ready and not cordoned), jobs, persistent volume claims, Gardener extension resources, shoots, seeds, machines and etcds
+- `health.yaml` in the config directory sets what hide healthy hides per kind, for your own resources too: status conditions, the observed generation or a CEL expression
+
 ### Changed
 - logs moved from `⌘L` to `l` (and from `⌥⌘L` to `⌥L` for the whole pane)
 - `l` and `c` no longer jump to the label selector and CEL fields: `/` and then `⇥` gets there (or the menu bar's **View → Filter by Labels / Filter by CEL**)

@@ -85,4 +85,8 @@ type Status struct {
 	Skipped   int    `json:"skipped,omitempty"`
 	// Marked counts the rows marked for an action on many rows.
 	Marked int `json:"marked,omitempty"`
+	// Healthy says what hiding healthy objects hides on this pane ("pods
+	// that are Running …", the health rule's title); "" = no rule for the
+	// kind, so nothing would be hidden.
+	Healthy string `json:"healthy,omitempty"`
 }

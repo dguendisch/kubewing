@@ -1,5 +1,5 @@
 // Package config loads the user's hand-edited files in ~/.kubewing/
-// (config.yaml, keybindings.yaml, refs.yaml, themes/*.yaml). kubewing only reads them,
+// (config.yaml, keybindings.yaml, refs.yaml, health.yaml, themes/*.yaml). kubewing only reads them,
 // except config.yaml and keybindings.yaml saved from the settings editor (see WriteFile): the files it
 // writes there are its own history.yaml (see HistoryStore) and columns.yaml (see ColumnStore).
 // Missing files mean defaults;
@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	"sigs.k8s.io/yaml"
 
+	"github.com/dguendisch/kubewing/internal/health"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/relations"
 )
@@ -243,6 +244,17 @@ type Effective struct {
 	// Refs are the field reference rules: refs.yaml's before the built-in
 	// ones; nil without refs.yaml (see Rules).
 	Refs *relations.Rules `json:"-"`
+	// Health are the health rules (hide healthy): health.yaml's before the
+	// built-in ones; nil without health.yaml (see HealthRules).
+	Health *health.Rules `json:"-"`
+}
+
+// HealthRules are the health rules in effect.
+func (e Effective) HealthRules() *health.Rules {
+	if e.Health == nil {
+		return health.Default
+	}
+	return e.Health
 }
 
 // Rules are the field reference rules in effect.
@@ -275,6 +287,9 @@ const KeysFile = "keybindings.yaml"
 // example) and what it does: the reference shown beside the editor, and
 // commented out, the start of a new file (see Starter).
 //
+// HealthFile holds the user's health rules (hide healthy).
+const HealthFile = "health.yaml"
+
 //go:embed reference.yaml
 var Reference string
 
@@ -438,6 +453,15 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 			errf("refs.yaml", "%v", err)
 		}
 		e.Refs = rs
+	}
+
+	var hf health.RulesFile
+	if read(HealthFile, &hf) {
+		rs, errs := health.Compile(hf)
+		for _, err := range errs {
+			errf(HealthFile, "%v", err)
+		}
+		e.Health = rs
 	}
 
 	if t := e.Config.Theme; t != "" && t != "default" {

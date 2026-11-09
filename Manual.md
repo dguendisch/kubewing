@@ -253,8 +253,18 @@ Columns and widths are kept in `columns.yaml` across restarts. Changing columns 
 | Deployments, StatefulSets | `observedGeneration` is current, and current, updated, ready and available replicas all equal `spec.replicas` |
 | ReplicaSets | the same, without "updated" |
 | DaemonSets | scheduled, updated, ready and available all equal desired; none misscheduled |
+| Jobs | the `Complete` condition is True |
+| Nodes | the `Ready` condition is True and the node isn't cordoned |
+| PersistentVolumeClaims | Bound |
+| ManagedResources (Gardener) | `observedGeneration` is current; `ResourcesApplied` and `ResourcesHealthy` are True, `ResourcesProgressing` is False |
+| Gardener extension resources (`extensions.gardener.cloud`: Infrastructure, Worker, …) | `observedGeneration` is current and the last operation succeeded |
+| Shoots, Seeds | `observedGeneration` is current, the last operation succeeded and every condition is True |
+| Machines (`machine.sapcloud.io`) | Running |
+| Etcds (`druid.gardener.cloud`) | ready |
 
-Anything terminating stays visible. Other kinds have no checkbox. It's evaluated live: an object that becomes healthy drops out, one that stops being healthy comes back.
+Anything terminating stays visible. Other kinds have no checkbox; its tooltip says what it hides. It's evaluated live: an object that becomes healthy drops out, one that stops being healthy comes back.
+
+What counts as healthy is configurable per kind, for your own resources too: see [`health.yaml`](#healthyaml).
 
 ### Selecting and copying
 
@@ -872,13 +882,14 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 
 Both keys work while the editor's text doesn't have the focus (in the text, keys are the editor's); the other one doesn't switch files while one is open, so edits are never dropped unasked.
 
-A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the link points. The other files (`refs.yaml`, themes) are edited outside kubewing.
+A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the link points. The other files (`refs.yaml`, `health.yaml`, themes) are edited outside kubewing.
 
 | File | Content |
 |---|---|
 | `config.yaml` | settings (below) |
 | `keybindings.yaml` | key overrides |
 | `refs.yaml` | which fields refer to other objects (jumps from the YAML) |
+| `health.yaml` | what "hide healthy" hides, per kind |
 | `themes/<name>.yaml` | theme token overrides |
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
 | `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
@@ -958,6 +969,30 @@ rules:
     namespaceField: namespace         # default: the object's own namespace
 disable: [node-name]                  # ids of built-in rules
 ```
+
+### `health.yaml`
+
+What "hide healthy" hides (see [Hide healthy](#hide-healthy)): a rule per kind. The first rule whose `kinds` match an object decides; kinds without a rule are never hidden, and an object being deleted never is. Yours come before the built-in ones; a rule with a built-in's `id` replaces it, `disable` turns built-in ones off. The built-in rules are in [internal/health/health.yaml](internal/health/health.yaml). Changes apply to open panes once the config is reloaded.
+
+```yaml
+rules:
+  # healthy when every check the rule sets holds
+  - id: widget
+    kinds: [example.com/Widget]       # group/Kind ("Pod" for core kinds), globs allowed ("example.com/*"); required
+    title: widgets that are ready     # the checkbox's tooltip ("{kinds}" = the pane's kind: "widgets")
+    generation: true                  # status.observedGeneration is at least metadata.generation
+    conditions:                       # status.conditions: type → required status; a missing condition fails
+      Ready: "True"
+      Degraded: "False"
+    cel: o.status.phase == "Up"       # a CEL expression over the object o, as in the filter; a missing field fails
+  # cordoned nodes count as healthy too (replaces the built-in rule "node")
+  - id: node
+    kinds: [Node]
+    conditions: {Ready: "True"}
+disable: [pvc]                        # ids of built-in rules
+```
+
+Pods and workloads use checks built into kubewing, named by `builtin: pod`, `workload` (Deployments, StatefulSets), `replicaset` or `daemonset`; a rule of yours can use them for other kinds of the same shape too.
 
 Paths are field names separated by dots, plus:
 

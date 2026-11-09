@@ -138,6 +138,15 @@ Object identity from watch events, not screen position (avoids viddy's row-shift
 - **Label completion** counts keys and values among the source's objects matching the draft's *other* requirements (`Service.Labels`, `internal/bridge/labels.go`): from the pane's objects when the rest is at least as strict as the applied selector or the pane shows the past, else from a metadata-only list of the source; failures fall back to the pane's objects.
 - **CEL completion** takes field paths from the live objects (works for every CRD without OpenAPI). The objects are schemaless, so keys that aren't identifiers complete as `["app.kubernetes.io/name"]`, not Kubernetes' `__dot__` escaping. CEL has a cost limit per evaluation; a missing field is "no match", other errors are counted and reported.
 
+## Health rules (hide healthy)
+
+What `hideHealthy` hides is data, not code: rules in `internal/health/health.yaml` (embedded), extended by the user's `health.yaml` (theirs first, same id replaces, `disable` drops), compiled once per config load (`health.Compile`), like the field references.
+
+- **One rule per kind, first match.** A rule's `kinds` are globs over `group/Kind`, matched by the object's own apiVersion and kind (so the mixed-kind `all` pane works), the decision cached per kind. Terminating objects are never healthy, whatever the rule.
+- **Checks, all must hold:** `builtin` (Go: pod readiness and rollout completion, which CEL would make awkward and slow), `generation` (observedGeneration ≥ generation), `conditions` (type → status, missing fails), `cel` (the filter's CEL environment; a missing field or an error fails). The common CRD shape (conditions plus observedGeneration) needs no CEL.
+- **Go says what applies, not the frontend.** The frame's `Status.Healthy` carries the pane's rule title (from the resolved group and kind; a tape takes the group from its first object), so the checkbox, its tooltip and `h`'s refusal follow the rules without a second copy of the kind list in TypeScript, and follow a config reload.
+- **Reload in place.** `ReloadConfig` hands the new rules to every open view (`View.SetHealth`): matches are recomputed, objects and diff state kept, like a stage change.
+
 ## History buffer
 
 In-memory, newest snapshot + reverse field-path deltas, per shared watch (`internal/history`, diffs from `internal/fieldpath`).
@@ -302,12 +311,13 @@ Example — "a shortcut opens an overlay", by layer:
 | `internal/catalog` | per-context completion snapshot (resource types, namespaces), background refresh |
 | `scripts/release.sh`, `.github/workflows/release.yml` | tagging the next release; building and publishing it on the tag's push |
 | `internal/update` | the update check (GitHub's release list), the offer and its notes, release signatures, the in-place install; `cmd/releasesign` signs release zips |
-| `internal/config` | `~/.kubewing/` loader (config, keybindings, themes, the built-in themes embedded from `themes/`; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
+| `internal/config` | `~/.kubewing/` loader (config, keybindings, `refs.yaml`, `health.yaml`, themes, the built-in themes embedded from `themes/`; invalid parts reported, defaults used); `history.yaml`; `columns.yaml`; `clusters.yaml` |
 | `internal/gardener` | gardenctl-v2 config and patterns, target resolution in the garden (shoot, control plane, project), gardenlogin kubeconfigs, gardenctl session targets; no Gardener Go deps |
 | `internal/safety` | per-context rules, two-phase mutations (prepare → single-use token → execute) |
 | `internal/view` | pipeline over events → keyed diff → viewport frames |
 | `internal/bridge` | frontend API, ≤10 Hz frame pump, WebSocket transport |
 | `internal/app` | the Wails-bound service (thin adapter over the bridge), native menu, window, single instance, detaching |
+| `internal/health` | health rules for hide healthy (`health.yaml`, embedded; pod and workload checks in Go); pure |
 | `internal/relations` | the jump menu's relations (namespace, owners, owned, references), each as a pipeline target; field reference rules (`refs.yaml`, embedded) matched over a YAML text; pure |
 | `internal/tape` | scenario tapes (goldens, headless E2E); fake catalog; fake actions (echo shell, port-forward; a service's via `rel-services`); fake metrics (`metrics:`); `filter: true` tapes (`rel-*`) honor namespace and selectors and serve metadata |
 | `frontend/src` | React 19 + Compiler, Glide grid, zustand, transport (Wails / WS) |

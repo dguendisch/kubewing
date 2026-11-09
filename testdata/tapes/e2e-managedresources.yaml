@@ -1,0 +1,47 @@
+# E2E tape for "hide healthy" on a kind decided by a health rule of
+# conditions (Gardener's managed resources): one healthy, one progressing,
+# one whose apply failed, and one the controller hasn't seen yet.
+pipeline:
+  source: {resource: managedresources}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Healthy, type: string, priority: 0}
+initial:
+  - object:
+      apiVersion: resources.gardener.cloud/v1alpha1
+      kind: ManagedResource
+      metadata: {name: kube-proxy, namespace: shoot--foo--bar, uid: mr-ok, generation: 3, creationTimestamp: "2026-01-01T10:00:00Z"}
+      status:
+        observedGeneration: 3
+        conditions:
+          - {type: ResourcesApplied, status: "True", reason: ApplySucceeded}
+          - {type: ResourcesHealthy, status: "True", reason: ResourcesHealthy, message: All resources are healthy.}
+          - {type: ResourcesProgressing, status: "False", reason: ResourcesRolledOut}
+    cells: [kube-proxy, "True"]
+  - object:
+      apiVersion: resources.gardener.cloud/v1alpha1
+      kind: ManagedResource
+      metadata: {name: coredns, namespace: shoot--foo--bar, uid: mr-progressing, generation: 5, creationTimestamp: "2026-01-01T10:00:00Z"}
+      status:
+        observedGeneration: 5
+        conditions:
+          - {type: ResourcesApplied, status: "True", reason: ApplySucceeded}
+          - {type: ResourcesHealthy, status: "True", reason: ResourcesHealthy}
+          - {type: ResourcesProgressing, status: "True", reason: DeploymentProgressing}
+    cells: [coredns, "True"]
+  - object:
+      apiVersion: resources.gardener.cloud/v1alpha1
+      kind: ManagedResource
+      metadata: {name: vpn-shoot, namespace: shoot--foo--bar, uid: mr-failed, generation: 2, creationTimestamp: "2026-01-01T10:00:00Z"}
+      status:
+        observedGeneration: 2
+        conditions:
+          - {type: ResourcesApplied, status: "False", reason: ApplyFailed}
+          - {type: ResourcesHealthy, status: "True", reason: ResourcesHealthy}
+          - {type: ResourcesProgressing, status: "False", reason: ResourcesRolledOut}
+    cells: [vpn-shoot, "True"]
+  - object:
+      apiVersion: resources.gardener.cloud/v1alpha1
+      kind: ManagedResource
+      metadata: {name: metrics-server, namespace: shoot--foo--bar, uid: mr-new, generation: 1, creationTimestamp: "2026-01-01T10:00:00Z"}
+    cells: [metrics-server, ""]

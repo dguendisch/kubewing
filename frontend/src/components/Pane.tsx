@@ -641,31 +641,32 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         onBlur={onBlur}
         className={`w-36 truncate ${field}`}
       />
-      {/* other kinds aren't affected, so there's nothing to show */}
-      {S.hasHealth(pane.kind) ? (
-        <label title={healthyTitle(pane.kind!)} className="flex shrink-0 cursor-pointer items-center gap-1 text-fg-muted">
-          <input
-            type="checkbox"
-            aria-label="hide healthy"
-            checked={!!pane.spec.hideHealthy}
-            onChange={(e) => apply({ hideHealthy: e.target.checked })}
-            // a click mustn't leave focus in the header: keys go back to the table
-            onMouseUp={(e) => e.currentTarget.blur()}
-            className="accent-(--color-accent)"
-          />
-          hide healthy
-        </label>
-      ) : null}
+      <HideHealthy pane={pane} apply={apply} />
     </header>
   );
 }
 
-function healthyTitle(kind: string) {
-  const what =
-    kind === "Pod"
-      ? "pods that are Running with all containers ready"
-      : `${kind.toLowerCase()}s whose replicas are all current, up to date, ready and available`;
-  return `hide ${what} (h)`;
+/**
+ * The hide healthy checkbox, for a kind with a health rule (built in or health.yaml's): the status names what it
+ * hides. Other kinds aren't affected, so there's nothing to show.
+ */
+function HideHealthy({ pane, apply }: { pane: S.PaneState; apply: (patch: Partial<S.PaneSpec>) => void }) {
+  const healthy = usePaneStatus(pane.serverId)?.healthy;
+  if (!healthy) return null;
+  return (
+    <label title={`hide ${healthy} (h)`} className="flex shrink-0 cursor-pointer items-center gap-1 text-fg-muted">
+      <input
+        type="checkbox"
+        aria-label="hide healthy"
+        checked={!!pane.spec.hideHealthy}
+        onChange={(e) => apply({ hideHealthy: e.target.checked })}
+        // a click mustn't leave focus in the header: keys go back to the table
+        onMouseUp={(e) => e.currentTarget.blur()}
+        className="accent-(--color-accent)"
+      />
+      hide healthy
+    </label>
+  );
 }
 
 /** The not-yet-synced marker: connected's dot, pulsing while the initial list loads; a still ring once the

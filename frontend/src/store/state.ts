@@ -18,7 +18,7 @@ export interface PaneSpec {
   filter: string;
   /** The filter a jump set (o.metadata.name == …): ⌘O drops the filter while it's still this one. */
   jumpFilter?: string;
-  /** Hides healthy objects of the healthKinds (other kinds pass). */
+  /** Hides healthy objects, as the health rule for their kind says (built in or health.yaml; kinds without one pass). */
   hideHealthy?: boolean;
   /** Sorts by a column (a header click): its name, "-" in front = descending; unset = kubectl's order. */
   sort?: string;
@@ -36,13 +36,6 @@ export function sortOf(sort: string | undefined): { column: string; desc: boolea
   if (!sort) return undefined;
   return sort.startsWith("-") ? { column: sort.slice(1), desc: true } : { column: sort, desc: false };
 }
-
-/**
- * Kinds "hide healthy" knows (internal/view/healthy.go): pods Running with
- * all containers ready, workloads whose rollout is complete.
- */
-export const healthKinds = ["Pod", "Deployment", "StatefulSet", "ReplicaSet", "DaemonSet"];
-export const hasHealth = (kind?: string) => !!kind && healthKinds.includes(kind);
 
 export interface PaneState {
   id: string;

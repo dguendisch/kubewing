@@ -1,29 +1,34 @@
-package view
+package health
 
-// healthy reports whether obj has nothing to look at: not being deleted and,
-// by kind, a ready pod or a workload whose rollout is complete (see
-// healthyPod, healthyWorkload). Other kinds are never healthy, so never
-// hidden; the frontend's healthKinds lists the same kinds.
-func healthy(obj map[string]any) bool {
-	meta, _ := obj["metadata"].(map[string]any)
-	if meta["deletionTimestamp"] != nil {
-		return false
-	}
-	spec, _ := obj["spec"].(map[string]any)
-	status, _ := obj["status"].(map[string]any)
-	switch obj["kind"] {
-	case "Pod":
+// builtins are the checks a rule names by `builtin`: pods, and workloads
+// whose rollout is complete (what kubectl rollout status waits for).
+var builtins = map[string]func(obj map[string]any) bool{
+	"pod": func(obj map[string]any) bool {
+		spec, _ := obj["spec"].(map[string]any)
+		status, _ := obj["status"].(map[string]any)
 		return healthyPod(spec, status)
-	case "Deployment", "StatefulSet":
+	},
+	"workload": func(obj map[string]any) bool {
+		meta, spec, status := parts(obj)
 		return healthyWorkload(meta, spec, status, "replicas", "updatedReplicas", "readyReplicas", "availableReplicas")
-	case "ReplicaSet":
-		// a ReplicaSet doesn't roll out: its pods are all of its one template
+	},
+	// a ReplicaSet doesn't roll out: its pods are all of its one template
+	"replicaset": func(obj map[string]any) bool {
+		meta, spec, status := parts(obj)
 		return healthyWorkload(meta, spec, status, "replicas", "readyReplicas", "availableReplicas")
-	case "DaemonSet":
+	},
+	"daemonset": func(obj map[string]any) bool {
+		meta, _, status := parts(obj)
 		return number(status["numberMisscheduled"]) == 0 &&
 			healthyWorkload(meta, nil, status, "currentNumberScheduled", "updatedNumberScheduled", "numberReady", "numberAvailable")
-	}
-	return false
+	},
+}
+
+func parts(obj map[string]any) (meta, spec, status map[string]any) {
+	meta, _ = obj["metadata"].(map[string]any)
+	spec, _ = obj["spec"].(map[string]any)
+	status, _ = obj["status"].(map[string]any)
+	return
 }
 
 // healthyWorkload reports whether the controller has seen the latest spec

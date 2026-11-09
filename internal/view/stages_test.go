@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dguendisch/kubewing/internal/health"
 	"github.com/dguendisch/kubewing/internal/pipeline"
 	"github.com/dguendisch/kubewing/internal/source"
 )
@@ -194,5 +195,85 @@ func TestGrepTerms(t *testing.T) {
 		if got := names(v); !slices.Equal(got, want) {
 			t.Errorf("grep %q: rows = %v, want %v", grep, got, want)
 		}
+	}
+}
+
+func TestHideHealthyStage(t *testing.T) {
+	ready := func(uid, name string, ok bool) source.Item {
+		it := stagePod(uid, name, "Running", "api", 0)
+		it.Object.Object["status"].(map[string]any)["containerStatuses"] = []any{map[string]any{"name": "c", "ready": ok}}
+		return it
+	}
+	v := stageView(t)
+	v.Apply(source.Event{Type: source.Relist, Items: []source.Item{
+		ready("a", "api-0", true),
+		ready("b", "api-1", false),
+		stagePod("c", "api-2", "Pending", "api", 0),
+	}}, t0)
+	if err := v.SetStages([]pipeline.Stage{{HideHealthy: true}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(v); !slices.Equal(got, []string{"api-1", "api-2"}) {
+		t.Fatalf("rows = %v", got)
+	}
+	// the draft CEL preview keeps the stage
+	if pv := v.PreviewFilter(`o.status.phase == "Running"`); pv.Matched != 1 {
+		t.Fatalf("preview = %+v", pv)
+	}
+	// becoming ready hides a pod live
+	v.Apply(source.Event{Type: source.Modified, Item: ready("b", "api-1", true)}, t0)
+	if got := names(v); !slices.Equal(got, []string{"api-2"}) {
+		t.Fatalf("rows after ready = %v", got)
+	}
+	_ = v.SetStages(nil)
+	if got := names(v); len(got) != 3 {
+		t.Fatalf("rows after toggle off = %v", got)
+	}
+}
+
+// new health rules (a config reload) apply to the rows in place; the status
+// names what the pane's rule hides
+func TestSetHealth(t *testing.T) {
+	ready := func(uid, name string) source.Item {
+		it := stagePod(uid, name, "Running", "api", 0)
+		it.Object.Object["status"].(map[string]any)["containerStatuses"] = []any{map[string]any{"name": "c", "ready": true}}
+		return it
+	}
+	v, err := New(pipeline.Pipeline{
+		Source: pipeline.Source{Resource: "pods"},
+		Stages: []pipeline.Stage{{HideHealthy: true}},
+		Render: pipeline.Render{Columns: []pipeline.Column{{Name: "NAME", Path: "metadata.name"}}},
+	}, Options{Kind: "Pod"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v.Apply(source.Event{Type: source.Relist, Items: []source.Item{ready("a", "api-0"), stagePod("b", "api-1", "Pending", "api", 0)}}, t0)
+	if got := names(v); !slices.Equal(got, []string{"api-1"}) {
+		t.Fatalf("rows = %v", got)
+	}
+	f, _ := v.Frame(t0)
+	if f.Status.Healthy != "pods that are Running with all containers ready" {
+		t.Errorf("status healthy = %q", f.Status.Healthy)
+	}
+	// a rule of one's own: pending pods count as healthy, running ones don't
+	rs, errs := health.Compile(health.RulesFile{Rules: []health.Rule{{ID: "pod", Kinds: []string{"Pod"}, Title: "pending pods", CEL: `o.status.phase == "Pending"`}}})
+	if len(errs) > 0 {
+		t.Fatal(errs)
+	}
+	v.SetHealth(rs)
+	if got := names(v); !slices.Equal(got, []string{"api-0"}) {
+		t.Fatalf("rows after reload = %v", got)
+	}
+	if f, _ := v.Frame(t0); f.Status.Healthy != "pending pods" {
+		t.Errorf("status healthy after reload = %q", f.Status.Healthy)
+	}
+	// no rule for the kind: nothing hidden, nothing to name
+	none, _ := health.Compile(health.RulesFile{Disable: []string{"pod"}})
+	v.SetHealth(none)
+	if got := names(v); len(got) != 2 {
+		t.Fatalf("rows without a rule = %v", got)
+	}
+	if f, _ := v.Frame(t0); f.Status.Healthy != "" {
+		t.Errorf("status healthy without a rule = %q", f.Status.Healthy)
 	}
 }

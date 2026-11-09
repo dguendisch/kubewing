@@ -20,6 +20,7 @@ import (
 	"github.com/dguendisch/kubewing/internal/catalog"
 	"github.com/dguendisch/kubewing/internal/config"
 	"github.com/dguendisch/kubewing/internal/gardener"
+	"github.com/dguendisch/kubewing/internal/health"
 	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
@@ -148,7 +149,9 @@ func (s *Service) viewOptions(sub *source.Subscription, namespaced bool) view.Op
 	vo := s.opts.View
 	vo.Namespaced = namespaced
 	vo.Kind = sub.Resolved.Kind
+	vo.Group = sub.Resolved.GVR.Group
 	vo.History = sub.History
+	vo.Health = s.Config().HealthRules()
 	if vo.Normalizer == nil {
 		vo.Normalizer = s.normalizer()
 	}
@@ -172,13 +175,34 @@ func (s *Service) Config() config.Effective {
 // ReloadConfig re-reads the config files and emits ConfigEvent. Diff rules
 // apply to watches started afterwards: a pane joining a running watch (a
 // split) keeps its rules, so one history never mixes two rule sets. The
-// history limits apply at once, to running recordings too.
+// history limits and the health rules apply at once, to running
+// recordings and open panes too.
 func (s *Service) ReloadConfig() config.Effective {
 	cfg := config.Load(s.opts.ConfigDir)
 	s.setConfig(cfg)
 	s.reg.SetLimits(s.historyLimits())
+	s.setHealth(cfg.HealthRules())
 	s.emit.Emit(ConfigEvent, cfg)
 	return cfg
+}
+
+// setHealth gives open panes new health rules; a pane hiding healthy
+// objects shows what they change at its next frame.
+func (s *Service) setHealth(rs *health.Rules) {
+	s.mu.Lock()
+	panes := make([]*pane, 0, len(s.panes))
+	for _, pn := range s.panes {
+		panes = append(panes, pn)
+	}
+	s.mu.Unlock()
+	for _, pn := range panes {
+		pn.mu.Lock()
+		if pn.view != nil {
+			pn.view.SetHealth(rs)
+		}
+		pn.mu.Unlock()
+		pn.poke()
+	}
 }
 
 // ConfigFile is a config file for the settings editor: config.yaml (⌘,)

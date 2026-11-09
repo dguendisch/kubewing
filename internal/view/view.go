@@ -24,6 +24,7 @@ import (
 
 	"github.com/dguendisch/kubewing/internal/expr"
 	"github.com/dguendisch/kubewing/internal/fieldpath"
+	"github.com/dguendisch/kubewing/internal/health"
 	"github.com/dguendisch/kubewing/internal/history"
 	"github.com/dguendisch/kubewing/internal/normalize"
 	"github.com/dguendisch/kubewing/internal/pipeline"
@@ -52,6 +53,12 @@ type Options struct {
 	// only (a namespace's snapshot): the detail's YAML, and decoding and the
 	// field history on it, read it. nil = the row's object as it is.
 	Full func(key string) *unstructured.Unstructured
+	// Health decides what hideHealthy hides (SetHealth replaces it); nil =
+	// the built-in rules.
+	Health *health.Rules
+	// Group is the resource's API group ("apps"; "" = core): with Kind, it
+	// picks the health rule the status names (Status.Healthy).
+	Group string
 }
 
 // Versions reads an object's recorded versions (source.History).
@@ -77,6 +84,9 @@ func (o *Options) defaults() {
 	}
 	if o.Normalizer == nil {
 		o.Normalizer = normalize.New()
+	}
+	if o.Health == nil {
+		o.Health = health.Default
 	}
 }
 
@@ -290,6 +300,23 @@ func (v *View) SetStages(in []pipeline.Stage) error {
 		v.evalMatch(e)
 	}
 	return nil
+}
+
+// SetHealth replaces the health rules (a config reload): objects and diff
+// state are kept, the match flags recomputed if hideHealthy is on.
+func (v *View) SetHealth(rs *health.Rules) {
+	if rs == nil {
+		rs = health.Default
+	}
+	v.opts.Health = rs
+	if !v.hideHealthy {
+		return
+	}
+	v.sorted = nil
+	v.firstErr = ""
+	for _, e := range v.entries {
+		v.evalMatch(e)
+	}
 }
 
 func compileColumns(in []pipeline.Column) ([]colSpec, error) {
@@ -723,7 +750,7 @@ func (v *View) evalMatch(e *entry) {
 // matches applies the view's stages to an entry, with filters in place of
 // the view's own (a draft filter is previewed that way).
 func (v *View) matches(e *entry, filters []*expr.Program) (bool, error) {
-	if v.hideHealthy && healthy(e.item.Object.Object) {
+	if v.hideHealthy && v.opts.Health.Healthy(e.item.Object.Object) {
 		return false, nil
 	}
 	return matches(e.item.Object.Object, e.cells, filters, v.greps)
@@ -989,7 +1016,7 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 			f.Rows = append(f.Rows, r)
 		}
 	}
-	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs, Marked: len(v.marks)}
+	status := Status{Synced: v.synced, Objects: v.objectCount(), Error: v.err, FilterErrors: v.matchErrs, Marked: len(v.marks), Healthy: v.opts.Health.Title(v.opts.Group, v.opts.Kind)}
 	status.Recording = v.opts.History != nil && v.opts.History.Recording()
 	if !v.at.IsZero() {
 		status.At, status.Behind = v.at.UTC().Format(time.RFC3339Nano), v.behind

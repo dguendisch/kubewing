@@ -50,6 +50,8 @@ export interface Status {
   skipped?: number;
   /** Rows marked for an action on many rows. */
   marked?: number;
+  /** What hide healthy hides here ("pods that are Running …", the health rule's title); unset = no rule for the kind. */
+  healthy?: string;
 }
 
 /** A resource type a listing couldn't list, and why (forbidden, an aggregated API down). */
