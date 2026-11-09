@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+
+## [0.5.0] - 2026-11-09
 ### Added
 - hide healthy (`h`) works on more kinds: Gardener managed resources (applied, healthy and not progressing), nodes (Ready and not cordoned), jobs, persistent volume claims, Gardener extension resources, shoots, seeds, machines and etcds
 - `health.yaml` in the config directory sets what hide healthy hides per kind, for your own resources too: status conditions, the observed generation or a CEL expression
