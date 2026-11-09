@@ -232,9 +232,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Shift+R", command: "source.reconnect" },
   // a listing (everything in a namespace) lists again: it isn't watched; what changed since is marked
   { key: "Meta+R", command: "source.refresh", when: ["table", "detail"] },
+  // the label selector and CEL fields are a ⇥ further (filter.focusLabels / filter.focusCel: unbound, in the menu bar)
   { key: "/", command: "filter.focus", when: ["table"] },
-  { key: "L", command: "filter.focusLabels", when: ["table"] },
-  { key: "C", command: "filter.focusCel", when: ["table"] },
   { key: "H", command: "filter.toggleHealthy", when: ["table"] },
   // as in kubectl get -o wide
   { key: "O", command: "view.columns", when: ["table"] },
@@ -363,9 +362,9 @@ export const defaultBindings: Binding[] = [
   { key: "S", command: "object.scale", when: ["table"] },
   // kubectl rollout restart (always confirmed: every pod is replaced); r is the YAML view's refresh, not bound in the table
   { key: "R", command: "object.restart", when: ["table"] },
-  // logs (stern-like): ⌘L tails the selected row's pods, ⌥⌘L every pod the pods pane shows
-  { key: "Meta+L", command: "object.logs", when: ["table"] },
-  { key: "Alt+Meta+L", command: "view.logs", when: ["table"] },
+  // logs (stern-like): l tails the selected row's pods, ⌥L every pod the pods pane shows
+  { key: "L", command: "object.logs", when: ["table"] },
+  { key: "Alt+L", command: "view.logs", when: ["table"] },
   // in a log pane: / focuses the filter, t toggles timestamps, ⌘K clears, ⌘F finds
   { key: "/", command: "logs.focusFilter", when: ["logs"] },
   { key: "Escape", command: "logs.blurFilter", when: ["logsfilter"] },

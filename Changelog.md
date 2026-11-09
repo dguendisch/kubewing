@@ -1,6 +1,8 @@
 # Changelog
 ## [Unreleased]
 ### Changed
+- logs moved from `⌘L` to `l` (and from `⌥⌘L` to `⌥L` for the whole pane)
+- `l` and `c` no longer jump to the label selector and CEL fields: `/` and then `⇥` gets there (or the menu bar's **View → Filter by Labels / Filter by CEL**)
 - the node shell moved from `⌥⌘O` to `n` in a table, like the other row keys; from a terminal pane it's in the menu bar (**Object → Node Shell…**)
 - the row menu (`⌘⏎`) is regrouped
 

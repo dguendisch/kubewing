@@ -1,5 +1,5 @@
 /**
- * The log dialog's form (⌘L): which containers, how much history, follow,
+ * The log dialog's form (l): which containers, how much history, follow,
  * timestamps. Pure, so the parsing is a unit test rather than a dialog.
  */
 import type { LogsOptions } from "../transport/types";

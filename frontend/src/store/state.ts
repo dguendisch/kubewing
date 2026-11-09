@@ -289,7 +289,7 @@ export interface Overlay {
   field?: FieldHistory;
   /** config: the file as it was when the editor opened (config.yaml or keybindings.yaml). */
   configFile?: ConfigFile;
-  /** logs: what the tail follows: the row's pods (key), every pod the pane shows (⌥⌘L) or the marked rows' pods. */
+  /** logs: what the tail follows: the row's pods (key), every pod the pane shows (⌥L) or the marked rows' pods. */
   scope?: LogsScope;
   /** Focus restored when the overlay closes. */
   restore: FocusContext;

@@ -295,7 +295,7 @@ Each object still gets its own safety check, its UID precondition and its own re
 
 ## 4. Filtering
 
-The filter bar in each pane's header has three fields: grep (`/`), label selector (`l`) and CEL (`c`).
+The filter bar in each pane's header has three fields: grep (`/`), label selector and CEL. `/` lands in grep, `⇥` moves on to the label selector and CEL (`⇧⇥` back); the fields can also be clicked, or reached from the menu bar (**View → Filter by Labels / Filter by CEL**).
 
 Filter changes keep the watch and the diff state. `⏎` and `Esc` go back to the table from any of the three fields.
 
@@ -314,7 +314,7 @@ Matches the rendered row text, applied as you type, fzf-style:
 
 A negated term or an alternative after `|` applies once it's finished (a following space, `⏎`, or leaving the field), so the table doesn't blank and refill while you type `!c`, `!co`, … `Esc` restores the grep the field had when it got focus. Matches are highlighted in the cells. Age columns are matched as timestamps (and not highlighted).
 
-### Label selector: `l`
+### Label selector
 
 Kubernetes' syntax, sent to the API server (so it narrows what's loaded):
 
@@ -326,7 +326,7 @@ Kubernetes' syntax, sent to the API server (so it narrows what's loaded):
 | `env`, `!env` | has / doesn't have the label |
 | `app=web, env in (prod, staging)` | commas AND |
 
-### CEL: `c`
+### CEL
 
 A [CEL](https://cel.dev) expression over the object `o`, for what a selector can't express. It runs in kubewing on the loaded objects, so narrow with the label selector first on big sources.
 
@@ -611,7 +611,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `⌘C` / `⌘⇧C` | copy name / copy cell… |
 | `⌘J` | jump to… |
 | `v` | events |
-| `⌘L` | logs… (`⌥⌘L` for the whole pane) |
+| `l` | logs… (`⌥L` for the whole pane) |
 | `x` | exec shell |
 | `b` | debug container… |
 | `n` | node shell… |
@@ -654,9 +654,9 @@ kubewing has a stern-like multi-pod log tail.
 
 ### Starting a tail
 
-- `⌘L` on a row follows its pods: a pod row follows that pod (by name, so a recreated StatefulSet pod carries on); a workload, node or namespace row follows all of its pods, keeping up as pods come and go.
-- `⌘L` with rows marked follows the pods of all marked rows together, in one tail: marked pods by name, marked workloads, nodes or namespaces with all their pods. A pod that two marked rows cover (a deployment and one of its pods) is followed once. Rows without pods (a config map) are skipped, and the dialog names them. At most 20 marked workloads, nodes or namespaces at once (any number of pods).
-- `⌥⌘L` (or **logs of pane**) follows every pod the pods pane currently shows, with its namespace, selectors, grep and CEL applied (a snapshot: later edits to the pane don't change it).
+- `l` on a row follows its pods: a pod row follows that pod (by name, so a recreated StatefulSet pod carries on); a workload, node or namespace row follows all of its pods, keeping up as pods come and go.
+- `l` with rows marked follows the pods of all marked rows together, in one tail: marked pods by name, marked workloads, nodes or namespaces with all their pods. A pod that two marked rows cover (a deployment and one of its pods) is followed once. Rows without pods (a config map) are skipped, and the dialog names them. At most 20 marked workloads, nodes or namespaces at once (any number of pods).
+- `⌥L` (or **logs of pane**) follows every pod the pods pane currently shows, with its namespace, selectors, grep and CEL applied (a snapshot: later edits to the pane don't change it).
 
 A dialog asks first: which containers (all checked), how much history per container (the last lines, `100` by default from `logs.tail`; since a duration like `10m` or `1h30m`; or `all`), follow (on) and timestamps (off). `⏎` starts from anywhere in it, so `⌘L ⏎` takes the defaults. Without follow, each container's log is read once and the tail ends.
 
@@ -986,8 +986,8 @@ The most used keys:
 | Where | Keys |
 |---|---|
 | Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
-| Table | `/` grep · `l` labels · `c` CEL · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
-| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `⌘L` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
+| Table | `/` grep (`⇥` labels, CEL) · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
+| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `l` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |

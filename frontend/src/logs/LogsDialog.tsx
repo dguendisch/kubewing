@@ -6,12 +6,12 @@ import type { LogsScope, PodRef } from "../transport/types";
 import { checkLogForm, initialLogForm, perPodUnavailable, toggleAllContainers, toggleContainer, type LogForm } from "./options";
 
 /**
- * ⌘L / ⌥⌘L: what a log tail shows, before it starts (of a row, the marked
+ * l / ⌥L: what a log tail shows, before it starts (of a row, the marked
  * rows or the whole pane). The containers its pods
  * have (all checked), how much history (the last lines, since a duration ago,
  * or all), whether to follow, and timestamps. With several pods: a pane
  * per pod instead of one tail, below or in a new tab. ⏎ from anywhere in it starts,
- * so ⌘L ⏎ is the defaults.
+ * so l ⏎ is the defaults.
  */
 export function LogsDialog() {
   const o = useUI((s) => (s.overlay?.kind === "logs" ? s.overlay : undefined));

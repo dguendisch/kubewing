@@ -617,7 +617,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         ref={labelInput}
         field="labels"
         label="label selector"
-        placeholder="l labels"
+        placeholder="⇥ labels"
         applied={pane.spec.labelSelector}
         serverId={pane.serverId}
         focused={filterField === "labels"}
@@ -631,7 +631,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         ref={celInput}
         field="filter"
         label="cel"
-        placeholder="c cel"
+        placeholder="⇥ cel"
         applied={pane.spec.filter}
         serverId={pane.serverId}
         focused={filterField === "cel"}

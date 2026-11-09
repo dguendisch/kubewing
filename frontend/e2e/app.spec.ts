@@ -640,10 +640,11 @@ test("label selector: click or l focuses it and keeps focus while typing, ⏎ go
   await page.keyboard.press("Escape");
   expect((await inspect(page)).focus).toBe("table");
   await expect(labels).not.toBeFocused();
-  // l from the table lands in the label field, / still in grep
-  await page.keyboard.press("l");
+  // / and ⇥ from the table land in the label field (l is the logs' key)
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
   await expect(labels).toBeFocused();
-  await expect(labels).toHaveValue("app=api"); // l is not typed into the field
+  await expect(labels).toHaveValue("app=api");
   // esc drops a draft: the applied selector comes back, nothing applied
   await page.keyboard.type(",tier=x");
   await page.keyboard.press("Escape");
@@ -652,7 +653,8 @@ test("label selector: click or l focuses it and keeps focus while typing, ⏎ go
   await expect(labels).toHaveValue("app=api");
   expect((await focused(page)).spec.labelSelector).toBe("app=api");
   // back in the field, the shorter value from esc completes as before (the caret was past its end)
-  await page.keyboard.press("l");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
   await expect(labels).toBeFocused();
   await page.keyboard.press("End");
   await page.keyboard.type(",ap");
@@ -665,7 +667,8 @@ test("label selector: click or l focuses it and keeps focus while typing, ⏎ go
 
 test("label selector completes keys and values from the live objects; ↓ opens the list", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("l");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
   const labels = page.getByLabel("label selector");
   const list = page.getByRole("listbox", { name: "label suggestions" });
   // ↓ in the empty field lists every key, the first one highlighted
@@ -700,7 +703,8 @@ test("label selector completes keys and values from the live objects; ↓ opens 
 test("label completion isn't limited by the applied selector, only by the draft's other requirements", async ({ page }) => {
   // rel-pods honors selectors: app=web leaves 4 of its 6 pods loaded
   await openTape(page, "rel-pods", 6);
-  await page.keyboard.press("l");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
   const labels = page.getByLabel("label selector");
   const list = page.getByRole("listbox", { name: "label suggestions" });
   await page.keyboard.type("app=web");
@@ -719,9 +723,11 @@ test("label completion isn't limited by the applied selector, only by the draft'
   await expect(list.getByRole("option")).toHaveText(["app4/4"]);
 });
 
-test("cel filter: c focuses, a draft previews without touching the table, ⏎ applies and goes back to the table", async ({ page }) => {
+test("cel filter: / ⇥ ⇥ focuses, a draft previews without touching the table, ⏎ applies and goes back to the table", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   const cel = page.getByLabel("cel", { exact: true });
   await expect(cel).toBeFocused();
   const preview = page.getByRole("status", { name: "cel draft" });
@@ -742,7 +748,9 @@ test("cel filter: c focuses, a draft previews without touching the table, ⏎ ap
   await expect(cel).not.toBeFocused();
   expect((await inspect(page)).focus).toBe("table");
   // a parse error is refused with the reason; the applied filter stays, and so does the focus
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await page.keyboard.press("End");
   await page.keyboard.type(" &&");
   await expect(cel).toHaveAttribute("aria-invalid", "true");
@@ -756,7 +764,9 @@ test("cel filter: c focuses, a draft previews without touching the table, ⏎ ap
   await expect(cel).toHaveAttribute("aria-invalid", "true");
   await expect(cel).toHaveAttribute("title", /Syntax error/);
   await page.keyboard.press("Escape");
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await expect(preview).toContainText("Syntax error");
   // esc drops the draft: the applied filter is back in the field, and keys go to the table
   await page.keyboard.press("Escape");
@@ -778,7 +788,9 @@ test("cel filter: c focuses, a draft previews without touching the table, ⏎ ap
 
 test("cel filter completes field paths from the live objects", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await page.keyboard.type("o.metadata.la");
   const list = page.getByRole("listbox", { name: "cel suggestions" });
   await expect(list.getByRole("option").first()).toContainText("labels");
@@ -789,7 +801,9 @@ test("cel filter completes field paths from the live objects", async ({ page }) 
 
 test("cel filter: ↓ opens the suggestions at the caret, ↑ in an empty field recalls recent filters", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   const cel = page.getByLabel("cel", { exact: true });
   const list = page.getByRole("listbox", { name: "cel suggestions" });
   await page.keyboard.press("ArrowDown");
@@ -818,7 +832,9 @@ test("cel filter: ↓ opens the suggestions at the caret, ↑ in an empty field 
 test("cel filter brackets keys that aren't identifiers, and completes after them", async ({ page }) => {
   // runs before the safety tests delete web-0 from this tape (serial, in file order)
   await openTape(page, "e2e-static", 8);
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   const cel = page.getByLabel("cel", { exact: true });
   const list = page.getByRole("listbox", { name: "cel suggestions" });
   await page.keyboard.type("o.metadata.annotations.kub");
@@ -835,7 +851,9 @@ test("cel filter brackets keys that aren't identifiers, and completes after them
 
 test("cel filter completes operators that fit the field's type", async ({ page }) => {
   await openTape(page);
-  await page.keyboard.press("c");
+  await page.keyboard.press("/");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Tab");
   await page.keyboard.type("o.status.phase ");
   const list = page.getByRole("listbox", { name: "cel suggestions" });
   await expect(list.getByRole("option").first()).toContainText("==");
@@ -5371,7 +5389,7 @@ test.describe("jump to (⌘J)", () => {
   });
 });
 
-// Multi-pod log tail (⌘L): the e2e-pod-logs tape has pods api-0, api-1, worker-0
+// Multi-pod log tail (l): the e2e-pod-logs tape has pods api-0, api-1, worker-0
 // (worker excluded by app=api), a later api-2 and a deleted api-1. Each pod's
 // lines carry its name; a selector pane filters pods, the live filter filters
 // lines.
@@ -5437,11 +5455,12 @@ test.describe("logs", () => {
       return p.spec.resource === "e2e-pod-logs" && !!p.serverId && !!p.status?.synced;
     }).toBe(true);
     if (labelSelector) {
-      await page.keyboard.press("l");
+      await page.keyboard.press("/");
+      await page.keyboard.press("Tab");
       await page.keyboard.type(labelSelector);
       await page.keyboard.press("Enter");
       await expect.poll(async () => (await focused(page)).spec.labelSelector).toBe(labelSelector);
-      // ⏎ went back to the table, so table keys (⌥⌘L) resolve
+      // ⏎ went back to the table, so table keys (⌥L) resolve
       await expect.poll(async () => (await inspect(page)).focus).toBe("table");
     }
   }
@@ -5450,8 +5469,8 @@ test.describe("logs", () => {
     await page.keyboard.press("g");
     for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
   }
-  // ⌘L / ⌥⌘L open the log dialog; ⏎ starts with its defaults once it has listed the pods
-  async function tail(page: Page, key = "ControlOrMeta+l") {
+  // l / ⌥L open the log dialog; ⏎ starts with its defaults once it has listed the pods
+  async function tail(page: Page, key = "l") {
     await page.keyboard.press(key);
     const dialog = page.getByRole("dialog", { name: "logs" });
     await expect(dialog.getByRole("textbox", { name: "history" })).toBeFocused();
@@ -5466,7 +5485,7 @@ test.describe("logs", () => {
     return session ? (s.logs?.[session]?.screen ?? "") : "";
   }
 
-  test("⌘L on a pod row tails just that pod", async ({ page }) => {
+  test("l on a pod row tails just that pod", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
     await tail(page);
@@ -5480,9 +5499,9 @@ test.describe("logs", () => {
     expect((await screen(page)).split("\n")[0]).toBe("api-0 app starting");
   });
 
-  test("⌥⌘L tails every pod the pane shows; a label selector narrows it", async ({ page }) => {
+  test("⌥L tails every pod the pane shows; a label selector narrows it", async ({ page }) => {
     await openLogs(page, "app=api");
-    await tail(page, "Alt+ControlOrMeta+l");
+    await tail(page, "Alt+l");
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
     // api pods are followed, worker is not (filtered out by app=api)
     await expect.poll(() => screen(page)).toContain("api-0 app ready");
@@ -5490,7 +5509,7 @@ test.describe("logs", () => {
     expect(await screen(page)).not.toContain("worker-0");
   });
 
-  test("⌘L with rows marked tails the marked pods together", async ({ page }) => {
+  test("l with rows marked tails the marked pods together", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
     await page.keyboard.press("Space");
@@ -5499,7 +5518,7 @@ test.describe("logs", () => {
     await expect.poll(async () => (await focused(page)).status?.marked).toBe(2);
     // the cursor on api-1, which isn't marked: the marks win
     await select(page, "lg-api-1");
-    await page.keyboard.press("ControlOrMeta+l");
+    await page.keyboard.press("l");
     await expect(page.getByRole("dialog", { name: "logs" })).toContainText("logs of api-0, worker-0");
     await page.keyboard.press("Escape");
     await tail(page);
@@ -5523,7 +5542,7 @@ test.describe("logs", () => {
     const logPanes = async () => Object.values((await inspect(page)).panes).filter((p) => p.logs).map((p) => p.logs!.title).sort();
 
     // below: one pane per pod, stacked under the table
-    await page.keyboard.press("ControlOrMeta+l");
+    await page.keyboard.press("l");
     await expect(perPod).toBeEnabled();
     await expect(newTab).toBeDisabled(); // only with a pane per pod
     await perPod.check();
@@ -5540,7 +5559,7 @@ test.describe("logs", () => {
     // ⌥⌘↑ from the first log pane: back to the table, its marks still there
     await page.keyboard.press("Alt+ControlOrMeta+ArrowUp");
     await expect.poll(() => inspect(page).then((x) => x.focus)).toBe("table");
-    await page.keyboard.press("ControlOrMeta+l");
+    await page.keyboard.press("l");
     await perPod.check();
     await newTab.check();
     await page.keyboard.press("Enter");
@@ -5623,10 +5642,10 @@ test.describe("logs", () => {
     expect((await inspect(page)).focus).toBe("logs");
   });
 
-  test("⌘L asks first: containers, history, follow and timestamps; esc cancels", async ({ page }) => {
+  test("l asks first: containers, history, follow and timestamps; esc cancels", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");
-    await page.keyboard.press("ControlOrMeta+l");
+    await page.keyboard.press("l");
     const dialog = page.getByRole("dialog", { name: "logs" });
     await expect(dialog).toContainText("logs of api-0");
     // the defaults: every container, the configured tail, following, no timestamps
@@ -5641,7 +5660,7 @@ test.describe("logs", () => {
     await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("table");
     expect(Object.values((await inspect(page)).panes).some((p) => p.logs)).toBe(false);
     // a bad history is refused in the dialog
-    await page.keyboard.press("ControlOrMeta+l");
+    await page.keyboard.press("l");
     const history = dialog.getByRole("textbox", { name: "history" });
     await expect(history).toBeFocused();
     await history.fill("ten minutes");

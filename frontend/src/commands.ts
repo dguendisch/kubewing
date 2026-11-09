@@ -442,7 +442,7 @@ export type LogScroll = "lineDown" | "lineUp" | "pageDown" | "pageUp" | "top" | 
 export const scrollers = new Map<string, (to: LogScroll) => void>();
 
 /**
- * ⌘L / ⌥⌘L: the log dialog for a row's pods, or with rows marked for theirs
+ * l / ⌥L: the log dialog for a row's pods, or with rows marked for theirs
  * together (scope "pane" = every pod the pods pane shows); it starts the tail
  * (startLogs).
  */

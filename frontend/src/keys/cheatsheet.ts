@@ -89,9 +89,9 @@ const sections: { title: string; rows: Row[] }[] = [
   {
     title: "table",
     rows: [
-      row("filter rows", "filter.focus"),
-      row("filter by label selector", "filter.focusLabels"),
-      row("filter by CEL expression", "filter.focusCel"),
+      row("filter rows (⇥ on to the label selector and CEL fields)", "filter.focus"),
+      row("filter by label selector (unbound: ⇥ from /, or the menu bar)", "filter.focusLabels"),
+      row("filter by CEL expression (unbound: ⇥ from /, or the menu bar)", "filter.focusCel"),
       row("hide / show healthy pods and workloads", "filter.toggleHealthy"),
       row("columns: -o wide, custom ones (also right-click the header)", "view.columns"),
       row("metrics on / off: CPU and memory of pods and nodes (kubectl top)", "view.toggleMetrics"),
