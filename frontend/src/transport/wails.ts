@@ -64,6 +64,8 @@ export function wailsTransport(): Transport {
     debugStart: (t, o, cols, rows) => call("DebugStart", t, o, cols, rows),
     debugImages: () => call("DebugImages"),
     removeDebugImage: (i) => call("RemoveDebugImage", i),
+    metaHistory: (k) => call("MetaHistory", k),
+    removeMetaHistory: (k, p) => call("RemoveMetaHistory", k, p),
     nodes: (c) => call("Nodes", c),
     opsPodDefaults: () => call("OpsPodDefaults"),
     persistentVolumes: (c) => call("PersistentVolumes", c),

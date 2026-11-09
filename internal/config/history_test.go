@@ -104,3 +104,27 @@ func TestHistoryBrokenOrNone(t *testing.T) {
 		t.Errorf("in memory only: %v", got)
 	}
 }
+
+func TestHistoryMeta(t *testing.T) {
+	dir := t.TempDir()
+	h := OpenHistory(dir)
+	for i := range 22 {
+		_ = h.AddMeta(false, []string{fmt.Sprintf("k%d=v", i)})
+	}
+	// several at once keep their order, ahead of the older ones; one again moves to the front
+	_ = h.AddMeta(false, []string{"a=1", "k5=v"})
+	_ = h.AddMeta(true, []string{`note=two words`})
+	got := OpenHistory(dir).Get()
+	if len(got.Labels) != MaxMeta || got.Labels[0] != "a=1" || got.Labels[1] != "k5=v" || got.Labels[2] != "k21=v" || slices.Contains(got.Labels, "k1=v") {
+		t.Errorf("labels: %v", got.Labels)
+	}
+	if !slices.Equal(got.Annotations, []string{"note=two words"}) {
+		t.Errorf("annotations: %v", got.Annotations)
+	}
+	_ = h.RemoveMeta(false, "a=1")
+	_ = h.RemoveMeta(true, "unknown=x")
+	got = OpenHistory(dir).Get()
+	if got.Labels[0] != "k5=v" || len(got.Annotations) != 1 {
+		t.Errorf("after remove: %v %v", got.Labels, got.Annotations)
+	}
+}

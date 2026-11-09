@@ -1,6 +1,7 @@
 package bridge
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,24 @@ func TestLabelAndAnnotate(t *testing.T) {
 		m, err := svc.RowMeta(res.Pane, "s-web-1")
 		return err == nil && m.Annotations["example.com/note"] == "drained for maintenance, back at 14:00"
 	})
+
+	// what was set is remembered per dialog (removals aren't); a refused value isn't
+	if got := svc.MetaHistory(safety.Label); fmt.Sprint(got) != "[tier=web]" {
+		t.Errorf("label history: %v", got)
+	}
+	if got := svc.MetaHistory(safety.Annotate); fmt.Sprint(got) != "[example.com/note=drained for maintenance, back at 14:00]" {
+		t.Errorf("annotate history: %v", got)
+	}
+	p, _ = svc.Prepare(safety.Label, res.Pane, "s-web-1")
+	if err := svc.Label(p.Token, MetaChanges{Set: map[string]string{"bad": "two words"}}); err == nil {
+		t.Fatal("a label value with spaces must be refused")
+	}
+	if got := svc.MetaHistory(safety.Label); fmt.Sprint(got) != "[tier=web]" {
+		t.Errorf("label history after a refusal: %v", got)
+	}
+	if left, err := svc.RemoveMetaHistory(safety.Label, "tier=web"); err != nil || len(left) != 0 {
+		t.Errorf("remove: %v %v", left, err)
+	}
 }
 
 func TestMetaPatch(t *testing.T) {

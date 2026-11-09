@@ -1036,6 +1036,10 @@ export interface Transport {
   debugImages(): Promise<string[]>;
   /** Forgets one; returns what's left. */
   removeDebugImage(image: string): Promise<string[]>;
+  /** key=value pairs recently set by the label (or annotate) dialog, newest first (history.yaml). */
+  metaHistory(kind: "label" | "annotate"): Promise<string[]>;
+  /** Forgets one; returns what's left. */
+  removeMetaHistory(kind: "label" | "annotate", pair: string): Promise<string[]>;
   /** The ops pod dialog's initial values. */
   opsPodDefaults(): Promise<OpsPodDefaults>;
   /** A context's nodes ("" = current), from the shared nodes watch; poll while loading. */

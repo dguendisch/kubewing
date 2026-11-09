@@ -21,10 +21,16 @@ const HistoryFile = "history.yaml"
 // MaxDebugImages is how many recent debug images are kept.
 const MaxDebugImages = 10
 
+// MaxMeta is how many recently applied labels (and, apart, annotations) are kept.
+const MaxMeta = 20
+
 // History mirrors history.yaml.
 type History struct {
 	// DebugImages are the images of debug containers and ops pods that started, newest first.
 	DebugImages []string `json:"debugImages"`
+	// Labels and Annotations are the key=value pairs recently set by the label and annotate dialogs, newest first.
+	Labels      []string `json:"labels,omitempty"`
+	Annotations []string `json:"annotations,omitempty"`
 	// OpsPod: the namespace and checkboxes of the last ops pod that started; nil = none yet.
 	OpsPod *OpsPodSettings `json:"opsPod,omitempty"`
 	// Window: the main window's size when kubewing last closed; nil = never closed yet.
@@ -69,6 +75,8 @@ func OpenHistory(dir string) *HistoryStore {
 	var h History
 	if yaml.Unmarshal(b, &h) == nil {
 		s.h.DebugImages = dedupe(h.DebugImages, MaxDebugImages)
+		s.h.Labels = dedupe(h.Labels, MaxMeta)
+		s.h.Annotations = dedupe(h.Annotations, MaxMeta)
 		s.h.OpsPod = h.OpsPod
 		s.h.Window = h.Window
 	}
@@ -79,7 +87,7 @@ func OpenHistory(dir string) *HistoryStore {
 func (s *HistoryStore) Get() History {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	h := History{DebugImages: slices.Clone(s.h.DebugImages)}
+	h := History{DebugImages: slices.Clone(s.h.DebugImages), Labels: slices.Clone(s.h.Labels), Annotations: slices.Clone(s.h.Annotations)}
 	if s.h.OpsPod != nil {
 		o := *s.h.OpsPod
 		h.OpsPod = &o
@@ -128,8 +136,43 @@ func (s *HistoryStore) RemoveDebugImage(image string) error {
 	return s.save()
 }
 
+// AddMeta moves the key=value pairs just set by a label (annotations
+// false) or annotate (true) to the front, in their order (at most MaxMeta),
+// and saves.
+func (s *HistoryStore) AddMeta(annotations bool, pairs []string) error {
+	if len(pairs) == 0 {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l := s.metaList(annotations)
+	*l = dedupe(append(slices.Clone(pairs), *l...), MaxMeta)
+	return s.save()
+}
+
+// RemoveMeta drops a key=value pair from the labels' (or annotations')
+// history and saves; unknown pairs are a no-op.
+func (s *HistoryStore) RemoveMeta(annotations bool, pair string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l := s.metaList(annotations)
+	i := slices.Index(*l, pair)
+	if i < 0 {
+		return nil
+	}
+	*l = slices.Delete(*l, i, i+1)
+	return s.save()
+}
+
+func (s *HistoryStore) metaList(annotations bool) *[]string {
+	if annotations {
+		return &s.h.Annotations
+	}
+	return &s.h.Labels
+}
+
 func (s *HistoryStore) save() error {
-	return writeAtomic(s.dir, HistoryFile, "# Written by kubewing (recent debug/ops pod images, last ops pod settings, window size); safe to delete.\n", s.h)
+	return writeAtomic(s.dir, HistoryFile, "# Written by kubewing (recent debug/ops pod images, last ops pod settings, recent labels and annotations, window size); safe to delete.\n", s.h)
 }
 
 // writeAtomic writes v as YAML to dir/file (temp file + rename), so a crash

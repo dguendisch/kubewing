@@ -3,6 +3,7 @@
 ### Added
 - hide healthy (`h`) works on more kinds: Gardener managed resources (applied, healthy and not progressing), nodes (Ready and not cordoned), jobs, persistent volume claims, Gardener extension resources, shoots, seeds, machines and etcds
 - `health.yaml` in the config directory sets what hide healthy hides per kind, for your own resources too: status conditions, the observed generation or a CEL expression
+- the label and annotate dialogs remember the last 20 labels and annotations you set: `↓` in the field lists them, ✕ forgets one
 
 ### Changed
 - logs moved from `⌘L` to `l` (and from `⌥⌘L` to `⌥L` for the whole pane)

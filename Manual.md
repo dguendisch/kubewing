@@ -641,6 +641,7 @@ With rows marked, copy name, label, annotate, scale, rollout restart, delete and
 - `key=value` sets a key (a new one, or a new value), `key-` removes one. `env=prod tier=front app-` does all three.
 - Annotation values with spaces go in quotes: `note="drained, back at 14:00"`. Label values can't have spaces (Kubernetes' rule).
 - The list previews what the text does: `+` added, `~` changed (old value struck through), `−` removed. A click on a key takes it into the field with its value, to change it.
+- `↓` lists the last 20 labels (or annotations) you set, newest first, ranked by what you type. `⏎`, `⇥` or a click puts the highlighted one in place of the word at the cursor, so you can keep going with `↓` for the next. Keys already in your text aren't listed, and the list says how a value compares with the object's (`already set`, `now dev`). ✕ forgets one, `Esc` closes the list. Only changes that were applied are remembered (in `history.yaml`), not removals.
 
 `⏎` applies, `Esc` cancels. Anything refused (an invalid key or value, a removed key that isn't set, a webhook) stays in the dialog with your text kept. Only the keys given are sent, with the object's UID, so a recreated object with the same name is never hit.
 
@@ -892,7 +893,7 @@ A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the li
 | `health.yaml` | what "hide healthy" hides, per kind |
 | `themes/<name>.yaml` | theme token overrides |
 | `columns.yaml` | written by kubewing: columns and widths per resource type (edit by hand while kubewing isn't running) |
-| `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, the window's size |
+| `history.yaml` | written by kubewing: recent debug and node-shell images, the last node shell's settings, recent labels and annotations, the window's size |
 | `clusters.yaml` | written by kubewing: the recently opened clusters (`⌘⇧O`), the latest first, at most 100 |
 | `update.json` | written by kubewing: when it last checked for updates, and the version you skipped |
 

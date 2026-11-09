@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { submitMeta } from "../commands";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { Batch } from "../transport/types";
-import { hasChanges, parseMeta, parseReplicas, unionCurrent, unionMeta, type MetaChange } from "./metaForm";
+import { rank, type Candidate } from "../complete/complete";
+import { hasChanges, parseMeta, parseReplicas, quoteValue, recentCandidates, tokenAt, unionCurrent, unionMeta, type MetaChange } from "./metaForm";
 
 /**
  * ⇧L / ⇧A / s: label, annotate or scale the selected row, as kubectl
@@ -68,7 +69,7 @@ function Meta({ kind, serverId, rowKey, name }: { kind: "label" | "annotate"; se
   };
   // a click on a key takes it into the field (to change its value, or remove it with key-)
   const take = (k: string, v: string) => {
-    const token = `${k}=${quote(v)}`;
+    const token = `${k}=${quoteValue(v)}`;
     setText((t) => (t.trim() ? `${t.trimEnd()} ${token}` : token));
     setError(undefined);
     input.current?.focus();
@@ -103,19 +104,17 @@ function Meta({ kind, serverId, rowKey, name }: { kind: "label" | "annotate"; se
         ))}
       </ul>
       <label className="flex flex-col gap-1 text-fg-muted">
-        key=value sets · key- removes{kind === "annotate" ? ' · "quotes" keep spaces' : ""}
-        <input
-          ref={input}
-          autoFocus
-          aria-label="changes"
-          value={text}
-          spellCheck={false}
-          onChange={(e) => {
-            setText(e.target.value);
+        key=value sets · key- removes{kind === "annotate" ? ' · "quotes" keep spaces' : ""} · ↓ recent
+        <ChangesField
+          input={input}
+          kind={kind}
+          text={text}
+          current={current}
+          error={!!error}
+          onChange={(t) => {
+            setText(t);
             setError(undefined);
           }}
-          placeholder={kind === "label" ? "e.g. env=prod tier-" : 'e.g. note="drained for maintenance"'}
-          className={`w-full ${field} ${error ? "border-deleted" : ""}`}
         />
       </label>
       {error ? (
@@ -128,10 +127,156 @@ function Meta({ kind, serverId, rowKey, name }: { kind: "label" | "annotate"; se
   );
 }
 
-/** A value as the field takes it back: quoted if it has spaces or quotes (in the kind of quote it doesn't contain). */
-function quote(v: string): string {
-  if (!/[\s"']/.test(v)) return v;
-  return v.includes('"') ? `'${v}'` : `"${v}"`;
+/**
+ * The label / annotate dialog's text field. ↓ lists the pairs set lately
+ * (history.yaml, per dialog: the last 20) for the word at the caret, ranked
+ * as it's typed on; ⏎ or ⇥ takes one in place of that word (quoted as the
+ * field takes it), a click too; ✕ forgets one; Esc closes the list (a second
+ * Esc the dialog). Keys the rest of the text gives aren't offered.
+ */
+function ChangesField({ input, kind, text, current, error, onChange }: {
+  input: React.RefObject<HTMLInputElement | null>;
+  kind: "label" | "annotate";
+  text: string;
+  current?: Record<string, string>;
+  error: boolean;
+  onChange: (t: string) => void;
+}) {
+  const id = useId();
+  const [recent, setRecent] = useState<string[]>([]);
+  const [caret, setCaret] = useState(0);
+  const [open, setOpen] = useState(false);
+  // -1 = nothing active: ⏎ submits the dialog
+  const [active, setActive] = useState(-1);
+  useEffect(() => {
+    bridge().metaHistory(kind).then((r) => setRecent(r ?? []), () => {});
+  }, [kind]);
+
+  const at = tokenAt(text, Math.min(caret, text.length));
+  const matches = open ? rank(at.word, recentCandidates(recent, text, at, current), 20) : [];
+  const shown = open && matches.length > 0;
+  const cur = active >= 0 ? matches[active] : undefined;
+
+  // the caret after a pick, once the new text is in the DOM
+  const place = useRef<number>(undefined);
+  useLayoutEffect(() => {
+    if (place.current === undefined) return;
+    input.current?.setSelectionRange(place.current, place.current);
+    setCaret(place.current);
+    place.current = undefined;
+  });
+  const accept = (c: Candidate) => {
+    // the caret past the space after it, so the next can follow (↓ again); a token ends at a space or the end
+    const after = text.slice(at.to) || " ";
+    place.current = at.from + c.value.length + 1;
+    onChange(text.slice(0, at.from) + c.value + after);
+    setOpen(false);
+    setActive(-1);
+  };
+  const preselect = (word: string, list = matches) => (word && list[0] && !list[0].fuzzy ? 0 : -1);
+
+  return (
+    <div className="relative">
+      <input
+        ref={input}
+        autoFocus
+        role="combobox"
+        aria-label="changes"
+        aria-expanded={shown}
+        aria-controls={`${id}-list`}
+        aria-autocomplete="list"
+        aria-activedescendant={cur ? `${id}-${active}` : undefined}
+        autoComplete="off"
+        value={text}
+        spellCheck={false}
+        onChange={(e) => {
+          const t = e.target.value;
+          const c = e.target.selectionStart ?? t.length;
+          onChange(t);
+          setCaret(c);
+          if (!open) return;
+          // a space ends the word: the list closes (↓ opens it for the next)
+          const w = tokenAt(t, c);
+          if (!w.word) return setOpen(false), setActive(-1);
+          setActive(preselect(w.word, rank(w.word, recentCandidates(recent, t, w, current), 20)));
+        }}
+        onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? text.length)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={(e) => {
+          const n = matches.length;
+          if (e.key === "ArrowDown" && !e.altKey && !e.metaKey && !shown) {
+            e.preventDefault();
+            const c = e.currentTarget.selectionStart ?? text.length;
+            setCaret(c);
+            setOpen(true);
+            setActive(0);
+          } else if ((e.key === "ArrowDown" || e.key === "ArrowUp") && shown) {
+            e.preventDefault();
+            const d = e.key === "ArrowDown" ? 1 : -1;
+            setActive((a) => (a < 0 ? (d > 0 ? 0 : n - 1) : (a + d + n) % n));
+          } else if (e.key === "Tab" && !e.shiftKey && shown) {
+            e.preventDefault();
+            accept((cur ?? matches[0]!).candidate);
+          } else if (e.key === "Enter" && shown && cur) {
+            // takes the pair; the next ⏎ applies
+            e.preventDefault();
+            accept(cur.candidate);
+          } else if (e.key === "Escape" && shown) {
+            e.preventDefault();
+            e.stopPropagation();
+            setOpen(false);
+            setActive(-1);
+          }
+        }}
+        placeholder={kind === "label" ? "e.g. env=prod tier-" : 'e.g. note="drained for maintenance"'}
+        className={`w-full ${field} ${error ? "border-deleted" : ""}`}
+      />
+      {shown ? (
+        <ul
+          id={`${id}-list`}
+          role="listbox"
+          aria-label={`recent ${kind === "label" ? "labels" : "annotations"}`}
+          className="absolute top-full left-0 z-40 mt-px max-h-64 w-full overflow-x-hidden overflow-y-auto border border-border bg-bg-elev shadow-menu"
+        >
+          {matches.map((m, i) => (
+            <li
+              key={m.candidate.label}
+              id={`${id}-${i}`}
+              role="option"
+              aria-selected={i === active}
+              ref={i === active ? (el) => el?.scrollIntoView({ block: "nearest" }) : undefined}
+              // mousedown, not click: the input keeps focus
+              onMouseDown={(e) => {
+                e.preventDefault();
+                accept(m.candidate);
+              }}
+              onMouseMove={() => setActive(i)}
+              className={`flex cursor-default gap-3 px-2 py-0.5 ${i === active ? "bg-bg-hover text-fg" : "text-fg-muted"}`}
+            >
+              <span className="min-w-0 shrink truncate text-fg">{m.candidate.label}</span>
+              {m.candidate.detail ? <span className="ml-auto shrink-0">{m.candidate.detail}</span> : null}
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={`remove ${m.candidate.label}`}
+                title="forget it"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  const pair = m.candidate.label;
+                  void bridge().removeMetaHistory(kind, pair).then((r) => setRecent(r ?? []), () => {});
+                  setActive((a) => Math.min(a, matches.length - 2));
+                }}
+                className={`${m.candidate.detail ? "" : "ml-auto "}shrink-0 rounded border border-border px-1.5 leading-tight text-fg-muted hover:border-deleted hover:text-deleted`}
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 /** One key: as it is, or as the typed text changes it. */
@@ -269,7 +414,7 @@ function MetaMany({ kind, batch }: { kind: "label" | "annotate"; batch: Batch })
     });
   };
   const take = (k: string, v: string) => {
-    const token = `${k}=${quote(v)}`;
+    const token = `${k}=${quoteValue(v)}`;
     setText((t) => (t.trim() ? `${t.trimEnd()} ${token}` : token));
     setError(undefined);
     input.current?.focus();
@@ -316,19 +461,17 @@ function MetaMany({ kind, batch }: { kind: "label" | "annotate"; batch: Batch })
         ))}
       </ul>
       <label className="flex flex-col gap-1 text-fg-muted">
-        key=value sets · key- removes · on all {n}{kind === "annotate" ? ' · "quotes" keep spaces' : ""}
-        <input
-          ref={input}
-          autoFocus
-          aria-label="changes"
-          value={text}
-          spellCheck={false}
-          onChange={(e) => {
-            setText(e.target.value);
+        key=value sets · key- removes · on all {n}{kind === "annotate" ? ' · "quotes" keep spaces' : ""} · ↓ recent
+        <ChangesField
+          input={input}
+          kind={kind}
+          text={text}
+          current={current}
+          error={!!error}
+          onChange={(t) => {
+            setText(t);
             setError(undefined);
           }}
-          placeholder={kind === "label" ? "e.g. env=prod tier-" : 'e.g. note="drained for maintenance"'}
-          className={`w-full ${field} ${error ? "border-deleted" : ""}`}
         />
       </label>
       {error ? (

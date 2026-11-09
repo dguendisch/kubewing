@@ -1,3 +1,4 @@
+import type { Candidate } from "../complete/complete";
 import type { MetaChanges } from "../transport/types";
 
 /** One change of the label / annotate dialog, as the preview lists it. */
@@ -126,4 +127,54 @@ export function unionCurrent(keys: UnionKey[], rows: number): Record<string, str
   const out: Record<string, string> = {};
   for (const k of keys) out[k.key] = k.count === rows && k.values.length === 1 ? k.values[0]!.value : "\u0000mixed";
   return out;
+}
+
+/** The token of the label / annotate text at the caret: what a recent pair replaces (from–to) and what's typed of it (word). */
+export function tokenAt(text: string, caret: number): { from: number; to: number; word: string } {
+  let start = -1;
+  let quote: string | undefined;
+  for (let i = 0; i <= text.length; i++) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === quote) quote = undefined;
+      else if (ch === undefined) return { from: start, to: i, word: text.slice(start, caret) };
+      continue;
+    }
+    const space = ch === undefined || /\s/.test(ch);
+    if (!space && start < 0) start = i;
+    if (!space && (ch === '"' || ch === "'")) quote = ch;
+    if (space && start >= 0) {
+      if (start <= caret && caret <= i) return { from: start, to: i, word: text.slice(start, caret) };
+      start = -1;
+    }
+    if (i >= caret && start < 0) break;
+  }
+  return { from: caret, to: caret, word: "" };
+}
+
+/** A value as the field takes it back: quoted if it has spaces or quotes (in the kind of quote it doesn't contain). */
+export function quoteValue(v: string): string {
+  if (!/[\s"']/.test(v)) return v;
+  return v.includes('"') ? `'${v}'` : `"${v}"`;
+}
+
+/**
+ * The recently applied pairs (key=value, newest first) as candidates for the
+ * token at the caret: inserted quoted as the field takes them, without keys
+ * the rest of the text already gives (they'd be given twice); the detail says
+ * how it compares with the current value. Pure.
+ */
+export function recentCandidates(recent: string[], text: string, at: { from: number; to: number }, current: Record<string, string> = {}): Candidate[] {
+  const rest = splitTokens(text.slice(0, at.from) + " " + text.slice(at.to));
+  const given = new Set("list" in rest ? rest.list.map((t) => (t.includes("=") ? t.slice(0, t.indexOf("=")) : t.replace(/-$/, ""))) : []);
+  return recent.flatMap((pair) => {
+    const eq = pair.indexOf("=");
+    if (eq <= 0) return [];
+    const key = pair.slice(0, eq);
+    const value = pair.slice(eq + 1);
+    if (given.has(key)) return [];
+    const old = current[key];
+    const detail = old === undefined ? undefined : old === value ? "already set" : old === "\u0000mixed" ? "now differs" : `now ${old}`;
+    return [{ value: `${key}=${quoteValue(value)}`, label: pair, detail, removable: true }];
+  });
 }

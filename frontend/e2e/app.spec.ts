@@ -3987,7 +3987,7 @@ test.describe("object actions", () => {
       const list = dialog.getByRole("list", { name: "labels" });
       await expect(list).toContainText("app=api");
       await expect(list).toContainText("tier=back");
-      const input = dialog.getByRole("textbox", { name: "changes" });
+      const input = dialog.getByRole("combobox", { name: "changes" });
       await expect(input).toBeFocused();
       // a label value can't have spaces: Go refuses it, the text stays
       await input.fill(`env="two words"`);
@@ -4014,7 +4014,7 @@ test.describe("object actions", () => {
       await page.keyboard.press("Shift+A");
       const dialog = page.getByRole("dialog", { name: "annotate" });
       await dialog.getByRole("list", { name: "annotations" }).getByText("owner").click();
-      const input = dialog.getByRole("textbox", { name: "changes" });
+      const input = dialog.getByRole("combobox", { name: "changes" });
       await expect(input).toHaveValue("owner=team-a");
       await input.fill(`owner=team-b note="drained, back at 14:00"`);
       await input.press("Enter");
@@ -4028,6 +4028,49 @@ test.describe("object actions", () => {
       await page.keyboard.press("Escape");
       await expect(dialog).toHaveCount(0);
       expect((await inspect(page)).focus).toBe("table");
+    });
+
+    test("↓ in the label dialog lists the labels set lately; ⏎ takes one for the word at the caret, ✕ forgets one", async ({ page }) => {
+      // the first test set env=prod and tier=front on api; web takes them from the history
+      await openMeta(page);
+      await select(page, "m-web");
+      await page.keyboard.press("Shift+L");
+      const dialog = page.getByRole("dialog", { name: "label" });
+      const input = dialog.getByRole("combobox", { name: "changes" });
+      const recent = dialog.getByRole("listbox", { name: "recent labels" });
+      await expect(recent).toHaveCount(0); // not on focus
+      await input.press("ArrowDown");
+      await expect(recent.getByRole("option")).toHaveText([/^env=prod/, /^tier=front/]);
+      // typing ranks them; the real match is preselected and ⏎ takes it (the dialog stays)
+      await page.keyboard.type("ti");
+      await expect(recent.getByRole("option", { selected: true })).toHaveText(/^tier=front/);
+      await input.press("Enter");
+      await expect(input).toHaveValue("tier=front ");
+      await expect(recent).toHaveCount(0);
+      // a key already in the text isn't offered again
+      await input.press("ArrowDown");
+      await expect(recent.getByRole("option")).toHaveText([/^env=prod/]);
+      await input.press("Enter");
+      await expect(input).toHaveValue("tier=front env=prod ");
+      await input.press("Enter");
+      await expect(page.getByLabel("message")).toHaveText("labeled e2e-meta/web");
+      await expect.poll(async () => {
+        const y = await yamlOf(page, "m-web");
+        return y.includes("env: prod") && y.includes("tier: front");
+      }).toBe(true);
+
+      // again: what web has now is said; ✕ forgets one, Esc closes the list before the dialog
+      await page.keyboard.press("Shift+L");
+      await input.press("ArrowDown");
+      await expect(recent.getByRole("option", { name: /^env=prod/ })).toContainText("already set");
+      await recent.getByRole("button", { name: "remove tier=front" }).click();
+      await expect(recent.getByRole("option")).toHaveText([/^env=prod/]);
+      await expect(input).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(recent).toHaveCount(0);
+      await expect(dialog).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
     });
 
     test("s scales from the row menu's count; the dev context confirms with from and to", async ({ page }) => {
@@ -6153,7 +6196,7 @@ test.describe("marked rows", () => {
     const dialog = page.getByRole("dialog", { name: "label 3" });
     // app=b on one of three rows
     await expect(dialog.getByRole("list", { name: "labels" })).toContainText("app=b1/3");
-    await dialog.getByRole("textbox", { name: "changes" }).fill("team=x");
+    await dialog.getByRole("combobox", { name: "changes" }).fill("team=x");
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
     await expect(page.locator("section[data-pane]").first().getByLabel("message")).toHaveText("labeled 3 e2e-batch");

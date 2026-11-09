@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasChanges, parseMeta, parseReplicas, unionCurrent, unionMeta } from "./metaForm";
+import { hasChanges, parseMeta, parseReplicas, recentCandidates, tokenAt, unionCurrent, unionMeta } from "./metaForm";
 
 describe("label / annotate text", () => {
   const cur = { app: "web", tier: "front" };
@@ -66,5 +66,30 @@ describe("label / annotate on many rows", () => {
     expect("send" in r && r.send).toEqual({ set: { tier: "front" }, remove: [] });
     expect(parseMeta("tier-", cur)).toMatchObject({ send: { remove: ["tier"] } });
     expect(parseMeta("env-", cur)).toEqual({ error: '"env" isn\'t set' });
+  });
+});
+
+describe("recent labels / annotations", () => {
+  it("finds the token at the caret, quotes included", () => {
+    expect(tokenAt("", 0)).toEqual({ from: 0, to: 0, word: "" });
+    expect(tokenAt("env=prod ti", 11)).toEqual({ from: 9, to: 11, word: "ti" });
+    expect(tokenAt("env=prod tier=x", 10)).toEqual({ from: 9, to: 15, word: "t" });
+    expect(tokenAt("env=prod  x", 9)).toEqual({ from: 9, to: 9, word: "" });
+    expect(tokenAt(`note="two words" a`, 9)).toEqual({ from: 0, to: 16, word: `note="two` });
+    expect(tokenAt(`note="open`, 10)).toEqual({ from: 0, to: 10, word: `note="open` });
+  });
+
+  it("offers recent pairs quoted, without keys given elsewhere, compared with the current values", () => {
+    const recent = ["env=prod", "note=two words", "tier=back", "app=web", "bad"];
+    const text = "tier- e";
+    const c = recentCandidates(recent, text, tokenAt(text, 7), { app: "web", env: "dev" });
+    expect(c).toEqual([
+      { value: "env=prod", label: "env=prod", detail: "now dev", removable: true },
+      { value: `note="two words"`, label: "note=two words", detail: undefined, removable: true },
+      { value: "app=web", label: "app=web", detail: "already set", removable: true },
+    ]);
+    // the token being replaced doesn't hide its own key
+    expect(recentCandidates(["env=prod"], "env=d", { from: 0, to: 5 }).map((x) => x.value)).toEqual(["env=prod"]);
+    expect(recentCandidates(["env=prod"], "", { from: 0, to: 0 }, { env: "\u0000mixed" })[0]!.detail).toBe("now differs");
   });
 });

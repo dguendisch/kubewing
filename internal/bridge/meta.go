@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"maps"
 	"slices"
 	"strings"
@@ -73,8 +74,35 @@ func (s *Service) patchMeta(token, kind string, c MetaChanges) error {
 	if _, err := s.opts.Actor.Patch(ctx, r.cluster, r.res, a.Namespace, a.Name, patch, false); err != nil {
 		return fmt.Errorf("%s %s: %w", field, a.Name, err)
 	}
+	// remembered once applied: a value the API server refused isn't offered again
+	pairs := []string{}
+	for _, k := range slices.Sorted(maps.Keys(c.Set)) {
+		pairs = append(pairs, k+"="+c.Set[k])
+	}
+	if err := s.opts.History.AddMeta(kind == safety.Annotate, pairs); err != nil {
+		log.Printf("history: %v", err)
+	}
 	s.refreshAfter(r)
 	return nil
+}
+
+// MetaHistory are the key=value pairs recently set by kind's dialog
+// ("label" or "annotate"), newest first.
+func (s *Service) MetaHistory(kind string) []string {
+	h := s.opts.History.Get()
+	if kind == safety.Annotate {
+		return h.Annotations
+	}
+	return h.Labels
+}
+
+// RemoveMetaHistory forgets a pair (✕ in the label or annotate dialog's
+// list) and returns what's left.
+func (s *Service) RemoveMetaHistory(kind, pair string) ([]string, error) {
+	if err := s.opts.History.RemoveMeta(kind == safety.Annotate, pair); err != nil {
+		return nil, err
+	}
+	return s.MetaHistory(kind), nil
 }
 
 // metaPatch checks the changes (keys as Kubernetes validates them, label

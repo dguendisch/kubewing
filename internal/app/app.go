@@ -208,6 +208,10 @@ func (a *App) TerminalStart(token string, cols, rows int) (bridge.TerminalResult
 func (a *App) RemoveDebugImage(image string) ([]string, error) {
 	return a.svc.RemoveDebugImage(image)
 }
+func (a *App) MetaHistory(kind string) []string { return a.svc.MetaHistory(kind) }
+func (a *App) RemoveMetaHistory(kind, pair string) ([]string, error) {
+	return a.svc.RemoveMetaHistory(kind, pair)
+}
 func (a *App) SessionInput(id, data string) error { return a.svc.SessionInput(id, data) }
 func (a *App) SessionResize(id string, cols, rows int) error {
 	return a.svc.SessionResize(id, cols, rows)
