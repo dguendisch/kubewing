@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-09
 ### Added
 - editing decoded values: `⌘E` in the editor opens the value at the cursor decoded (base64, gzip, brotli, also nested: a kubeconfig in a managed resource's manifests), and `Esc` encodes your edit back the way it was encoded; `e` in a decoded value opens it in the editor
 - keybinding editor: `⌥⌘,` (**kubewing → Settings → Keyboard Shortcuts…**) edits `keybindings.yaml` in the app: every default binding beside it, unknown commands, keys and contexts shown as you type, `⌘S` saves and applies
