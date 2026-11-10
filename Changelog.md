@@ -5,6 +5,9 @@
 - font settings in `config.yaml`: `font.family` (any installed font, e.g. a Nerd Font), `font.size` and `font.ligatures`, for tables, YAML, terminals, logs and menus alike; a font that isn't installed is reported when the settings are saved or loaded
 - `⌘+` / `⌘-` / `⌘0` zoom the font of all panes and tabs until kubewing quits (also in the View menu)
 
+### Fixed
+- a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again
+
 ## [0.5.0] - 2026-11-09
 ### Added
 - hide healthy (`h`) works on more kinds: Gardener managed resources (applied, healthy and not progressing), nodes (Ready and not cordoned), jobs, persistent volume claims, Gardener extension resources, shoots, seeds, machines and etcds

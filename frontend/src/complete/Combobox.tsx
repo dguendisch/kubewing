@@ -11,7 +11,7 @@ interface Props {
   onRemove?: (c: Candidate) => void;
   /** Enter on a highlighted suggestion that differs from the text only accepts it; the next Enter submits (as the port-forward dialog). */
   enterAccepts?: boolean;
-  /** An accepted value that is only a step (a field path ending in "."): the list stays open for the next one, nothing preselected. */
+  /** An accepted value that is only a step (a field path ending in "."): the list stays open for the next one, nothing preselected. Deleting a step's last character (⌫ on the ".") closes the list, so Enter submits the value as typed. */
   continues?: (v: string) => boolean;
   candidates: Candidate[];
   /** Shown under the list (loading, partial discovery, errors). */
@@ -97,11 +97,15 @@ export function Combobox({ label, value, onChange, onSubmit, enterAccepts, conti
         }}
         onBlur={() => setOpen(false)}
         onChange={(e) => {
-          onChange(e.target.value);
+          const next = e.target.value;
+          onChange(next);
           setTyped(true);
           setStepped(false);
-          setOpen(true);
-          setActive(preselect(e.target.value));
+          // ⌫ on a step's final "." (spec. → spec) stops there: the list closes, so Enter submits the
+          // text rather than taking the step again (↓ or typing on opens it again)
+          const backedOff = !!continues?.(value) && !continues(next) && next === value.slice(0, -1);
+          setOpen(!backedOff);
+          setActive(backedOff ? -1 : preselect(next));
         }}
         onKeyDown={(e) => {
           const ctrl = e.ctrlKey && !e.metaKey && !e.altKey;

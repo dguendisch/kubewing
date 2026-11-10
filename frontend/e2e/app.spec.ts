@@ -224,6 +224,32 @@ test.describe("columns (per resource type)", () => {
     await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
   });
 
+  test("⌫ on a completed path's final dot stops there: the list closes and ⏎ adds the map itself", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    await page.keyboard.press("o");
+    const path = dialog(page).getByRole("combobox", { name: "column path" });
+    const suggestions = dialog(page).getByRole("listbox", { name: "column path suggestions" });
+    await path.focus();
+    await page.keyboard.type("sp");
+    await page.keyboard.press("Enter");
+    await expect(path).toHaveValue("spec.");
+    await expect(suggestions).toBeVisible();
+    await page.keyboard.press("Backspace");
+    await expect(path).toHaveValue("spec");
+    await expect(suggestions).toBeHidden();
+    await page.keyboard.press("Enter");
+    await expect(columnList(page).nth(4)).toHaveText(/SPEC\s*spec(?!\.)/);
+    await expect(path).toHaveValue("");
+    // ↓ still opens the list there, and typing on does too
+    await page.keyboard.type("spec.");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("ArrowDown");
+    await expect(suggestions).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.type(".");
+    await expect(suggestions).toContainText("nodeName");
+  });
+
   test("CEL columns complete from the objects, as the filter bar's CEL field", async ({ page }) => {
     await openTape(page, "e2e-wide", 2);
     await page.keyboard.press("o");
