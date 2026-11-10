@@ -218,7 +218,7 @@ A cell whose text doesn't fit shows it whole as a tooltip.
 
 In the table itself:
 
-- **Sort:** a click on a header sorts by it (ascending, again for descending, a third time back to kubectl's order). Numbers sort as numbers, ages by time (youngest first), durations such as `5m` or `2d3h` by length; empty and `<unknown>` cells go last. The sort belongs to the pane (and its back/forward history), not to the type.
+- **Sort:** a click on a header sorts by it (ascending, again for descending, a third time back to kubectl's order). Numbers sort as numbers, numbered names naturally (`shoot-2` before `shoot-10`, also in kubectl's order), ages by time (youngest first), durations such as `5m` or `2d3h` by length; empty and `<unknown>` cells go last. The sort belongs to the pane (and its back/forward history), not to the type.
 - **Move:** dragging a header moves its column (saved for the type).
 - **Resize:** dragging a header edge resizes; a double-click fits the column to the visible rows. Widths are saved for the type; **reset widths** goes back to defaults.
 

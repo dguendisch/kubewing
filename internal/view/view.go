@@ -926,12 +926,58 @@ func (v *View) less(a, b *entry) bool {
 	}
 	// kubectl order: namespace, name; then key for determinism
 	if a.ns != b.ns {
-		return a.ns < b.ns
+		return naturalCompare(a.ns, b.ns) < 0
 	}
 	if a.name != b.name {
-		return a.name < b.name
+		return naturalCompare(a.name, b.name) < 0
 	}
 	return a.key < b.key
+}
+
+// naturalCompare orders strings so embedded digit runs sort by numeric value:
+// "shoot-2" before "shoot-10" (not byte order, which puts "10" before "2").
+// Like JS localeCompare with {numeric: true}, but case-sensitive byte order
+// outside digit runs. Runs of equal value but different leading zeros ("01" vs
+// "1") only decide when the rest is equal, so the result stays a total order.
+func naturalCompare(a, b string) int {
+	tie := 0
+	for len(a) > 0 && len(b) > 0 {
+		ad, bd := a[0] >= '0' && a[0] <= '9', b[0] >= '0' && b[0] <= '9'
+		if ad && bd {
+			// span each digit run, skipping leading zeros for the magnitude compare
+			ai, bi := 0, 0
+			for ai < len(a) && a[ai] >= '0' && a[ai] <= '9' {
+				ai++
+			}
+			for bi < len(b) && b[bi] >= '0' && b[bi] <= '9' {
+				bi++
+			}
+			an, bn := strings.TrimLeft(a[:ai], "0"), strings.TrimLeft(b[:bi], "0")
+			if len(an) != len(bn) {
+				if len(an) < len(bn) {
+					return -1
+				}
+				return 1
+			}
+			if an != bn {
+				return strings.Compare(an, bn)
+			}
+			// equal magnitude: keep comparing the rest; zero padding only breaks a final tie
+			if tie == 0 {
+				tie = strings.Compare(a[:ai], b[:bi])
+			}
+			a, b = a[ai:], b[bi:]
+			continue
+		}
+		if a[0] != b[0] {
+			return strings.Compare(a[:1], b[:1])
+		}
+		a, b = a[1:], b[1:]
+	}
+	if c := strings.Compare(a, b); c != 0 {
+		return c
+	}
+	return tie
 }
 
 func (v *View) compare(col int, a, b *entry) int {
@@ -964,7 +1010,7 @@ func (v *View) compare(col int, a, b *entry) int {
 			return 1
 		}
 	}
-	return strings.Compare(x, y)
+	return naturalCompare(x, y)
 }
 
 func (v *View) rowData(e *entry, now time.Time) RowData {
