@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cellChoices, formatAge, initialCell, layout, toHex, withAlpha } from "./cells";
+import { cellChoices, formatAge, initialCell, layout, syncProgress, toHex, withAlpha } from "./cells";
 
 const now = Date.parse("2026-01-01T12:00:00Z");
 
@@ -101,5 +101,16 @@ describe("cellChoices", () => {
     expect(initialCell(c, "GONE")).toBe(0);
     expect(initialCell(c)).toBe(0);
     expect(initialCell(cellChoices({ key: "k", cells: ["", "x"] }, cols.slice(0, 2), now))).toBe(1);
+  });
+});
+
+describe("syncProgress", () => {
+  it("shows the share and the counts", () => {
+    expect(syncProgress(1500, 4213)).toBe("35% (1,500/4,213)");
+    expect(syncProgress(0, 800)).toBe("0% (0/800)");
+  });
+  it("never shows 100% before the list is done (the total is an estimate)", () => {
+    expect(syncProgress(1000, 1000)).toBe("99% (1,000/1,000)");
+    expect(syncProgress(1200, 1000)).toBe("99% (1,200/1,000)");
   });
 });

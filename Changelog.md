@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+### Added
+- the status line now shows how far it got on huge resource listings (e.g. `syncing 35% (1,500/4,213)`)
 
 ## [0.5.0] - 2026-11-09
 ### Added

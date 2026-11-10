@@ -135,3 +135,9 @@ export function initialCell(choices: CellChoice[], column?: string): number {
   const i = column === undefined ? -1 : choices.findIndex((c) => c.label === column && !c.disabled);
   return i >= 0 ? i : Math.max(0, choices.findIndex((c) => !c.disabled));
 }
+
+/** "36% (1,500/4,213)": the server's total is an estimate, so the share never shows 100% before the list is done. */
+export function syncProgress(loaded: number, total: number): string {
+  const pct = Math.min(99, Math.floor((loaded / total) * 100));
+  return `${pct}% (${loaded.toLocaleString("en-US")}/${total.toLocaleString("en-US")})`;
+}

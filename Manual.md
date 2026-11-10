@@ -163,6 +163,8 @@ Entries that can't be opened (a garden whose kubeconfig is missing) are greyed o
 
 At the bottom of every table pane: the connection state (a green dot and **connected** once the watch is synced), `N shown / M objects`, errors, why metric columns are empty (see [Metrics](#metrics-m)), the **record changes** toggle and **columns**.
 
+While a pane's first list is still loading, the dot pulses and says **syncing**. For a large resource, listed page by page, it also shows how far the list got: `syncing 35% (1,500/4,213)`. The total is the API server's estimate, which it only gives for lists without a label or field selector, and only once the first 500 objects are in, so a small or filtered list just says **syncing**.
+
 When a synced watch starts failing (the network is down, the API server is unreachable), the state turns red and says **disconnected**. The rows stay as they last were, and the watch keeps retrying with a growing pause (up to 30 s).
 
 **Reconnect** (`⌘⇧R`, a click on **connected**/**disconnected**, or File → Reconnect) doesn't wait for the retry: it drops the connection to the focused pane's context and lists every resource shown from that context again, over a fresh connection. Use it after the network comes back, or when a pane looks stuck while still saying connected. Panes keep their rows, filters and recorded history; whatever changed in the meantime shows as changes. Panes on that context whose open had failed open again. Shells, port-forwards and log tails keep their own connection.

@@ -7,7 +7,7 @@ import type { SafetyRule } from "../transport/types";
 import { loadRule, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useContexts, useUI } from "../store/store";
 import { useConfig } from "../store/config";
-import { formatAge } from "../grid/cells";
+import { formatAge, syncProgress } from "../grid/cells";
 import { prettyKey } from "../keys/keymap";
 import { bottomCorners, paneIds } from "../store/layout";
 import * as S from "../store/state";
@@ -670,11 +670,13 @@ function HideHealthy({ pane, apply }: { pane: S.PaneState; apply: (patch: Partia
 }
 
 /** The not-yet-synced marker: connected's dot, pulsing while the initial list loads; a still ring once the
- *  source reports an error, since the error beside it is then the news. */
-function Syncing({ stalled }: { stalled: boolean }) {
+ *  source reports an error, since the error beside it is then the news. With the list's progress (a large
+ *  unfiltered list, page by page), how far it got. */
+function Syncing({ stalled, loaded, total }: { stalled: boolean; loaded?: number; total?: number }) {
+  const progress = !stalled && !!total ? syncProgress(loaded ?? 0, total) : "";
   return (
-    <span>
-      {stalled ? "○" : <span className="text-accent motion-safe:animate-pulse">●</span>} syncing
+    <span aria-label="syncing" title={progress ? `the initial list: ${(loaded ?? 0).toLocaleString("en-US")} of ${total!.toLocaleString("en-US")} objects so far` : undefined}>
+      {stalled ? "○" : <span className="text-accent motion-safe:animate-pulse">●</span>} syncing{progress ? ` ${progress}` : ""}
     </span>
   );
 }
@@ -807,7 +809,7 @@ function StatusLine({ pane }: { pane: S.PaneState }) {
   const st = d?.status;
   return (
     <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
-      {st?.snapshot ? <Listed paneId={pane.id} st={st} /> : st?.synced ? <Connection paneId={pane.id} down={!!st.error} /> : <Syncing stalled={!!st?.error} />}
+      {st?.snapshot ? <Listed paneId={pane.id} st={st} /> : st?.synced ? <Connection paneId={pane.id} down={!!st.error} /> : <Syncing stalled={!!st?.error} loaded={st?.loaded} total={st?.loadTotal} />}
       <span>
         {d?.total ?? 0} shown / {st?.objects ?? 0} objects
       </span>

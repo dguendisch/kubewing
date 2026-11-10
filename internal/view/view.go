@@ -173,6 +173,8 @@ type View struct {
 	err    string
 	// listing: a snapshot's progress and last outcome (nil: watched)
 	listing *source.Listing
+	// loaded: the running list's progress (nil: none, or it reports none)
+	loaded *source.Loaded
 	// listedAt, skipped: the last complete listing's (kept while the next runs)
 	listedAt string
 	skipped  []source.SkippedType
@@ -551,7 +553,7 @@ func (v *View) Apply(ev source.Event, now time.Time) {
 		v.entries = v.live
 		v.apply(ev, now)
 		v.live, v.entries = v.entries, past
-		if ev.Type != source.Error && ev.Type != source.Listed {
+		if !stateless(ev.Type) {
 			v.behind++
 		}
 		if v.colsDirty && !dirty {
@@ -563,13 +565,22 @@ func (v *View) Apply(ev source.Event, now time.Time) {
 	v.apply(ev, now)
 }
 
+// stateless events change no object: errors and progress.
+func stateless(t source.EventType) bool {
+	return t == source.Error || t == source.Listed || t == source.Progress
+}
+
 func (v *View) apply(ev source.Event, now time.Time) {
-	if ev.Type != source.Error && ev.Type != source.Listed {
+	if !stateless(ev.Type) {
 		v.sorted = nil
 	}
 	switch ev.Type {
 	case source.Error:
-		v.err = ev.Err
+		// a failed list starts over
+		v.err, v.loaded = ev.Err, nil
+		return
+	case source.Progress:
+		v.loaded = ev.Loaded
 		return
 	case source.Listed:
 		v.listing = ev.Listing
@@ -578,7 +589,7 @@ func (v *View) apply(ev source.Event, now time.Time) {
 		}
 		return
 	case source.Relist:
-		v.err = ""
+		v.err, v.loaded = "", nil
 		extended := false
 		for _, it := range ev.Items {
 			extended = v.noteExtended(it.Object.Object) || extended
@@ -1029,6 +1040,9 @@ func (v *View) Frame(now time.Time) (f Frame, ok bool) {
 	}
 	if v.ShowsAllocation() && v.at.IsZero() {
 		status.AllocError, status.AllocLoading = v.metrics.AllocErr, v.metrics.AllocLoading
+	}
+	if l := v.loaded; l != nil && !v.synced {
+		status.Loaded, status.LoadTotal = l.Items, l.Total
 	}
 	if l := v.listing; l != nil {
 		status.Snapshot, status.ListedAt, status.Skipped = true, v.listedAt, len(v.skipped)

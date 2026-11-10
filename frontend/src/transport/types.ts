@@ -39,6 +39,9 @@ export interface Status {
   allocLoading?: boolean;
   /** Why the requests/limits columns are empty (the pods can't be listed). */
   allocError?: string;
+  /** The initial list's progress: loaded of loadTotal objects; unset when synced or the API server doesn't say (a filtered list, before its first page). */
+  loaded?: number;
+  loadTotal?: number;
   /** A listing (everything in a namespace): listed once, not watched; ⌘R lists again. */
   snapshot?: boolean;
   /** When the last listing finished (RFC 3339); unset while the first runs. */

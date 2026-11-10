@@ -276,6 +276,8 @@ func (c *Cluster) list(ctx context.Context, rc *rest.RESTClient, res Resolved, n
 	var items []Item
 	var cols []metav1.TableColumnDefinition
 	var rv, cont string
+	// estimate: the total from a count of our own (0: not asked, -1: none)
+	estimate := 0
 	for {
 		req := c.request(rc, res, ns, ls, fs).Param("limit", "500")
 		if cont != "" {
@@ -297,11 +299,49 @@ func (c *Cluster) list(ctx context.Context, rc *rest.RESTClient, res Resolved, n
 		if cont == "" {
 			break
 		}
+		// the server counts what remains only for unfiltered lists
+		total := -1
+		switch {
+		case t.remaining != nil:
+			total = len(items) + int(*t.remaining)
+		case estimate > 0:
+			total = max(estimate, len(items)+1)
+		case estimate == 0 && ls == "" && fs == "":
+			// a Table without the count (some aggregated API servers'
+			// convertors drop it, e.g. Gardener's): their metadata lists keep it
+			estimate = -1
+			if n, ok := c.count(ctx, rc, res, ns); ok {
+				estimate, total = n, max(n, len(items)+1)
+			}
+		}
+		if total > 0 {
+			if !send(ctx, out, Event{Type: Progress, Loaded: &Loaded{Items: len(items), Total: total}}) {
+				return "", ctx.Err()
+			}
+		}
 	}
 	if !send(ctx, out, Event{Type: Relist, Items: items, Columns: cols}) {
 		return "", ctx.Err()
 	}
 	return rv, nil
+}
+
+// metadataListAccept asks for a metadata-only list (PartialObjectMetadataList).
+const metadataListAccept = "application/json;as=PartialObjectMetadataList;v=v1;g=meta.k8s.io,application/json"
+
+// count is the number of objects of an unfiltered list now, from a
+// one-object metadata page's remaining count; ok is false if the server
+// doesn't say.
+func (c *Cluster) count(ctx context.Context, rc *rest.RESTClient, res Resolved, ns string) (int, bool) {
+	body, err := c.request(rc, res, ns, "", "").SetHeader("Accept", metadataListAccept).Param("limit", "1").DoRaw(ctx)
+	if err != nil {
+		return 0, false
+	}
+	t, err := decodeTableOrList(body)
+	if err != nil || t.remaining == nil {
+		return 0, false
+	}
+	return len(t.items) + int(*t.remaining), true
 }
 
 func (c *Cluster) watch(ctx context.Context, rc *rest.RESTClient, res Resolved, ns, ls, fs, rv string, out chan<- Event) (string, bool, error) {
@@ -382,6 +422,9 @@ type decoded struct {
 	items   []Item
 	rv      string
 	cont    string
+	// remaining: the server's estimate of the objects after this page (nil
+	// if it doesn't say: a filtered list, the last page)
+	remaining *int64
 }
 
 // decodeTableOrList accepts a meta.k8s.io Table (preferred) or, for
@@ -400,7 +443,7 @@ func decodeTableOrList(body []byte) (decoded, error) {
 		if err := json.Unmarshal(body, &t); err != nil {
 			return decoded{}, err
 		}
-		d := decoded{columns: t.ColumnDefinitions, rv: t.ResourceVersion, cont: t.Continue}
+		d := decoded{columns: t.ColumnDefinitions, rv: t.ResourceVersion, cont: t.Continue, remaining: t.RemainingItemCount}
 		if d.columns == nil {
 			d.columns = []metav1.TableColumnDefinition{}
 		}
@@ -423,7 +466,7 @@ func decodeTableOrList(body []byte) (decoded, error) {
 		if err != nil {
 			return decoded{}, err
 		}
-		d := decoded{rv: l.GetResourceVersion(), cont: l.GetContinue()}
+		d := decoded{rv: l.GetResourceVersion(), cont: l.GetContinue(), remaining: l.GetRemainingItemCount()}
 		for i := range l.Items {
 			StripManagedFields(&l.Items[i])
 			d.items = append(d.items, Item{Object: &l.Items[i]})

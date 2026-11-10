@@ -1,0 +1,12 @@
+# E2E tape: a large cluster's list, page by page: for 2s the status line shows how far the
+# initial list got (the API server's remaining count), then the objects arrive.
+pipeline:
+  source: {resource: e2e-slow}
+listDelay: 2s
+listProgress: {items: 1500, total: 4213}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: big-0, namespace: prod, uid: sl-big-0, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [big-0, Running]

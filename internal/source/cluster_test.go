@@ -186,3 +186,89 @@ func TestReconnectDropsConnection(t *testing.T) {
 		t.Fatalf("names = %q", got)
 	}
 }
+
+// A paginated list reports its progress after each page the server says
+// more remain after (not after the last), then the whole list as one Relist;
+// a filtered list, which the server doesn't count, reports none; Tables
+// without the count are counted once by a metadata list.
+func TestListReportsProgress(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("watch") == "true" {
+			<-r.Context().Done()
+			return
+		}
+		if q.Get("limit") != "500" && !strings.Contains(r.Header.Get("Accept"), "as=PartialObjectMetadataList") {
+			t.Errorf("limit = %q", q.Get("limit"))
+		}
+		filtered := q.Get("labelSelector") != ""
+		// "uncounted": an aggregated API server whose Tables drop the count, its metadata lists keep it
+		uncounted := r.URL.Path == "/api/v1/namespaces/uncounted/pods"
+		if strings.Contains(r.Header.Get("Accept"), "as=PartialObjectMetadataList") {
+			if !uncounted || q.Get("limit") != "1" || q.Get("continue") != "" || filtered {
+				t.Errorf("unexpected count: %s %s", r.URL.Path, r.URL.RawQuery)
+			}
+			fmt.Fprint(w, `{"kind":"PartialObjectMetadataList","apiVersion":"meta.k8s.io/v1","metadata":{"resourceVersion":"10","continue":"x","remainingItemCount":5},"items":[{"metadata":{"name":"a"}}]}`)
+			return
+		}
+		meta := func(cont string, remaining int) string {
+			if cont == "" {
+				return `{"resourceVersion":"10"}`
+			}
+			if filtered || uncounted {
+				return fmt.Sprintf(`{"resourceVersion":"10","continue":%q}`, cont)
+			}
+			return fmt.Sprintf(`{"resourceVersion":"10","continue":%q,"remainingItemCount":%d}`, cont, remaining)
+		}
+		switch q.Get("continue") {
+		case "":
+			fmt.Fprintf(w, `{"kind":"Table","apiVersion":"meta.k8s.io/v1","metadata":%s,%s,"rows":[%s,%s]}`, meta("p2", 3), cols, tableRow("a", "ua", "1", "0"), tableRow("b", "ub", "1", "0"))
+		case "p2":
+			fmt.Fprintf(w, `{"kind":"Table","apiVersion":"meta.k8s.io/v1","metadata":%s,%s,"rows":[%s,%s]}`, meta("p3", 1), cols, tableRow("c", "uc", "1", "0"), tableRow("d", "ud", "1", "0"))
+		default:
+			fmt.Fprintf(w, `{"kind":"Table","apiVersion":"meta.k8s.io/v1","metadata":%s,%s,"rows":[%s]}`, meta("", 0), cols, tableRow("e", "ue", "1", "0"))
+		}
+	}))
+	defer srv.Close()
+
+	for _, tc := range []struct {
+		name, ns, labels string
+		want             []Loaded
+	}{
+		{"unfiltered", "ns", "", []Loaded{{Items: 2, Total: 5}, {Items: 4, Total: 5}}},
+		{"filtered", "ns", "app=web", nil},
+		// counted once, by a metadata list, after the first page
+		{"table without the count", "uncounted", "", []Loaded{{Items: 2, Total: 6}, {Items: 4, Total: 6}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Cluster{Config: &rest.Config{Host: srv.URL}, http: srv.Client()}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			out := make(chan Event, 10)
+			go c.Watch(ctx, Resolved{GVR: schema.GroupVersionResource{Version: "v1", Resource: "pods"}, Namespaced: true}, tc.ns, tc.labels, "", out)
+			var got []Loaded
+			for {
+				select {
+				case ev := <-out:
+					switch ev.Type {
+					case Progress:
+						got = append(got, *ev.Loaded)
+						continue
+					case Relist:
+						if len(ev.Items) != 5 {
+							t.Fatalf("relist: %d items", len(ev.Items))
+						}
+						if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+							t.Fatalf("progress = %v, want %v", got, tc.want)
+						}
+						return
+					default:
+						t.Fatalf("unexpected %s (%s)", ev.Type, ev.Err)
+					}
+				case <-ctx.Done():
+					t.Fatal("timeout")
+				}
+			}
+		})
+	}
+}

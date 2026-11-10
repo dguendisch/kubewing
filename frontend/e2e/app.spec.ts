@@ -74,6 +74,19 @@ test("live table shows server-side columns and rows", async ({ page }) => {
   await expect(page.getByRole("status", { name: "pane status" })).toContainText("3 shown / 3 objects");
 });
 
+test("a large list shows its progress while syncing, until the objects arrive", async ({ page }) => {
+  // e2e-slow: the list takes 2s, reporting 1,500 of 4,213 objects meanwhile
+  await ready(page);
+  await page.keyboard.press("ControlOrMeta+O");
+  await page.getByRole("combobox", { name: "resource" }).fill("e2e-slow");
+  await page.keyboard.press("Enter");
+  const status = page.getByRole("status", { name: "pane status" });
+  await expect(status.getByLabel("syncing")).toHaveText("● syncing 35% (1,500/4,213)");
+  await expect.poll(async () => (await focused(page)).status?.synced, tapeSteps).toBe(true);
+  await expect(status.getByLabel("syncing")).toHaveCount(0);
+  await expect(status).toContainText("1 shown / 1 objects");
+});
+
 test.describe("columns (per resource type)", () => {
   // one backend serves the whole run, and columns.yaml with it: leave e2e-wide and nodes as they were
   test.afterEach(async ({ page }) => {

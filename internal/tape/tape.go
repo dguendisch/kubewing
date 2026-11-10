@@ -42,6 +42,9 @@ type Tape struct {
 	// ListDelay delays the initial list (e.g. "1s"), as a large cluster's
 	// list takes a while (replays only; not scaled by speed).
 	ListDelay string `json:"listDelay,omitempty"`
+	// ListProgress is the list's progress reported at once while ListDelay
+	// holds the list back, as an API server's pages report what remains.
+	ListProgress *source.Loaded `json:"listProgress,omitempty"`
 }
 
 // Usage is an object's usage as quantities ("250m", "128Mi").

@@ -348,3 +348,34 @@ func TestRegistryRestart(t *testing.T) {
 		t.Fatalf("active = %d", r.Active())
 	}
 }
+
+// A subscriber joining while the list runs gets its last progress; once
+// listed, none.
+func TestRegistryReplaysProgress(t *testing.T) {
+	f := &fakeOpener{feed: make(chan Event)}
+	r := NewRegistry(f)
+	k := Key{Cluster: "c", Resource: "pods"}
+	a, _ := r.Subscribe(k)
+	defer a.Close()
+	f.feed <- Event{Type: Progress, Loaded: &Loaded{Items: 500, Total: 1200}}
+	recv(t, a.Events)
+
+	b, _ := r.Subscribe(k)
+	if ev := recv(t, b.Events); ev.Type != Progress || *ev.Loaded != (Loaded{Items: 500, Total: 1200}) {
+		t.Fatalf("late subscriber: %+v", ev)
+	}
+	b.Close()
+
+	f.feed <- Event{Type: Relist, Items: []Item{pod("x")}}
+	recv(t, a.Events)
+	c, _ := r.Subscribe(k)
+	defer c.Close()
+	if ev := recv(t, c.Events); ev.Type != Relist {
+		t.Fatalf("after the list: %+v", ev)
+	}
+	select {
+	case ev := <-c.Events:
+		t.Fatalf("progress replayed after the list: %+v", ev)
+	case <-time.After(50 * time.Millisecond):
+	}
+}

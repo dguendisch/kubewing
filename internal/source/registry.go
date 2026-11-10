@@ -81,6 +81,9 @@ type shared struct {
 	lastErr string
 	// listing: a snapshot's last progress (nil for watches)
 	listing *Listing
+	// loaded: a running list's last progress (nil when none runs, or it
+	// doesn't report any)
+	loaded *Loaded
 }
 
 // Subscription receives events for one subscriber.
@@ -294,6 +297,9 @@ func (r *Registry) SubscribeWith(k Key, norm *normalize.Normalizer) (*Subscripti
 	if sh.listing != nil {
 		ch <- Event{Type: Listed, Listing: sh.listing}
 	}
+	if sh.loaded != nil {
+		ch <- Event{Type: Progress, Loaded: sh.loaded}
+	}
 	sh.subs[sub] = ch
 	var once sync.Once
 	return &Subscription{Events: ch, Resolved: sh.res, History: &History{sh: sh, reg: r, now: r.Now}, close: func() {
@@ -455,15 +461,18 @@ func (r *Registry) fanout(ctx context.Context, sh *shared, in <-chan Event) {
 				for _, it := range ev.Items {
 					sh.items[itemKey(it)] = it
 				}
-				sh.columns, sh.synced, sh.lastErr = ev.Columns, true, ""
+				sh.columns, sh.synced, sh.lastErr, sh.loaded = ev.Columns, true, "", nil
 			case Added, Modified:
 				sh.items[itemKey(ev.Item)] = ev.Item
 			case Deleted:
 				delete(sh.items, itemKey(ev.Item))
 			case Error:
-				sh.lastErr = ev.Err
+				// a failed list starts over
+				sh.lastErr, sh.loaded = ev.Err, nil
 			case Listed:
 				sh.listing = ev.Listing
+			case Progress:
+				sh.loaded = ev.Loaded
 			}
 			for _, ch := range sh.subs {
 				select {

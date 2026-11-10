@@ -73,6 +73,11 @@ type Status struct {
 	// their pods are still being listed; AllocError: they can't be
 	AllocLoading bool   `json:"allocLoading,omitempty"`
 	AllocError   string `json:"allocError,omitempty"`
+	// Loaded/LoadTotal: the initial list's progress, objects so far of the
+	// total (both 0 once synced, or while the API server doesn't say: a
+	// filtered list, before its first page, a list of a single page)
+	Loaded    int `json:"loaded,omitempty"`
+	LoadTotal int `json:"loadTotal,omitempty"`
 	// Snapshot: the source is listed once, not watched (a namespace's
 	// snapshot); ListedAt is when the last listing finished (RFC 3339; ""
 	// while the first runs), Listing/ListTypes the progress of one running

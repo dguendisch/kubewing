@@ -314,3 +314,32 @@ func TestNodeExtendedColumns(t *testing.T) {
 		t.Fatalf("cells = %q", got)
 	}
 }
+
+// The initial list's progress shows until it's synced; a failed list
+// drops it (the retry starts over), and a relist after sync shows none.
+func TestStatusListProgress(t *testing.T) {
+	v := topView(t, Options{})
+	status := func() Status {
+		v.everFramed, v.lastStatus = false, Status{}
+		f, _ := v.Frame(t0)
+		return *f.Status
+	}
+	v.Apply(source.Event{Type: source.Progress, Loaded: &source.Loaded{Items: 500, Total: 1200}}, t0)
+	if s := status(); s.Synced || s.Loaded != 500 || s.LoadTotal != 1200 {
+		t.Fatalf("listing: %+v", s)
+	}
+	v.Apply(source.Event{Type: source.Error, Err: "boom"}, t0)
+	if s := status(); s.Loaded != 0 || s.LoadTotal != 0 {
+		t.Fatalf("after an error: %+v", s)
+	}
+	v.Apply(source.Event{Type: source.Progress, Loaded: &source.Loaded{Items: 1000, Total: 1200}}, t0)
+	v.Apply(source.Event{Type: source.Relist, Columns: podDefs, Items: []source.Item{topPod("a", "api-0")}}, t0)
+	if s := status(); !s.Synced || s.Loaded != 0 || s.LoadTotal != 0 {
+		t.Fatalf("synced: %+v", s)
+	}
+	// a relist's progress (after the watch expired) doesn't show: the rows are there
+	v.Apply(source.Event{Type: source.Progress, Loaded: &source.Loaded{Items: 500, Total: 1200}}, t0)
+	if s := status(); s.Loaded != 0 || s.Objects != 1 {
+		t.Fatalf("relisting: %+v", s)
+	}
+}

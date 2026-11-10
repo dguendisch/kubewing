@@ -106,6 +106,9 @@ func (o *Opener) Watch(ctx context.Context, _ string, res source.Resolved, k sou
 	inject, done := o.attach(t)
 	defer done()
 	if d, _ := time.ParseDuration(t.ListDelay); d > 0 {
+		if t.ListProgress != nil && !emit(source.Event{Type: source.Progress, Loaded: t.ListProgress}) {
+			return
+		}
 		select {
 		case <-time.After(d):
 		case <-ctx.Done():

@@ -33,6 +33,10 @@ const (
 	Error EventType = "error"
 	// Listed reports a snapshot's progress (Listing); state is unchanged.
 	Listed EventType = "listed"
+	// Progress reports how far a source's initial list (or relist) has
+	// got (Loaded); state is unchanged. Sent only after a page when the API
+	// server reports what remains (unfiltered lists), not after the last.
+	Progress EventType = "progress"
 )
 
 // Event is delivered to subscribers in order.
@@ -46,6 +50,14 @@ type Event struct {
 	Err     string // Error
 	// Listing is a snapshot's progress (Listed only).
 	Listing *Listing
+	// Loaded is a list's progress (Progress only).
+	Loaded *Loaded
+}
+
+// Loaded is how far a paginated list has got: Items of Total objects so far.
+type Loaded struct {
+	Items int `json:"items"`
+	Total int `json:"total"`
 }
 
 // StripManagedFields removes metadata.managedFields in place; it is noise
