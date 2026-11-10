@@ -194,10 +194,10 @@ describe("default keymap", () => {
   });
   it("suppressed webview defaults are either bound or explicitly unbound", () => {
     // Meta+F ours (Monaco's find in the detail view), Meta+R a listing's refresh, Meta+Shift+R
-    // the reconnect, Meta+S the editor's preview/apply; the rest must not be bound to a command by accident (that would make
+    // the reconnect, Meta+S the editor's preview/apply, Meta+= / Meta+- / Meta+0 the font zoom; the rest must not be bound to a command by accident (that would make
     // suppression depend on focus).
     const bound = new Set(defaultBindings.map((b) => b.key));
-    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+R", "Meta+Shift+R", "Meta+S"]);
+    expect(suppressedDefaults.filter((k) => bound.has(k))).toEqual(["Meta+F", "Meta+R", "Meta+Shift+R", "Meta+=", "Meta+-", "Meta+0", "Meta+S"]);
   });
   it("pretty-prints chords", () => {
     expect(prettyKey("Alt+Meta+P")).toBe("⌥⌘P");

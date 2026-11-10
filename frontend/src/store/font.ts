@@ -2,12 +2,16 @@ import type { FontConfig } from "../transport/types";
 
 /**
  * The app's one font (config.yaml `font`): its family in front of theme.css's
- * default stack (--font-mono), its base size and ligatures. applyFont sets the
- * CSS variables the DOM uses; the canvas grid, xterm and Monaco can't read CSS,
- * so they take font() whenever the config generation (themeGen) changes.
+ * default stack (--font-mono), its base size and ligatures, the size zoomed
+ * by ⌘+/⌘- for the session (zoomFont). applyFont sets the CSS variables the
+ * DOM uses; the canvas grid, xterm and Monaco can't read CSS, so they take
+ * font() whenever the config generation (themeGen) changes.
  */
 
 export const DEFAULT_FONT_SIZE = 12;
+/** font.size bounds (Go's MinFontSize/MaxFontSize); zoom stays within them too. */
+export const MIN_FONT_SIZE = 8;
+export const MAX_FONT_SIZE = 24;
 
 /** What a font config resolves to. */
 export interface AppliedFont {
@@ -58,8 +62,27 @@ export function unligate(text: string): string {
   return text.replace(/([!-/:-@[-`{-~])(?=[!-/:-@[-`{-~])/g, "$1‌");
 }
 
+const clampSize = (n: number) => Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, n));
+
+/** The size font.size shows at with a zoom offset (px), within the bounds. Pure. */
+export function zoomedSize(base: number, zoom: number): number {
+  return clampSize(base + zoom);
+}
+
+/**
+ * The zoom offset after ⌘+ (1), ⌘- (-1) or ⌘0 (0). A step starts from the
+ * size shown, so at a bound one step back is one px back (also after a
+ * reload moved font.size nearer to it). Pure.
+ */
+export function zoomStep(base: number, zoom: number, step: 1 | -1 | 0): number {
+  return step === 0 ? 0 : clampSize(zoomedSize(base, zoom) + step) - base;
+}
+
 let applied: AppliedFont | undefined;
 let defaults: string | undefined;
+let configured: FontConfig | undefined;
+// the session's zoom (px on top of font.size): kept across reloads, never saved
+let zoom = 0;
 
 /**
  * theme.css's default stack, read before applyFont first overrides
@@ -81,17 +104,32 @@ export function gridHeights(size: number): { row: number; header: number } {
 
 /**
  * Applies a font config: the CSS variables (--font-mono, --kw-font-size,
- * --kw-ligatures) and font() for the canvas, xterm and Monaco. (Go reports a
- * family that isn't installed: WebKit's canvas can't see user fonts to tell.)
+ * --kw-ligatures) and font() for the canvas, xterm and Monaco, the size
+ * zoomed by the session's zoom. (Go reports a family that isn't installed:
+ * WebKit's canvas can't see user fonts to tell.)
  */
 export function applyFont(c: FontConfig | undefined) {
+  configured = c;
   const root = document.documentElement.style;
   const family = fontStack(c?.family, defaultStack());
-  const size = c?.size || DEFAULT_FONT_SIZE;
+  const size = zoomedSize(c?.size || DEFAULT_FONT_SIZE, zoom);
   const ligatures = !!c?.ligatures;
   applied = { family, size, ligatures };
   if (c?.family) root.setProperty("--font-mono", family);
   else root.removeProperty("--font-mono");
   root.setProperty("--kw-font-size", `${size}px`);
   root.setProperty("--kw-ligatures", ligatures ? "normal" : "none");
+}
+
+/**
+ * Zooms the font one px in (1) or out (-1), or back to font.size (0), in
+ * every pane and tab, for as long as kubewing runs (a reload of the config
+ * keeps it). Reports whether the size changed: the caller then bumps the
+ * config generation, which the canvas grid, xterm and Monaco re-read.
+ */
+export function zoomFont(step: 1 | -1 | 0): boolean {
+  const before = font().size;
+  zoom = zoomStep(configured?.size || DEFAULT_FONT_SIZE, zoom, step);
+  applyFont(configured);
+  return font().size !== before;
 }

@@ -1938,6 +1938,35 @@ test.describe("font (config.yaml font)", () => {
     await expect.poll(rowHeight).toBeGreaterThan(before);
     await page.keyboard.press("Control+D");
   });
+
+  test("⌘+ / ⌘- zoom every pane from font.size, within 8 … 24 px, a reload keeps the zoom, ⌘0 drops it", async ({ page }) => {
+    await openTape(page);
+    const size = async () => (await applied(page)).font.size;
+    const body = () => page.evaluate(() => getComputedStyle(document.body).fontSize);
+    await page.keyboard.press("Meta+Equal");
+    await expect.poll(size).toBe(13);
+    // ⌘+ as typed (⌘⇧=) zooms too
+    await page.keyboard.press("Meta+Shift+Equal");
+    await expect.poll(size).toBe(14);
+    expect(await body()).toBe("14px");
+    // the YAML editor takes the zoomed size, and follows a step while open
+    await page.keyboard.press("Enter");
+    const lines = page.locator('[data-viewer="single"] .monaco-editor .view-lines');
+    await expect.poll(() => lines.evaluate((el) => getComputedStyle(el).fontSize)).toBe("14px");
+    await page.keyboard.press("Meta+Minus");
+    await expect.poll(() => lines.evaluate((el) => getComputedStyle(el).fontSize)).toBe("13px");
+    // a reload with another font.size keeps the zoom on top of it
+    await setFont(page, { size: 16 });
+    await expect.poll(size).toBe(17);
+    for (let i = 0; i < 10; i++) await page.keyboard.press("Meta+Equal");
+    await expect.poll(size).toBe(24);
+    // at the bound one step back is one px back
+    await page.keyboard.press("Meta+Minus");
+    await expect.poll(size).toBe(23);
+    await page.keyboard.press("Meta+Digit0");
+    await expect.poll(size).toBe(16);
+    expect(await body()).toBe("16px");
+  });
 });
 
 // Safety model (testdata/config/config.yaml): "tape-dev" is DEV (delete confirms),

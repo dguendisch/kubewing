@@ -135,6 +135,9 @@ export type CommandId =
   | "view.columns"
   | "view.toggleMetrics"
   | "view.toggleAllocation"
+  | "view.zoomIn"
+  | "view.zoomOut"
+  | "view.zoomReset"
   | "history.toggleRecording"
   | "travel.toggle"
   | "travel.prev"
@@ -163,7 +166,7 @@ export const commandIds: readonly CommandId[] = [
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "update.check", "edit.submit", "edit.back", "edit.decode",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
-  "view.columns", "view.toggleMetrics", "view.toggleAllocation", "history.toggleRecording",
+  "view.columns", "view.toggleMetrics", "view.toggleAllocation", "view.zoomIn", "view.zoomOut", "view.zoomReset", "history.toggleRecording",
   "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",
 ];
 
@@ -227,6 +230,11 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+,", command: "config.edit" },
   // its sibling in the app menu's Settings: keybindings.yaml, every default binding beside it
   { key: "Alt+Meta+,", command: "config.editKeys" },
+  // the font of every pane and tab, for the session (font.size stays as configured); ⌘+ is ⌘⇧= on most layouts
+  { key: "Meta+=", command: "view.zoomIn" },
+  { key: "Meta+Shift+=", command: "view.zoomIn" },
+  { key: "Meta+-", command: "view.zoomOut" },
+  { key: "Meta+0", command: "view.zoomReset" },
   // the focused pane's context: a fresh connection and fresh lists (after the network was down, a stuck watch);
   // global, as the browser's hard reload (and ⌘R is the webview's, suppressed)
   { key: "Meta+Shift+R", command: "source.reconnect" },
@@ -509,8 +517,8 @@ function resolveOwn(key: string, focus: FocusContext, bindings: Binding[]): Comm
 export const editorModal = (focus: FocusContext) => focus === "edit" || focus === "editpreview";
 
 /**
- * Global commands that only move the focus (or maximize or resize its pane):
- * they reach the app from the editor too. Not ⌘[ / ⌘] (next/previous pane): they're the
+ * Global commands that only move the focus (or maximize or resize its pane,
+ * or zoom the font): they reach the app from the editor too. Not ⌘[ / ⌘] (next/previous pane): they're the
  * editor's indent.
  */
 const focusMoves = new Set<CommandId>([
@@ -519,6 +527,7 @@ const focusMoves = new Set<CommandId>([
   "pane.resizeLeft", "pane.resizeRight", "pane.resizeUp", "pane.resizeDown",
   "tab.next", "tab.prev", "tab.mruNext", "tab.mruPrev",
   ...([1, 2, 3, 4, 5, 6, 7, 8, 9] as const).map((n) => `tab.goto${n}` as const),
+  "view.zoomIn", "view.zoomOut", "view.zoomReset",
 ]);
 export const editorMoves = (c: CommandId) => focusMoves.has(c);
 

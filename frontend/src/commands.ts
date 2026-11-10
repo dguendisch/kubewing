@@ -15,6 +15,7 @@ import { nowOf, rowAt } from "./grid/rowcache";
 import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
 import { logBuffers } from "./logs/buffer";
 import { useUpdate } from "./update/update";
+import { zoom } from "./store/config";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -342,6 +343,12 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return void openConfigEditor(pane.id, "config.yaml");
     case "config.editKeys":
       return void openConfigEditor(pane.id, "keybindings.yaml");
+    case "view.zoomIn":
+      return zoom(1);
+    case "view.zoomOut":
+      return zoom(-1);
+    case "view.zoomReset":
+      return zoom(0);
     case "source.reconnect":
       return void reconnect(pane.id);
     case "source.refresh":

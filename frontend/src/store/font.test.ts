@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fontStack, gridHeights, parseFamilies, unligate } from "./font";
+import { fontStack, gridHeights, parseFamilies, unligate, zoomedSize, zoomStep } from "./font";
 
 const defaults = '"SF Mono", ui-monospace, Menlo, monospace';
 
@@ -33,5 +33,24 @@ describe("gridHeights", () => {
   it("is 22/24 at the default size and follows the size", () => {
     expect(gridHeights(12)).toEqual({ row: 22, header: 24 });
     expect(gridHeights(16)).toEqual({ row: 26, header: 28 });
+  });
+});
+
+describe("zoom", () => {
+  it("steps one px at a time and ⌘0 drops the offset", () => {
+    expect(zoomStep(12, 0, 1)).toBe(1);
+    expect(zoomStep(12, 1, 1)).toBe(2);
+    expect(zoomStep(12, 2, -1)).toBe(1);
+    expect(zoomStep(12, -3, 0)).toBe(0);
+    expect(zoomedSize(12, 2)).toBe(14);
+  });
+  it("stays within 8 … 24 px, and one step back from a bound is one px back", () => {
+    expect(zoomStep(23, 1, 1)).toBe(1);
+    expect(zoomStep(9, -1, -1)).toBe(-1);
+    // a reload brought font.size nearer the bound than the offset reaches: the size shown is the limit
+    expect(zoomedSize(22, 5)).toBe(24);
+    expect(zoomStep(22, 5, -1)).toBe(1);
+    expect(zoomedSize(10, -5)).toBe(8);
+    expect(zoomStep(10, -5, 1)).toBe(-1);
   });
 });

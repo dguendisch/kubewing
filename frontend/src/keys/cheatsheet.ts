@@ -51,6 +51,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("edit the settings (config.yaml), the reference beside them", "config.edit"),
       row("edit the key bindings (keybindings.yaml), every default beside them", "config.editKeys"),
       row("reload the config", "config.reload"),
+      row("font bigger / smaller / as configured, everywhere until kubewing quits", "view.zoomIn", "view.zoomOut", "view.zoomReset"),
       row("check for updates (unbound: the app menu has it)", "update.check"),
       row("this cheat sheet", "help.toggle"),
       row("run the prepared action", "confirm.accept"),

@@ -1022,6 +1022,8 @@ kubewing uses one font everywhere: tables, YAML, terminals, logs, menus and dial
 
 A reload (`⌘⇧,`, or saving in `⌘,`) applies changes at once, to open panes too.
 
+`⌘+` and `⌘-` make the font one pixel bigger or smaller, in every pane and tab at once (also **View → Zoom In / Zoom Out**); `⌘0` (**Actual Size**) goes back to `font.size`. The zoom stays within 8 … 24px and lasts until kubewing quits: it isn't saved, and the next start uses `font.size` again. A reload keeps it, on top of the new `font.size`.
+
 ### Themes
 
 Two themes are built in: the default one (dark grey with an orange accent) and `blue` (navy with a blue accent); select it with `theme: blue`. Both draw drop shadows below menus and dialogs.
@@ -1038,7 +1040,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `?` help |
+| Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `⌘+`/`⌘-`/`⌘0` font size · `?` help |
 | Table | `/` grep (`⇥` labels, CEL) · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `l` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |

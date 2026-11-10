@@ -3,7 +3,7 @@ import { defaultBindings, mergeBindings, type Binding } from "../keys/keymap";
 import type { Config } from "../transport/types";
 import { DEFAULT_SCROLLBACK, sessions } from "../term/sessions";
 import { DEFAULT_LOG_BUFFER, logBuffers } from "../logs/buffer";
-import { applyFont } from "./font";
+import { applyFont, zoomFont } from "./font";
 
 /** Theme tokens defined in theme.css (without "--color-"); theme files may override these. */
 export const themeTokens = [
@@ -32,7 +32,7 @@ export interface ConfigState {
   /** Go-side load errors plus frontend validation (keybindings, theme tokens). */
   errors: string[];
   dismissed: boolean;
-  /** Bumped whenever the config is applied (theme tokens, font): the canvas grid, xterm and Monaco re-read colors and font on change. */
+  /** Bumped whenever the config is applied (theme tokens, font) or the font zoomed: the canvas grid, xterm and Monaco re-read colors and font on change. */
   themeGen: number;
 }
 
@@ -62,4 +62,9 @@ export function applyConfig(c: Config) {
   sessions.setScrollback(c.config.terminal?.scrollback ?? DEFAULT_SCROLLBACK);
   logBuffers.setMax(c.config.logs?.buffer ?? DEFAULT_LOG_BUFFER);
   useConfig.setState((s) => ({ config: c, bindings: r.bindings, errors: r.errors, dismissed: false, themeGen: s.themeGen + 1 }));
+}
+
+/** ⌘+ / ⌘- / ⌘0: zooms the font for the session; the canvas grid, xterm and Monaco follow via themeGen. */
+export function zoom(step: 1 | -1 | 0) {
+  if (zoomFont(step)) useConfig.setState((s) => ({ themeGen: s.themeGen + 1 }));
 }
