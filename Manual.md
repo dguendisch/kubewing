@@ -877,8 +877,8 @@ Configuration lives in `~/.kubewing/` (or `$KUBEWING_HOME`, or `-config`). All f
 `⌘,` (or **kubewing → Settings → General…**) opens `config.yaml` in an editor, with a reference beside it: every setting with its default (or an example) and what it does. Copy what you need from there; **reference** shows or hides it.
 
 - Without a `config.yaml` yet, the editor starts with the reference commented out, so nothing changes until you uncomment a line (`⌘/` comments lines in and out).
-- Problems show below the editor as you type, as kubewing would read the file.
-- `⌘S` saves and applies at once, like `⌘⇧,`. If the file still has problems, it's saved anyway and those parts fall back to defaults (and show in the banner).
+- Problems show below the editor as you type, as kubewing would read the file. Whether `font.family` is installed is checked when you save: it shows there too then.
+- `⌘S` saves and applies at once, like `⌘⇧,`. If the file still has problems, it's saved anyway and those parts fall back to defaults (and show in the banner once the editor is closed: while it's open, the banner is hidden).
 - `Esc` closes. With unsaved edits it asks first; a second `Esc` drops them.
 
 `⌥⌘,` (or **kubewing → Settings → Keyboard Shortcuts…**) opens `keybindings.yaml` the same way, with every default binding beside it, by section, written as an entry would be: copy a line and change its key. Problems (an unknown command, key or context, an entry without a key or command) show as you type, numbered by entry. A new file starts with a commented example.
@@ -903,6 +903,11 @@ A symlinked `config.yaml` or `keybindings.yaml` (dotfiles) is saved where the li
 
 ```yaml
 theme: mytheme              # blue (built in) or themes/mytheme.yaml; omit for the default theme
+
+font:
+  family: JetBrainsMono Nerd Font   # an installed font or a list ("Fira Code", Menlo); omit for SF Mono
+  size: 12                  # px, 8 … 24
+  ligatures: false          # true: "->", "!=", "=>" as one glyph, in fonts that have them
 
 diff:
   ignore:                   # extra noise rules for the diff ("*" matches any list element / map key)
@@ -1006,6 +1011,16 @@ Paths are field names separated by dots, plus:
 | `*`, `*SecretRef` | any key, a key matching the glob |
 | `**` | any depth (`**.volumes[*].secret`: pod specs wherever they're embedded) |
 | `["example.com/ref"]` | a key with dots, literally |
+
+### Fonts
+
+kubewing uses one font everywhere: tables, YAML, terminals, logs, menus and dialogs. Without `font` in `config.yaml` it's SF Mono (Menlo where SF Mono isn't available) at 12px.
+
+- `font.family` names an installed font, as Font Book shows its family (a Nerd Font is called e.g. `JetBrainsMono Nerd Font`), or a comma-separated list, of which the first installed one is used. SF Mono and Menlo stay behind it, so a missing font falls back to them; the settings editor and the error banner then say so. Pick a monospaced font: table columns and terminals only line up with one.
+- `font.size` is the base size in pixels (8 … 24); table rows, terminals and editors follow it, and the smaller text of menus and status lines stays 1-2px below it.
+- `font.ligatures: true` lets fonts with programming ligatures (Fira Code, JetBrains Mono, Cascadia Code) join `->`, `!=`, `=>` and the like into one glyph. It's off by default, so text reads as it was typed.
+
+A reload (`⌘⇧,`, or saving in `⌘,`) applies changes at once, to open panes too.
 
 ### Themes
 

@@ -2,6 +2,11 @@
 
 theme: default              # "default" (or none), "blue" (built in), or themes/<name>.yaml
 
+font:                       # the whole app: tables, YAML, terminals, logs, menus
+  family: JetBrainsMono Nerd Font   # an installed font, or a list ("Fira Code", Menlo); SF Mono, then Menlo come after it; none: SF Mono
+  size: 12                  # px, 8 … 24; smaller UI text follows
+  ligatures: false          # true: "->", "!=", "=>" joined into one glyph, in fonts that have them
+
 diff:
   ignore:                   # noise rules on top of the built-in ones (resourceVersion, managedFields, heartbeats …)
     - path: metadata.annotations.example\.com/last-sync   # "*" matches any list element / map key, "\." a literal dot

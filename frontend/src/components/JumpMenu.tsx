@@ -111,7 +111,7 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
       {items.map((it, i) => (
         <div key={it.id}>
           {i === 0 || items[i - 1]!.section !== it.section ? (
-            <div role="separator" aria-label={sectionTitle[it.section]} className={`px-3 text-[11px] text-fg-muted uppercase ${i > 0 ? "mt-1 border-t border-border pt-1" : ""}`}>
+            <div role="separator" aria-label={sectionTitle[it.section]} className={`px-3 text-small text-fg-muted uppercase ${i > 0 ? "mt-1 border-t border-border pt-1" : ""}`}>
               {sectionTitle[it.section]}
             </div>
           ) : null}
@@ -129,8 +129,8 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
               {it.indent ? "↑ " : ""}
               <Label label={it.label} type={it.type} muted={!!it.disabled} />
             </span>
-            {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}
-            {!it.disabled && it.note ? <span className="truncate text-[11px] text-fg-muted">· {it.note}</span> : null}
+            {it.disabled ? <span className="truncate text-small">· {it.disabled}</span> : null}
+            {!it.disabled && it.note ? <span className="truncate text-small text-fg-muted">· {it.note}</span> : null}
             <span className="ml-auto shrink-0 text-fg-muted">{it.detail}</span>
           </button>
         </div>

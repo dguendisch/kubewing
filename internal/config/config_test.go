@@ -82,6 +82,7 @@ accent: "rgb(203, 75, 22)"
 		Dir: dir,
 		Config: Config{
 			Theme: "solar",
+			Font:  Font{Size: DefaultFontSize},
 			Diff:  Diff{Ignore: []normalize.Rule{{Path: "status.observedGeneration", Kinds: []string{"Deployment"}}}},
 			Contexts: []ContextRule{
 				{Match: "*prod*", Label: "PROD", Color: "prod", ReadOnly: true, Confirm: []string{"delete", "exec", "edit"}, Strict: true},
@@ -381,3 +382,71 @@ disable: [node]
 		t.Error("node rule not disabled")
 	}
 }
+
+// font: family checked for CSS-breaking characters, size within bounds; broken parts fall back.
+func TestFontConfig(t *testing.T) {
+	installed := map[string]bool{"JetBrainsMono Nerd Font": true, "Fira Code": true, "Menlo": true, "Monaco": true}
+	orig := fontInstalled
+	fontInstalled = func(name string) bool { return installed[name] }
+	t.Cleanup(func() { fontInstalled = orig })
+	for _, c := range []struct {
+		yaml      string
+		family    string
+		size      int
+		ligatures bool
+		errs      int
+	}{
+		{"theme: default\n", "", DefaultFontSize, false, 0},
+		{"font: {family: JetBrainsMono Nerd Font, size: 14, ligatures: true}\n", "JetBrainsMono Nerd Font", 14, true, 0},
+		{"font: {family: '\"Fira Code\", Menlo'}\n", `"Fira Code", Menlo`, DefaultFontSize, false, 0},
+		{"font: {family: \"  Monaco \"}\n", "Monaco", DefaultFontSize, false, 0},
+		{"font: {family: \"Menlo; color: red\"}\n", "", DefaultFontSize, false, 1},
+		{"font: {family: \"a,,b\"}\n", "", DefaultFontSize, false, 1},
+		{"font: {family: \"\\\"Fira\"}\n", "", DefaultFontSize, false, 1},
+		{"font: {size: 7}\n", "", DefaultFontSize, false, 1},
+		{"font: {size: 25, family: Monaco}\n", "Monaco", DefaultFontSize, false, 1},
+		{"font: {size: 8}\n", "", 8, false, 0},
+	} {
+		e := Load(write(t, map[string]string{"config.yaml": c.yaml}))
+		f := e.Config.Font
+		if f.Family != c.family || f.Size != c.size || f.Ligatures != c.ligatures || len(e.Errors) != c.errs {
+			t.Errorf("%q: got %+v, errors %v", c.yaml, f, e.Errors)
+		}
+	}
+}
+
+// font.family: reported when none of its fonts is installed (the default font shows), not when one is.
+func TestFontInstalledCheck(t *testing.T) {
+	orig := fontInstalled
+	fontInstalled = func(name string) bool { return name == "Comic Mono" }
+	t.Cleanup(func() { fontInstalled = orig })
+	for _, c := range []struct{ family, err string }{
+		{"Comic Mono", ""},
+		{"Missing, Comic Mono", ""},
+		{"Missing, monospace", ""},
+		{"\"monospace\"", `"monospace" is not installed`},
+		{"Missing", `font.family: "Missing" is not installed, using the default font`},
+		{"'A', B", `font.family: none of "A", "B" is installed, using the default font`},
+	} {
+		e := Load(write(t, map[string]string{"config.yaml": "font: {family: " + yamlQuote(c.family) + "}\n"}))
+		if c.err == "" && len(e.Errors) != 0 || c.err != "" && (len(e.Errors) != 1 || !strings.Contains(e.Errors[0], c.err)) {
+			t.Errorf("%q: errors %v, want %q", c.family, e.Errors, c.err)
+		}
+		// still applied: the default stack stands behind it in the frontend
+		if e.Config.Font.Family != c.family {
+			t.Errorf("%q: family %q not kept", c.family, e.Config.Font.Family)
+		}
+	}
+}
+
+// the settings editor's live check doesn't ask the system: only loading (startup, reload, save) does
+func TestFontInstalledNotChecked(t *testing.T) {
+	orig := fontInstalled
+	fontInstalled = func(string) bool { t.Error("Check asked whether a font is installed"); return false }
+	t.Cleanup(func() { fontInstalled = orig })
+	if errs, _ := Check(t.TempDir(), File, "font: {family: Missing}\n"); len(errs) != 0 {
+		t.Errorf("Check: %v", errs)
+	}
+}
+
+func yamlQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }

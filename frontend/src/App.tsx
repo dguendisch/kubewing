@@ -58,7 +58,7 @@ export function App() {
           const n = S.tabShortcut(i, tabs.length);
           const title = tabTitle(t, p, p?.context ? rules[p.context] : undefined);
           const shortcut = n && (
-            <span aria-hidden className="text-[11px] text-fg-muted">
+            <span aria-hidden className="text-small text-fg-muted">
               ⌘{n}
             </span>
           );
@@ -69,7 +69,7 @@ export function App() {
               type="button"
               aria-label={`close tab ${title}`}
               title="close tab (⌘W)"
-              className="absolute top-1/2 left-1.5 hidden size-4 -translate-y-1/2 items-center justify-center rounded text-[11px] leading-none text-fg-muted group-hover:flex hover:bg-fg/15 hover:text-fg"
+              className="absolute top-1/2 left-1.5 hidden size-4 -translate-y-1/2 items-center justify-center rounded text-small leading-none text-fg-muted group-hover:flex hover:bg-fg/15 hover:text-fg"
               onClick={() => setUI((s) => S.requestCloseTab(s, t.id))}
             >
               ✕
@@ -130,7 +130,7 @@ export function App() {
             type="button"
             aria-label="keyboard shortcuts"
             title={`keyboard shortcuts${helpKeyText ? ` (${helpKeyText})` : ""}`}
-            className="mr-1 flex size-5 items-center justify-center self-center rounded-full border border-fg-muted/60 text-[11px] leading-none text-fg-muted hover:border-fg hover:text-fg"
+            className="mr-1 flex size-5 items-center justify-center self-center rounded-full border border-fg-muted/60 text-small leading-none text-fg-muted hover:border-fg hover:text-fg"
             onClick={() => dispatch("help.toggle")}
           >
             ?

@@ -145,7 +145,7 @@ export function HistoryList() {
             onClick={() => void pickHistory(i)}
           >
             <span className="shrink-0">{label}</span>
-            {detail ? <span className="truncate text-[11px] text-fg-muted">{detail}</span> : null}
+            {detail ? <span className="truncate text-small text-fg-muted">{detail}</span> : null}
           </button>
         );
       })}

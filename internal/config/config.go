@@ -44,6 +44,7 @@ func Dir() string {
 type Config struct {
 	// Theme names themes/<name>.yaml or a built-in theme (BuiltinThemes); "" or "default" uses the default theme.
 	Theme string `json:"theme,omitempty"`
+	Font  Font   `json:"font"`
 	Diff  Diff   `json:"diff"`
 	// Contexts are per-context safety rules; the first matching rule wins.
 	Contexts []ContextRule `json:"contexts"`
@@ -57,6 +58,69 @@ type Config struct {
 	// FocusFollowsMouse focuses the pane under the mouse pointer, without a
 	// click. Default off.
 	FocusFollowsMouse bool `json:"focusFollowsMouse,omitempty"`
+}
+
+// Font configures the one font of the whole app: tables, YAML, terminals,
+// logs and the rest of the UI.
+type Font struct {
+	// Family is an installed font ("JetBrainsMono Nerd Font") or a
+	// comma-separated list of them, the first one installed wins; the
+	// default stack (SF Mono, Menlo) always comes after it. "" = the
+	// default stack alone. The frontend reports one that isn't installed.
+	Family string `json:"family,omitempty"`
+	// Size is the base size in px (smaller UI text is 1-2px less); 0 = 12.
+	Size int `json:"size,omitempty"`
+	// Ligatures joins character sequences ("->", "!=", "=>") into one glyph
+	// in fonts that have them. Default off: text reads as typed.
+	Ligatures bool `json:"ligatures,omitempty"`
+}
+
+// Font size bounds and default (px).
+const (
+	DefaultFontSize = 12
+	MinFontSize     = 8
+	MaxFontSize     = 24
+)
+
+// fontFamily is a font name or a comma-separated list of names, optionally
+// quoted: nothing that could end the CSS value (;{}<>\) or a quote inside one.
+var fontFamily = regexp.MustCompile(`^\s*("[^"]+"|'[^']+'|[^"',;{}<>\\]+)(\s*,\s*("[^"]+"|'[^']+'|[^"',;{}<>\\]+))*\s*$`)
+
+// fontInstalled tells whether a font is installed (a family as Font Book
+// lists it, or a font's full name); a variable for tests.
+var fontInstalled = systemFontInstalled
+
+// cssGenerics are CSS's generic families: always there, never looked up.
+var cssGenerics = []string{"serif", "sans-serif", "monospace", "cursive", "fantasy", "system-ui", "ui-serif", "ui-sans-serif", "ui-monospace", "ui-rounded", "math", "emoji", "fangsong"}
+
+// missingFonts says which fonts of a family list aren't installed when none
+// of them is ("" when one is, or the list is empty): the default stack shows
+// then. Unquoted generic families count as installed.
+func missingFonts(family string) string {
+	var names []string
+	for _, f := range strings.Split(family, ",") {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		if len(f) > 1 && (f[0] == '"' || f[0] == '\'') && f[len(f)-1] == f[0] {
+			f = f[1 : len(f)-1]
+		} else if slices.Contains(cssGenerics, strings.ToLower(f)) {
+			return ""
+		}
+		if fontInstalled(f) {
+			return ""
+		}
+		names = append(names, fmt.Sprintf("%q", f))
+	}
+	switch len(names) {
+	case 0:
+		return ""
+	case 1:
+		return names[0] + " is not installed"
+	default:
+		return "none of " + strings.Join(names, ", ") + " is installed"
+	}
 }
 
 // Launch configures a launch from a terminal.
@@ -269,7 +333,7 @@ func (e Effective) Rules() *relations.Rules {
 func Defaults(dir string) Effective {
 	return Effective{
 		Dir:         dir,
-		Config:      Config{Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}, Terminal: Terminal{Scrollback: DefaultScrollback}, Logs: Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer}},
+		Config:      Config{Font: Font{Size: DefaultFontSize}, Diff: Diff{Ignore: []normalize.Rule{}}, Contexts: []ContextRule{}, Terminal: Terminal{Scrollback: DefaultScrollback}, Logs: Logs{Tail: DefaultLogTail, MaxStreams: DefaultLogStreams, Buffer: DefaultLogBuffer}},
 		Keybindings: []Binding{},
 		Theme:       map[string]string{},
 		Errors:      []string{},
@@ -354,8 +418,15 @@ func Check(dir, file, text string) ([]string, Effective) {
 }
 
 // Load reads dir. dir == "" means no config at all (defaults, no errors).
+//
+// Unlike Check, it also asks the system whether font.family is installed:
+// on load and save only, not on every keystroke of the settings editor.
 func Load(dir string) Effective {
-	return load(dir, func(file string) ([]byte, error) { return os.ReadFile(filepath.Join(dir, file)) })
+	e := load(dir, func(file string) ([]byte, error) { return os.ReadFile(filepath.Join(dir, file)) })
+	if missing := missingFonts(e.Config.Font.Family); missing != "" {
+		e.Errors = append(e.Errors, File+": font.family: "+missing+", using the default font")
+	}
+	return e
 }
 
 func load(dir string, readFile func(file string) ([]byte, error)) Effective {
@@ -385,6 +456,19 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 			e.Config.Contexts = append(e.Config.Contexts, r)
 		}
 		e.Config.Theme = c.Theme
+		if f := c.Font.Family; f != "" && !fontFamily.MatchString(f) {
+			errf("config.yaml", "font.family: %q is not a font name or a comma-separated list of them", f)
+		} else {
+			e.Config.Font.Family = strings.TrimSpace(f)
+		}
+		switch n := c.Font.Size; {
+		case n == 0: // unset: the default
+		case n < MinFontSize || n > MaxFontSize:
+			errf("config.yaml", "font.size: %d is not between %d and %d px", n, MinFontSize, MaxFontSize)
+		default:
+			e.Config.Font.Size = n
+		}
+		e.Config.Font.Ligatures = c.Font.Ligatures
 		switch n := c.Terminal.Scrollback; {
 		case n == 0: // unset: the default
 		case n < MinScrollback || n > MaxScrollback:

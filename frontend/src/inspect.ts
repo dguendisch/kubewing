@@ -6,6 +6,7 @@ import { openTerminals } from "./term/Terminal";
 import { openLogViews } from "./logs/LogView";
 import { logBuffers } from "./logs/buffer";
 import { useConfig } from "./store/config";
+import { font } from "./store/font";
 import { paneData, useColumns, useUI } from "./store/store";
 import * as S from "./store/state";
 import { paneIds } from "./store/layout";
@@ -21,7 +22,7 @@ export function inspect() {
   const tab = S.activeTab(s);
   const c = useConfig.getState();
   return {
-    config: { dir: c.config?.dir, errors: c.dismissed ? [] : c.errors, themeGen: c.themeGen },
+    config: { dir: c.config?.dir, errors: c.dismissed ? [] : c.errors, themeGen: c.themeGen, font: font() },
     activeTab: s.activeTab,
     tabs: s.tabs.map((t) => ({ id: t.id, layout: t.layout, focused: t.focused, maximized: t.maximized })),
     focus: s.focus,
@@ -47,11 +48,11 @@ export function inspect() {
     // the object view's cursor (0-based) and selection, as Monaco has them
     place: cursors.get(tab.focused)?.place?.(),
     selected: cursors.get(tab.focused)?.selected?.(),
-    // per session: scrollback setting, lines held (screen + scrollback) and the oldest line's text
+    // per session: scrollback setting, lines held (screen + scrollback), the oldest line's text and the font
     terminals: Object.fromEntries(
       [...openTerminals].map(([id, t]) => {
         const b = t.buffer.active;
-        return [id, { scrollback: t.options.scrollback, lines: b.length, first: b.getLine(0)?.translateToString(true) }];
+        return [id, { scrollback: t.options.scrollback, lines: b.length, first: b.getLine(0)?.translateToString(true), fontSize: t.options.fontSize, fontFamily: t.options.fontFamily }];
       }),
     ),
     // per log session: lines buffered, streams followed, the rendered screen text and the viewport's

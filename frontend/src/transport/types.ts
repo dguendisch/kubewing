@@ -436,7 +436,7 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean };
+  config: { theme?: string; font?: FontConfig; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;
@@ -455,6 +455,13 @@ export interface ConfigFile {
   exists: boolean;
   /** config.yaml: every setting with its default (or an example) and what it does; keybindings.yaml has none (the frontend's keymap). */
   reference?: string;
+}
+
+/** Mirrors config.Font: config.yaml's font. */
+export interface FontConfig {
+  family?: string;
+  size?: number;
+  ligatures?: boolean;
 }
 
 /** Mirrors bridge.ConfigCheck: what a config file's text would bring. */

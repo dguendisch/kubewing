@@ -7,7 +7,7 @@ import type { CommandId } from "./keys/keymap";
 import { inspect } from "./inspect";
 import { bridge, connect, loadContexts } from "./store/store";
 import { logBuffers } from "./logs/buffer";
-import { useConfig } from "./store/config";
+import { applyConfig, useConfig } from "./store/config";
 import { createTransport } from "./transport";
 import "./theme.css";
 
@@ -19,12 +19,14 @@ await loadContexts();
 if (import.meta.env.MODE !== "production") {
   // bridge: e2e tests reset what they saved (one backend serves the whole run); logBuffers: they fill a log pane;
   // dispatch: a native menu click (which a browser can't send); config: a setting the shared config.yaml doesn't have
-  (window as unknown as { __kw: { inspect: typeof inspect; bridge: typeof bridge; logBuffers: typeof logBuffers; dispatch: (c: CommandId) => void; config: typeof useConfig } }).__kw = {
+  // (applyConfig: one applied as a reload would, e.g. the font)
+  (window as unknown as { __kw: { inspect: typeof inspect; bridge: typeof bridge; logBuffers: typeof logBuffers; dispatch: (c: CommandId) => void; config: typeof useConfig; applyConfig: typeof applyConfig } }).__kw = {
     inspect,
     bridge,
     logBuffers,
     dispatch: (c) => dispatch(c),
     config: useConfig,
+    applyConfig,
   };
 }
 

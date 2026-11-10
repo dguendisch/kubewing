@@ -184,7 +184,7 @@ function Maximized({ hidden }: { hidden: number }) {
         e.preventDefault();
       }}
       onClick={() => setUI(S.toggleMaximize)}
-      className="absolute top-0 right-0 z-20 flex items-center gap-0.5 rounded-bl bg-accent px-1 text-[11px] leading-4 text-bg hover:opacity-90"
+      className="absolute top-0 right-0 z-20 flex items-center gap-0.5 rounded-bl bg-accent px-1 text-small leading-4 text-bg hover:opacity-90"
     >
       <span aria-hidden>⤡</span>
       {hidden}
@@ -263,7 +263,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
           onFocus={() => setUI((s) => S.focusPane(s, id))}
         />
       </div>
-      <footer role="status" aria-label="logs status" className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-[11px] text-fg-muted">
+      <footer role="status" aria-label="logs status" className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-small text-fg-muted">
         <LogFollowing follow={logs.follow} live={logs.exited === undefined && st.following > 0} />
         <span>{logs.filter ? `${st.shown.toLocaleString()} / ${st.total.toLocaleString()} lines` : `${st.total.toLocaleString()} lines`}</span>
         <span>

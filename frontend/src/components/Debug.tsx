@@ -147,7 +147,7 @@ function Dialog({ serverId, rowKey, pod, batch }: { serverId?: string; rowKey?: 
           />
         </label>
       </div>
-      <div className="text-[11px] text-fg-muted">{profileHints[(opts.profile.trim() || "general") as DebugProfile] ?? "\u00a0"}</div>
+      <div className="text-small text-fg-muted">{profileHints[(opts.profile.trim() || "general") as DebugProfile] ?? "\u00a0"}</div>
       {error ? (
         <div role="alert" className="text-deleted">
           {error}

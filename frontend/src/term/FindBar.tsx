@@ -41,7 +41,7 @@ export function FindBar({ paneId, result, kind = "term" }: { paneId: string; res
       title={title}
       onMouseDown={(e) => e.preventDefault()} // keep focus in the field
       onClick={() => toggle(k)}
-      className={`rounded px-1 font-mono text-[11px] leading-tight ${find[k] ? "bg-accent/25 text-fg outline outline-accent" : "text-fg-muted hover:text-fg"}`}
+      className={`rounded px-1 font-mono text-small leading-tight ${find[k] ? "bg-accent/25 text-fg outline outline-accent" : "text-fg-muted hover:text-fg"}`}
     >
       {label}
     </button>
@@ -79,7 +79,7 @@ export function FindBar({ paneId, result, kind = "term" }: { paneId: string; res
       {opt("caseSensitive", "Aa", "match case (⌥⌘C)")}
       {opt("wholeWord", "ab", "whole word (⌥⌘W)")}
       {opt("regex", ".*", "regular expression (⌥⌘R)")}
-      <span aria-label="matches" className="min-w-20 px-1 text-[11px] whitespace-nowrap text-fg-muted">
+      <span aria-label="matches" className="min-w-20 px-1 text-small whitespace-nowrap text-fg-muted">
         {count}
       </span>
       {step(cmdPrev, "↑", "previous match (⇧⏎)")}

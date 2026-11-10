@@ -17,6 +17,7 @@ import {
 import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
 import { useConfig } from "../store/config";
+import { font, gridHeights, unligate } from "../store/font";
 import { bridge, paneData, useColumns } from "../store/store";
 import { clockRendered, layout, withAlpha, type ColorToken } from "./cells";
 import { grepRanges, parseGrep, type Range } from "../components/grep";
@@ -44,9 +45,9 @@ function gridTheme(): Partial<Theme> {
     horizontalBorderColor: "transparent",
     accentColor: token("accent"),
     accentLight: withAlpha(token("accent"), 0.18), // not color-mix(): Glide can't blend it, see withAlpha
-    fontFamily: getComputedStyle(document.body).fontFamily,
-    baseFontStyle: "12px",
-    headerFontStyle: "600 11px",
+    fontFamily: font().family,
+    baseFontStyle: `${font().size}px`,
+    headerFontStyle: `600 ${font().size - 1}px`,
     cellHorizontalPadding: 8,
   };
 }
@@ -106,11 +107,11 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
   const [, force] = useReducer((x: number) => x + 1, 0);
   // the canvas can't use CSS variables: re-read the tokens whenever the theme changes
   const themeGen = useConfig((s) => s.themeGen);
-  const { theme, colors } = useMemo(() => {
+  const { theme, colors, heights, ligatures } = useMemo(() => {
     void themeGen;
     const colors: Record<string, string> = {};
     for (const v of [...Object.values(colorVar), "hidden", "match", "accent", "marked"]) colors[v] = token(v);
-    return { theme: gridTheme(), colors };
+    return { theme: gridTheme(), colors, heights: gridHeights(font().size), ligatures: font().ligatures };
   }, [themeGen]);
 
   // grep highlights: ranges per row, cached by RowData (a new frame brings new objects for changed rows)
@@ -129,7 +130,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
 
   // lets overlays (context menu) anchor to a row; see actions/anchor.ts
   useEffect(() => {
-    const header = 24;
+    const header = heights.header;
     rowLocators.set(serverId, {
       row: (i) => {
         const b = ref.current?.getBounds(0, i);
@@ -141,7 +142,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
       },
     });
     return () => void rowLocators.delete(serverId);
-  }, [serverId]);
+  }, [serverId, heights.header]);
 
   // subscribe to frames; repaint only damaged cells, re-render only on shape changes
   useEffect(() => {
@@ -419,7 +420,8 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
       ctx.fillRect(x0, rect.y + 3, ctx.measureText(l.text.slice(s, e)).width, rect.height - 6);
       ctx.restore();
     }
-    ctx.fillText(l.text, x, y);
+    // canvas text ignores CSS's font-variant-ligatures: off breaks them up (same widths, see unligate)
+    ctx.fillText(ligatures ? l.text : unligate(l.text), x, y);
     if (l.strike) ctx.fillRect(x, y, w, 1);
     ctx.restore();
     void drawContent;
@@ -445,8 +447,8 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
       height="100%"
       columns={columns}
       rows={d.total}
-      rowHeight={22}
-      headerHeight={24}
+      rowHeight={heights.row}
+      headerHeight={heights.header}
       getCellContent={getCellContent}
       drawCell={drawCell}
       drawHeader={drawHeader}

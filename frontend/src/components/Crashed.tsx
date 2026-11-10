@@ -46,7 +46,7 @@ function Report({ what, error, stack, retry }: { what: string; error: unknown; s
           {copied ? "copied" : "copy"}
         </button>
       </div>
-      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap text-[11px] text-fg-muted select-text">{text}</pre>
+      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap text-small text-fg-muted select-text">{text}</pre>
     </div>
   );
 }

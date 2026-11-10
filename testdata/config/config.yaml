@@ -7,6 +7,15 @@
 # themes/<name>.yaml; omit (or "default") for the built-in theme
 theme: e2e
 
+# one font for the whole app (E2E keeps the default: SF Mono, then Menlo, 12px, no ligatures)
+#   family:    an installed font or a comma-separated list; SF Mono and Menlo come after it
+#   size:      px, 8 … 24
+#   ligatures: "->", "!=" joined into one glyph in fonts that have them; default false
+# font:
+#   family: JetBrainsMono Nerd Font
+#   size: 13
+#   ligatures: false
+
 diff:
   # extra noise rules on top of the built-in ones (resourceVersion, managedFields, heartbeats …);
   # "*" matches every list element / map key, kinds optionally restricts a rule

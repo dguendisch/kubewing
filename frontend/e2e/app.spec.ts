@@ -1765,6 +1765,53 @@ test.describe("config (testdata/config)", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  // Go asks the system (CoreText) whether the font is installed on load and save, not while typing (config_test.go);
+  // the save here is stubbed to what Go's would return, so the shared fixture isn't written. The main banner waits behind the dialog.
+  test("⌘, reports a font that isn't installed on save, not while typing; the main banner is hidden while the editor is open", async ({ page }) => {
+    await ready(page);
+    type Kw = { __kw: { bridge(): { saveConfig(f: string, t: string): Promise<unknown>; config(): Promise<{ errors: string[] }> }; config: { setState(s: object): void } } };
+    // a problem of the saved config: the banner shows it, until the editor opens
+    await page.evaluate(() => (window as unknown as Kw).__kw.config.setState({ errors: ["config.yaml: saved problem"], dismissed: false }));
+    const banner = page.getByRole("alert", { name: "config errors" });
+    await expect(banner).toContainText("saved problem");
+    await page.keyboard.press("ControlOrMeta+,");
+    const dialog = page.getByRole("dialog", { name: "settings" });
+    await expect(dialog.locator("[data-editor=yaml] .view-lines")).toContainText("theme: e2e");
+    await expect(banner).toHaveCount(0);
+    // a save that writes nothing and comes back as Go's reload would: the font's problem among the file's
+    await page.evaluate(() => {
+      const b = (window as unknown as Kw).__kw.bridge();
+      b.saveConfig = (_f, text) =>
+        b.config().then((c) => ({ ...c, errors: text.includes("No Such Font") ? ['config.yaml: font.family: "No Such Font Anywhere" is not installed, using the default font'] : [] }));
+    });
+    const textarea = dialog.getByRole("textbox", { name: "config.yaml" });
+    await textarea.focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.insertText("\nfont: {family: No Such Font Anywhere}");
+    const problems = dialog.getByRole("alert", { name: "config problems" });
+    // while typing: nothing (the live check doesn't look fonts up)
+    await expect(dialog).toContainText("edited");
+    await page.waitForTimeout(600);
+    await expect(problems).toHaveCount(0);
+    // saved: the editor lists it (the banner stays hidden behind it)
+    await page.keyboard.press("ControlOrMeta+S");
+    await expect(dialog).toContainText("saved and applied, defaults used where there are problems");
+    await expect(problems).toHaveText('font.family: "No Such Font Anywhere" is not installed, using the default font');
+    await expect(banner).toHaveCount(0);
+    // typing again clears it until the next save
+    await page.keyboard.press("End");
+    await page.keyboard.insertText(" ");
+    await expect(dialog).toContainText("edited");
+    await expect(problems).toHaveCount(0);
+    // closed (the edit dropped): the banner is back
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(banner).toContainText("saved problem");
+    await page.getByRole("button", { name: "dismiss" }).click();
+  });
+
   // the file is the shared fixture: edits are dropped, and only its own text is saved back
   test("⌥⌘, edits keybindings.yaml: every default beside it, unknown commands while typing, ⌘S saves and applies", async ({ page }) => {
     await ready(page);
@@ -1804,6 +1851,92 @@ test.describe("config (testdata/config)", () => {
     await expect(dialog).toHaveCount(1);
     await page.keyboard.press("ControlOrMeta+Alt+,");
     await expect(dialog).toHaveCount(0);
+  });
+});
+
+// config.yaml's font, applied as a reload would (the shared config.yaml keeps the default font)
+test.describe("font (config.yaml font)", () => {
+  type Font = { family?: string; size?: number; ligatures?: boolean };
+  const setFont = (page: Page, font: Font | undefined) =>
+    page.evaluate((font) => {
+      const kw = (window as unknown as { __kw: { config: { getState(): { config?: { config: object } } }; applyConfig(c: object): void } }).__kw;
+      const c = kw.config.getState().config!;
+      kw.applyConfig({ ...c, config: { ...c.config, font } });
+    }, font);
+  const applied = async (page: Page) => (await inspect(page) as unknown as { config: unknown }).config as { font: { family: string; size: number; ligatures: boolean }; errors: string[] };
+  test.afterEach(async ({ page }) => setFont(page, undefined));
+
+  test("the default: theme.css's stack (SF Mono, Menlo), 12px, no ligatures", async ({ page }) => {
+    await ready(page);
+    const f = (await applied(page)).font;
+    expect(f.family).toContain("Menlo");
+    expect(f.family).not.toContain("JetBrains");
+    expect(f.size).toBe(12);
+    expect(f.ligatures).toBe(false);
+    expect(await page.evaluate(() => getComputedStyle(document.body).fontVariantLigatures)).toBe("none");
+    expect(await page.evaluate(() => getComputedStyle(document.body).fontSize)).toBe("12px");
+  });
+
+  test("family, size and ligatures apply live to the DOM, the table, Monaco and terminals; the defaults stay behind the family", async ({ page }) => {
+    await openTape(page);
+    await setFont(page, { family: "Courier New", size: 16, ligatures: true });
+    await expect.poll(async () => (await applied(page)).font.size).toBe(16);
+    const f = (await applied(page)).font;
+    expect(f.family).toMatch(/^"Courier New", .*Menlo/);
+    expect(f.ligatures).toBe(true);
+    // DOM: base size, smaller UI text follows it, ligatures from the setting
+    const css = await page.evaluate(() => {
+      const probe = document.createElement("span");
+      probe.className = "text-small";
+      document.body.append(probe);
+      const small = getComputedStyle(probe).fontSize;
+      probe.remove();
+      const b = getComputedStyle(document.body);
+      return { size: b.fontSize, family: b.fontFamily, ligatures: b.fontVariantLigatures, small };
+    });
+    expect(css).toEqual({ size: "16px", family: expect.stringContaining("Courier New"), ligatures: "normal", small: "15px" });
+    // table: rows 16 + 10 px below a 16 + 12 px header (the row under a click is the one at that height)
+    const rows = (await focused(page)).rows;
+    const grid = page.locator("section[data-pane] canvas").first();
+    const box = (await grid.boundingBox())!;
+    await page.mouse.click(box.x + 60, box.y + 28 + 2 * 26 + 13);
+    await expect.poll(async () => (await focused(page)).selected).toBe(2);
+    await page.mouse.click(box.x + 60, box.y + 28 + 26 + 13);
+    await expect.poll(async () => (await focused(page)).selected).toBe(1);
+    expect(rows.length).toBeGreaterThan(2);
+    // Monaco: an editor opened now, and one already open when the font changes again
+    await page.keyboard.press("Enter");
+    const viewer = page.locator('[data-viewer="single"] .monaco-editor');
+    await expect(viewer).toBeVisible();
+    const lines = viewer.locator(".view-lines");
+    await expect.poll(() => lines.evaluate((el) => getComputedStyle(el).fontSize)).toBe("16px");
+    expect(await lines.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/^"Courier New", "SF Mono"/);
+    await setFont(page, { size: 10 });
+    await expect.poll(() => lines.evaluate((el) => getComputedStyle(el).fontSize)).toBe("10px");
+    // Monaco appends its own fallbacks (Menlo, Monaco, "Courier New"): the configured stack leads
+    expect(await lines.evaluate((el) => getComputedStyle(el).fontFamily)).toMatch(/^"SF Mono", ui-monospace, Menlo, monospace/);
+    expect(await lines.evaluate((el) => getComputedStyle(el).fontFeatureSettings)).toContain('"liga" 0');
+  });
+
+  test("a terminal takes the font, also when it changes while it's open", async ({ page }) => {
+    await openTape(page);
+    await page.keyboard.press("Control+T");
+    await expect.poll(async () => (await inspect(page)).focus).toBe("terminal");
+    await expect(page.locator("[data-terminal] .xterm-rows")).toContainText("local:tape$");
+    const term = async () => {
+      const s = await inspect(page);
+      const id = (s.panes[s.focusedPane] as unknown as { term: { session: string } }).term.session;
+      return (s as unknown as { terminals: Record<string, { fontSize: number; fontFamily: string }> }).terminals[id]!;
+    };
+    await expect.poll(async () => (await term()).fontSize).toBe(12);
+    const rowHeight = () => page.locator("[data-terminal] .xterm-rows > div").first().evaluate((el) => el.getBoundingClientRect().height);
+    const before = await rowHeight();
+    await setFont(page, { family: "Courier New", size: 18 });
+    await expect.poll(async () => (await term()).fontSize).toBe(18);
+    expect((await term()).fontFamily).toContain("Courier New");
+    // the cells grew: a row of the screen is taller
+    await expect.poll(rowHeight).toBeGreaterThan(before);
+    await page.keyboard.press("Control+D");
   });
 });
 

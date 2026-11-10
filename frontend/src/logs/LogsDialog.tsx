@@ -143,7 +143,7 @@ function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId:
               placeholder="100, 10m or all"
               className={`${field} ${error ? "border-deleted" : ""}`}
             />
-            <span className="text-[11px]">the last lines per container (100), since a duration ago (10m, 1h30m), or all</span>
+            <span className="text-small">the last lines per container (100), since a duration ago (10m, 1h30m), or all</span>
           </label>
           <div className="flex gap-4">
             <label className="flex items-center gap-1.5 text-fg">
@@ -193,7 +193,7 @@ function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId:
         </div>
       ) : null}
       <div className="flex items-center justify-end gap-2 text-fg-muted">
-        <span className="mr-auto text-[11px]">⏎ starts · esc cancels</span>
+        <span className="mr-auto text-small">⏎ starts · esc cancels</span>
         <button type="button" onClick={() => setUI(S.closeOverlay)} className="rounded border border-border px-2 py-0.5 hover:border-accent">
           cancel
         </button>

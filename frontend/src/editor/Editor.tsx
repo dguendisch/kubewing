@@ -6,7 +6,7 @@ import { showBlame, type BlameOf, type BlameState } from "./blame";
 import { changedRange } from "./changed";
 import { claimFocus } from "./focus";
 import { loadMonaco } from "./load";
-import { addActions, common, cursorOf, cursorPoint, defineTheme, goTo, markRefs, type ContextAction, type FieldRefs, type Place, type ViewState } from "./Viewer";
+import { addActions, common, cursorOf, cursorPoint, defineTheme, fontOptions, goTo, markRefs, type ContextAction, type FieldRefs, type Place, updateFont, type ViewState } from "./Viewer";
 
 interface Props {
   /** The text it opens with; later changes of the prop don't reset what was typed. */
@@ -76,7 +76,7 @@ export function Editor({ initial, value, language = "yaml", onChange, onSubmit, 
       if (disposed || !host.current) return;
       defineTheme(m);
       const model = m.editor.createModel(initial, language);
-      const ed = m.editor.create(host.current, { ...common, readOnly: false, domReadOnly: false, renderLineHighlight: "line", stickyScroll: { enabled: false }, tabSize: 2, model, ariaLabel: label });
+      const ed = m.editor.create(host.current, { ...common, ...fontOptions(), readOnly: false, domReadOnly: false, renderLineHighlight: "line", stickyScroll: { enabled: false }, tabSize: 2, model, ariaLabel: label });
       editor.current = ed;
       if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
       else if (at) goTo(ed, at);
@@ -155,7 +155,11 @@ export function Editor({ initial, value, language = "yaml", onChange, onSubmit, 
   }, [value]);
 
   useEffect(() => {
-    if (themeGen) void loadMonaco().then(defineTheme);
+    if (themeGen)
+      void loadMonaco().then((m) => {
+        defineTheme(m);
+        if (editor.current) updateFont(m, editor.current);
+      });
   }, [themeGen]);
 
   return <div ref={host} data-editor="yaml" className="h-full w-full" />;

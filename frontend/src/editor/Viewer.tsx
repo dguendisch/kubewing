@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { create } from "zustand";
 import type * as Monaco from "monaco-editor/editor/editor.api.js";
 import { useConfig } from "../store/config";
+import { font } from "../store/font";
 import { bridge, useUI } from "../store/store";
 import { showBlame, type BlameOf, type BlameState } from "./blame";
 import { changeIndex } from "./diffnav";
@@ -39,14 +40,28 @@ export function defineTheme(m: MonacoApi) {
   m.editor.setTheme("kubewing");
 }
 
+/** The configured font (config.yaml font), for new editors and, on a reload, open ones. */
+export function fontOptions(): Monaco.editor.IEditorOptions {
+  const f = font();
+  return { fontFamily: f.family, fontSize: f.size, fontLigatures: f.ligatures };
+}
+
+/**
+ * Applies a reloaded font to an editor: Monaco measures glyphs once per
+ * font, so a changed font is measured again (and the font loaded by then).
+ */
+export function updateFont(m: MonacoApi, ed: { updateOptions(o: Monaco.editor.IEditorOptions): void }) {
+  ed.updateOptions(fontOptions());
+  m.editor.remeasureFonts();
+}
+
+/** Options of every editor (the font's: fontOptions()). */
 export const common: Monaco.editor.IEditorOptions = {
   readOnly: true,
   domReadOnly: true,
   minimap: { enabled: false },
   scrollBeyondLastLine: false,
   automaticLayout: true,
-  fontFamily: getComputedStyle(document.body).fontFamily,
-  fontSize: 12,
   renderLineHighlight: "none",
   folding: true,
   stickyScroll: { enabled: true },
@@ -260,7 +275,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
       defineTheme(m);
       if (mode === "single") {
         let model = m.editor.createModel(live.current.value, language);
-        const ed = m.editor.create(host.current, { ...common, ...wordWrap(useUI.getState().wrap), model, ariaLabel: label });
+        const ed = m.editor.create(host.current, { ...common, ...fontOptions(), ...wordWrap(useUI.getState().wrap), model, ariaLabel: label });
         editor.current = ed;
         single.current = ed;
         if (viewState?.state) ed.restoreViewState(viewState.state as Monaco.editor.ICodeEditorViewState);
@@ -312,7 +327,7 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
         let a = m.editor.createModel(live.current.original ?? "", language);
         let b = m.editor.createModel(live.current.value, language);
         // diffWordWrap follows wordWrap ("inherit")
-        const ed = m.editor.createDiffEditor(host.current, { ...common, ...wordWrap(useUI.getState().wrap), renderSideBySide: true, originalEditable: false, ariaLabel: label });
+        const ed = m.editor.createDiffEditor(host.current, { ...common, ...fontOptions(), ...wordWrap(useUI.getState().wrap), renderSideBySide: true, originalEditable: false, ariaLabel: label });
         editor.current = { updateOptions: (o) => ed.updateOptions(o), focus: () => ed.getModifiedEditor().focus() };
         ed.setModel({ original: a, modified: b });
         const mod = ed.getModifiedEditor();
@@ -420,7 +435,11 @@ export function Viewer({ value, original, language = "yaml", label, slot, autoFo
   useEffect(() => setBlaming.current?.(), [blaming, blame?.serverId, blame?.key]);
 
   useEffect(() => {
-    if (themeGen) void loadMonaco().then(defineTheme);
+    if (themeGen)
+      void loadMonaco().then((m) => {
+        defineTheme(m);
+        if (editor.current) updateFont(m, editor.current);
+      });
   }, [themeGen]);
 
   return <div ref={host} data-viewer={mode} data-wrap={wrap} className="h-full w-full" />;

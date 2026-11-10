@@ -195,10 +195,10 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
             <span aria-hidden className="text-fg-muted">⠿</span>
             <input type="checkbox" tabIndex={-1} aria-label={r.name} checked={r.shown} onChange={() => update(toggle(rows, i), i)} />
             <span className={r.shown ? "text-fg" : "text-fg-muted"}>{r.name}</span>
-            {isWide(r) ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">wide</span> : null}
-            {r.metric ? <span className="rounded bg-bg px-1 text-[10px] text-fg-muted">{r.metric === "usage" ? "metrics" : "requests/limits"}</span> : null}
-            {r.missing ? <span className="rounded bg-bg px-1 text-[10px] text-deleted" title="this resource has no such server column">missing</span> : null}
-            {isCustom(r) ? <span className="truncate text-[11px] text-fg-muted">{r.path ?? r.expr}</span> : null}
+            {isWide(r) ? <span className="rounded bg-bg px-1 text-tiny text-fg-muted">wide</span> : null}
+            {r.metric ? <span className="rounded bg-bg px-1 text-tiny text-fg-muted">{r.metric === "usage" ? "metrics" : "requests/limits"}</span> : null}
+            {r.missing ? <span className="rounded bg-bg px-1 text-tiny text-deleted" title="this resource has no such server column">missing</span> : null}
+            {isCustom(r) ? <span className="truncate text-small text-fg-muted">{r.path ?? r.expr}</span> : null}
             <span className="flex-1" />
             {isCustom(r) ? (
               <button
@@ -285,7 +285,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
             ))}
           </select>
         </div>
-        <div className="text-[11px]">{add.mode === "path" ? "keys with dots (labels, annotations) need CEL" : "CEL over o, the object · ⇥ completes"}</div>
+        <div className="text-small">{add.mode === "path" ? "keys with dots (labels, annotations) need CEL" : "CEL over o, the object · ⇥ completes"}</div>
       </fieldset>
       {error ? (
         <div role="alert" className="text-deleted">
@@ -307,7 +307,7 @@ function Dialog({ serverId, type, choices }: { serverId: string; type: string; c
           OK
         </button>
       </div>
-      <div className="text-[11px] text-fg-muted">space show · drag or ⌥↑↓ move · ⏎ save · esc cancel</div>
+      <div className="text-small text-fg-muted">space show · drag or ⌥↑↓ move · ⏎ save · esc cancel</div>
     </form>
   );
 }

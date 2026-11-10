@@ -131,11 +131,11 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
             }}
           >
             <span>{it.label}</span>
-            {it.multi === false && !it.disabled ? <span className="truncate text-[11px] text-fg-muted">· {row?.name}</span> : null}
-            {it.disabled ? <span className="truncate text-[11px]">· {it.disabled}</span> : null}
+            {it.multi === false && !it.disabled ? <span className="truncate text-small text-fg-muted">· {row?.name}</span> : null}
+            {it.disabled ? <span className="truncate text-small">· {it.disabled}</span> : null}
             <span className="ml-auto text-fg-muted">{it.shortcut}</span>
             {it.splitShortcut ? (
-              <span className="text-[11px] text-fg-muted" title={`${it.splitShortcut}: in a split to the right`}>
+              <span className="text-small text-fg-muted" title={`${it.splitShortcut}: in a split to the right`}>
                 · {it.splitShortcut} split
               </span>
             ) : null}

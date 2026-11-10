@@ -120,6 +120,10 @@ func TestConfigFiles(t *testing.T) {
 	if c, _ := svc.CheckConfig(config.File, "theme: blue\n"); c.Problems == nil || len(c.Problems) != 0 || c.Keybindings == nil {
 		t.Errorf("check config.yaml: %+v (empty lists, never null)", c)
 	}
+	// whether the font is installed is checked on save, not while typing
+	if c, _ := svc.CheckConfig(config.File, "font: {family: No Such Font Anywhere}\n"); len(c.Problems) != 0 {
+		t.Errorf("check config.yaml font: %+v (no installed check while typing)", c)
+	}
 	if _, err := svc.CheckConfig("../x", ""); err == nil {
 		t.Error("check ../x: not editable")
 	}

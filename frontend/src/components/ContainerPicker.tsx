@@ -35,7 +35,7 @@ export function ContainerPicker() {
           onClick={() => void pickContainer(c.name)}
         >
           <span>{c.name}</span>
-          <span className="ml-auto truncate text-[11px] text-fg-muted">{c.detail}</span>
+          <span className="ml-auto truncate text-small text-fg-muted">{c.detail}</span>
         </button>
       ))}
       <div className="border-t border-border px-3 pt-1 text-fg-muted">⏎ exec · esc cancel</div>

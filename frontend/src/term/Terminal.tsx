@@ -9,6 +9,7 @@ import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
 import { claimFocus } from "../editor/focus";
 import { useConfig } from "../store/config";
+import { font } from "../store/font";
 import { DEFAULT_SCROLLBACK, sessions } from "./sessions";
 
 /** Open terminals by session, for the test introspection hook (inspect.ts). */
@@ -64,6 +65,7 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<XTerm>(undefined);
   const search = useRef<SearchAddon>(undefined);
+  const refit = useRef<() => void>(() => {});
   const themeGen = useConfig((s) => s.themeGen);
   const scrollback = useConfig((s) => s.config?.config.terminal?.scrollback ?? DEFAULT_SCROLLBACK);
   const cb = useRef({ onInput, onResize, onExit, onFocus, onFindResult });
@@ -73,8 +75,8 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
 
   useEffect(() => {
     const t = new XTerm({
-      fontFamily: getComputedStyle(document.body).fontFamily,
-      fontSize: 12,
+      fontFamily: font().family,
+      fontSize: font().size,
       cursorBlink: true,
       scrollback,
       theme: theme(),
@@ -106,6 +108,9 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     });
     ro.observe(host.current!);
     fit.fit();
+    refit.current = () => {
+      if (host.current?.offsetWidth) fit.fit();
+    };
     cb.current.onResize(t.cols, t.rows);
     const detach = sessions.attach(session, (c) => {
       if (c instanceof Uint8Array) t.write(c);
@@ -147,8 +152,17 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     if (!findOpen) term.current?.scrollToBottom();
   }, [findOpen]);
 
+  // a reloaded config: colors and font (the DOM renderer takes ligatures from the page's CSS); a new cell size refits the grid
   useEffect(() => {
-    if (term.current && themeGen) term.current.options.theme = theme();
+    const t = term.current;
+    if (!t || !themeGen) return;
+    t.options.theme = theme();
+    const f = font();
+    if (t.options.fontFamily !== f.family || t.options.fontSize !== f.size) {
+      t.options.fontFamily = f.family;
+      t.options.fontSize = f.size;
+      refit.current();
+    }
   }, [themeGen]);
 
   // live search: a changed query or option searches again from where the view is (incremental, as Monaco);

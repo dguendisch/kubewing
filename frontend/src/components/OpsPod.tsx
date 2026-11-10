@@ -212,7 +212,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
             </label>
             <label className="flex flex-col gap-1 text-fg-muted">
               namespace
-              {claimNs && !opts.namespace.trim() ? <span className="text-[11px]">empty → the volume's claim namespace {claimNs}</span> : null}
+              {claimNs && !opts.namespace.trim() ? <span className="text-small">empty → the volume's claim namespace {claimNs}</span> : null}
               <Combobox
                 label="namespace"
                 value={opts.namespace}
@@ -268,7 +268,7 @@ function Dialog({ cluster, initialNode, defaults }: { cluster: string; initialNo
               <div className="pb-1">{check("readOnly", "read-only")}</div>
             </div>
           </fieldset>
-          <div className="text-[11px] text-fg-muted">{opsPodHint(opts)}</div>
+          <div className="text-small text-fg-muted">{opsPodHint(opts)}</div>
         </div>
         {yaml ? (
             <div className="flex min-w-0 flex-1 flex-col gap-1">

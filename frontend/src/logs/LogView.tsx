@@ -8,6 +8,7 @@ import type { TermFind } from "../store/state";
 import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
 import { useConfig } from "../store/config";
+import { font } from "../store/font";
 import { logBuffers } from "./buffer";
 import { filterTerms, renderLines } from "./render";
 
@@ -65,6 +66,7 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<XTerm>(undefined);
   const search = useRef<SearchAddon>(undefined);
+  const refit = useRef<() => void>(() => {});
   const themeGen = useConfig((s) => s.themeGen);
   const cb = useRef({ onFocus, onFindResult });
   cb.current = { onFocus, onFindResult };
@@ -79,8 +81,8 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
 
   useEffect(() => {
     const t = new XTerm({
-      fontFamily: getComputedStyle(document.body).fontFamily,
-      fontSize: 12,
+      fontFamily: font().family,
+      fontSize: font().size,
       cursorBlink: false,
       scrollback: 1_000_000,
       theme: theme(),
@@ -121,6 +123,9 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
     });
     ro.observe(host.current!);
     fit.fit();
+    refit.current = () => {
+      if (host.current?.offsetWidth) fit.fit();
+    };
 
     // one redraw at a time: clear() is immediate but write() is parsed later, so
     // a redraw while one is in flight is queued (and coalesced) until it's done
@@ -172,8 +177,17 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
     else term.current?.blur();
   }, [focused]);
 
+  // a reloaded config: colors and font (the DOM renderer takes ligatures from the page's CSS); a new cell size refits the grid
   useEffect(() => {
-    if (term.current && themeGen) term.current.options.theme = theme();
+    const t = term.current;
+    if (!t || !themeGen) return;
+    t.options.theme = theme();
+    const f = font();
+    if (t.options.fontFamily !== f.family || t.options.fontSize !== f.size) {
+      t.options.fontFamily = f.family;
+      t.options.fontSize = f.size;
+      refit.current();
+    }
   }, [themeGen]);
 
   // a changed filter or timestamp toggle re-renders the screen from the buffer

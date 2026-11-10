@@ -23,17 +23,23 @@
   --color-shadow: #000000c0;
   --shadow-menu: 0 2px 6px -1px color-mix(in srgb, var(--color-shadow) 60%, transparent), 0 12px 28px -6px var(--color-shadow);
   --shadow-dialog: 0 4px 10px -2px color-mix(in srgb, var(--color-shadow) 60%, transparent), 0 24px 48px -12px var(--color-shadow);
-  --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, Menlo, monospace;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  /* UI text smaller than the base size (config.yaml font.size, set by store/font.ts as --kw-font-size) */
+  --text-small: calc(var(--kw-font-size) - 1px);
+  --text-tiny: calc(var(--kw-font-size) - 2px);
 }
 
 html, body, #root { height: 100%; margin: 0; }
 /* dark UI: without this WebKit draws light-scheme scrollbars (dark thumb on our dark bg) */
 :root { color-scheme: dark; }
+:root { --kw-font-size: 12px; --kw-ligatures: none; }
 body {
   background: var(--color-bg);
   color: var(--color-fg);
   font-family: var(--font-mono);
-  font-size: 12px;
+  /* config.yaml font.size and font.ligatures (store/font.ts): smaller UI text is text-small (1px less) or text-tiny (2px less) */
+  font-size: var(--kw-font-size);
+  font-variant-ligatures: var(--kw-ligatures);
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
@@ -52,7 +58,7 @@ input { user-select: text; }
 .kw-ref-hand .kw-ref { text-decoration-style: solid; color: var(--color-match); }
 
 /* The blame (blame.ts): each line's field manager in the line-number gutter, dimmed, left-aligned, cut with an ellipsis */
-.kw-blame .margin-view-overlays .line-numbers { text-align: left; padding-left: 6px; padding-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.7; font-size: 11px; cursor: help; }
+.kw-blame .margin-view-overlays .line-numbers { text-align: left; padding-left: 6px; padding-right: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: 0.7; font-size: var(--text-small); cursor: help; }
 .kw-blame .margin-view-overlays .line-numbers.active-line-number { opacity: 1; }
 
 /* dockview (split layout): colors from the theme tokens above */

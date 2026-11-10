@@ -16,7 +16,8 @@ const CHECK_MS = 250;
  * the same way, every default binding beside it (from the keymap; a new file
  * starts as a commented example). Problems show while typing (Go checks the
  * text as it would load it, the keymap the entries' commands, keys and
- * contexts); ⌘S writes the file and applies it, as ⌘⇧, does. Esc closes
+ * contexts); ⌘S writes the file and applies it, as ⌘⇧, does, and adds what
+ * only loading the file finds (a font that isn't installed). Esc closes
  * (asking first while edits are unsaved).
  */
 export function ConfigEditor() {
@@ -39,6 +40,8 @@ function Dialog({ file }: { file: ConfigFile }) {
   const [exists, setExists] = useState(file.exists);
   const [text, setText] = useState(kind.starter);
   const [problems, setProblems] = useState<string[]>([]);
+  // what only a save finds (checked as the file is loaded, not while typing: a font that isn't installed)
+  const [saveProblems, setSaveProblems] = useState<string[]>([]);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
@@ -49,6 +52,8 @@ function Dialog({ file }: { file: ConfigFile }) {
   const root = useRef<HTMLDivElement>(null);
   const textRef = useRef(text);
   textRef.current = text;
+  const problemsRef = useRef(problems);
+  problemsRef.current = problems;
   const edited = text !== saved;
 
   useEffect(() => {
@@ -78,10 +83,13 @@ function Dialog({ file }: { file: ConfigFile }) {
     void bridge()
       .saveConfig(file.file, t)
       .then(
-        () => {
+        (cfg) => {
           setSaved(t);
           setExists(true);
           setDone(true);
+          // the saved file's problems the live check doesn't have (the rest it shows already)
+          const prefix = `${file.file}: `;
+          setSaveProblems(cfg.errors.filter((e) => e.startsWith(prefix)).map((e) => e.slice(prefix.length)).filter((e) => !problemsRef.current.includes(e)));
         },
         (e) => setError(String((e as Error)?.message ?? e)),
       )
@@ -110,7 +118,7 @@ function Dialog({ file }: { file: ConfigFile }) {
   const state = edited ? (
     <span className="text-changed">edited</span>
   ) : done ? (
-    <span className="text-added">saved and applied{problems.length ? ", defaults used where there are problems" : ""}</span>
+    <span className="text-added">saved and applied{problems.length || saveProblems.length ? ", defaults used where there are problems" : ""}</span>
   ) : !exists ? (
     <span>{kind.fresh}</span>
   ) : null;
@@ -160,6 +168,7 @@ function Dialog({ file }: { file: ConfigFile }) {
             onChange={(t) => {
               setDropAsked(false);
               setDone(false);
+              setSaveProblems([]);
               setText(t);
             }}
             onSave={save}
@@ -174,9 +183,9 @@ function Dialog({ file }: { file: ConfigFile }) {
           </div>
         ) : null}
       </div>
-      {problems.length ? (
+      {problems.length || saveProblems.length ? (
         <ul role="alert" aria-label="config problems" className="max-h-24 overflow-auto text-deleted">
-          {problems.map((p, i) => (
+          {[...problems, ...saveProblems].map((p, i) => (
             <li key={i} className="select-text">
               {p}
             </li>

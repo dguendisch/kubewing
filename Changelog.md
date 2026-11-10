@@ -2,6 +2,7 @@
 ## [Unreleased]
 ### Added
 - the status line now shows how far it got on huge resource listings (e.g. `syncing 35% (1,500/4,213)`)
+- font settings in `config.yaml`: `font.family` (any installed font, e.g. a Nerd Font), `font.size` and `font.ligatures`, for tables, YAML, terminals, logs and menus alike; a font that isn't installed is reported when the settings are saved or loaded
 
 ## [0.5.0] - 2026-11-09
 ### Added

@@ -57,7 +57,7 @@ export function CellPicker() {
           }}
           onClick={() => void copyCell(i)}
         >
-          <span className="shrink-0 text-[11px] text-fg-muted">{c.label}</span>
+          <span className="shrink-0 text-small text-fg-muted">{c.label}</span>
           <span className="ml-auto truncate">{c.disabled ? <span className="text-fg-muted">{c.disabled}</span> : (c.shown ?? c.text)}</span>
         </button>
       ))}
