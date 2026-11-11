@@ -121,7 +121,8 @@ func (o *ClusterOpener) Logs(ctx context.Context, cluster, namespace, pod, conta
 
 // Logs follows a container's logs, like `kubectl logs -f --timestamps`, and
 // copies them to w until the stream ends or ctx is cancelled (NoFollow: like
-// `kubectl logs --timestamps`, until what is there is read).
+// `kubectl logs --timestamps`, until what is there is read; Previous: the
+// previous instance's, as `kubectl logs -p`).
 func (c *Cluster) Logs(ctx context.Context, namespace, pod, container string, lo LogOptions, w io.Writer) error {
 	cs, err := kubernetes.NewForConfigAndClient(c.Config, c.http)
 	if err != nil {
@@ -133,6 +134,7 @@ func (c *Cluster) Logs(ctx context.Context, namespace, pod, container string, lo
 		Timestamps:   true,
 		TailLines:    lo.TailLines,
 		SinceSeconds: lo.SinceSeconds,
+		Previous:     lo.Previous,
 	}
 	if lo.SinceTime != nil {
 		opts.SinceTime = &metav1.Time{Time: *lo.SinceTime}

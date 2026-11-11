@@ -263,6 +263,36 @@ func TestLogsStartHistory(t *testing.T) {
 	svc.SessionClose(r.Session)
 }
 
+// Previous reads the previous instance's logs once, even with follow; a pod
+// without one (worker-0) says so instead of failing.
+func TestLogsStartPrevious(t *testing.T) {
+	svc, log, res := logsSetup(t)
+	waitRow(t, log, res.Pane, "lg-api-0", func(view.RowData) bool { return true })
+	for _, tc := range []struct{ key, want, not string }{
+		{"lg-api-0", "api-0 app out of memory", "serving request"},
+		{"lg-worker-0", "— no previous instance —", "worker-0 app"},
+	} {
+		r, err := svc.LogsStart(res.Pane, tc.key, LogsRow, LogsOptions{Previous: true, Follow: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			texts, _, exit := logLines(log, r.Session)
+			if exit != "" {
+				if !contains(texts, tc.want) || contains(texts, tc.not) {
+					t.Errorf("%s: texts = %v, want %q and no %q", tc.key, texts, tc.want, tc.not)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: a previous read never ended", tc.key)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+}
+
 // The dialog's choices are checked before anything starts.
 func TestLogsStartBadOptions(t *testing.T) {
 	svc, log, res := logsSetup(t)

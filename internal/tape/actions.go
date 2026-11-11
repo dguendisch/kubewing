@@ -236,7 +236,9 @@ func (o *Opener) OpsPods() map[string]*corev1.Pod {
 // a ticker scaled by Speed until ctx ends; otherwise it blocks until ctx ends
 // (a real follow of a still-running container never returns on its own).
 // NoFollow returns once the annotation's lines are written. SinceSeconds
-// counts back from the last line's timestamp (the tape's "now").
+// counts back from the last line's timestamp (the tape's "now"). Previous
+// emits the "kubewing.test/logs-previous" annotation instead and returns,
+// or fails as the API does if the pod has none.
 func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, lo source.LogOptions, w io.Writer) error {
 	var ann map[string]string
 	for _, t := range o.Tapes {
@@ -248,7 +250,14 @@ func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, 
 	// line i is stamped base+i seconds, whatever the tail; "now" is just after the last
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	var lines []string
-	if raw := ann["kubewing.test/logs"]; raw != "" {
+	key := "kubewing.test/logs"
+	if lo.Previous {
+		key = "kubewing.test/logs-previous"
+		if ann[key] == "" {
+			return fmt.Errorf("previous terminated container %q in pod %q not found", container, pod)
+		}
+	}
+	if raw := ann[key]; raw != "" {
 		lines = strings.Split(strings.TrimRight(raw, "\n"), "\n")
 	}
 	n := len(lines)
@@ -270,7 +279,7 @@ func (o *Opener) Logs(ctx context.Context, _, namespace, pod, container string, 
 			return err
 		}
 	}
-	if lo.NoFollow {
+	if lo.NoFollow || lo.Previous {
 		return nil
 	}
 	if ann["kubewing.test/logs-follow"] == "" {

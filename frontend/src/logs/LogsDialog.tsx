@@ -9,7 +9,8 @@ import { checkLogForm, initialLogForm, perPodUnavailable, toggleAllContainers, t
  * l / ⌥L: what a log tail shows, before it starts (of a row, the marked
  * rows or the whole pane). The containers its pods
  * have (all checked), how much history (the last lines, since a duration ago,
- * or all), whether to follow, and timestamps. With several pods: a pane
+ * or all), whether to follow, the previous instance instead (⌘P, as kubectl
+ * logs -p: read once, so follow is off), and timestamps. With several pods: a pane
  * per pod instead of one tail, below or in a new tab. ⏎ from anywhere in it starts,
  * so l ⏎ is the defaults.
  */
@@ -87,6 +88,11 @@ function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId:
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") setUI(S.closeOverlay);
+        // ⌘P from anywhere in it, the history field too (p alone would be typed there)
+        else if (form && e.metaKey && !e.altKey && !e.ctrlKey && !e.shiftKey && e.code === "KeyP") {
+          e.preventDefault();
+          update({ ...form, previous: !form.previous });
+        }
       }}
     >
       <div className="text-fg">
@@ -146,9 +152,28 @@ function Dialog({ paneId, serverId, rowKey, scope }: { paneId: string; serverId:
             <span className="text-small">the last lines per container (100), since a duration ago (10m, 1h30m), or all</span>
           </label>
           <div className="flex gap-4">
-            <label className="flex items-center gap-1.5 text-fg">
-              <input type="checkbox" checked={form.follow} onChange={(e) => update({ ...form, follow: e.target.checked })} onKeyDown={enterSubmits} className="accent-accent" />
+            <label className={`flex items-center gap-1.5 ${form.previous ? "text-fg-muted" : "text-fg"}`} title={form.previous ? "the previous instance's logs are read once" : undefined}>
+              <input
+                type="checkbox"
+                aria-label="follow"
+                checked={form.follow && !form.previous}
+                disabled={form.previous}
+                onChange={(e) => update({ ...form, follow: e.target.checked })}
+                onKeyDown={enterSubmits}
+                className="accent-accent"
+              />
               follow
+            </label>
+            <label className="flex items-center gap-1.5 text-fg" title="the logs of each container's previous, terminated instance (after a restart or crash)">
+              <input
+                type="checkbox"
+                aria-label="previous"
+                checked={form.previous}
+                onChange={(e) => update({ ...form, previous: e.target.checked })}
+                onKeyDown={enterSubmits}
+                className="accent-accent"
+              />
+              previous <span className="text-small text-fg-muted">⌘P</span>
             </label>
             <label className="flex items-center gap-1.5 text-fg">
               <input type="checkbox" checked={form.timestamps} onChange={(e) => update({ ...form, timestamps: e.target.checked })} onKeyDown={enterSubmits} className="accent-accent" />

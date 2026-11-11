@@ -6001,6 +6001,38 @@ test.describe("logs", () => {
     expect((await pane()).logs!.timestamps).toBe(false);
   });
 
+  test("⌘P in the dialog reads the previous instance's logs, read once", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await page.keyboard.press("l");
+    const dialog = page.getByRole("dialog", { name: "logs" });
+    const history = dialog.getByRole("textbox", { name: "history" });
+    await expect(history).toBeFocused();
+    const previous = dialog.getByRole("checkbox", { name: "previous" });
+    const follow = dialog.getByRole("checkbox", { name: "follow" });
+    // off by default; ⌘P toggles it from the history field (nothing typed there), and follow goes off
+    await expect(previous).not.toBeChecked();
+    await page.keyboard.press("Meta+p");
+    await expect(previous).toBeChecked();
+    await expect(follow).not.toBeChecked();
+    await expect(follow).toBeDisabled();
+    await expect(history).toHaveValue("100");
+    await page.keyboard.press("Meta+p");
+    await expect(previous).not.toBeChecked();
+    await expect(follow).toBeChecked();
+    await page.keyboard.press("Meta+p");
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeHidden();
+    await expect.poll(() => screen(page)).toContain("api-0 app out of memory");
+    expect(await screen(page)).not.toContain("serving request");
+    const pane = Object.values((await inspect(page)).panes).find((p) => p.logs)!;
+    expect(pane.logs).toMatchObject({ follow: false, previous: true });
+    await expect(page.getByRole("status", { name: "logs status" })).toContainText("previous instance");
+    await expect.poll(async () => Object.values((await inspect(page)).panes).find((p) => p.logs)?.logs?.exited).toBe("ended");
+    // ended: the hint names the key that closes the log pane (⌃D), not ⌘W (that closes the tab)
+    await expect(page.getByText("ended · ⌃D closes")).toBeVisible();
+  });
+
   test("a followed tail shows following in its footer", async ({ page }) => {
     await openLogs(page);
     await select(page, "lg-api-0");

@@ -479,7 +479,7 @@ export async function startLogs(paneId: string, key: string | undefined, scope: 
   if (!pane?.serverId) return "the pane is gone";
   try {
     const r = await bridge().logsStart(pane.serverId, key ?? "", scope, opts);
-    const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps, follow: opts.follow, prefix: true };
+    const logs: S.Logs = { session: r.session, title: r.title, context: r.context, filter: "", timestamps, follow: opts.follow, previous: opts.previous, prefix: true };
     setUI((x) => S.openLogs(x, logs, pane.id));
   } catch (e) {
     return errorText(e);
@@ -499,7 +499,7 @@ export async function startLogPanes(paneId: string, key: string | undefined, sco
   const logs: S.Logs[] = [];
   const failed: string[] = [];
   out.forEach((o, i) => {
-    if (o.status === "fulfilled") logs.push({ session: o.value.session, title: o.value.title, context: o.value.context, filter: "", timestamps, follow: opts.follow, prefix: true });
+    if (o.status === "fulfilled") logs.push({ session: o.value.session, title: o.value.title, context: o.value.context, filter: "", timestamps, follow: opts.follow, previous: opts.previous, prefix: true });
     else failed.push(`${pods[i]!.name}: ${errorText(o.reason)}`);
   });
   if (logs.length) setUI((x) => S.openLogPanes(x, logs, newTab ? `logs ×${logs.length}` : undefined, pane.id));

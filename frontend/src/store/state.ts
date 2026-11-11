@@ -155,6 +155,8 @@ export interface Logs {
   timestamps: boolean;
   /** Started following (new lines stream in); false = the logs were read once. */
   follow: boolean;
+  /** The previous, terminated instance's logs (kubectl logs -p), read once. */
+  previous?: boolean;
   /** Prefix lines with their pod/container (off for a single-pod tail is still on; kept for the toggle). */
   prefix: boolean;
   /** Exit text once the session ended; the pane stays until closed. */

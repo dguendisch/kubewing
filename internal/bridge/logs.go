@@ -56,12 +56,15 @@ type LogsResult struct {
 // logs.tail), Since ago (a Go duration, "10m"), or All of it; at most one of
 // Since and All. Follow keeps streaming (and picks up pods that appear later);
 // without it each container's log is read once and the session ends.
+// Previous reads each container's previous, terminated instance instead
+// (kubectl logs -p): read once, whatever Follow says.
 type LogsOptions struct {
 	Containers []string `json:"containers,omitempty"`
 	Tail       int      `json:"tail,omitempty"`
 	Since      string   `json:"since,omitempty"`
 	All        bool     `json:"all,omitempty"`
 	Follow     bool     `json:"follow"`
+	Previous   bool     `json:"previous,omitempty"`
 	// Only narrows the tail to one of its pods (namespace/name): a pane per
 	// pod. That pod by name, so a recreated StatefulSet pod carries on.
 	Only *PodRef `json:"only,omitempty"`
@@ -521,7 +524,7 @@ func (s *Service) LogsStart(paneID, key, scope string, o LogsOptions) (LogsResul
 // tailOptions turns the dialog's choices into tailer options; tail is the
 // configured logs.tail (the default when the dialog leaves it 0).
 func tailOptions(o LogsOptions, tail int) (logs.Options, error) {
-	opts := logs.Options{Tail: int64(tail), NoFollow: !o.Follow, Whole: o.All}
+	opts := logs.Options{Tail: int64(tail), NoFollow: !o.Follow || o.Previous, Whole: o.All, Previous: o.Previous}
 	for _, c := range o.Containers {
 		if c = strings.TrimSpace(c); c != "" {
 			opts.Containers = append(opts.Containers, c)

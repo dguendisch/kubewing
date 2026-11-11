@@ -248,7 +248,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
         <span className="font-semibold text-accent">logs</span>
         <span>{logs.title}</span>
         <LogFilter paneId={id} value={logs.filter} focused={filterFocused} shown={st.shown} total={st.total} />
-        {logs.exited !== undefined ? <span className="text-deleted">ended · ⌘W closes</span> : null}
+        {logs.exited !== undefined ? <LogEnded /> : null}
       </header>
       <div className="relative min-h-0 flex-1 bg-bg">
         <FindBar paneId={id} result={findResult} kind="logs" />
@@ -264,7 +264,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
         />
       </div>
       <footer role="status" aria-label="logs status" className="flex items-center gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-small text-fg-muted">
-        <LogFollowing follow={logs.follow} live={logs.exited === undefined && st.following > 0} />
+        <LogFollowing follow={logs.follow} previous={!!logs.previous} live={logs.exited === undefined && st.following > 0} />
         <span>{logs.filter ? `${st.shown.toLocaleString()} / ${st.total.toLocaleString()} lines` : `${st.total.toLocaleString()} lines`}</span>
         <span>
           {st.following} container{st.following === 1 ? "" : "s"} in {st.pods} pod{st.pods === 1 ? "" : "s"}
@@ -280,7 +280,13 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
 
 /** As the table's "connected": a green dot while new lines stream in; grey once
  *  nothing is followed (read once without follow, every container ended, or the session over). */
-function LogFollowing({ follow, live }: { follow: boolean; live: boolean }) {
+function LogFollowing({ follow, previous, live }: { follow: boolean; previous: boolean; live: boolean }) {
+  if (previous)
+    return (
+      <span title="the logs of each container's previous, terminated instance, read once">
+        <span>●</span> previous instance
+      </span>
+    );
   if (follow && live)
     return (
       <span>
@@ -292,6 +298,12 @@ function LogFollowing({ follow, live }: { follow: boolean; live: boolean }) {
       <span>●</span> not following
     </span>
   );
+}
+
+/** An ended tail: the key that closes the log pane (pane.close in the logs context; keybindings.yaml may change it), not ⌘W's tab. */
+function LogEnded() {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "pane.close" && (!b.when || b.when.includes("logs")))?.key);
+  return <span className="text-deleted">ended{key ? ` · ${prettyKey(key)} closes` : ""}</span>;
 }
 
 /** Timestamps on/off, with the key that toggles them (keybindings.yaml may change it); dimmed while off. */

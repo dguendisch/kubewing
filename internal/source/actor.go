@@ -62,12 +62,14 @@ type Actor interface {
 // ("" = from the start); SinceTime starts just after a timestamp (to resume
 // after a restart or a dropped stream); SinceSeconds starts that long ago.
 // All unset = the whole log. NoFollow reads what is there and returns
-// (kubectl logs without -f).
+// (kubectl logs without -f). Previous reads the container's previous,
+// terminated instance (kubectl logs -p).
 type LogOptions struct {
 	TailLines    *int64
 	SinceTime    *time.Time
 	SinceSeconds *int64
 	NoFollow     bool
+	Previous     bool
 }
 
 // ExecStreams are the TTY streams of an exec session.

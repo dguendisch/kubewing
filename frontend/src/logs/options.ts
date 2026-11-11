@@ -1,6 +1,6 @@
 /**
  * The log dialog's form (l): which containers, how much history, follow,
- * timestamps. Pure, so the parsing is a unit test rather than a dialog.
+ * the previous instance, timestamps. Pure, so the parsing is a unit test rather than a dialog.
  */
 import type { LogsOptions } from "../transport/types";
 
@@ -12,6 +12,8 @@ export interface LogForm {
   /** "100" = the last 100 lines, "10m" / "1h30m" = since then, "all" = everything. */
   history: string;
   follow: boolean;
+  /** The previous, terminated instance of each container (kubectl logs -p); read once, so it overrides follow. */
+  previous: boolean;
   timestamps: boolean;
   /** A log pane per pod instead of one tail over all (offered with 2 or more pods). */
   perPod: boolean;
@@ -28,9 +30,9 @@ export function perPodUnavailable(pods: number): string | undefined {
   if (pods > maxLogPanes) return `${pods} pods, at most ${maxLogPanes} panes`;
 }
 
-/** The dialog's defaults: every container, the configured tail, following, no timestamps. */
+/** The dialog's defaults: every container, the configured tail, following the current instance, no timestamps. */
 export function initialLogForm(containers: string[], tail: number): LogForm {
-  return { containers, picked: [...containers], history: String(tail), follow: true, timestamps: false, perPod: false, newTab: false };
+  return { containers, picked: [...containers], history: String(tail), follow: true, previous: false, timestamps: false, perPod: false, newTab: false };
 }
 
 /** Toggles one container; the others keep their state. */
@@ -66,5 +68,6 @@ export function checkLogForm(f: LogForm): LogsOptions | string {
   if (typeof h === "string") return h;
   // every container checked: none named, so containers of pods that appear later are followed too
   const containers = f.picked.length === f.containers.length ? undefined : f.picked;
-  return { ...h, containers, follow: f.follow };
+  // the previous instance's logs don't grow: read once
+  return { ...h, containers, follow: f.follow && !f.previous, ...(f.previous ? { previous: true } : {}) };
 }

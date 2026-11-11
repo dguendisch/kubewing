@@ -71,6 +71,10 @@ type Options struct {
 	// NoFollow reads what each stream holds once and ends it (kubectl logs
 	// without -f): no reconnects. The bridge feeds it a single pod list.
 	NoFollow bool
+	// Previous reads each container's previous, terminated instance (kubectl
+	// logs -p); it implies NoFollow (those logs don't grow). A container
+	// without a previous instance gets a marker line and ends.
+	Previous bool
 	// Containers, if set, restricts following to containers of these names.
 	Containers []string
 	// MaxStreams caps concurrent followers; <=0 = DefaultMaxStreams.
@@ -126,6 +130,9 @@ type follower struct {
 	// lastTS is the timestamp of the last line emitted, to resume after a
 	// reconnect without repeating it. Guarded by Tailer.mu.
 	lastTS string
+	// hasPrevious is whether the container had a previous instance when
+	// found (Options.Previous reads only those). Set at start.
+	hasPrevious bool
 }
 
 // New creates a tailer. Feed it events with Apply; it starts no followers on
@@ -139,6 +146,9 @@ func New(ctx context.Context, actor LogStreamer, o Options, sink Sink) *Tailer {
 	}
 	if o.LineCap <= 0 {
 		o.LineCap = DefaultLineCap
+	}
+	if o.Previous {
+		o.NoFollow = true
 	}
 	cctx, cancel := context.WithCancel(ctx)
 	return &Tailer{
@@ -204,7 +214,7 @@ func (t *Tailer) reconcilePod(obj *unstructured.Unstructured) {
 		return
 	}
 	for _, c := range cs {
-		if !c.loggable() || len(t.opts.Containers) > 0 && !slices.Contains(t.opts.Containers, c.name) {
+		if !c.loggable(t.opts.Previous) || len(t.opts.Containers) > 0 && !slices.Contains(t.opts.Containers, c.name) {
 			continue
 		}
 		id := uid + "/" + c.name
@@ -222,7 +232,7 @@ func (t *Tailer) reconcilePod(obj *unstructured.Unstructured) {
 			changed = true
 			continue
 		}
-		f := t.startFollower(id, uid, ns, pod, c.name, c.running && !deleting)
+		f := t.startFollower(id, uid, ns, pod, c.name, c.running && !deleting, c.hasPrevious)
 		t.followers[id] = f
 		changed = true
 	}
@@ -243,7 +253,7 @@ func (t *Tailer) reconcilePod(obj *unstructured.Unstructured) {
 
 // startFollower launches the goroutine that streams one container. Must be
 // called with t.mu held (it reads color assignment); it does not block.
-func (t *Tailer) startFollower(id, uid, ns, pod, container string, running bool) *follower {
+func (t *Tailer) startFollower(id, uid, ns, pod, container string, running, hasPrevious bool) *follower {
 	color, ok := t.colors[uid]
 	if !ok {
 		color = t.nextColor % palette
@@ -253,7 +263,7 @@ func (t *Tailer) startFollower(id, uid, ns, pod, container string, running bool)
 	fctx, cancel := context.WithCancel(t.ctx)
 	f := &follower{
 		stream: Stream{ID: id, Pod: pod, Namespace: ns, Container: container, Color: color, State: Following},
-		cancel: cancel, running: running,
+		cancel: cancel, running: running, hasPrevious: hasPrevious,
 	}
 	t.running.Add(1)
 	go func() {
@@ -265,6 +275,12 @@ func (t *Tailer) startFollower(id, uid, ns, pod, container string, running bool)
 
 // run streams a container, reconnecting while it is running.
 func (t *Tailer) run(ctx context.Context, f *follower) {
+	if t.opts.Previous && !f.hasPrevious {
+		// the API would refuse ("previous terminated container … not found")
+		t.emitMarker(f, "— no previous instance —")
+		t.markEnded(f)
+		return
+	}
 	first := true
 	for {
 		lo := source.LogOptions{}
@@ -279,6 +295,7 @@ func (t *Tailer) run(ctx context.Context, f *follower) {
 		}
 		first = false
 		lo.NoFollow = t.opts.NoFollow
+		lo.Previous = t.opts.Previous
 		w := &lineWriter{tailer: t, f: f, cap: t.opts.LineCap}
 		err := t.actor.Logs(ctx, t.opts.Cluster, f.stream.Namespace, f.stream.Pod, f.stream.Container, lo, w)
 		w.flush()

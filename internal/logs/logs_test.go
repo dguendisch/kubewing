@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -289,5 +290,42 @@ func TestSinceAndWhole(t *testing.T) {
 		if tc.since == 0 && o.SinceSeconds != nil || tc.since != 0 && (o.SinceSeconds == nil || *o.SinceSeconds != tc.since) {
 			t.Errorf("%+v: sinceSeconds = %v, want %d", tc.o, o.SinceSeconds, tc.since)
 		}
+	}
+}
+
+// Previous reads each container's previous instance once (kubectl logs -p),
+// even a crash-looping one that waits now; a container without a previous
+// instance gets a marker instead of an API call.
+func TestPrevious(t *testing.T) {
+	fa := newFakeActor()
+	fa.streams["u1/app"] = []string{"crashed"}
+	sink := &recordSink{}
+	tl := New(context.Background(), fa, Options{Previous: true}, sink)
+	defer tl.Close()
+	p := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1", "kind": "Pod",
+		"metadata": map[string]any{"uid": "u1", "name": "u1", "namespace": "ns"},
+		"spec":     map[string]any{"containers": []any{map[string]any{"name": "app"}, map[string]any{"name": "side"}, map[string]any{"name": "new"}}},
+		"status": map[string]any{"containerStatuses": []any{
+			// crash-looping: waiting now, its last instance terminated
+			map[string]any{"name": "app", "state": map[string]any{"waiting": map[string]any{"reason": "CrashLoopBackOff"}}, "lastState": map[string]any{"terminated": map[string]any{"exitCode": int64(1)}}},
+			// never restarted
+			map[string]any{"name": "side", "state": map[string]any{"running": map[string]any{}}},
+		}},
+	}}
+	tl.Apply(source.Event{Type: source.Added, Item: item(p)})
+	tl.Wait()
+	if fa.callCount() != 1 || fa.calls[0].container != "app" || !fa.calls[0].opts.Previous || !fa.calls[0].opts.NoFollow {
+		t.Errorf("calls = %+v, want one Previous, NoFollow read of app", fa.calls)
+	}
+	got := sink.texts()
+	slices.Sort(got)
+	if want := []string{"crashed", "— no previous instance —"}; !slices.Equal(got, want) {
+		t.Errorf("lines = %v, want %v", got, want)
+	}
+	// "new" isn't reported by the kubelet yet: not followed at all
+	st := tl.Streams()
+	if len(st) != 2 || st[0].State != Ended || st[1].State != Ended {
+		t.Errorf("streams = %+v, want app and side, ended", st)
 	}
 }

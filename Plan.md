@@ -15,7 +15,7 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 - **Hide healthy:** a "why not healthy" hint (the failing check of the rule, e.g. in the row tooltip or the YAML view); more Gardener kinds once asked for (BackupBucket/BackupEntry live in `extensions.gardener.cloud` and `core.gardener.cloud`, ControllerInstallation, ManagedSeed).
 - **Time travel:** pinning objects or views against eviction (within budget); linking the moment of splits (pods and nodes at the same time).
-- **Logs:** a whole-pane tail for non-pod panes (the union of their pods); previous-container logs (`--previous`); saving a tail to a file; an optional timestamp column.
+- **Logs:** a whole-pane tail for non-pod panes (the union of their pods); saving a tail to a file; an optional timestamp column.
 - **Editing decoded values (`⌘E`):** a readable preview: `EditCheck` also returns decoded diffs of the fields edited through a level (both sides with the same chain), offered beside the object diff (today it's one encoded value against another); blame and `⌘J` inside a decoded level; `Esc` from the preview back to the level it was submitted from (today: the object's editor).
 - **Decode:** a hint at the end of decodable lines (`⟶ base64·brotli · yaml 14 KiB`, `⟶ jwt, expires in 3h`); a decoded view of a whole secret (all keys at once, like `kubectl view-secret`).
 - **Marked rows:** exec into several pods; input typed once to all debug panes of a batch (like iTerm's broadcast); edit of many objects (one YAML stream).

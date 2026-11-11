@@ -885,6 +885,8 @@ export interface LogsOptions {
   /** The whole log. */
   all?: boolean;
   follow: boolean;
+  /** The previous, terminated instance of each container (kubectl logs -p): read once, whatever follow says. */
+  previous?: boolean;
   /** Narrows the tail to one of its pods (a pane per pod). */
   only?: PodRef;
 }

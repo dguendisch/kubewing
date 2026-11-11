@@ -16,15 +16,27 @@ import (
 type containerInfo struct {
 	name    string
 	running bool
-	// hasState is whether the pod status mentioned the container at all; a
+	// hasState is whether the container is running or terminated; a
 	// container the kubelet hasn't reported yet (no status) is not loggable.
 	hasState bool
+	// reported is whether the pod status lists the container at all (waiting too).
+	reported bool
+	// hasPrevious is whether a previous instance terminated (lastState), so
+	// its logs can be read (kubectl logs -p): a crash-looping container's.
+	hasPrevious bool
 }
 
 // loggable reports whether logs can be read: the container has a state
 // (running or terminated). A purely waiting container (ImagePullBackOff) has
-// no readable log yet, so following it would just error in a loop.
-func (c containerInfo) loggable() bool { return c.hasState }
+// no readable log yet, so following it would just error in a loop. For the
+// previous instance's logs every reported container counts (a crash-looping
+// one waits): one without a previous instance says so instead.
+func (c containerInfo) loggable(previous bool) bool {
+	if previous {
+		return c.reported
+	}
+	return c.hasState
+}
 
 // containers lists a pod's regular, init, sidecar and ephemeral containers in
 // spec order, with their running state from the pod status. It reads an
@@ -32,8 +44,7 @@ func (c containerInfo) loggable() bool { return c.hasState }
 func containers(obj *unstructured.Unstructured) []containerInfo {
 	o := obj.Object
 	type st struct {
-		running  bool
-		hasState bool
+		running, hasState, hasPrevious bool
 	}
 	states := map[string]st{}
 	for _, f := range []string{"containerStatuses", "initContainerStatuses", "ephemeralContainerStatuses"} {
@@ -47,7 +58,9 @@ func containers(obj *unstructured.Unstructured) []containerInfo {
 			state, _, _ := unstructured.NestedMap(m, "state")
 			_, running := state["running"]
 			_, terminated := state["terminated"]
-			states[name] = st{running: running, hasState: running || terminated}
+			last, _, _ := unstructured.NestedMap(m, "lastState")
+			_, prev := last["terminated"]
+			states[name] = st{running: running, hasState: running || terminated, hasPrevious: prev}
 		}
 	}
 	var out []containerInfo
@@ -59,7 +72,8 @@ func containers(obj *unstructured.Unstructured) []containerInfo {
 			if name == "" {
 				continue
 			}
-			out = append(out, containerInfo{name: name, running: states[name].running, hasState: states[name].hasState})
+			cs, ok := states[name]
+			out = append(out, containerInfo{name: name, running: cs.running, hasState: cs.hasState, reported: ok, hasPrevious: cs.hasPrevious})
 		}
 	}
 	return out

@@ -671,7 +671,9 @@ kubewing has a stern-like multi-pod log tail.
 - `l` with rows marked follows the pods of all marked rows together, in one tail: marked pods by name, marked workloads, nodes or namespaces with all their pods. A pod that two marked rows cover (a deployment and one of its pods) is followed once. Rows without pods (a config map) are skipped, and the dialog names them. At most 20 marked workloads, nodes or namespaces at once (any number of pods).
 - `⌥L` (or **logs of pane**) follows every pod the pods pane currently shows, with its namespace, selectors, grep and CEL applied (a snapshot: later edits to the pane don't change it).
 
-A dialog asks first: which containers (all checked), how much history per container (the last lines, `100` by default from `logs.tail`; since a duration like `10m` or `1h30m`; or `all`), follow (on) and timestamps (off). `⏎` starts from anywhere in it, so `⌘L ⏎` takes the defaults. Without follow, each container's log is read once and the tail ends.
+A dialog asks first: which containers (all checked), how much history per container (the last lines, `100` by default from `logs.tail`; since a duration like `10m` or `1h30m`; or `all`), follow (on), previous (off) and timestamps (off). `⏎` starts from anywhere in it, so `⌘L ⏎` takes the defaults. Without follow, each container's log is read once and the tail ends.
+
+**Previous instance** (`⌘P` in the dialog, from any field): shows the logs of each container's previous, terminated instance, like `kubectl logs -p`. Use it for a container that crashed or was restarted (a crash-looping container's last run, an `OOMKilled` one). Those logs don't grow, so they're read once and follow is off; the history choice still applies. A container that has never restarted shows **— no previous instance —**. The status line says **previous instance**.
 
 The log pane opens below.
 
@@ -694,7 +696,7 @@ The log pane opens below.
 | `⏎` | back to the latest line |
 | `⌃D` / `⌃⇧D` | close the pane |
 
-Scrolled up, new lines don't move the view. The status line shows **following** (green) while lines stream in, **not following** (grey) once nothing is followed, then shown/total lines, container and pod counts, any dropped or limited streams, and whether **timestamps** are on or off with the key that toggles them (`t`).
+Scrolled up, new lines don't move the view. The status line shows **following** (green) while lines stream in, **not following** (grey) once nothing is followed (**previous instance** for a tail of the previous instances), then shown/total lines, container and pod counts, any dropped or limited streams, and whether **timestamps** are on or off with the key that toggles them (`t`).
 
 ---
 

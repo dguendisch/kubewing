@@ -4,7 +4,7 @@ import { checkLogForm, initialLogForm, maxLogPanes, parseHistory, perPodUnavaila
 describe("log dialog form", () => {
   it("defaults to every container, the configured tail, following", () => {
     const f = initialLogForm(["app", "side"], 100);
-    expect(f).toEqual({ containers: ["app", "side"], picked: ["app", "side"], history: "100", follow: true, timestamps: false, perPod: false, newTab: false });
+    expect(f).toEqual({ containers: ["app", "side"], picked: ["app", "side"], history: "100", follow: true, previous: false, timestamps: false, perPod: false, newTab: false });
     // all checked: no names sent, so a later pod's containers are followed too
     expect(checkLogForm(f)).toEqual({ tail: 100, containers: undefined, follow: true });
   });
@@ -32,6 +32,12 @@ describe("log dialog form", () => {
     expect(f.picked).toEqual([]);
     expect(checkLogForm(f)).toBe("pick at least one container");
     expect(toggleAllContainers(f).picked).toEqual(["app", "side", "init"]);
+  });
+
+  it("previous: the last instance's logs, read once whatever follow says", () => {
+    const f = { ...initialLogForm(["app"], 100), previous: true };
+    expect(checkLogForm(f)).toEqual({ tail: 100, containers: undefined, follow: false, previous: true });
+    expect(checkLogForm({ ...f, history: "all" })).toEqual({ all: true, containers: undefined, follow: false, previous: true });
   });
 
   it("offers a pane per pod for 2 to 8 pods", () => {

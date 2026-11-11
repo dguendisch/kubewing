@@ -3,7 +3,8 @@
 # container name). filter: true so a by-name or by-selector pods watch honors
 # the namespace and selectors like an API server would. A step adds a third
 # pod and deletes one, so the tail picks up a pod that appears later and ends
-# a follower whose pod is gone. logs-follow keeps a stream open emitting ticks.
+# a follower whose pod is gone. logs-follow keeps a stream open emitting ticks;
+# logs-previous are the logs of a container's previous instance (logs -p).
 filter: true
 pipeline:
   source: {resource: e2e-pod-logs, namespace: shop}
@@ -22,8 +23,10 @@ initial:
         creationTimestamp: "2026-01-01T10:00:00Z"
         annotations:
           kubewing.test/logs: "api-0 %c starting\napi-0 %c ready\napi-0 %c serving request /healthz"
+          # its previous instance's logs (logs -p); the other pods have none
+          kubewing.test/logs-previous: "api-0 %c before the restart\napi-0 %c out of memory"
       spec: {containers: [{name: app}]}
-      status: {phase: Running, containerStatuses: [{name: app, ready: true, state: {running: {}}}]}
+      status: {phase: Running, containerStatuses: [{name: app, ready: true, restartCount: 1, state: {running: {}}, lastState: {terminated: {reason: OOMKilled, exitCode: 137}}}]}
     cells: [api-0, Running]
   - object:
       apiVersion: v1

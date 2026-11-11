@@ -1,5 +1,10 @@
 # Changelog
 ## [Unreleased]
+### Added
+- the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
+
+### Fixed
+- an ended log tail now names the key that closes its pane (`⌃D`), not `⌘W`, which closes the whole tab
 
 ## [0.6.0] - 2026-11-11
 ### Added
