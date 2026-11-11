@@ -1,0 +1,44 @@
+# Publishes the release list the updater reads (internal/update, ListURL) as releases.json on the
+# latest release: GitHub serves release downloads without the API's rate limit (60 anonymous
+# requests an hour per IP, used up quickly behind a shared company egress).
+# Runs after release.yml publishes, when a release is edited or deleted on GitHub (its notes are the
+# updater's "what's new"), or by hand (Actions → release-list → Run workflow).
+name: release-list
+
+on:
+  workflow_call:
+  workflow_dispatch:
+  release:
+    # releases made by release.yml (the runner's token) trigger nothing: it calls this itself
+    types: [published, edited, deleted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-list
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # gh release upload
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Publish releases.json
+        run: |
+          # GitHub's release JSON cut to what the updater reads; the token sees drafts, the list must not
+          gh api "repos/$GH_REPO/releases?per_page=50" --jq '[.[] | select(.draft | not)
+            | {tag_name, name, body, draft, prerelease, published_at, html_url,
+               assets: [.assets[] | {name, size, browser_download_url, digest}]}]' > "$RUNNER_TEMP/releases.json"
+          jq -e 'length > 0' "$RUNNER_TEMP/releases.json" > /dev/null || { echo "::error::empty release list"; exit 1; }
+          # releases/latest/download/ follows "latest", which is never a pre-release: the list there names
+          # the candidates too
+          latest=$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name 2>/dev/null) || {
+            echo "::warning::no latest release yet: the updater keeps using the API"; exit 0; }
+          gh release upload "$latest" "$RUNNER_TEMP/releases.json" --clobber
+          echo "releases.json ($(jq length "$RUNNER_TEMP/releases.json") releases) on $latest" >> "$GITHUB_STEP_SUMMARY"

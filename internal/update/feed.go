@@ -7,6 +7,7 @@ package update
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,9 +19,18 @@ import (
 // Repo is where the releases are published.
 const Repo = "dguendisch/kubewing"
 
-// FeedURL lists the newest releases: one request gives the versions, their
-// notes and their assets (with digests). Anonymous: 60 requests an hour,
-// far more than a daily check needs.
+// ListAsset is the release list the release workflow publishes as an asset
+// of the latest release (.github/workflows/release-list.yml): GitHub's
+// release JSON, cut to the fields below.
+const ListAsset = "releases.json"
+
+// ListURL downloads it: a release download, which GitHub doesn't rate-limit,
+// unlike its API (60 anonymous requests an hour per IP, which a shared
+// company egress uses up long before a daily check).
+const ListURL = "https://github.com/" + Repo + "/releases/latest/download/" + ListAsset
+
+// FeedURL is the API's release list: the fallback while the latest release
+// has no ListAsset (releases before it, or the moment it's re-uploaded).
 const FeedURL = "https://api.github.com/repos/" + Repo + "/releases?per_page=50"
 
 // Release is one GitHub release, as far as the updater needs it.
@@ -60,24 +70,34 @@ type Feed interface {
 	Releases(ctx context.Context) ([]Release, error)
 }
 
-// GitHub is the real feed.
+// GitHub is the real feed: the published list, else the API.
 type GitHub struct {
-	Client *http.Client
-	URL    string // "" = FeedURL
+	Client  *http.Client
+	ListURL string // "" = ListURL
+	APIURL  string // "" = FeedURL
 }
+
+// errNoList: the latest release has no list asset.
+var errNoList = errors.New("no release list")
 
 // Releases implements Feed.
 func (g GitHub) Releases(ctx context.Context) ([]Release, error) {
-	url := g.URL
-	if url == "" {
-		url = FeedURL
+	rs, err := g.get(ctx, or(g.ListURL, ListURL), false)
+	if !errors.Is(err, errNoList) {
+		return rs, err
 	}
+	return g.get(ctx, or(g.APIURL, FeedURL), true)
+}
+
+func (g GitHub) get(ctx context.Context, url string, api bool) ([]Release, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	if api {
+		req.Header.Set("Accept", "application/vnd.github+json")
+		req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+	}
 	resp, err := client(g.Client).Do(req)
 	if err != nil {
 		return nil, err
@@ -85,7 +105,10 @@ func (g GitHub) Releases(ctx context.Context) ([]Release, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		switch {
+		case !api && resp.StatusCode == http.StatusNotFound:
+			return nil, errNoList
+		case api && (resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests):
 			return nil, fmt.Errorf("GitHub's rate limit for anonymous requests is used up, try again later")
 		}
 		return nil, fmt.Errorf("GitHub answered %s: %s", resp.Status, strings.TrimSpace(string(msg)))
@@ -112,6 +135,13 @@ func (f File) Releases(context.Context) ([]Release, error) {
 		return nil, fmt.Errorf("%s: %w", f, err)
 	}
 	return rs, nil
+}
+
+func or(s, def string) string {
+	if s != "" {
+		return s
+	}
+	return def
 }
 
 func client(c *http.Client) *http.Client {

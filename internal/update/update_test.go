@@ -502,26 +502,59 @@ func TestUpdaterInstallFlow(t *testing.T) {
 }
 
 func TestGitHubFeed(t *testing.T) {
+	const list = `[{"tag_name":"v0.1.0","body":"### Added\n- x","prerelease":false,"html_url":"u","published_at":"2026-11-06T20:25:06Z",
+		"assets":[{"name":"kubewing-0.1.0-macos-arm64.zip","size":41975851,"browser_download_url":"d","digest":"sha256:7bf199651443d0bd5519ae05592a3e1d737b74c3e005fca9bba8054844ff55b7"}]}]`
+	var apiCalls int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Accept") != "application/vnd.github+json" {
-			t.Errorf("accept %q", r.Header.Get("Accept"))
+		switch r.URL.Path {
+		case "/latest/download/releases.json": // a release download: no API headers
+			if r.Header.Get("Accept") == "application/vnd.github+json" {
+				t.Errorf("list request with API accept")
+			}
+			w.Write([]byte(list))
+		case "/redirect":
+			http.Redirect(w, r, "/latest/download/releases.json", http.StatusFound)
+		case "/api":
+			apiCalls++
+			if r.Header.Get("Accept") != "application/vnd.github+json" {
+				t.Errorf("accept %q", r.Header.Get("Accept"))
+			}
+			if r.URL.Query().Get("limited") != "" {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.Write([]byte(list))
+		case "/broken":
+			w.WriteHeader(http.StatusBadGateway)
+		default:
+			http.NotFound(w, r)
 		}
-		if r.URL.Query().Get("limited") != "" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-		w.Write([]byte(`[{"tag_name":"v0.1.0","body":"### Added\n- x","prerelease":false,"html_url":"u","published_at":"2026-11-06T20:25:06Z",
-			"assets":[{"name":"kubewing-0.1.0-macos-arm64.zip","size":41975851,"browser_download_url":"d","digest":"sha256:7bf199651443d0bd5519ae05592a3e1d737b74c3e005fca9bba8054844ff55b7"}]}]`))
 	}))
 	defer srv.Close()
-	rs, err := GitHub{URL: srv.URL}.Releases(context.Background())
-	if err != nil || len(rs) != 1 || rs[0].Version() != "0.1.0" || rs[0].Assets[0].Size != 41975851 {
-		t.Fatalf("%v %+v", err, rs)
+	check := func(name string, g GitHub, wantAPI int) {
+		t.Helper()
+		apiCalls = 0
+		rs, err := g.Releases(context.Background())
+		if err != nil || len(rs) != 1 || rs[0].Version() != "0.1.0" || rs[0].Assets[0].Size != 41975851 {
+			t.Fatalf("%s: %v %+v", name, err, rs)
+		}
+		if d, err := digest(rs[0].Assets[0].Digest); err != nil || len(d) != 64 {
+			t.Fatalf("%s: digest %q %v", name, d, err)
+		}
+		if apiCalls != wantAPI {
+			t.Fatalf("%s: %d API calls, want %d", name, apiCalls, wantAPI)
+		}
 	}
-	if d, err := digest(rs[0].Assets[0].Digest); err != nil || len(d) != 64 {
-		t.Fatalf("digest %q %v", d, err)
+	// the published list (behind GitHub's redirect to the CDN), the API untouched
+	check("list", GitHub{ListURL: srv.URL + "/redirect", APIURL: srv.URL + "/api"}, 0)
+	// no list on the latest release yet: the API
+	check("fallback", GitHub{ListURL: srv.URL + "/missing", APIURL: srv.URL + "/api"}, 1)
+	// the list failing otherwise isn't papered over by the API
+	apiCalls = 0
+	if _, err := (GitHub{ListURL: srv.URL + "/broken", APIURL: srv.URL + "/api"}).Releases(context.Background()); err == nil || !strings.Contains(err.Error(), "502") || apiCalls != 0 {
+		t.Fatalf("broken list: %v", err)
 	}
-	if _, err := (GitHub{URL: srv.URL + "?limited=1"}).Releases(context.Background()); err == nil || !strings.Contains(err.Error(), "rate limit") {
+	if _, err := (GitHub{ListURL: srv.URL + "/missing", APIURL: srv.URL + "/api?limited=1"}).Releases(context.Background()); err == nil || !strings.Contains(err.Error(), "rate limit") {
 		t.Fatalf("rate limit: %v", err)
 	}
 }

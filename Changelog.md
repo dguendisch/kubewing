@@ -11,6 +11,7 @@
 - shoot ⇄ control plane moved from `⌘⇧P` to `⌥⌘O`, next to `⌘⇧O`'s clusters
 
 ### Fixed
+- checking for updates no longer fails with "GitHub's rate limit for anonymous requests is used up" behind a company network or VPN
 - a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again
 
 ## [0.5.0] - 2026-11-09

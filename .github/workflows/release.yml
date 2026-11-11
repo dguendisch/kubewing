@@ -104,3 +104,11 @@ jobs:
           shopt -s nullglob
           gh release create "$TAG" bin/*.zip bin/*.sha256 bin/*.zip.sig \
             --verify-tag --title "kubewing ${TAG#v}" --notes-file "$RUNNER_TEMP/notes.md" "${flags[@]}"
+
+  # the updater's release list (release-list.yml), now naming this release
+  list:
+    needs: build
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-list.yml
