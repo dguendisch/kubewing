@@ -12,6 +12,10 @@ import (
 )
 
 func TestReferenceIsValid(t *testing.T) {
+	// The reference names a font the build machine needn't have (e.g. CI).
+	orig := fontInstalled
+	fontInstalled = func(string) bool { return true }
+	t.Cleanup(func() { fontInstalled = orig })
 	dir := write(t, map[string]string{File: Reference})
 	if e := Load(dir); len(e.Errors) != 0 {
 		t.Errorf("the reference must load without problems: %v", e.Errors)
