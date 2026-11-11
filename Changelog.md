@@ -17,6 +17,9 @@
 - a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again
 - a pane of nodes could now and then stay on **loading requests/limits…** with its requests/limits columns empty, right after it was opened
 
+### Changed
+- resource lists now sort numbered names in natural order (e.g. `shoot-2` before `shoot-10`)
+
 ## [0.5.0] - 2026-11-09
 ### Added
 - hide healthy (`h`) works on more kinds: Gardener managed resources (applied, healthy and not progressing), nodes (Ready and not cordoned), jobs, persistent volume claims, Gardener extension resources, shoots, seeds, machines and etcds
