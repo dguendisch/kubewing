@@ -39,7 +39,7 @@ function useLeased<T extends { loading?: boolean }>(fetch: () => Promise<T>, act
 }
 
 /**
- * ⌘⌥O: an ops pod on a node (ops-toolbelt's hacks/ops-pod), from anywhere.
+ * n (and Object → Node Shell…): an ops pod on a node (ops-toolbelt's hacks/ops-pod).
  * The node is prefilled from the selected row (a node, or the node a pod
  * runs on) and completes from the context's nodes: Go's shared nodes watch,
  * i.e. an open nodes pane's data if there is one. Image (shared history

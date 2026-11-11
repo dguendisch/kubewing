@@ -40,7 +40,7 @@ contexts:
 debug:
   image: nicolaka/netshoot
 
-# ⌘⌥O (node shell: a pod on a node, as ops-toolbelt's hacks/ops-pod): defaults of the dialog.
+# n (node shell: a pod on a node, as ops-toolbelt's hacks/ops-pod): defaults of the dialog.
 # Namespace and checkboxes are these until a pod ran; then the last used ones (history.yaml).
 #   image:       prefilled (else the last image that started, debug containers' included)
 #   namespace:   where the pod is created (default: default)

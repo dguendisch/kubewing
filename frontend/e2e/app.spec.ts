@@ -6092,8 +6092,8 @@ test.describe("⌘⇧O: open a cluster", () => {
     await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
-    // ⌘⇧P: its control plane, whose seed isn't in the test garden: the error shows in the pane, which stays
-    await page.keyboard.press("ControlOrMeta+Shift+P");
+    // ⌥⌘O: its control plane, whose seed isn't in the test garden: the error shows in the pane, which stays
+    await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect(pane.getByRole("status", { name: "pane status" }).getByLabel("message")).toContainText("soil");
     await expect(pane).toHaveAttribute("data-context", "tape-garden/shoot--foo--bar");
     // ⌃T: the local terminal targets the shoot for gardenctl too (its own session)
@@ -6119,7 +6119,7 @@ test.describe("⌘⇧O: open a cluster", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌘⇧P only on what ⌘⇧O opened", async ({ page }) => {
+  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
     await openStatic(page);
     await page.keyboard.press("ControlOrMeta+Shift+O");
     const field = page.getByRole("combobox", { name: "cluster" });
@@ -6142,10 +6142,10 @@ test.describe("⌘⇧O: open a cluster", () => {
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
     await page.keyboard.press("Escape");
 
-    // back in the first tab: ⌘⇧P on a cluster ⌘⇧O didn't open says so
+    // back in the first tab: ⌥⌘O on a cluster ⌘⇧O didn't open says so
     await page.keyboard.press("ControlOrMeta+1");
     const from = (await inspect(page)).focusedPane;
-    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect(page.locator(`section[data-pane="${from}"]`).getByLabel("message")).toContainText("⌘⇧O");
     // ⌃⇧⏎: a new pane below the focused one, the toggle unchanged
     await page.keyboard.press("ControlOrMeta+Shift+O");
@@ -6219,9 +6219,9 @@ test.describe("⌘⇧O: open a cluster", () => {
     let s = await inspect(page);
     expect(s.focusedPane).not.toBe(from);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
-    // ⌘⇧P right away, ⌘O still open over it: the shoot, ⌘O open over that
+    // ⌥⌘O right away, ⌘O still open over it: the shoot, ⌘O open over that
     expect((await inspect(page)).overlays).toEqual(["open"]);
-    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
     await expect.poll(async () => (await inspect(page)).overlays).toEqual(["open"]);
     // ⌘O is the shoot's now (not the control plane's it was opened over): what it picks lists there
@@ -6229,7 +6229,7 @@ test.describe("⌘⇧O: open a cluster", () => {
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", namespace: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
     // and back from the table
-    await page.keyboard.press("ControlOrMeta+Shift+P");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
     await page.keyboard.press("Control+D");
     await expect.poll(async () => (await inspect(page)).focusedPane).toBe(from);

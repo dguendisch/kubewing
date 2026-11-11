@@ -141,7 +141,7 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 Entries that can't be opened (a garden whose kubeconfig is missing) are greyed out, with the reason. Safety labels show next to the entries already, as far as the name is known. `✕` on a shoot forgets both its shoot and its control plane.
 
-**Shoot ⇄ control plane: `⌘⇧P`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘⇧O`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘⇧O` or `⌘J`, also right after opening, with `⌘O` still over the empty pane (it then stays open over the other plane). It also works on clusters opened from a terminal with gardenctl's kubeconfigs (`gardenctl target`, then `kubewing`), as their kubeconfig says which shoot or control plane they are. On a seed, the shoot is the one whose namespace the pane shows (`shoot--<project>--<name>`), else the one whose control plane was opened there last (a pane on nodes, or on all namespaces). Elsewhere it says so in the status line.
+**Shoot ⇄ control plane: `⌥⌘O`** (File → Shoot ⇄ Control Plane) switches the focused table pane from a shoot to its control plane, or back. The pane keeps its resource and filters. A control plane starts in the shoot's namespace on the seed, a shoot in all namespaces. Like a pick in `⌘⇧O`, it may ask you to log in, and `⌘←` goes back. It works on shoots and control planes opened with `⌘⇧O` or `⌘J`, also right after opening, with `⌘O` still over the empty pane (it then stays open over the other plane). It also works on clusters opened from a terminal with gardenctl's kubeconfigs (`gardenctl target`, then `kubewing`), as their kubeconfig says which shoot or control plane they are. On a seed, the shoot is the one whose namespace the pane shows (`shoot--<project>--<name>`), else the one whose control plane was opened there last (a pane on nodes, or on all namespaces). Elsewhere it says so in the status line.
 
 **Gardener targets.** kubewing reads gardenctl's config, `~/.garden/gardenctl-v2.yaml` (or `$GCTL_HOME/$GCTL_CONFIG_NAME.yaml`; `-garden` names another directory): the gardens, their kubeconfigs and contexts, and the `patterns` that turn a URL or name into a target. It's read anew each time the dialog opens. You need neither gardenctl nor its `target` command, but you do need what gardenctl's kubeconfigs need: `kubectl-gardenlogin` (shoots), and whatever the garden's kubeconfig uses (e.g. `kubectl oidc-login`), on your shell's `PATH` (see [Launching from the Dock or Finder](#launching-from-the-dock-or-finder)).
 
@@ -565,7 +565,7 @@ Each entry starts with its resource type (**replicaset** web-7d4, **pods** in sh
 - `⏎` opens it in the pane (`⌘←` goes back to the rows), `⇧⏎` in a split below, `⌘⏎` in a new tab.
 - Only picking an entry looks it up in the garden, which may ask you to log in; the entry says **resolving…** meanwhile. An error (no access, a seed without a login secret) shows on the entry, and the menu stays open.
 - The garden is one of gardenctl's (see [Gardener targets](#opening-a-cluster-o)): opened with `⌘⇧O`, or from any kubeconfig whose context points at the same API server.
-- `⌘⇧P` switches a shoot or control plane opened this way, as one opened with `⌘⇧O`. Opened clusters are remembered in `⌘⇧O`'s list.
+- `⌥⌘O` switches a shoot or control plane opened this way, as one opened with `⌘⇧O`. Opened clusters are remembered in `⌘⇧O`'s list.
 
 ### Jumping from a field in the YAML
 
@@ -1042,7 +1042,7 @@ The most used keys:
 
 | Where | Keys |
 |---|---|
-| Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌘⇧P` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `⌘+`/`⌘-`/`⌘0` font size · `?` help |
+| Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌥⌘O` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `⌘+`/`⌘-`/`⌘0` font size · `?` help |
 | Table | `/` grep (`⇥` labels, CEL) · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
 | Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `l` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |

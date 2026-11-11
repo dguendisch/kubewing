@@ -43,7 +43,7 @@ describe("cheat sheet", () => {
     expect(global.entries.slice(0, 3).map((e) => [e.keys, e.when])).toEqual([
       [["⌘O"], []],
       [["⌘⇧O"], []],
-      [["⌘⇧P"], ["table", "detail", "dialog"]],
+      [["⌥⌘O"], ["table", "detail", "dialog"]],
     ]);
     // the app's own keys are in it too (no section of their own)
     expect(global.entries.map((e) => e.label)).toContain("this cheat sheet");

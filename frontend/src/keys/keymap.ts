@@ -228,7 +228,7 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+Shift+O", command: "cluster.open" },
   // the focused pane from a shoot to its control plane (the seed, in the shoot's namespace) and back;
   // in ⌘O too (only there of the dialogs): a cluster just opened has it open over it
-  { key: "Meta+Shift+P", command: "cluster.otherPlane", when: ["table", "detail", "dialog"] },
+  { key: "Alt+Meta+O", command: "cluster.otherPlane", when: ["table", "detail", "dialog"] },
   { key: "Meta+Shift+,", command: "config.reload" },
   // the macOS settings key: config.yaml in an editor, the reference beside it
   { key: "Meta+,", command: "config.edit" },

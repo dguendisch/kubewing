@@ -292,8 +292,8 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
     expect(resolve("Escape", "menu")).toBe("detail.close"); // the jump menu closes like the ⌘⏎ menu
     expect(resolve("Shift+Enter", "menu")).toBe("menu.runSplit");
     expect(resolve("Meta+Enter", "menu")).toBe("menu.runTab");
-    // ⌘⇧P in ⌘O too: a cluster just opened has it open over it
-    expect(resolve("Meta+Shift+P", "dialog")).toBe("cluster.otherPlane");
+    // ⌥⌘O in ⌘O too: a cluster just opened has it open over it
+    expect(resolve("Alt+Meta+O", "dialog")).toBe("cluster.otherPlane");
     expect(resolve("Enter", "menu")).toBe("menu.run");
     expect(resolve("J", "table")).toBe("row.down");
   });

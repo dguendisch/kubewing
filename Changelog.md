@@ -7,6 +7,9 @@
 - `⌘F` searches the open keyboard cheat sheet by section, description or keys; `⌘G` / `⏎` and `⌘⇧G` / `⇧⏎` step through the matches, which are highlighted
 - the log viewer's status bar now shows whether timestamps are on or off and the key that toggles them
 
+### Changed
+- shoot ⇄ control plane moved from `⌘⇧P` to `⌥⌘O`, next to `⌘⇧O`'s clusters
+
 ### Fixed
 - a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again
 

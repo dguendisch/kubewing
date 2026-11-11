@@ -1,4 +1,4 @@
-# E2E tape for nodes (ops pod dialog completion, ⌘⌥O on a node row): a
+# E2E tape for nodes (ops pod dialog completion, n on a node row): a
 # Gardener-like pool across zones, one cordoned and one not-ready node.
 # Allocatable 2 cpu / 8Gi / 50Gi ephemeral storage / 10 pods, one node with
 # a GPU; unfinished-pods.yaml are the pods on them.

@@ -986,7 +986,7 @@ export interface Transport {
   openCluster(e: ClusterEntry): Promise<ClusterOpen>;
   /** Removes a cluster from the recent ones. */
   forgetCluster(e: ClusterEntry): Promise<void>;
-  /** ⌘⇧P: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘⇧O opened); may ask to log in. */
+  /** ⌥⌘O: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘⇧O opened); may ask to log in. */
   otherPlane(cluster: string, namespace: string): Promise<ClusterOpen>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;

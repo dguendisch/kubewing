@@ -451,7 +451,7 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
           {key ? `: ${prettyKey(key)}` : ""} picks {noCluster ? "one" : "a resource"}
         </button>
       </div>
-      {/* nothing is watched: no sync state or counts, only messages (⌘⇧P's) */}
+      {/* nothing is watched: no sync state or counts, only messages (⌥⌘O's) */}
       <footer role="status" className="flex gap-3 border-t border-border bg-bg-elev px-2 py-0.5 text-fg-muted" aria-label="pane status">
         <span>nothing listed</span>
         <StatusMessage pane={pane} className="ml-auto" />

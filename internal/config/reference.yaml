@@ -24,7 +24,7 @@ debug:                      # debug containers (b)
   image: nicolaka/netshoot  # prefilled; none: the last image that started
   profile: general          # general, baseline, restricted, netadmin, sysadmin
 
-opsPod:                     # node shells (⌘⌥O): until a pod ran, then the last used ones
+opsPod:                     # node shells (n): until a pod ran, then the last used ones
   image: europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest   # prefilled; none: the last image that started
   namespace: default        # where the pod is created
   chroot: false             # the shell runs in /host, i.e. on the node (implies hostRoot)

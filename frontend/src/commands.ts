@@ -980,7 +980,7 @@ async function submitEdit() {
 }
 
 /**
- * ⌘⌥O, from anywhere: the ops pod dialog on the focused pane's context.
+ * n (and Object → Node Shell…): the ops pod dialog on the focused pane's context.
  * A selected row that stands for a node (a node, a pod's node) prefills it;
  * nothing selected (a terminal pane, an empty table) starts empty.
  */
@@ -1497,13 +1497,13 @@ export async function openCluster(paneId: string, cluster: string, namespace: st
 }
 
 /**
- * ⌘⇧P: the focused pane from a shoot to its control plane or back (Go
+ * ⌥⌘O: the focused pane from a shoot to its control plane or back (Go
  * knows which target the pane's cluster is, once ⌘⇧O or ⌘J resolved it). The
  * pane stays as it is (the resource, its view) on the other cluster; ⌘O open
  * over it (it lists nothing yet) is open over the other plane then.
  */
 async function switchPlane(pane: S.PaneState) {
-  if (pane.term || pane.logs) return flash(pane.id, "⌘⇧P switches a table pane between shoot and control plane", true);
+  if (pane.term || pane.logs) return flash(pane.id, "⌥⌘O switches a table pane between shoot and control plane", true);
   if (S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
   flash(pane.id, "resolving the other plane… (the garden may ask to log in)");
   try {
