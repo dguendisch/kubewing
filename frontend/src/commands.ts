@@ -359,6 +359,13 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
     case "help.toggle":
       // from an open menu or port-forward list: that overlay closes, the sheet replaces it
       return setUI((x) => (x.overlay?.kind === "help" ? S.closeOverlay(x) : S.openOverlay(S.closeOverlay(x), { kind: "help", pane: pane.id })));
+    case "help.find":
+      return setUI(S.openHelpFind);
+    case "help.findClose":
+      return setUI(S.closeHelpFind);
+    case "help.findNext":
+    case "help.findPrev":
+      return setUI((x) => S.stepHelpFind(x, cmd === "help.findNext" ? 1 : -1));
     case "object.delete":
       return void prepareAction("delete");
     case "confirm.accept":

@@ -4,7 +4,7 @@
  * Every key path (JS keydown, native menu accelerator) resolves through
  * resolve() into the single command dispatcher (src/commands.ts).
  */
-export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "logs", "logsfilter", "logsfind", "forwards", "menu", "help", "edit", "editpreview", "travel"] as const;
+export const focusContexts = ["table", "filter", "detail", "palette", "dialog", "switcher", "confirm", "terminal", "ended", "termfind", "logs", "logsfilter", "logsfind", "forwards", "menu", "help", "helpfind", "edit", "editpreview", "travel"] as const;
 export type FocusContext = (typeof focusContexts)[number];
 
 export type CommandId =
@@ -125,6 +125,10 @@ export type CommandId =
   | "confirm.accept"
   | "confirm.cancel"
   | "help.toggle"
+  | "help.find"
+  | "help.findNext"
+  | "help.findPrev"
+  | "help.findClose"
   | "update.check"
   | "edit.submit"
   | "edit.back"
@@ -164,7 +168,7 @@ export const commandIds: readonly CommandId[] = [
   "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
-  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "update.check", "edit.submit", "edit.back", "edit.decode",
+  "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "help.find", "help.findNext", "help.findPrev", "help.findClose", "update.check", "edit.submit", "edit.back", "edit.decode",
   "term.find", "term.findNext", "term.findPrev", "term.findClose",
   "view.columns", "view.toggleMetrics", "view.toggleAllocation", "view.zoomIn", "view.zoomOut", "view.zoomReset", "history.toggleRecording",
   "travel.toggle", "travel.prev", "travel.next", "travel.back", "travel.forward", "travel.start", "travel.live", "travel.field",
@@ -406,6 +410,13 @@ export const defaultBindings: Binding[] = [
   // not global: in the filter bar and the dialogs "?" is text being typed
   { key: "?", command: "help.toggle", when: ["table", "detail", "ended", "forwards", "menu", "help"] },
   { key: "Escape", command: "detail.close", when: ["help"] },
+  // find in the cheat sheet (as the terminal's): ⌘F opens the box, ⌘G / ⌘⇧G step the matches, Esc closes find (the sheet stays)
+  { key: "Meta+F", command: "help.find", when: ["help", "helpfind"] },
+  { key: "Meta+G", command: "help.findNext", when: ["help", "helpfind"] },
+  { key: "Meta+Shift+G", command: "help.findPrev", when: ["help", "helpfind"] },
+  { key: "Enter", command: "help.findNext", when: ["helpfind"] },
+  { key: "Shift+Enter", command: "help.findPrev", when: ["helpfind"] },
+  { key: "Escape", command: "help.findClose", when: ["helpfind"] },
   // find in a terminal (as Monaco's): ⌘F opens the bar, ⌘G / ⌘⇧G step, Esc closes back to the shell
   { key: "Meta+F", command: "term.find", when: ["terminal", "ended", "termfind"] },
   { key: "Meta+G", command: "term.findNext", when: ["terminal", "ended", "termfind"] },

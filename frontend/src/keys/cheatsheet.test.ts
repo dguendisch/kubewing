@@ -78,4 +78,11 @@ describe("cheat sheet", () => {
   it("is handled by the dispatcher", () => {
     expect(commandsSrc).toContain(`case "help.toggle"`);
   });
+
+  it("lists the sheet's own find", () => {
+    const e = flat();
+    expect(e["find in this cheat sheet"]!.keys).toEqual(["⌘F"]);
+    expect(e["close find"]!.keys).toEqual(["esc"]);
+    for (const c of ["help.find", "help.findClose", "help.findNext", "help.findPrev"]) expect(commandsSrc).toContain(`case "${c}"`);
+  });
 });

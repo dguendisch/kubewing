@@ -272,7 +272,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
         {st.ended ? <span>{st.ended} ended</span> : null}
         {st.limited ? <span className="text-changed">{st.limited} not followed (limit)</span> : null}
         {st.dropped ? <span className="text-deleted">{st.dropped.toLocaleString()} dropped</span> : null}
-        {logs.timestamps ? <span>timestamps</span> : null}
+        <TimestampsHint on={logs.timestamps} />
       </footer>
     </>
   );
@@ -290,6 +290,18 @@ function LogFollowing({ follow, live }: { follow: boolean; live: boolean }) {
   return (
     <span title={follow ? "every followed container ended" : "started without follow: the logs were read once"}>
       <span>●</span> not following
+    </span>
+  );
+}
+
+/** Timestamps on/off, with the key that toggles them (keybindings.yaml may change it); dimmed while off. */
+function TimestampsHint({ on }: { on: boolean }) {
+  const key = useConfig((c) => c.bindings.find((b) => b.command === "logs.toggleTimestamps")?.key);
+  const hint = key ? ` (${prettyKey(key)})` : "";
+  return (
+    <span className={on ? undefined : "opacity-50"} title={`timestamps ${on ? "on" : "off"}${hint}`}>
+      timestamps {on ? "on" : "off"}
+      {hint}
     </span>
   );
 }

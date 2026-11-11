@@ -1272,6 +1272,42 @@ test("? shows the cheat sheet with the live keymap, esc closes it", async ({ pag
   expect((await focused(page)).selected).toBe(1);
 });
 
+test("cmd+f searches the cheat sheet; enter steps matches, esc closes find then the sheet", async ({ page }) => {
+  await openTape(page);
+  await page.keyboard.press("?");
+  const sheet = page.getByRole("dialog", { name: "keyboard shortcuts" });
+  await expect(sheet).toContainText("split down");
+  // ⌘F opens the find box and focuses it
+  await page.keyboard.press("ControlOrMeta+F");
+  expect((await inspect(page)).focus).toBe("helpfind");
+  const find = sheet.getByRole("textbox", { name: "find" });
+  await expect(find).toBeFocused();
+  // typing narrows to the matches (the match count shows how many)
+  await page.keyboard.type("port-forward");
+  await expect(sheet.getByLabel("matches")).toContainText("of");
+  // the active match row is highlighted and scrolled into view
+  await expect(sheet.getByText("port-forward…", { exact: true })).toBeVisible();
+  // ⏎ steps to the next match, the count's position advances
+  const first = await sheet.getByLabel("matches").textContent();
+  await page.keyboard.press("Enter");
+  expect(await sheet.getByLabel("matches").textContent()).not.toBe(first);
+  // a section heading matches too: "time-travel" has no entry by that word, yet its rows are found
+  await find.fill("time-travel");
+  await expect(sheet.getByLabel("matches")).toContainText("of");
+  await expect(sheet.getByRole("heading", { name: "time-travel" })).toBeVisible();
+  // Esc closes the find but leaves the sheet open
+  await page.keyboard.press("Escape");
+  let s = await inspect(page);
+  expect(s.focus).toBe("help");
+  expect(s.overlays).toEqual(["help"]);
+  await expect(find).toHaveCount(0);
+  // Esc again closes the sheet
+  await page.keyboard.press("Escape");
+  s = await inspect(page);
+  expect(s.overlays).toEqual([]);
+  expect(s.focus).toBe("table");
+});
+
 test("the ? button at the right end of the tab bar toggles the cheat sheet", async ({ page }) => {
   await openTape(page);
   const button = page.getByRole("button", { name: "keyboard shortcuts" });
@@ -5943,6 +5979,26 @@ test.describe("logs", () => {
     await expect(status).toContainText("not following");
     // the read is over: the session ends on its own
     await expect.poll(async () => Object.values((await inspect(page)).panes).find((p) => p.logs)?.logs?.exited).toBe("ended");
+  });
+
+  test("the status bar hints the t key for timestamps, and t toggles them", async ({ page }) => {
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await tail(page);
+    await expect.poll(() => inspect(page).then((s) => s.focus)).toBe("logs");
+    const status = page.getByRole("status", { name: "logs status" });
+    // off by default: the hint names the key that turns them on
+    await expect(status).toContainText("timestamps off (t)");
+    const pane = async () => Object.values((await inspect(page)).panes).find((p) => p.logs)!;
+    expect((await pane()).logs!.timestamps).toBe(false);
+    // t turns them on
+    await page.keyboard.press("t");
+    await expect(status).toContainText("timestamps on (t)");
+    expect((await pane()).logs!.timestamps).toBe(true);
+    // and off again
+    await page.keyboard.press("t");
+    await expect(status).toContainText("timestamps off (t)");
+    expect((await pane()).logs!.timestamps).toBe(false);
   });
 
   test("a followed tail shows following in its footer", async ({ page }) => {

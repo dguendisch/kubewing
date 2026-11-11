@@ -350,6 +350,8 @@ export interface UIState {
   /** Which filter bar field "filter" focus means (default grep). */
   filterField?: FilterField;
   overlay?: Overlay;
+  /** The cheat sheet's find (⌘F in the help overlay): the query and the current match. */
+  helpFind?: { query: string; index: number };
   nextId: number;
   /** Default spec for new panes (current kube context). */
   defaults: PaneSpec;
@@ -641,6 +643,30 @@ export function closeLogFind(s: UIState): UIState {
 
 export function updateLogFind(s: UIState, paneId: string, f: (x: TermFind) => TermFind): UIState {
   return updatePane(s, paneId, (q) => (q.logs ? { ...q, logs: { ...q.logs, find: f(q.logs.find ?? noFind) } } : q));
+}
+
+/** ⌘F in the cheat sheet: opens the find box (keeping any earlier query) and focuses it. */
+export function openHelpFind(s: UIState): UIState {
+  if (s.overlay?.kind !== "help") return s;
+  return { ...s, focus: "helpfind", helpFind: { query: s.helpFind?.query ?? "", index: 0 } };
+}
+
+/** Esc in the find box: back to the sheet, the find cleared. */
+export function closeHelpFind(s: UIState): UIState {
+  if (s.focus !== "helpfind") return s;
+  return { ...s, focus: "help", helpFind: undefined };
+}
+
+/** ⌘G / ⌘⇧G / ⏎ / ⇧⏎: step the current match; the component wraps it against the live count. */
+export function stepHelpFind(s: UIState, delta: number): UIState {
+  if (!s.helpFind) return s;
+  return { ...s, helpFind: { ...s.helpFind, index: s.helpFind.index + delta } };
+}
+
+/** Typing in the find box: a new query starts the matches afresh. */
+export function setHelpFindQuery(s: UIState, query: string): UIState {
+  if (!s.helpFind) return s;
+  return { ...s, helpFind: { query, index: 0 } };
 }
 
 /** Edit sessions (Go holds the original) no pane's editor references any more: closed, left, or the pane gone. */
@@ -1288,7 +1314,8 @@ export function wrapIndex<T>(items: T[], index: number, delta: number, ok: (item
 
 export function closeOverlay(s: UIState): UIState {
   if (!s.overlay) return s;
-  return { ...s, overlay: undefined, focus: s.overlay.restore };
+  // the cheat sheet's find is a sub-state of the sheet: leaving the sheet clears it
+  return { ...s, overlay: undefined, focus: s.overlay.restore, helpFind: undefined };
 }
 
 /** YAML pipeline for a pane (see internal/pipeline). JSON is valid YAML. */

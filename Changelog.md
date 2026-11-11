@@ -4,6 +4,8 @@
 - the status line now shows how far it got on huge resource listings (e.g. `syncing 35% (1,500/4,213)`)
 - font settings in `config.yaml`: `font.family` (any installed font, e.g. a Nerd Font), `font.size` and `font.ligatures`, for tables, YAML, terminals, logs and menus alike; a font that isn't installed is reported when the settings are saved or loaded
 - `⌘+` / `⌘-` / `⌘0` zoom the font of all panes and tabs until kubewing quits (also in the View menu)
+- `⌘F` searches the open keyboard cheat sheet by section, description or keys; `⌘G` / `⏎` and `⌘⇧G` / `⇧⏎` step through the matches, which are highlighted
+- the log viewer's status bar now shows whether timestamps are on or off and the key that toggles them
 
 ### Fixed
 - a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again

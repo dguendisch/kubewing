@@ -694,7 +694,7 @@ The log pane opens below.
 | `⏎` | back to the latest line |
 | `⌃D` / `⌃⇧D` | close the pane |
 
-Scrolled up, new lines don't move the view. The status line shows **following** (green) while lines stream in, **not following** (grey) once nothing is followed, then shown/total lines, container and pod counts, and any dropped or limited streams.
+Scrolled up, new lines don't move the view. The status line shows **following** (green) while lines stream in, **not following** (grey) once nothing is followed, then shown/total lines, container and pod counts, any dropped or limited streams, and whether **timestamps** are on or off with the key that toggles them (`t`).
 
 ---
 
@@ -1035,6 +1035,8 @@ Two themes are built in: the default one (dark grey with an orange accent) and `
 ## 18. Keyboard reference
 
 `?` (or the **?** button at the right end of the tab bar) opens the cheat sheet: every shortcut by section (the global keys first), with the context it applies in, read from the live keymap (so your overrides show). `?` again, the button again, or `Esc` closes it.
+
+`⌘F` searches the open cheat sheet: type to match on a section's name, a shortcut's description or its keys, with the matched text highlighted; `⌘G` / `⏎` jumps to the next match and `⌘⇧G` / `⇧⏎` the previous (the rest dims so the matches stand out). `Esc` closes the search and leaves the sheet open; `Esc` again closes the sheet.
 
 The most used keys:
 

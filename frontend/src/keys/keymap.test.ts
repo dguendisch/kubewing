@@ -115,6 +115,15 @@ describe("resolve", () => {
     expect(resolve("?", "table")).toBe("help.toggle");
     expect(resolve("?", "help")).toBe("help.toggle"); // toggles back off
     expect(resolve("Escape", "help")).toBe("detail.close");
+    // find in the cheat sheet: ⌘F opens the box, ⌘G / ⌘⇧G / ⏎ / ⇧⏎ step, Esc closes find (the sheet stays)
+    expect(resolve("Meta+F", "help")).toBe("help.find");
+    expect(resolve("Meta+F", "helpfind")).toBe("help.find");
+    expect(resolve("Meta+G", "helpfind")).toBe("help.findNext");
+    expect(resolve("Meta+Shift+G", "helpfind")).toBe("help.findPrev");
+    expect(resolve("Enter", "helpfind")).toBe("help.findNext");
+    expect(resolve("Shift+Enter", "helpfind")).toBe("help.findPrev");
+    expect(resolve("Escape", "helpfind")).toBe("help.findClose");
+    expect(resolve("?", "helpfind")).toBeUndefined(); // typing a question mark into the find box
     expect(resolve("?", "filter")).toBeUndefined(); // typing a question mark into the filter
     expect(resolve("?", "confirm")).toBeUndefined();
   });

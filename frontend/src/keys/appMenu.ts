@@ -125,7 +125,16 @@ const layout: { title: string; entries: Entry[] }[] = [
     title: "Tab",
     entries: [["Name Tab…", "tab.rename"], null, ["Next Tab", "tab.next"], ["Previous Tab", "tab.prev"], null, ...tabJumps],
   },
-  { title: "Help", entries: [["Keyboard Shortcuts", "help.toggle"]] },
+  {
+    title: "Help",
+    entries: [
+      ["Keyboard Shortcuts", "help.toggle"],
+      null,
+      ["Find in Shortcuts", "help.find"],
+      ["Find Next", "help.findNext"],
+      ["Find Previous", "help.findPrev"],
+    ],
+  },
 ];
 
 /** The menu bar for a keymap. Pure. */
