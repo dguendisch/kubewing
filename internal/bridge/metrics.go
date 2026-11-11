@@ -133,9 +133,15 @@ func (s *Service) setFeed(pn *pane, kind feedKind, on bool) {
 	pn.mu.Lock()
 	slot := pn.metrics.slot(kind)
 	if pn.closed || *slot != nil {
-		// closed meanwhile, or joined by a concurrent call: undo ours
+		// closed meanwhile, or joined by a concurrent call: undo ours. Unless
+		// the slot holds this very feed: panes is a set, so ours and the
+		// slot's are one membership, and releasing it would stop the feed
+		// under the slot (Close's leaveMetrics releases it then).
+		same := *slot == f
 		pn.mu.Unlock()
-		s.release(f, pn)
+		if !same {
+			s.release(f, pn)
+		}
 		return
 	}
 	*slot = f

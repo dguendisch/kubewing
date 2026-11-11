@@ -13,6 +13,7 @@
 ### Fixed
 - checking for updates no longer fails with "GitHub's rate limit for anonymous requests is used up" behind a company network or VPN
 - a custom column's field path can now stop before a leaf: `⌫` on the `.` the completion added (`spec.` → `spec`) closes the suggestions, so `⏎` adds `spec` instead of completing to `spec.` again
+- a pane of nodes could now and then stay on **loading requests/limits…** with its requests/limits columns empty, right after it was opened
 
 ## [0.5.0] - 2026-11-09
 ### Added

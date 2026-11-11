@@ -306,3 +306,40 @@ func TestAllocationFeed(t *testing.T) {
 	svc.Close(a.Pane)
 	svc.Close(b.Pane)
 }
+
+// Two concurrent joins of a pane's feed (Open and its pump both sync it):
+// the one finding the slot already taken backs out without taking the pane
+// out of the feed the other one joined. It ran in this order now and then:
+// the feed stopped and the pane waited for sums forever.
+func TestFeedConcurrentJoin(t *testing.T) {
+	o := &allocOpener{pods: make(chan source.Event, 16)}
+	rec := &recorder{}
+	reg := source.NewRegistry(o)
+	svc := New(reg, rec, Options{Actor: o})
+	t.Cleanup(svc.Shutdown)
+	if err := svc.SetTypeColumns("nodes", []pipeline.Column{{Name: "NAME"}, {Name: "%CPU REQ"}}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := svc.Open("source: {resource: nodes}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.mu.Lock()
+	pn := svc.panes[a.Pane]
+	svc.mu.Unlock()
+	waitFor(t, func() bool { pn.mu.Lock(); defer pn.mu.Unlock(); return pn.metrics.alloc != nil })
+	// the late call of the two: the slot is set, the pane already in the feed
+	svc.setFeed(pn, allocFeed, true)
+	pn.mu.Lock()
+	f := pn.metrics.alloc
+	pn.mu.Unlock()
+	f.mu.Lock()
+	in := f.panes[pn]
+	f.mu.Unlock()
+	if !in {
+		t.Fatal("the late join took the pane out of its feed")
+	}
+	o.pods <- source.Event{Type: source.Relist, Items: []source.Item{allocPod("p1", "n1", "500m")}}
+	waitFor(t, func() bool { c := paneCells(t, svc, rec, a.Pane)["n1"]; return len(c) > 1 && c[1] == "25%" })
+	svc.Close(a.Pane)
+}
