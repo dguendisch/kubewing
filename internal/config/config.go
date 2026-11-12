@@ -223,6 +223,9 @@ func (o OpsPod) Settings() OpsPodSettings {
 type Terminal struct {
 	// Scrollback is how many lines a terminal keeps beyond the screen.
 	Scrollback int `json:"scrollback"`
+	// CopyOnSelect copies a mouse selection to the clipboard as the button is
+	// released, in terminals and log panes alike.
+	CopyOnSelect bool `json:"copyOnSelect,omitempty"`
 }
 
 // Scrollback bounds and default (lines).
@@ -476,6 +479,7 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 		default:
 			e.Config.Terminal.Scrollback = n
 		}
+		e.Config.Terminal.CopyOnSelect = c.Terminal.CopyOnSelect
 		for _, f := range []struct {
 			name     string
 			val      int

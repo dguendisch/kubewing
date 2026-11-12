@@ -178,6 +178,16 @@ func TestFocusFollowsMouseConfig(t *testing.T) {
 	}
 }
 
+// terminal.copyOnSelect: off unless set.
+func TestCopyOnSelectConfig(t *testing.T) {
+	if Load(write(t, map[string]string{"config.yaml": "theme: default\n"})).Config.Terminal.CopyOnSelect {
+		t.Error("unset: want off")
+	}
+	if !Load(write(t, map[string]string{"config.yaml": "terminal: {copyOnSelect: true}\n"})).Config.Terminal.CopyOnSelect {
+		t.Error("terminal.copyOnSelect: true not applied")
+	}
+}
+
 func hasError(errs []string, sub string) bool {
 	for _, e := range errs {
 		if strings.Contains(e, sub) {

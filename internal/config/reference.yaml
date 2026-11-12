@@ -33,6 +33,7 @@ opsPod:                     # node shells (n): until a pod ran, then the last us
 
 terminal:
   scrollback: 10000         # lines kept beyond the screen, 100 … 1000000
+  copyOnSelect: false       # true: selecting with the mouse copies, in terminals and logs alike
 
 logs:
   tail: 100                 # lines per container before following, 1 … 10000

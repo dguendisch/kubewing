@@ -51,7 +51,8 @@ opsPod:
   image: europe-docker.pkg.dev/gardener-project/releases/gardener/ops-toolbelt:latest
 
 # terminal panes (exec, debug, ops pods)
-#   scrollback: lines kept beyond the screen (default 10000, 100 … 1000000)
+#   scrollback:   lines kept beyond the screen (default 10000, 100 … 1000000)
+#   copyOnSelect: a mouse selection is copied when the button is released, in terminals and logs (default false)
 terminal:
   scrollback: 20000
 

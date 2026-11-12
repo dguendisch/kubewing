@@ -1,6 +1,7 @@
 # Changelog
 ## [Unreleased]
 ### Added
+- copy on select: with `terminal.copyOnSelect: true` in `config.yaml`, selecting text with the mouse in a shell or log pane copies it (off by default)
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 
 ### Fixed

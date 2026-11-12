@@ -696,6 +696,8 @@ The log pane opens below.
 | `⏎` | back to the latest line |
 | `⌃D` / `⌃⇧D` | close the pane |
 
+With `terminal.copyOnSelect: true`, selecting text with the mouse copies it as you release the button (see [Shells](#13-shells-exec-debug-containers-node-shells-local-terminals)).
+
 Scrolled up, new lines don't move the view. The status line shows **following** (green) while lines stream in, **not following** (grey) once nothing is followed (**previous instance** for a tail of the previous instances), then shown/total lines, container and pod counts, any dropped or limited streams, and whether **timestamps** are on or off with the key that toggles them (`t`).
 
 ---
@@ -705,6 +707,8 @@ Scrolled up, new lines don't move the view. The status line shows **following** 
 All shells open in a terminal pane below the table (a local terminal to the right with `⌃⇧T`). Every key goes to the shell except `⌘` chords, `⌃⇥` and `⌃⇧D`. `⌃D` or `exit` ends the shell and the pane goes with it; `⌃⇧D` closes the pane of a shell that won't end.
 
 `⌘F` finds in the output and scrollback: matches highlight as you type, `⏎`/`⇧⏎` or `⌘G`/`⌘⇧G` step, `⌥⌘C` / `⌥⌘W` / `⌥⌘R` toggle case, whole word and regex, `Esc` closes back to the prompt.
+
+**Copy on select** (`terminal.copyOnSelect: true` in `config.yaml`, off by default): selecting text with the mouse copies it when you release the button, as in many terminal apps: drag over it, double-click a word or triple-click a line. Without it, `⌘C` copies the selection. It works the same in log panes. Find's highlighted match doesn't count as a selection, so searching leaves the clipboard alone.
 
 A session that never started, or a shell that exits non-zero before your first keystroke, keeps its pane so the reason stays readable.
 
@@ -930,6 +934,7 @@ opsPod:                     # node shell defaults (until a pod ran; then the las
 
 terminal:
   scrollback: 10000         # lines, 100 … 1000000
+  copyOnSelect: false       # true: selecting with the mouse copies, in terminals and logs alike
 
 logs:
   tail: 100                 # lines per container before following, 1 … 10000

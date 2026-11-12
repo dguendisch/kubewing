@@ -10,6 +10,7 @@ import { chord, resolve } from "../keys/keymap";
 import { claimFocus } from "../editor/focus";
 import { useConfig } from "../store/config";
 import { font } from "../store/font";
+import { copyOnSelect } from "./copyOnSelect";
 import { DEFAULT_SCROLLBACK, sessions } from "./sessions";
 
 /** Open terminals by session, for the test introspection hook (inspect.ts). */
@@ -122,8 +123,10 @@ export function Terminal({ session, focused, find, onFindResult, onInput, onResi
     const onFocusIn = () => cb.current.onFocus?.();
     host.current!.addEventListener("focusin", onFocusIn);
     const el = host.current!;
+    const uncopy = copyOnSelect(t, el);
     return () => {
       el.removeEventListener("focusin", onFocusIn);
+      uncopy();
       detach();
       ro.disconnect();
       subs.forEach((s) => s.dispose());

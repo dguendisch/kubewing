@@ -436,7 +436,7 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; font?: FontConfig; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean };
+  config: { theme?: string; font?: FontConfig; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number; copyOnSelect?: boolean }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;

@@ -9,6 +9,7 @@ import "@xterm/xterm/css/xterm.css";
 import { chord, resolve } from "../keys/keymap";
 import { useConfig } from "../store/config";
 import { font } from "../store/font";
+import { copyOnSelect } from "../term/copyOnSelect";
 import { logBuffers } from "./buffer";
 import { filterTerms, renderLines } from "./render";
 
@@ -159,8 +160,10 @@ export function LogView({ session, focused, filter, timestamps, prefix, find, on
     const onFocusIn = () => cb.current.onFocus?.();
     host.current!.addEventListener("focusin", onFocusIn);
     const el = host.current!;
+    const uncopy = copyOnSelect(t, el);
     return () => {
       el.removeEventListener("focusin", onFocusIn);
+      uncopy();
       unsub();
       ro.disconnect();
       if (openLogViews.get(session) === t) openLogViews.delete(session);

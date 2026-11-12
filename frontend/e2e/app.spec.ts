@@ -3283,6 +3283,29 @@ test.describe("object actions", () => {
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
   });
 
+  test("terminal.copyOnSelect: off by default, on it copies a mouse selection when released", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+    await openStatic(page);
+    await select(page, "s-web-3");
+    await page.keyboard.press("x");
+    await expect.poll(() => termText(page)).toContain("$");
+    await page.evaluate(() => navigator.clipboard.writeText("before"));
+    // off: selecting copies nothing
+    await dragFirstRow(page, "[data-terminal]");
+    await page.waitForTimeout(200);
+    expect(await clipboard()).toBe("before");
+    // on (a reloaded config applies to the open terminal)
+    await setCopyOnSelect(page, true);
+    await dragFirstRow(page, "[data-terminal]");
+    await expect.poll(clipboard).toBe("tape shell in shop/web-3");
+    // the shell still has the keyboard
+    await page.keyboard.type("echo still here");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => termText(page)).toContain("echo still here\necho still here");
+    await setCopyOnSelect(page, false);
+  });
+
   test("⌘F finds in the terminal (as Monaco's find): live, ⏎ / ⇧⏎ / ⌘G step, options, esc back to the shell", async ({ page }) => {
     await openStatic(page);
     await select(page, "s-web-3");
@@ -5741,6 +5764,22 @@ test.describe("port-forward to a service", () => {
   });
 });
 
+/** Drags over the first rendered row of an xterm (a terminal's or a log pane's), left edge to right. */
+async function dragFirstRow(page: Page, host: string) {
+  const b = (await page.locator(`${host} .xterm-rows > div`).first().boundingBox())!;
+  await page.mouse.move(b.x + 1, b.y + b.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(b.x + b.width - 2, b.y + b.height / 2, { steps: 5 });
+  await page.mouse.up();
+}
+
+/** Sets config.yaml terminal.copyOnSelect in the loaded config, as a settings reload would. */
+const setCopyOnSelect = (page: Page, on: boolean) =>
+  page.evaluate((on) => {
+    const c = (window as unknown as { __kw: { config: { setState(f: (s: { config?: { config: { terminal?: object } } }) => object): void } } }).__kw.config;
+    c.setState((s) => ({ config: { ...s.config!, config: { ...s.config!.config, terminal: { ...s.config!.config.terminal, copyOnSelect: on } } } }));
+  }, on);
+
 test.describe("logs", () => {
   async function openLogs(page: Page, labelSelector = "") {
     await ready(page);
@@ -5794,6 +5833,21 @@ test.describe("logs", () => {
     expect(await screen(page)).not.toContain("api-1");
     // one pod, one container: no pod/container prefix, the lines start with their text
     expect((await screen(page)).split("\n")[0]).toBe("api-0 app starting");
+  });
+
+  test("terminal.copyOnSelect copies a mouse selection in a log pane too", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await openLogs(page);
+    await select(page, "lg-api-0");
+    await tail(page);
+    await expect.poll(() => screen(page)).toContain("api-0 app starting");
+    await setCopyOnSelect(page, true);
+    await page.evaluate(() => navigator.clipboard.writeText(""));
+    await dragFirstRow(page, "[data-logview]");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("api-0 app starting");
+    // the pane keeps its keys
+    expect((await inspect(page)).focus).toBe("logs");
+    await setCopyOnSelect(page, false);
   });
 
   test("⌥L tails every pod the pane shows; a label selector narrows it", async ({ page }) => {
