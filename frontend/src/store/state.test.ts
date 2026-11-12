@@ -951,6 +951,35 @@ describe("panes moving between windows", () => {
     expect(x.activeTab).toBe(1);
   });
 
+  it("a tab from another window lands at its place in the tab bar, shown, its layout, name and focus kept, under ids of this window's", () => {
+    const s = two(); // t1: v1 | v2, nextId 3
+    const tab: S.Tab = { id: "t5", name: "far", focused: "v8", maximized: "v8", layout: { type: "split", dir: "column", children: [leaf("v7"), leaf("v8")], sizes: [2, 1] } };
+    const panes: S.PaneState[] = [
+      { id: "v7", spec: S.initialSpec("other"), selected: 2, serverId: "p9" },
+      { id: "v8", spec: S.initialSpec("other"), selected: 0, serverId: "p9", leased: true, object: { key: "a", view: "yaml", split: true, from: "v7", follow: true } },
+    ];
+    const r = S.insertTab(s, tab, panes, 0);
+    const x = apply(r.state, (y) => y);
+    invariants(x);
+    expect(r.ids).toEqual({ v7: "v3", v8: "v4" });
+    expect(x.tabs.map((t) => t.id)).toEqual(["t5", "t1"]);
+    expect(x.activeTab).toBe(0);
+    expect(x.tabs[0]).toEqual({ id: "t5", name: "far", focused: "v4", maximized: "v4", layout: { type: "split", dir: "column", children: [leaf("v3"), leaf("v4")], sizes: [2, 1] } });
+    expect(x.panes.v3).toEqual({ ...panes[0], id: "v3" });
+    // the split object view still follows its table, under its new id
+    expect(x.panes.v4!.object).toEqual({ ...panes[1]!.object, from: "v3" });
+    expect(x.panes.v4!.leased).toBe(true);
+    // past the end: last; a table left behind in the other window is no pane here
+    const alone = S.insertTab(s, { id: "t2", layout: leaf("v1"), focused: "v1" }, [{ ...panes[1]!, id: "v1" }], 9);
+    invariants(apply(alone.state, (y) => y));
+    expect(alone.state.activeTab).toBe(1);
+    expect(alone.state.panes.v3!.object!.from).toBeUndefined();
+    // into an empty (detached) window
+    const e = S.insertTab(S.emptyState(), tab, panes, 0);
+    invariants(apply(e.state, (y) => y));
+    expect(e.state.tabs).toHaveLength(1);
+  });
+
   it("only offers targets that exist here", () => {
     const s = two();
     expect(S.canInsert(s, { newTab: true })).toBe(true);

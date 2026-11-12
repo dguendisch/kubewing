@@ -3045,8 +3045,9 @@ test.describe("time-travel", () => {
 // Object actions on the static tape: web-1 (2 containers, ports 8080/9090), web-3 (1 container),
 // web-4 (init, sidecar, crash-looping and running containers), cfg (a ConfigMap).
 test.describe("object actions", () => {
-  async function openStatic(page: Page, context = "") {
-    await ready(page);
+  /** context false: in the focused pane, the page as it is (e.g. a new tab), not reloaded. */
+  async function openStatic(page: Page, context: string | false = "") {
+    if (context !== false) await ready(page);
     await page.keyboard.press("ControlOrMeta+O");
     if (context) await page.getByRole("combobox", { name: "context" }).selectOption(context);
     await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
@@ -3381,6 +3382,118 @@ test.describe("object actions", () => {
       await expect.poll(() => page.evaluate(() => (window as unknown as Kw).__kw.bridge().windows().then((l) => l.map((x) => x.name)))).not.toContain(name);
       // the pane of a closed window is gone everywhere
       expect(Object.keys((await inspect(page)).panes)).toEqual(["v1"]);
+    });
+
+    type KwTab = { __kw: { windowName: string; sendTab(id: string, to: string, at: number): Promise<void>; detachTab(id: string, at?: { x: number; y: number }): Promise<void>; inspect(): Inspect & { focusedPane: string } } };
+
+    test("a tab dragged out of the window gets a window of its own with all its panes, and moves back into a place in the tab bar", async ({ page }) => {
+      await openStatic(page);
+      // t1: the listing; t3: a listing and a shell below it
+      await page.keyboard.press("ControlOrMeta+T");
+      await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+      await openStatic(page, false);
+      await select(page, "s-web-3");
+      await page.keyboard.press("x");
+      await expect.poll(() => termText(page)).toContain("web-3:app$");
+      await page.keyboard.type("echo before");
+      await page.keyboard.press("Enter");
+      await expect.poll(() => termText(page)).toContain("echo before\necho before");
+      const s0 = await inspect(page);
+      const tab = s0.tabs[1]!;
+      const [table, shell] = (tab.layout as { children: { id: string }[] }).children.map((c) => c.id);
+      const serverId = s0.panes[table!]!.serverId;
+      const session = ((await focused(page)) as unknown as { term: { session: string } }).term.session;
+      const popup = page.waitForEvent("popup");
+      await page.evaluate((id) => (window as unknown as KwTab).__kw.detachTab(id, { x: 40, y: 40 }), tab.id);
+      const w = await popup;
+      await expect.poll(() => w.evaluate(() => !!(window as unknown as Partial<KwTab>).__kw && (window as unknown as KwTab).__kw.windowName)).toMatch(/^w\d+$/);
+      // there: the same table watch and shell, laid out as they were, the shell focused
+      await expect.poll(async () => (await inspect(w)).tabs.length).toBe(1);
+      const s1 = await inspect(w);
+      expect(s1.tabs[0]!.layout).toMatchObject({ type: "split", dir: "column", children: [{ type: "pane" }, { type: "pane" }] });
+      const [t2, sh2] = (s1.tabs[0]!.layout as { children: { id: string }[] }).children.map((c) => c.id);
+      await expect.poll(async () => (await inspect(w)).panes[t2!]?.serverId).toBe(serverId);
+      await expect.poll(async () => (await inspect(w)).panes[t2!]?.rows.some((r) => r.key === "s-web-1")).toBe(true);
+      expect(s1.focusedPane).toBe(sh2);
+      await expect.poll(async () => ((await focused(w)) as unknown as { term?: { session: string } }).term?.session).toBe(session);
+      await expect.poll(() => termText(w)).toContain("echo before\necho before");
+      await w.locator("[data-terminal]").click();
+      await w.keyboard.type("echo there");
+      await w.keyboard.press("Enter");
+      await expect.poll(() => termText(w)).toContain("echo there\necho there");
+      // gone here, with both its panes
+      const s2 = await inspect(page);
+      expect(s2.tabs.map((t) => t.id)).toEqual(["t1"]);
+      expect(Object.keys(s2.panes)).not.toContain(table);
+      expect(Object.keys(s2.panes)).not.toContain(shell);
+      // back, before the first tab: the window it leaves closes
+      const closed = w.waitForEvent("close");
+      await w.evaluate(() => {
+        const kw = (window as unknown as KwTab).__kw;
+        return kw.sendTab(kw.inspect().tabs[0]!.id, "main", 0);
+      });
+      await closed;
+      await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+      const s3 = await inspect(page);
+      expect(s3.activeTab).toBe(0);
+      expect(s3.tabs[1]!.id).toBe("t1");
+      await expect.poll(async () => ((await focused(page)) as unknown as { term?: { session: string } }).term?.session).toBe(session);
+      await expect.poll(() => termText(page)).toContain("echo there\necho there");
+      await page.keyboard.type("echo back");
+      await page.keyboard.press("Enter");
+      await expect.poll(() => termText(page)).toContain("echo back\necho back");
+    });
+
+    test("another window's tab drag over this one marks its place in the tab bar, and the drop tells it", async ({ page }) => {
+      await openStatic(page);
+      await page.keyboard.press("ControlOrMeta+T"); // t1, t3
+      await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+      const w = await detach(page, "v1");
+      const answers: unknown[] = [];
+      await w.exposeFunction("kwAnswer", (m: unknown) => void answers.push(m));
+      await w.evaluate(() => {
+        const kw = (window as unknown as { __kw: { bridge(): { onWindow(cb: (m: { kind: string; data: unknown }) => void): void } } }).__kw;
+        kw.bridge().onWindow((m) => m.kind === "dragtarget" && (window as unknown as { kwAnswer(d: unknown): void }).kwAnswer(m.data));
+      });
+      type Send = { __kw: { bridge(): { sendWindow(to: string, kind: string, data: unknown): Promise<void> } } };
+      const send = (kind: string, data: unknown) => w.evaluate(([k, d]) => (window as unknown as Send).__kw.bridge().sendWindow("main", k, d), [kind, data] as const);
+      // over the left half of the only tab: before it
+      const first = (await page.getByRole("tab").first().boundingBox())!;
+      await send("dragover", { what: "tab", title: "moving", x: first.x + 4, y: first.y + first.height / 2 });
+      await expect(page.getByLabel("drop target")).toBeVisible();
+      await expect(page.getByLabel("moving tab")).toHaveText("moving");
+      await expect.poll(() => answers.at(-1)).toEqual({ target: { at: 0 }, drop: false });
+      // over the panes: after the last tab
+      const main = (await page.locator("main").boundingBox())!;
+      await send("dragover", { what: "tab", title: "moving", x: main.x + main.width / 2, y: main.y + main.height / 2 });
+      await expect.poll(() => answers.at(-1)).toEqual({ target: { at: 1 }, drop: false });
+      await send("dragdrop", {});
+      await expect.poll(() => answers.at(-1)).toEqual({ target: { at: 1 }, drop: true });
+      await expect(page.getByLabel("drop target")).toBeHidden();
+    });
+
+    test("a split object view moving with its table's tab keeps the table's watch and follows it there", async ({ page }) => {
+      await openStatic(page);
+      await page.keyboard.press("ControlOrMeta+T");
+      await expect.poll(async () => (await inspect(page)).tabs.length).toBe(2);
+      await openStatic(page, false);
+      await select(page, "s-web-1");
+      await page.keyboard.press("Shift+Enter");
+      await expect.poll(async () => (await inspect(page)).objects[(await inspect(page)).focusedPane]?.split).toBe(true);
+      await page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`).getByRole("checkbox", { name: "follow selection" }).check();
+      await expect.poll(async () => (await inspect(page)).objects[(await inspect(page)).focusedPane]?.follow).toBe(true);
+      const s0 = await inspect(page);
+      const serverId = s0.panes[(s0.tabs[1]!.layout as { children: { id: string }[] }).children[0]!.id]!.serverId;
+      const popup = page.waitForEvent("popup");
+      await page.evaluate((id) => (window as unknown as KwTab).__kw.detachTab(id), s0.tabs[1]!.id);
+      const w = await popup;
+      await expect.poll(async () => (await inspect(w).catch(() => undefined))?.tabs.length).toBe(1);
+      const s1 = await inspect(w);
+      const [table, view] = (s1.tabs[0]!.layout as { children: { id: string }[] }).children.map((c) => c.id);
+      // the same watch, shared: no second one opened
+      await expect.poll(async () => (await inspect(w)).panes[view!]?.serverId).toBe(serverId);
+      expect(s1.panes[table!]!.serverId).toBe(serverId);
+      expect(s1.objects[view!]).toMatchObject({ split: true, from: table, follow: true });
     });
   });
 

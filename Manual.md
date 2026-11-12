@@ -833,7 +833,7 @@ Drag a divider to resize, or use `⌘⌃` arrows (as in iTerm): the focused pane
 
 Hovering a tab shows a **✕** at its left, which closes that tab (asking first in the same cases as `⌘W`). It sits on the left so you can close several tabs in a row: the next tab moves into place with its ✕ under the pointer, and you just keep clicking.
 
-Tabs keep their width: when there are more than fit, they wrap into more rows and the panes below get shorter. Dragging a tab reorders the tabs, across rows too.
+Tabs keep their width: when there are more than fit, they wrap into more rows and the panes below get shorter. Dragging a tab reorders the tabs, across rows too. Dragged out of the window, a tab gets a window of its own with all its panes, laid out as they were (its panes are dimmed while the pointer is outside, saying where they'll go); dragged onto another window, a marker in that window's tab bar shows where it will land (anywhere below the tab bar puts it last), and dropping moves it there. The panes stay the same panes, as when moving a single pane between windows: watches, filters, history, shells and their screens, log lines. A window's only tab can't leave for a window of its own (it already is one), but it can move to another window, which closes the one it leaves.
 
 ### Names
 

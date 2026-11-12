@@ -4,12 +4,11 @@ import { edgeShare, nearestSide, paneIds, sidePart, type Rect, type Side } from 
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import { canDetach, detachPane, onDragMessage, sendPane, TAB_BAR } from "../store/transfer";
-
-/** The running drag's handler of answers from the window it's over (dragtarget). */
-let answer: ((m: WindowMessage) => void) | undefined;
-import { otherWindows, useWindows, windowName } from "../store/window";
-import type { PointerInfo, WindowInfo, WindowMessage } from "../transport/types";
+import { otherWindows, useWindows } from "../store/window";
+import type { WindowMessage } from "../transport/types";
 import { paneTitle } from "./tabTitle";
+import { tabTargetAt } from "./TabDrag";
+import { answerDrag, windowDrag, type DragKind, type DragOver } from "./windowDrag";
 
 /**
  * Moving a pane by drag and drop (ghostty): a grip shows at the top of a pane
@@ -43,13 +42,14 @@ interface Drag {
 
 const useDrag = create<{ drag?: Drag }>(() => ({}));
 
-/** Another window's drag passing over this one: where its pane would land here. */
+/** Another window's drag (a pane, or a whole tab) passing over this one: where it would land here. */
 interface Visit {
   from: string;
+  what: DragKind;
   title: string;
   x: number;
   y: number;
-  target?: S.MoveTarget;
+  target?: S.MoveTarget | { at: number };
   rect?: Rect;
 }
 
@@ -132,113 +132,30 @@ function dweller(onShown: () => void) {
   };
 }
 
-/** Where the pointer is during a drag: in this window, in another one (at a point of its page), or outside every one. */
-type Where = { in: "here" } | { in: "other"; window: string; x: number; y: number } | { in: "outside"; sx: number; sy: number };
-
-/**
- * The page's own idea of where it is on screen, for the browser build
- * (tests, dev), where there are no native windows to ask: WKWebView's
- * screenX/Y don't match the windows' frames, so the app asks Go (pointer()).
- */
-function whereByPage(wins: WindowInfo[], e: PointerEvent): Where {
-  const { screenX: sx, screenY: sy } = e;
-  if (sx >= window.screenX && sx < window.screenX + window.outerWidth && sy >= window.screenY && sy < window.screenY + window.outerHeight) return { in: "here" };
-  const w = wins.find((w) => w.name !== windowName && w.bounds.w > 0 && sx >= w.bounds.x && sx < w.bounds.x + w.bounds.w && sy >= w.bounds.y && sy < w.bounds.y + w.bounds.h);
-  return w ? { in: "other", window: w.name, x: sx - w.bounds.x, y: sy - w.bounds.y } : { in: "outside", sx, sy };
-}
-
-const whereByOS = (p: PointerInfo): Where =>
-  p.window === windowName ? { in: "here" } : p.window ? { in: "other", window: p.window, x: p.inX ?? 0, y: p.inY ?? 0 } : { in: "outside", sx: p.x, sy: p.y };
-
-/** How long a drop over another window waits for that window to say where the pane goes. */
-const DROP_WAIT = 1000;
-
 /** Starts a drag from a press on a pane's grip; window listeners follow the pointer until it's released. */
 function startDrag(pane: string, down: PointerEvent) {
   const startTab = S.activeTab(useUI.getState()).id;
   let dragging = false;
   const cursor = document.body.style.cursor;
-  const title = paneLabel(useUI.getState().panes[pane]);
-  // the app asks the OS where the mouse is and which window is in front there; the browser build (no native
-  // windows) falls back to the page's screen coordinates and the windows' frames, asked once
-  let native = true;
-  let wins: WindowInfo[] = [];
-  let ended = false;
-  // for the browser build: the windows' frames, if it turns out to be one
-  if (otherWindows(useWindows.getState().names).length) void bridge().windows().then((w) => (wins = w), () => {});
-  let asking = false;
-  let last: PointerEvent | undefined;
-  // the window the pointer is over, and the target it last reported
-  let away: string | undefined;
-  let remote: S.MoveTarget | undefined;
-  let dropAnswer: ((t: S.MoveTarget | undefined) => void) | undefined;
-  const leave = () => {
-    if (away) void bridge().sendWindow(away, "dragleave", {}).catch(() => {});
-    away = undefined;
-    remote = undefined;
-  };
-  answer = (m) => {
-    if (m.from !== away) return;
-    const d = m.data as { target?: S.MoveTarget; drop?: boolean };
-    remote = d.target;
-    if (d.drop) dropAnswer?.(d.target);
-  };
-
   const local = dweller(() => {
     // the tab's panes are laid out now: what's under the pointer changed
     const d = useDrag.getState().drag;
     if (d && !d.away && !d.outside) useDrag.setState({ drag: { ...d, ...targetAt(useUI.getState(), pane, d.x, d.y) } });
   });
-
   /** Follows the pointer to where it is: a target here, another window's (it shows it), or out of every window. */
-  const at = (e: PointerEvent, w: Where) => {
-    if (ended) return; // a late answer, after the drop
+  const across = windowDrag<S.MoveTarget>("pane", paneLabel(useUI.getState().panes[pane]), (e, w) => {
     if (w.in === "outside") {
       // a window of its own, if it isn't one already
-      leave();
       local.stop();
       useDrag.setState({ drag: { pane, x: e.clientX, y: e.clientY, sx: w.sx, sy: w.sy, outside: canDetach(useUI.getState(), pane) } });
-      return;
-    }
-    if (w.in === "other") {
-      if (away !== w.window) leave();
-      away = w.window;
+    } else if (w.in === "other") {
       local.stop();
-      void bridge().sendWindow(w.window, "dragover", { title, x: w.x, y: w.y }).catch(() => {});
       useDrag.setState({ drag: { pane, x: e.clientX, y: e.clientY, away: w.window } });
-      return;
+    } else {
+      local.at(e.clientX, e.clientY);
+      useDrag.setState({ drag: { pane, x: e.clientX, y: e.clientY, ...targetAt(useUI.getState(), pane, e.clientX, e.clientY) } });
     }
-    leave();
-    local.at(e.clientX, e.clientY);
-    useDrag.setState({ drag: { pane, x: e.clientX, y: e.clientY, ...targetAt(useUI.getState(), pane, e.clientX, e.clientY) } });
-  };
-  /** Asks where the pointer is (one question at a time; the latest move counts). */
-  const locate = () => {
-    if (asking || !last) return;
-    const e = last;
-    last = undefined;
-    // the pointer inside this page: here, without asking (also when the OS is asked: no round trip for the common case)
-    const inside = e.clientX >= 0 && e.clientY >= 0 && e.clientX < window.innerWidth && e.clientY < window.innerHeight;
-    if (inside || !native) {
-      at(e, inside ? { in: "here" } : whereByPage(wins, e));
-      return;
-    }
-    asking = true;
-    bridge()
-      .pointer()
-      .then(
-        (p) => at(e, whereByOS(p)),
-        () => {
-          // the browser build: no native windows
-          native = false;
-          at(e, whereByPage(wins, e));
-        },
-      )
-      .finally(() => {
-        asking = false;
-        if (!ended) locate();
-      });
-  };
+  });
 
   const move = (e: PointerEvent) => {
     if (!dragging) {
@@ -246,8 +163,7 @@ function startDrag(pane: string, down: PointerEvent) {
       dragging = true;
       document.body.style.cursor = "grabbing";
     }
-    last = e;
-    locate();
+    across.move(e);
   };
   // where on the grip it was grabbed: the new window opens with the pane where it was grabbed under the pointer
   // (its tab bar above the pane)
@@ -260,31 +176,22 @@ function startDrag(pane: string, down: PointerEvent) {
     window.removeEventListener("pointerup", up, true);
     window.removeEventListener("pointercancel", cancel, true);
     window.removeEventListener("keydown", key, true);
-    ended = true;
     local.stop();
     document.body.style.cursor = cursor;
     const d = useDrag.getState().drag;
     useDrag.setState({ drag: undefined });
     if (drop && d?.outside && d.sx !== undefined && d.sy !== undefined) {
-      answer = undefined;
+      across.cancel();
       void detachPane(pane, { x: d.sx - grab.x, y: d.sy - grab.y });
       return;
     }
-    if (drop && d?.away && away) {
+    if (drop && d?.away) {
       // the window under the pointer says where the pane goes (its last answer may still be on the way)
-      const to = away;
-      const where = await new Promise<S.MoveTarget | undefined>((resolve) => {
-        const timer = window.setTimeout(() => resolve(remote), DROP_WAIT);
-        dropAnswer = (t) => (clearTimeout(timer), resolve(t));
-        void bridge().sendWindow(to, "dragdrop", {}).catch(() => (clearTimeout(timer), resolve(undefined)));
-      });
-      answer = undefined;
-      away = undefined;
-      if (where) void sendPane(pane, to, where);
+      const r = await across.drop();
+      if (r?.target) void sendPane(pane, r.window, r.target);
       return;
     }
-    answer = undefined;
-    leave();
+    across.cancel();
     if (drop && d?.target) setUI((s) => S.movePane(s, pane, d.target!));
     else if (dragging) {
       setUI((s) => {
@@ -309,12 +216,13 @@ function startDrag(pane: string, down: PointerEvent) {
 
 /**
  * This window as the target of another window's drag: shows where the pane
- * would land (the same targets as a drag in here, the tab dwell included) and
- * tells the dragging window, which hands the pane over on release.
+ * would land (the same targets as a drag in here, the tab dwell included),
+ * or a whole tab (a place in the tab bar), and tells the dragging window,
+ * which hands it over on release.
  */
 export function listenForDrags() {
   const update = (v: Omit<Visit, "target" | "rect">, drop = false) => {
-    const t = targetAt(useUI.getState(), undefined, v.x, v.y);
+    const t = v.what === "tab" ? tabTargetAt(v.x, v.y) : targetAt(useUI.getState(), undefined, v.x, v.y);
     useVisit.setState({ visit: drop ? undefined : { ...v, ...t } });
     void bridge().sendWindow(v.from, "dragtarget", { target: t.target, drop }).catch(() => {});
   };
@@ -323,12 +231,13 @@ export function listenForDrags() {
     if (v) update(v);
   });
   onDragMessage((m: WindowMessage) => {
-    if (m.kind === "dragtarget") answer?.(m);
+    if (m.kind === "dragtarget") answerDrag(m);
     else if (m.kind === "dragover") {
       // the point in this window's page (the app: from the OS; the browser build: from the window's frame)
-      const { title, x, y } = m.data as { title: string; x: number; y: number };
-      dwell.at(x, y);
-      update({ from: m.from, title, x, y });
+      const { what = "pane", title, x, y } = m.data as DragOver;
+      // a tab goes into the tab bar: holding over a tab header doesn't show that tab
+      if (what === "pane") dwell.at(x, y);
+      update({ from: m.from, what, title, x, y });
     } else if (m.kind === "dragdrop") {
       // released here: the target at the last point, final
       dwell.stop();
@@ -423,7 +332,11 @@ export function DragPreview() {
   const leaving = drag && (drag.outside || drag.away) ? document.querySelector(`[data-pane="${CSS.escape(drag.pane)}"]`) : null;
   const lr = leaving ? box(leaving) : undefined;
   // over another window, that window shows it
-  const shown = drag && !drag.away ? { x: drag.x, y: drag.y, rect: drag.rect, title: drag.outside ? `${paneLabel(pane)} → new window` : paneLabel(pane) } : visit ? { x: visit.x, y: visit.y, rect: visit.rect, title: visit.title } : undefined;
+  const shown = drag && !drag.away
+    ? { x: drag.x, y: drag.y, rect: drag.rect, title: drag.outside ? `${paneLabel(pane)} → new window` : paneLabel(pane), what: "pane" }
+    : visit
+      ? { x: visit.x, y: visit.y, rect: visit.rect, title: visit.title, what: visit.what }
+      : undefined;
   if (!shown && !lr) return null;
   const r = shown?.rect;
   return (
@@ -446,7 +359,7 @@ export function DragPreview() {
       ) : null}
       {shown ? (
         <div
-          aria-label="moving pane"
+          aria-label={shown.what === "tab" ? "moving tab" : "moving pane"}
           className="absolute border border-accent bg-bg-elev px-2 py-0.5 text-fg shadow-menu"
           style={{ left: shown.x + 12, top: shown.y + 12 }}
         >

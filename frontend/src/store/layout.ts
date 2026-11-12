@@ -121,6 +121,12 @@ export function sidePart(r: Rect, side: Side, f: number): Rect {
   return { ...r, y: r.y + r.h * (1 - f), h: r.h * f };
 }
 
+/** The same layout, its panes renamed (ids missing from `to` keep theirs). */
+export function renameLeaves(l: Layout, to: Record<string, string>): Layout {
+  if (l.type === "pane") return leaf(to[l.id] ?? l.id);
+  return { ...l, children: l.children.map((c) => renameLeaves(c, to)) };
+}
+
 /** Removes a pane, collapsing single-child splits. Returns undefined if the tree is empty. */
 export function remove(l: Layout, target: string): Layout | undefined {
   if (l.type === "pane") return l.id === target ? undefined : l;

@@ -9,7 +9,7 @@ import { bridge, connect, loadContexts } from "./store/store";
 import { logBuffers } from "./logs/buffer";
 import { applyConfig, useConfig } from "./store/config";
 import { createTransport } from "./transport";
-import { detachPane, listenForPanes, sendPane } from "./store/transfer";
+import { detachPane, detachTab, listenForPanes, sendPane, sendTab } from "./store/transfer";
 import { listenForDrags } from "./components/PaneDrag";
 import { isMainWindow, windowName } from "./store/window";
 import "./theme.css";
@@ -27,8 +27,8 @@ if (import.meta.env.MODE !== "production") {
   // bridge: e2e tests reset what they saved (one backend serves the whole run); logBuffers: they fill a log pane;
   // dispatch: a native menu click (which a browser can't send); config: a setting the shared config.yaml doesn't have
   // (applyConfig: one applied as a reload would, e.g. the font)
-  // windowName, sendPane, detachPane: a pane moved to another window, or out of every window, as a drop
-  // there would (a browser can't drag outside its window)
+  // windowName, sendPane, detachPane, sendTab, detachTab: a pane or tab moved to another window, or out of
+  // every window, as a drop there would (a browser can't drag outside its window)
   (window as unknown as { __kw: Record<string, unknown> }).__kw = {
     inspect,
     bridge,
@@ -39,6 +39,8 @@ if (import.meta.env.MODE !== "production") {
     windowName,
     sendPane,
     detachPane,
+    sendTab,
+    detachTab,
   };
 }
 

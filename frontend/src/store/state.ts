@@ -3,7 +3,7 @@ import type { Batch, ColumnChoices, ConfigFile, ContextList, DebugOptions, Decod
 import type { ContainerChoice } from "../components/containers";
 import type { CellChoice } from "../grid/cells";
 import type { Place } from "../editor/Viewer";
-import { grid, insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, resize, sameShape, split, stackBelow, valid, type Direction, type Layout, type Side } from "./layout";
+import { grid, insert, insertEdge, leaf, MIN_PANE_PX, neighbor, paneIds, remove, renameLeaves, resize, sameShape, split, stackBelow, valid, type Direction, type Layout, type Side } from "./layout";
 
 /** A pane's pipeline as edited in the UI; serialized to YAML for the bridge. */
 export interface PaneSpec {
@@ -1084,6 +1084,32 @@ export function canInsert(s: UIState, to: MoveTarget): boolean {
   if ("newTab" in to) return true;
   const t = s.tabs.find((x) => x.id === to.tab);
   return !!t && (!to.pane || paneIds(t.layout).includes(to.pane));
+}
+
+/**
+ * A tab from another window joins this one at index `at` of the tab bar
+ * (past the end: last), shown: its layout, name and focus as they were, its
+ * panes under new ids of this window's (and a split object view's table
+ * with them). Returns the state and the ids the panes got (old → new).
+ */
+export function insertTab(s: UIState, tab: Tab, panes: PaneState[], at: number): { state: UIState; ids: Record<string, string> } {
+  let nextId = s.nextId;
+  const ids: Record<string, string> = {};
+  for (const p of panes) ids[p.id] = `v${nextId++}`;
+  const all = { ...s.panes };
+  for (const p of panes) {
+    const id = ids[p.id]!;
+    const from = p.object?.from;
+    // a table left behind in the other window is no pane here (an id there may name another one here)
+    all[id] = { ...p, id, ...(p.object && from ? { object: { ...p.object, from: ids[from] } } : {}) };
+  }
+  const { maximized, ...kept } = tab;
+  const t: Tab = { ...kept, id: `t${nextId++}`, layout: renameLeaves(tab.layout, ids), focused: ids[tab.focused] ?? ids[panes[0]!.id]! };
+  if (maximized && ids[maximized] === t.focused) t.maximized = t.focused;
+  const tabs = [...s.tabs];
+  const i = Math.max(0, Math.min(at, tabs.length));
+  tabs.splice(i, 0, t);
+  return { state: { ...s, tabs, panes: all, activeTab: i, nextId, focus: "table", overlay: undefined, switcher: undefined }, ids };
 }
 
 /** A window other than the main one, started empty: it waits for the pane it was opened for. */

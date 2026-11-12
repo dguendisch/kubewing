@@ -22,7 +22,7 @@ import { ClusterPicker } from "./components/ClusterPicker";
 import { TabSwitcher } from "./components/TabSwitcher";
 import { tabTitle } from "./components/tabTitle";
 import { NameField } from "./components/NameField";
-import { startTabDrag, useTabDrag } from "./components/TabDrag";
+import { startTabDrag, TabLeaving, useTabDrag } from "./components/TabDrag";
 import { UpdateDialog, UpdateHint } from "./update/UpdateDialog";
 import { dispatch } from "./commands";
 import { prettyKey } from "./keys/keymap";
@@ -176,6 +176,7 @@ function Window() {
       <UpdateDialog />
       <ConfigEditor />
       <DragPreview />
+      <TabLeaving />
     </div>
   );
 }
