@@ -6,6 +6,7 @@
 
 ### Fixed
 - an ended log tail now names the key that closes its pane (`⌃D`), not `⌘W`, which closes the whole tab
+- marked rows no longer grow pulsing borders around their age and restarts cells a few seconds after they were marked (due to time/age repainting)
 
 ## [0.6.0] - 2026-11-11
 ### Added

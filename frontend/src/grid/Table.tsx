@@ -13,6 +13,7 @@ import {
   type Rectangle,
   type Theme,
   CompactSelection,
+  blend,
 } from "@glideapps/glide-data-grid";
 import "@glideapps/glide-data-grid/dist/index.css";
 import { rowLocators } from "../actions/anchor";
@@ -364,24 +365,21 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
     const r = rowAt(data.current, row);
     const column = data.current.columns[col];
     const l = layout(r, col, column, nowOf(data.current));
-    // marked for an action on many rows: under a diff tint, and a bar at the row's left edge
-    if (r?.marked) {
-      ctx.save();
-      ctx.globalAlpha = 0.28;
+    // The background: marked for an action on many rows (under a diff tint), blended into one opaque color.
+    // A repaint of single cells (updateCells: the ages' tick, a frame's changed rows) wipes only the
+    // cell's inside, not its top pixel row and left one (the grid line), and redraws no grid lines: a
+    // translucent fill there would add up with each repaint into a border growing ever stronger.
+    // An opaque one paints the same on every repaint, and it spares the grid line's pixel.
+    // Glide's fill (the selected row's accent), passed but missing from the callback's type
+    let bg = blend((args as { cellFillColor?: string }).cellFillColor ?? t.bgCell, t.bgCell);
+    if (r?.marked) bg = blend(withAlpha(colors["marked"]!, 0.28), bg);
+    if (l.tint) bg = blend(withAlpha(colors[l.tint]!, 0.16), bg);
+    ctx.fillStyle = bg;
+    ctx.fillRect(rect.x + 1, rect.y, rect.width - 1, rect.height);
+    // and a bar at a marked row's left edge
+    if (r?.marked && col === 0) {
       ctx.fillStyle = colors["marked"]!;
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-      ctx.restore();
-      if (col === 0) {
-        ctx.fillStyle = colors["marked"]!;
-        ctx.fillRect(rect.x, rect.y, 3, rect.height);
-      }
-    }
-    if (l.tint) {
-      ctx.save();
-      ctx.globalAlpha = 0.16;
-      ctx.fillStyle = colors[l.tint]!;
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-      ctx.restore();
+      ctx.fillRect(rect.x, rect.y, 3, rect.height);
     }
     if (l.hiddenMarker) {
       ctx.fillStyle = colors["hidden"]!;
