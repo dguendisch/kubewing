@@ -2292,9 +2292,9 @@ test.describe("dockview layout", () => {
       await page.mouse.move(x, y, { steps: 8 });
     };
 
-    test("the grip shows while the mouse moves, and not with nowhere to move", async ({ page }) => {
+    test("the grip shows while the mouse moves", async ({ page }) => {
       await openTape(page);
-      await expect(grip(page, "v1")).toHaveCount(0); // the only pane of the only tab
+      await expect(grip(page, "v1")).toHaveCount(0); // the only pane there is: nowhere to go
       await page.keyboard.press("ControlOrMeta+Shift+D");
       await expect(grip(page, "v1")).not.toHaveAttribute("data-shown");
       const p = await center(page, 'section[data-pane="v1"]');
@@ -3261,6 +3261,127 @@ test.describe("object actions", () => {
     await page.keyboard.type("echo after");
     await page.keyboard.press("Enter");
     await expect.poll(() => termText(page)).toContain("echo after\necho after");
+  });
+
+  test.describe("panes in windows of their own", () => {
+    type Kw = { __kw: { windowName: string; sendPane(id: string, to: string, at: unknown): Promise<void>; detachPane(id: string, at?: { x: number; y: number }): Promise<void>; bridge(): { windows(): Promise<{ name: string }[]> } } };
+    /** The grip dropped outside every window (a browser can't drag there: the drop's own call). */
+    const detach = async (page: Page, id: string) => {
+      const popup = page.waitForEvent("popup");
+      await page.evaluate((id) => (window as unknown as Kw).__kw.detachPane(id, { x: 40, y: 40 }), id);
+      const w = await popup;
+      await expect.poll(() => w.evaluate(() => !!(window as unknown as Partial<Kw>).__kw && (window as unknown as Kw).__kw.windowName)).toMatch(/^w\d+$/);
+      return w;
+    };
+
+    test("a grip dropped outside the window detaches the pane into a window of its own: the same watch, its rows there, gone here", async ({ page }) => {
+      await openStatic(page);
+      await page.keyboard.press("ControlOrMeta+Shift+D"); // v1 | v2, the same listing
+      // dragged and dropped within the window with no target: nothing happens, no window opens
+      const only = (await page.locator('section[data-pane="v1"]').boundingBox())!;
+      await page.mouse.move(only.x + only.width / 2, only.y + only.height / 2);
+      await page.mouse.move(only.x + only.width / 2 + 5, only.y + only.height / 2);
+      const g = (await page.locator('section[data-pane="v1"]').getByRole("button", { name: "move pane" }).boundingBox())!;
+      await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(only.x + only.width / 2, only.y + only.height / 2, { steps: 8 });
+      await page.mouse.up();
+      expect(page.context().pages()).toHaveLength(1);
+      await expect.poll(async () => !!(await inspect(page)).panes.v2?.serverId).toBe(true);
+      const serverId = (await inspect(page)).panes.v2!.serverId;
+      const w = await detach(page, "v2");
+      await expect.poll(async () => (await focused(w)).serverId).toBe(serverId);
+      await expect.poll(async () => (await focused(w)).rows.some((r) => r.key === "s-web-1")).toBe(true);
+      const s = await inspect(page);
+      expect(Object.keys(s.panes)).toEqual(["v1"]);
+      expect(s.tabs).toHaveLength(1);
+      // the detached window's only pane is already a window of its own, but can move back (there's another window)
+      await expect(w.getByRole("button", { name: "move pane" })).toHaveCount(1);
+      await w.evaluate(() => (window as unknown as Kw).__kw.detachPane("v1"));
+      expect(page.context().pages()).toHaveLength(2); // no third window
+    });
+
+    test("a shell moves to another window and back with its screen; the last pane leaving closes that window", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-web-3");
+      await page.keyboard.press("x");
+      await expect.poll(() => termText(page)).toContain("web-3:app$");
+      await page.keyboard.type("echo before");
+      await page.keyboard.press("Enter");
+      await expect.poll(() => termText(page)).toContain("echo before\necho before");
+      const id = (await inspect(page)).focusedPane;
+      const session = ((await focused(page)) as unknown as { term: { session: string } }).term.session;
+      const w = await detach(page, id);
+      const name = await w.evaluate(() => (window as unknown as Kw).__kw.windowName);
+      // there: the same shell, its screen, and keys go to it
+      await expect.poll(async () => ((await focused(w)) as unknown as { term?: { session: string } }).term?.session).toBe(session);
+      await expect.poll(() => termText(w)).toContain("echo before\necho before");
+      await w.locator("[data-terminal]").click();
+      await w.keyboard.type("echo there");
+      await w.keyboard.press("Enter");
+      await expect.poll(() => termText(w)).toContain("echo there\necho there");
+      await expect(page.locator("[data-terminal]")).toHaveCount(0);
+      // back, as a drop below the table would: the screen comes along, the window it leaves closes
+      const closed = w.waitForEvent("close");
+      await w.evaluate(() => {
+        const kw = (window as unknown as Kw).__kw;
+        const s = (window as unknown as { __kw: { inspect(): { focusedPane: string } } }).__kw.inspect();
+        return kw.sendPane(s.focusedPane, "main", { tab: "t1", pane: "v1", side: "bottom" });
+      });
+      await closed;
+      await expect.poll(async () => ((await focused(page)) as unknown as { term?: { session: string } }).term?.session).toBe(session);
+      const s = await inspect(page);
+      expect(s.tabs[0]!.layout).toEqual({ type: "split", dir: "column", children: [{ type: "pane", id: "v1" }, { type: "pane", id: s.focusedPane }] });
+      await expect.poll(() => termText(page)).toContain("echo there\necho there");
+      await page.keyboard.type("echo back");
+      await page.keyboard.press("Enter");
+      await expect.poll(() => termText(page)).toContain("echo back\necho back");
+      await expect.poll(() => page.evaluate(() => (window as unknown as Kw).__kw.bridge().windows().then((l) => l.map((x) => x.name)))).not.toContain(name);
+    });
+
+    test("another window's drag over this one shows where the pane would go here, and the drop tells it", async ({ page }) => {
+      await openStatic(page);
+      await page.keyboard.press("ControlOrMeta+Shift+D"); // v1 | v2
+      const w = await detach(page, "v2"); // the drag comes from there
+      // what the dragging window sends: the pointer over the bottom of v1, in this window's page
+      const v1 = (await page.locator('section[data-pane="v1"]').boundingBox())!;
+      const answers: unknown[] = [];
+      await w.exposeFunction("kwAnswer", (m: unknown) => void answers.push(m));
+      await w.evaluate(() => {
+        const kw = (window as unknown as { __kw: { bridge(): { onWindow(cb: (m: { kind: string; data: unknown }) => void): void } } }).__kw;
+        kw.bridge().onWindow((m) => m.kind === "dragtarget" && (window as unknown as { kwAnswer(d: unknown): void }).kwAnswer(m.data));
+      });
+      type Send = { __kw: { bridge(): { sendWindow(to: string, kind: string, data: unknown): Promise<void> } } };
+      const send = (kind: string, data: unknown) => w.evaluate(([k, d]) => (window as unknown as Send).__kw.bridge().sendWindow("main", k, d), [kind, data] as const);
+      await send("dragover", { title: "moving", x: v1.x + v1.width / 2, y: v1.y + v1.height * 0.9 });
+      await expect(page.getByLabel("drop target")).toBeVisible();
+      await expect(page.getByLabel("moving pane")).toHaveText("moving");
+      await expect.poll(() => answers.at(-1)).toEqual({ target: { tab: "t1", pane: "v1", side: "bottom" }, drop: false });
+      // released: the final target, and the preview goes
+      await send("dragdrop", {});
+      await expect.poll(() => answers.at(-1)).toEqual({ target: { tab: "t1", pane: "v1", side: "bottom" }, drop: true });
+      await expect(page.getByLabel("drop target")).toBeHidden();
+      // left without a drop: the preview goes too
+      await send("dragover", { title: "moving", x: v1.x + 10, y: v1.y + v1.height / 2 });
+      await expect(page.getByLabel("drop target")).toBeVisible();
+      await send("dragleave", {});
+      await expect(page.getByLabel("drop target")).toBeHidden();
+    });
+
+    test("closing a detached window ends the shell it shows", async ({ page }) => {
+      await openStatic(page);
+      await select(page, "s-web-3");
+      await page.keyboard.press("x");
+      await expect.poll(() => termText(page)).toContain("web-3:app$");
+      const id = (await inspect(page)).focusedPane;
+      const w = await detach(page, id);
+      await expect.poll(() => termText(w)).toContain("web-3:app$");
+      const name = await w.evaluate(() => (window as unknown as Kw).__kw.windowName);
+      await w.close();
+      await expect.poll(() => page.evaluate(() => (window as unknown as Kw).__kw.bridge().windows().then((l) => l.map((x) => x.name)))).not.toContain(name);
+      // the pane of a closed window is gone everywhere
+      expect(Object.keys((await inspect(page)).panes)).toEqual(["v1"]);
+    });
   });
 
   test("the terminal keeps terminal.scrollback lines (config.yaml: 20000), more than the old 5000", async ({ page }) => {

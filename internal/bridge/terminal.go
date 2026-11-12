@@ -39,12 +39,17 @@ type TerminalResult struct {
 
 // TerminalStart redeems a prepared terminal and starts the local shell.
 func (s *Service) TerminalStart(token string, cols, rows int) (TerminalResult, error) {
+	return s.TerminalStartIn(context.Background(), token, cols, rows)
+}
+
+// TerminalStartIn is TerminalStart for the calling window.
+func (s *Service) TerminalStartIn(ctx context.Context, token string, cols, rows int) (TerminalResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.Terminal)
 	if err != nil {
 		return TerminalResult{}, err
 	}
 	t := target.(terminalTarget)
-	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+	id := s.startSession(windowOf(ctx), cols, rows, func(ctx context.Context, st source.ExecStreams) error {
 		sid, cleanup := s.gardenctlSession(t.cluster, t.namespace)
 		defer cleanup()
 		return s.opts.Actor.Shell(ctx, t.cluster, t.namespace, []string{"GCTL_SESSION_ID=" + sid}, st)

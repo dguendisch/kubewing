@@ -232,7 +232,10 @@ func portInfo(r row) []PortInfo {
 
 // SessionPayload is one SessionEvent.
 type SessionPayload struct {
-	ID   string `json:"id"`
+	ID string `json:"id"`
+	// Seq numbers the session's events (1, 2 …): a pane moving to another
+	// window splits them at Reassign's number.
+	Seq  int64  `json:"seq"`
 	Data string `json:"data,omitempty"` // base64
 	// Exit is set on the last event: "0", an exit code, or an error message.
 	Exit string `json:"exit,omitempty"`
@@ -269,6 +272,11 @@ var ExecShell = []string{"sh", "-c", "command -v bash >/dev/null 2>&1 && exec ba
 // else the first container. Init, sidecar and ephemeral containers can be
 // named too, as with kubectl exec -c.
 func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult, error) {
+	return s.ExecStartIn(context.Background(), token, container, cols, rows)
+}
+
+// ExecStartIn is ExecStart for the calling window: the session's output goes there.
+func (s *Service) ExecStartIn(ctx context.Context, token, container string, cols, rows int) (ExecResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.Exec)
 	if err != nil {
 		return ExecResult{}, err
@@ -285,7 +293,7 @@ func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult
 		return ExecResult{}, fmt.Errorf("pod %s has no container %q (has %s)", a.Name, container, strings.Join(all, ", "))
 	}
 
-	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+	id := s.startSession(windowOf(ctx), cols, rows, func(ctx context.Context, st source.ExecStreams) error {
 		return s.opts.Actor.Exec(ctx, r.cluster, a.Namespace, a.Name, container, ExecShell, st)
 	})
 	return ExecResult{Session: id, Container: container, Pod: a.Name, Context: a.Context, Others: all}, nil
@@ -293,11 +301,12 @@ func (s *Service) ExecStart(token, container string, cols, rows int) (ExecResult
 
 // startSession runs a TTY session (exec, debug) in the background: output
 // goes out as SessionEvents, the last one carrying the exit.
-func (s *Service) startSession(cols, rows int, run func(context.Context, source.ExecStreams) error) string {
+func (s *Service) startSession(window string, cols, rows int, run func(context.Context, source.ExecStreams) error) string {
 	s.mu.Lock()
 	s.next++
 	id := fmt.Sprintf("s%d", s.next)
 	s.mu.Unlock()
+	s.win.Own(id, window) // before its first output
 	ctx, cancel := context.WithCancel(context.Background())
 	inR, inW := io.Pipe()
 	ss := &session{id: id, stdin: inW, input: make(chan []byte, 1024), resize: make(chan source.TerminalSize, 4), cancel: cancel}
@@ -316,7 +325,8 @@ func (s *Service) startSession(cols, rows int, run func(context.Context, source.
 	s.mu.Unlock()
 
 	out := newBatcher(func(b []byte) {
-		s.emit.Emit(SessionEvent, SessionPayload{ID: id, Data: base64.StdEncoding.EncodeToString(b)})
+		data := base64.StdEncoding.EncodeToString(b)
+		s.win.emitStream(id, SessionEvent, func(seq int64) any { return SessionPayload{ID: id, Seq: seq, Data: data} })
 	})
 	s.running.Add(1)
 	go func() {
@@ -325,7 +335,9 @@ func (s *Service) startSession(cols, rows int, run func(context.Context, source.
 		out.Close()
 		_ = inR.Close()
 		s.endSession(ss)
-		s.emit.Emit(SessionEvent, SessionPayload{ID: id, Exit: exitText(ctx, err)})
+		exit := exitText(ctx, err)
+		s.win.emitStream(id, SessionEvent, func(seq int64) any { return SessionPayload{ID: id, Seq: seq, Exit: exit} })
+		s.win.Disown(id)
 	}()
 	return id
 }
@@ -355,6 +367,11 @@ type DebugResult struct {
 // ephemeral container: output shows while the image is pulled, then the
 // container's TTY. The container stays in the pod after the session ends.
 func (s *Service) DebugStart(token string, o DebugOptions, cols, rows int) (DebugResult, error) {
+	return s.DebugStartIn(context.Background(), token, o, cols, rows)
+}
+
+// DebugStartIn is DebugStart for the calling window.
+func (s *Service) DebugStartIn(ctx context.Context, token string, o DebugOptions, cols, rows int) (DebugResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.Debug)
 	if err != nil {
 		return DebugResult{}, err
@@ -383,7 +400,7 @@ func (s *Service) DebugStart(token string, o DebugOptions, cols, rows int) (Debu
 	}
 	name := debugName(cs)
 	// remembered once it runs: a typo or an image that can't be pulled isn't offered again
-	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+	id := s.startSession(windowOf(ctx), cols, rows, func(ctx context.Context, st source.ExecStreams) error {
 		dim := func(format string, args ...any) { fmt.Fprintf(st.Stdout, "\x1b[2m"+format+"\x1b[0m\r\n", args...) }
 		dim("starting %s (%s) in %s …", name, o.Image, a.Name)
 		spec := source.DebugSpec{

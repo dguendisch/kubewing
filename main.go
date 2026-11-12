@@ -150,15 +150,19 @@ func main() {
 	} else {
 		api.Updater = update.New(update.Options{Current: app.Version, Feed: update.GitHub{}, StateDir: *stateDir, Emit: emit.Emit, Installer: installer})
 	}
-	var win *application.WebviewWindow
+	var wins *app.Windows
 	var single *application.SingleInstanceOptions
 	if !*newProcess {
 		// a later launch lands here; until the window exists there is nothing to open a tab in
 		var err error
 		single, err = app.SingleInstance(opts.ConfigDir, func(l app.Launch) {
-			if win != nil {
-				emit.Emit(app.LaunchEvent, l)
-				app.BringToFront(emit.app, win)
+			if wins == nil {
+				return
+			}
+			// the window in front opens the tab
+			if w := wins.Front(); w != nil {
+				wins.EmitFront(app.LaunchEvent, l)
+				app.BringToFront(emit.app, w)
 			}
 		})
 		if err != nil {
@@ -186,10 +190,12 @@ func main() {
 	defer stopUpdater()
 	api.StartUpdater(ctx)
 	// before the frontend sends its menus (and should it never): no ⌘W "Close Window", no ⌘R "Reload"
-	a.Menu.Set(app.BaseMenu(nil, emit.Emit))
-	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emit.Emit)) }
-	// reopens in the size it was last closed in (history.yaml)
-	win = app.NewMainWindow(a, opts.History, application.WebviewWindowOptions{
+	// a menu click is for the window in front (wins is set before any window shows)
+	emitFront := func(name string, data any) { wins.EmitFront(name, data) }
+	a.Menu.Set(app.BaseMenu(nil, emitFront))
+	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emitFront)) }
+	winOpts := application.WebviewWindowOptions{
+		Name:   bridge.MainWindow,
 		Title:  "kubewing",
 		Width:  1400,
 		Height: 860,
@@ -201,7 +207,11 @@ func main() {
 		},
 		BackgroundColour: application.NewRGB(30, 30, 30), // theme.css --color-bg
 		URL:              "/",
-	})
+	}
+	// panes detached into windows of their own get windows like this one
+	wins = app.NewWindows(a, svc, winOpts)
+	// reopens in the size it was last closed in (history.yaml)
+	wins.Track(app.NewMainWindow(a, opts.History, winOpts))
 	if err := a.Run(); err != nil {
 		log.Fatal(err)
 	}
@@ -219,7 +229,8 @@ func waitFlag(wait bool, configDir string) bool {
 
 func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTapes bool, releases, current, stateDir string) {
 	hub := bridge.NewHub()
-	api := app.New(bridge.New(source.NewRegistry(opener), hub, opts))
+	svc := bridge.New(source.NewRegistry(opener), hub, opts)
+	api := app.New(svc)
 	if releases != "" {
 		// tests: a fake feed, checked on request only (no schedule runs), never installed (no Installer)
 		if current == "" {
@@ -234,7 +245,7 @@ func runHeadless(addr string, opener source.Opener, opts bridge.Options, fromTap
 		}
 	}
 	mux := http.NewServeMux()
-	mux.Handle("/kw-ws", hub.Handler(api))
+	mux.Handle("/kw-ws", hub.Handler(api, svc))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	log.Printf("kubewing headless bridge on ws://%s/kw-ws", addr)
 	log.Fatal(http.ListenAndServe(addr, mux))

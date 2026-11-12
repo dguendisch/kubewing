@@ -80,8 +80,10 @@ type Options struct {
 
 // Service manages panes.
 type Service struct {
-	reg  *source.Registry
+	reg *source.Registry
+	// emit broadcasts to every window; stream events go through win to their window
 	emit Emitter
+	win  *Windows
 	opts Options
 
 	mu    sync.Mutex
@@ -117,7 +119,8 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 	if opts.Clock == nil {
 		opts.Clock = realClock{}
 	}
-	s := &Service{reg: reg, emit: emit, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}, opened: map[string]gardener.Target{}}
+	win := NewWindows(emit)
+	s := &Service{reg: reg, emit: win, win: win, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}, opened: map[string]gardener.Target{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")
@@ -350,15 +353,24 @@ func hasSort(stages []pipeline.Stage) bool {
 
 // Open starts a pane for a pipeline given as YAML.
 func (s *Service) Open(pipelineYAML string) (OpenResult, error) {
+	return s.OpenIn(context.Background(), pipelineYAML)
+}
+
+// OpenIn opens a pane for the calling window: its frames go there.
+func (s *Service) OpenIn(ctx context.Context, pipelineYAML string) (OpenResult, error) {
 	p, err := pipeline.Parse([]byte(pipelineYAML))
 	if err != nil {
 		return OpenResult{}, err
 	}
-	return s.OpenPipeline(*p)
+	return s.openPipeline(windowOf(ctx), *p)
 }
 
-// OpenPipeline starts a pane for a pipeline.
+// OpenPipeline starts a pane for a pipeline (in the main window).
 func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
+	return s.openPipeline(MainWindow, p)
+}
+
+func (s *Service) openPipeline(window string, p pipeline.Pipeline) (OpenResult, error) {
 	sub, err := s.reg.SubscribeWith(source.Key{
 		Cluster: p.Source.Cluster, Resource: p.Source.Resource, Namespace: p.Source.Namespace,
 		LabelSelector: p.Source.LabelSelector, FieldSelector: p.Source.FieldSelector,
@@ -400,6 +412,7 @@ func (s *Service) OpenPipeline(p pipeline.Pipeline) (OpenResult, error) {
 	pn.id, pn.view, pn.cancel = id, v, cancel
 	s.panes[id] = pn
 	s.mu.Unlock()
+	s.win.Own(id, window) // before its first frame
 	go s.pump(ctx, pn)
 	s.syncMetrics(pn)
 	ctxName, _ := s.contextName(p.Source.Cluster)
@@ -697,6 +710,7 @@ func (s *Service) Close(paneID string) error {
 		return nil
 	}
 	pn.cancel()
+	s.win.Disown(paneID)
 	pn.sub.Close()
 	pn.mu.Lock()
 	pn.closed = true
@@ -898,7 +912,7 @@ func (s *Service) pump(ctx context.Context, pn *pane) {
 		pn.mu.Unlock()
 		last, dirty = time.Now(), false
 		if ok {
-			s.emit.Emit(FrameEvent, FramePayload{Pane: pn.id, Frame: f})
+			s.win.emitStream(pn.id, FrameEvent, func(int64) any { return FramePayload{Pane: pn.id, Frame: f} })
 		}
 	}
 	for {

@@ -816,6 +816,8 @@ Drag a divider to resize, or use `⌘⌃` arrows (as in iTerm): the focused pane
 
 **Moving panes** (as in ghostty): hovering a pane shows a grip at its top. Dragging it shows where it would go: the side of another pane (taking half of its place), a whole edge of the tab, a tab header (holding over it switches to that tab, so you can drop next to one of its panes), or `+` for a tab of its own. Dropping moves the pane as it is (its watch, filters, history, a shell and its screen). `Esc` cancels.
 
+**Windows:** drop a pane's grip outside the window and the pane gets a window of its own, opened where you dropped it and as big as the pane was. While the pointer is out of the window, the pane is dimmed and says where it will go. A pane has no grip only when it's the one pane there is. It stays the same pane: the same watch, filters and history, a shell keeps running with its screen, a log pane keeps its lines, a table scrubbed back in time stays at that moment. Dragged over another window, the grip shows the same targets there as within a window (a side of a pane, a tab's edge, a tab header to hold over, `+` for a new tab), and dropping moves the pane into it. A window other than the first one closes when its last pane moves away or closes; closing it with its red button closes its panes, as closing a tab does (their shells end). Menu commands and a launch from a terminal (a new tab) go to the window in front.
+
 ### Tabs
 
 | Key | Action |

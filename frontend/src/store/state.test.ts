@@ -929,6 +929,54 @@ describe("insert / insertEdge (where a dragged pane lands)", () => {
   });
 });
 
+describe("panes moving between windows", () => {
+  const two = () => S.splitPane(S.initialState(), "row"); // t1: v1 | v2
+
+  it("a pane from another window lands like a move: next to a pane, at a tab's edge, or in a new tab; under an id of this window's", () => {
+    const s = two();
+    const foreign: S.PaneState = { id: "v7", spec: S.initialSpec("other"), selected: 3, serverId: "p9", name: "far" };
+    let r = S.insertPane(s, foreign, { tab: "t1", pane: "v1", side: "bottom" });
+    let x = apply(r.state, (y) => y);
+    invariants(x);
+    expect(r.id).toBe("v3");
+    expect(x.tabs[0]!.layout).toEqual({ type: "split", dir: "row", children: [{ type: "split", dir: "column", children: [leaf("v1"), leaf("v3")] }, leaf("v2")] });
+    expect(x.panes.v3).toEqual({ ...foreign, id: "v3" });
+    expect(S.activeTab(x).focused).toBe("v3");
+    r = S.insertPane(s, foreign, { tab: "t1", side: "left" });
+    expect(r.state.tabs[0]!.layout).toEqual({ type: "split", dir: "row", children: [leaf("v3"), leaf("v1"), leaf("v2")] });
+    r = S.insertPane(s, foreign, { newTab: true });
+    x = apply(r.state, (y) => y);
+    invariants(x);
+    expect(x.tabs.map((t) => paneIds(t.layout))).toEqual([["v1", "v2"], ["v3"]]);
+    expect(x.activeTab).toBe(1);
+  });
+
+  it("only offers targets that exist here", () => {
+    const s = two();
+    expect(S.canInsert(s, { newTab: true })).toBe(true);
+    expect(S.canInsert(s, { tab: "t1", side: "top" })).toBe(true);
+    expect(S.canInsert(s, { tab: "t1", pane: "v2", side: "top" })).toBe(true);
+    expect(S.canInsert(s, { tab: "t9", side: "top" })).toBe(false);
+    expect(S.canInsert(s, { tab: "t1", pane: "v9", side: "top" })).toBe(false);
+  });
+
+  it("a detached window starts empty, and its last pane leaving (or closing) leaves it empty: it closes, no fresh pane", () => {
+    const empty = S.emptyState();
+    expect(empty.tabs).toEqual([]);
+    expect(empty.detached).toBe(true);
+    const { state } = S.insertPane(empty, { id: "x", spec: S.initialSpec(), selected: 0 }, { newTab: true });
+    const s = apply(state, (y) => y);
+    invariants(s);
+    const closed = S.closePane(s, "v1");
+    expect(closed.tabs).toEqual([]);
+    expect(closed.panes).toEqual({});
+    // the main window's last pane is replaced, as always
+    const main = apply(S.initialState(), (y) => S.closePane(y, "v1"));
+    invariants(main);
+    expect(ids(main)).toEqual(["v2"]);
+  });
+});
+
 describe("movePane (drag and drop by the grip)", () => {
   // t1: v1 | v2 (focus v2)
   const two = () => S.splitPane(S.initialState(), "row");

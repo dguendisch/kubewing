@@ -58,4 +58,17 @@ describe("sessions", () => {
   it("base64 round-trips UTF-8", () => {
     expect(new TextDecoder().decode(b64decode(b64encode("ünïcode ✓ $ ")))).toBe("ünïcode ✓ $ ");
   });
+
+  it("a pane from another window: its transcript there goes before what arrived here meanwhile", () => {
+    const dec = new TextDecoder();
+    const enc = (t: string) => new TextEncoder().encode(t);
+    sessions.push("s9", enc("after ")); // arrived here before the pane did
+    const snap = [enc("before "), enc("move ")];
+    sessions.prepend("s9", snap);
+    const got: string[] = [];
+    sessions.attach("s9", (c) => got.push(c instanceof Uint8Array ? dec.decode(c) : `exit:${c.exit}`));
+    expect(got.join("")).toBe("before move after ");
+    expect(sessions.snapshot("s9").map((c) => (c instanceof Uint8Array ? dec.decode(c) : "")).join("")).toBe("before move after ");
+    sessions.drop("s9");
+  });
 });

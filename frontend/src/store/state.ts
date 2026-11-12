@@ -365,6 +365,8 @@ export interface UIState {
   wrap: boolean;
   /** Object YAML (viewer and editor) shows each line's field manager in the gutter; session-wide, toggled with b (⌘B in the editor). */
   blame?: boolean;
+  /** A window a pane was detached into (not the main one): it closes with its last pane instead of starting a fresh one. */
+  detached?: boolean;
 }
 
 /** Namespace a context starts in: the kubeconfig's, else "" (all). "" (or "@1/") = the current context. */
@@ -918,13 +920,17 @@ export function newTab(s: UIState): UIState {
   };
 }
 
-/** Closes a tab; the last tab is replaced by a fresh one so the app always has a pane. */
+/**
+ * Closes a tab; the main window's last tab is replaced by a fresh one so the
+ * app always has a pane. Another window's last tab leaves it empty: it closes.
+ */
 export function closeTab(s: UIState, index = s.activeTab, dropPanes = true): UIState {
   // its name field goes with it
   if (s.overlay?.kind === "renameTab" && s.overlay.tabId === s.tabs[index]?.id) s = closeOverlay(s);
   const panes = { ...s.panes };
   if (dropPanes) for (const id of paneIds(s.tabs[index]!.layout)) delete panes[id];
   const tabs = s.tabs.filter((_, i) => i !== index);
+  if (tabs.length === 0 && s.detached) return { ...s, tabs, panes, activeTab: 0, overlay: undefined };
   if (tabs.length === 0) {
     const id = `v${s.nextId}`;
     return {
@@ -1046,6 +1052,44 @@ export function movePane(s: UIState, id: string, to: MoveTarget): UIState {
     tabs[activeTab] = { ...kept, layout, focused: id };
   }
   return { ...s, tabs, activeTab, nextId, focus: "table", overlay: undefined, switcher: undefined };
+}
+
+/**
+ * A pane from another window joins this one at `to` (as movePane would place
+ * it): under a new id of this window's (ids are per window), `pane` as it
+ * was otherwise. Returns the state and the id it got.
+ */
+export function insertPane(s: UIState, pane: PaneState, to: MoveTarget): { state: UIState; id: string } {
+  const id = `v${s.nextId}`;
+  let nextId = s.nextId + 1;
+  const panes = { ...s.panes, [id]: { ...pane, id } };
+  let tabs = [...s.tabs];
+  let activeTab: number;
+  const target = "newTab" in to ? undefined : tabs.findIndex((t) => t.id === to.tab);
+  if ("newTab" in to || target === undefined || target < 0) {
+    tabs.push({ id: `t${nextId++}`, layout: leaf(id), focused: id });
+    activeTab = tabs.length - 1;
+  } else {
+    activeTab = target;
+    const t = tabs[activeTab]!;
+    const layout = to.pane && paneIds(t.layout).includes(to.pane) ? insert(t.layout, to.pane, to.side, id) : insertEdge(t.layout, to.side, id);
+    const { maximized: _, ...kept } = t;
+    tabs[activeTab] = { ...kept, layout, focused: id };
+  }
+  return { state: { ...s, tabs, panes, activeTab, nextId, focus: "table", overlay: undefined, switcher: undefined }, id };
+}
+
+/** Whether a pane from another window could be dropped at `to` here. */
+export function canInsert(s: UIState, to: MoveTarget): boolean {
+  if ("newTab" in to) return true;
+  const t = s.tabs.find((x) => x.id === to.tab);
+  return !!t && (!to.pane || paneIds(t.layout).includes(to.pane));
+}
+
+/** A window other than the main one, started empty: it waits for the pane it was opened for. */
+export function emptyState(): UIState {
+  const spec = initialSpec();
+  return { tabs: [], activeTab: 0, panes: {}, focus: "table", nextId: 1, defaults: spec, mru: [], wrap: true, detached: true };
 }
 
 /** ⌘⇧I, a double-click on the tab: the tab's name field, in place. */

@@ -33,6 +33,8 @@ const (
 // LogsPayload is one LogsEvent.
 type LogsPayload struct {
 	ID string `json:"id"`
+	// Seq numbers the session's events, as SessionPayload.Seq.
+	Seq int64 `json:"seq"`
 	// Streams, when set, is the full current stream set (replaces the client's).
 	Streams []logs.Stream `json:"streams,omitempty"`
 	// Lines is a batch of log lines in arrival order.
@@ -413,6 +415,11 @@ type logsEvent struct {
 // every pod a pods pane currently shows (its filters applied); LogsMarked
 // the pods of the marked rows together.
 func (s *Service) LogsStart(paneID, key, scope string, o LogsOptions) (LogsResult, error) {
+	return s.LogsStartIn(context.Background(), paneID, key, scope, o)
+}
+
+// LogsStartIn is LogsStart for the calling window: the lines go there.
+func (s *Service) LogsStartIn(callCtx context.Context, paneID, key, scope string, o LogsOptions) (LogsResult, error) {
 	if s.opts.Actor == nil {
 		return LogsResult{}, fmt.Errorf("logs are not available")
 	}
@@ -455,7 +462,7 @@ func (s *Service) LogsStart(paneID, key, scope string, o LogsOptions) (LogsResul
 		subs = append(subs, sub)
 	}
 
-	id := s.startLogSession(func(ctx context.Context, sink logs.Sink) {
+	id := s.startLogSession(windowOf(callCtx), func(ctx context.Context, sink logs.Sink) {
 		// ending on its own (not following, a watch closed) stops the feeders too
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -703,7 +710,7 @@ func (k *logSink) close() {
 // startLogSession registers a log session (no TTY: only a cancel) and runs
 // run in the background, wiring its sink to LogsEvents. SessionClose and
 // Shutdown cancel it, like an exec session.
-func (s *Service) startLogSession(run func(context.Context, logs.Sink)) string {
+func (s *Service) startLogSession(window string, run func(context.Context, logs.Sink)) string {
 	s.mu.Lock()
 	s.next++
 	id := fmt.Sprintf("s%d", s.next)
@@ -711,10 +718,11 @@ func (s *Service) startLogSession(run func(context.Context, logs.Sink)) string {
 	ss := &session{id: id, cancel: cancel}
 	s.sessions[id] = ss
 	s.mu.Unlock()
+	s.win.Own(id, window) // before its first lines
 
 	sink := &logSink{emit: func(p LogsPayload) {
 		p.ID = id
-		s.emit.Emit(LogsEvent, p)
+		s.win.emitStream(id, LogsEvent, func(seq int64) any { p.Seq = seq; return p })
 	}}
 	s.running.Add(1)
 	go func() {
@@ -722,7 +730,9 @@ func (s *Service) startLogSession(run func(context.Context, logs.Sink)) string {
 		run(ctx, sink)
 		sink.close()
 		s.endSession(ss)
-		s.emit.Emit(LogsEvent, LogsPayload{ID: id, Exit: exitText(ctx, nil)})
+		exit := exitText(ctx, nil)
+		s.win.emitStream(id, LogsEvent, func(seq int64) any { return LogsPayload{ID: id, Seq: seq, Exit: exit} })
+		s.win.Disown(id)
 	}()
 	return id
 }

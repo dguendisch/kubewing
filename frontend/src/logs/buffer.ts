@@ -87,6 +87,21 @@ class LogBuffers {
     this.listeners.get(id)?.forEach((l) => l());
   }
 
+  /**
+   * A pane came from another window: its backlog there goes before what
+   * already arrived here (after the move), its streams unless newer ones came.
+   */
+  prepend(id: string, from: { lines: LogLine[]; streams: LogStream[]; dropped: number }) {
+    const b = this.buf(id);
+    const fresh = b.seq > 0;
+    b.lines = [...from.lines, ...b.lines];
+    if (b.lines.length > this.max) b.lines.splice(0, b.lines.length - this.max);
+    if (!fresh || b.streams.length === 0) b.streams = from.streams;
+    b.dropped += from.dropped;
+    b.seq++;
+    this.emit(id);
+  }
+
   /** Forgets a session (its pane is gone). */
   drop(id: string) {
     this.bufs.delete(id);

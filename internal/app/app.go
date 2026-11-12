@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/url"
 
@@ -36,8 +37,14 @@ func New(svc *bridge.Service) *App {
 	return &App{svc: svc, ContextsFn: KubeContexts}
 }
 
-func (a *App) Open(pipelineYAML string) (bridge.OpenResult, error) { return a.svc.Open(pipelineYAML) }
-func (a *App) Update(pane, pipelineYAML string) error              { return a.svc.Update(pane, pipelineYAML) }
+// Methods taking a context.Context first get the calling window from Wails
+// (from the WebSocket transport: its connection's): what they start streams
+// to that window.
+
+func (a *App) Open(ctx context.Context, pipelineYAML string) (bridge.OpenResult, error) {
+	return a.svc.OpenIn(ctx, pipelineYAML)
+}
+func (a *App) Update(pane, pipelineYAML string) error { return a.svc.Update(pane, pipelineYAML) }
 func (a *App) SetViewport(pane string, offset, limit int) error {
 	return a.svc.SetViewport(pane, offset, limit)
 }
@@ -172,11 +179,11 @@ func (a *App) EventsTarget(pane, key string) (relations.Target, error) {
 func (a *App) OwnedScan(pane, key string) (bridge.OwnedScanResult, error) {
 	return a.svc.OwnedScan(pane, key)
 }
-func (a *App) ExecStart(token, container string, cols, rows int) (bridge.ExecResult, error) {
-	return a.svc.ExecStart(token, container, cols, rows)
+func (a *App) ExecStart(ctx context.Context, token, container string, cols, rows int) (bridge.ExecResult, error) {
+	return a.svc.ExecStartIn(ctx, token, container, cols, rows)
 }
-func (a *App) DebugStart(token string, o bridge.DebugOptions, cols, rows int) (bridge.DebugResult, error) {
-	return a.svc.DebugStart(token, o, cols, rows)
+func (a *App) DebugStart(ctx context.Context, token string, o bridge.DebugOptions, cols, rows int) (bridge.DebugResult, error) {
+	return a.svc.DebugStartIn(ctx, token, o, cols, rows)
 }
 func (a *App) DebugImages() []string                 { return a.svc.DebugImages() }
 func (a *App) Nodes(cluster string) bridge.NodeList  { return a.svc.Nodes(cluster) }
@@ -196,14 +203,14 @@ func (a *App) OpsPodManifest(cluster, node string, o bridge.OpsPodOptions) (stri
 func (a *App) CheckOpsPod(cluster, node string, o bridge.OpsPodOptions) error {
 	return a.svc.CheckOpsPod(cluster, node, o)
 }
-func (a *App) OpsPodStart(token string, o bridge.OpsPodOptions, cols, rows int) (bridge.OpsPodResult, error) {
-	return a.svc.OpsPodStart(token, o, cols, rows)
+func (a *App) OpsPodStart(ctx context.Context, token string, o bridge.OpsPodOptions, cols, rows int) (bridge.OpsPodResult, error) {
+	return a.svc.OpsPodStartIn(ctx, token, o, cols, rows)
 }
 func (a *App) PrepareTerminal(cluster, namespace string) (safety.Pending, error) {
 	return a.svc.PrepareTerminal(cluster, namespace)
 }
-func (a *App) TerminalStart(token string, cols, rows int) (bridge.TerminalResult, error) {
-	return a.svc.TerminalStart(token, cols, rows)
+func (a *App) TerminalStart(ctx context.Context, token string, cols, rows int) (bridge.TerminalResult, error) {
+	return a.svc.TerminalStartIn(ctx, token, cols, rows)
 }
 func (a *App) RemoveDebugImage(image string) ([]string, error) {
 	return a.svc.RemoveDebugImage(image)
@@ -225,8 +232,29 @@ func (a *App) PortForwardStop(id string) error        { return a.svc.PortForward
 func (a *App) LogsTargets(pane, key, scope string) (bridge.LogsTargets, error) {
 	return a.svc.LogsTargets(pane, key, scope)
 }
-func (a *App) LogsStart(pane, key, scope string, o bridge.LogsOptions) (bridge.LogsResult, error) {
-	return a.svc.LogsStart(pane, key, scope, o)
+func (a *App) LogsStart(ctx context.Context, pane, key, scope string, o bridge.LogsOptions) (bridge.LogsResult, error) {
+	return a.svc.LogsStartIn(ctx, pane, key, scope, o)
+}
+
+// Windows (panes detached into windows of their own, see bridge/windows.go).
+
+func (a *App) OpenWindow(bounds bridge.Rect) (string, error) { return a.svc.OpenWindow(bounds) }
+func (a *App) AwaitWindow(name string) error                 { return a.svc.AwaitWindow(name) }
+func (a *App) WindowReady(ctx context.Context)               { a.svc.WindowReady(ctx) }
+func (a *App) CloseWindow(name string)                       { a.svc.CloseWindow(name) }
+func (a *App) Pointer() (bridge.PointerInfo, error) {
+	p, ok := a.svc.Pointer()
+	if !ok {
+		return p, errors.New("no native windows")
+	}
+	return p, nil
+}
+func (a *App) Windows() []bridge.WindowInfo { return a.svc.Windows() }
+func (a *App) Reassign(ids []string, to string) (map[string]int64, error) {
+	return a.svc.Reassign(ids, to)
+}
+func (a *App) SendWindow(ctx context.Context, to, kind string, data json.RawMessage) error {
+	return a.svc.SendWindow(ctx, to, kind, data)
 }
 
 // StartUpdater applies the config to the updater and runs its schedule until ctx ends.

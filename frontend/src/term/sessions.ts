@@ -55,6 +55,26 @@ class Sessions {
     this.transcript.delete(id);
     this.sizes.delete(id);
   }
+
+  /** The transcript as it stands (a pane moving to another window takes it along). */
+  snapshot(id: string): Chunk[] {
+    return [...(this.transcript.get(id) ?? [])];
+  }
+
+  /**
+   * A pane came from another window: its transcript there goes before what
+   * already arrived here (after the move); trimmed to the bound like pushes.
+   */
+  prepend(id: string, chunks: Chunk[]) {
+    const buf = [...chunks, ...(this.transcript.get(id) ?? [])];
+    let size = buf.reduce((n, c) => n + (c instanceof Uint8Array ? c.length : 0), 0);
+    while (size > this.max && buf.length > 1) {
+      const first = buf.shift()!;
+      if (first instanceof Uint8Array) size -= first.length;
+    }
+    this.transcript.set(id, buf);
+    this.sizes.set(id, size);
+  }
 }
 
 export const sessions = new Sessions();

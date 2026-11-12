@@ -362,6 +362,38 @@ export interface Launch {
   error?: string;
 }
 
+/** Mirrors bridge.Rect: a window's frame on screen (points, top-left origin). */
+export interface ScreenRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Mirrors bridge.WindowInfo. */
+export interface WindowInfo {
+  name: string;
+  bounds: ScreenRect;
+}
+
+/** Mirrors bridge.PointerInfo: the mouse during a drag, and the kubewing window frontmost under it. */
+export interface PointerInfo {
+  x: number;
+  y: number;
+  window?: string;
+  inX?: number;
+  inY?: number;
+  /** Another app's window is in front there. */
+  other?: boolean;
+}
+
+/** Mirrors bridge.WindowMessage: one window's frontend to another's. */
+export interface WindowMessage {
+  from: string;
+  kind: string;
+  data?: unknown;
+}
+
 /** Mirrors bridge.Draft: a filter bar edit not applied yet. */
 export interface Draft {
   field: "filter" | "labels";
@@ -840,6 +872,8 @@ export interface TerminalResult {
 /** Mirrors bridge.SessionPayload: output (base64) or, last, the exit. */
 export interface SessionPayload {
   id: string;
+  /** Numbers the session's events (1, 2 …); a pane moving to another window splits them at Reassign's number. */
+  seq?: number;
   data?: string;
   /** "0", an exit code, or an error message. */
   exit?: string;
@@ -866,6 +900,8 @@ export interface LogStream {
 /** Mirrors bridge.LogsPayload: a log session's stream set and/or line batch. */
 export interface LogsPayload {
   id: string;
+  /** As SessionPayload.seq. */
+  seq?: number;
   streams?: LogStream[];
   lines?: LogLine[];
   /** Lines dropped since the last event (batch overflow). */
@@ -1107,6 +1143,21 @@ export interface Transport {
   installUpdate(): Promise<void>;
   /** Opens an http(s) link in the default browser, never in the app's webview. */
   openURL(url: string): Promise<void>;
+  /** Opens a window of its own (a pane detached into it) at bounds; resolves with its name once it listens. */
+  openWindow(bounds: ScreenRect): Promise<string>;
+  /** This window's frontend listens: what was sent to it meanwhile comes now. */
+  windowReady(): Promise<void>;
+  /** Closes a window (not the main one); the panes it still shows close with it. */
+  closeWindow(name: string): Promise<void>;
+  /** The open windows, most recently in front first. */
+  windows(): Promise<WindowInfo[]>;
+  /** The mouse and the window under it, from the OS (macOS app); rejects in the browser (no native windows). */
+  pointer(): Promise<PointerInfo>;
+  /** Hands streams (server panes, sessions) to another window; per stream the seq of the last event sent here. */
+  reassign(ids: string[], to: string): Promise<Record<string, number>>;
+  /** A message to another window's frontend (WindowMessage there). */
+  sendWindow(to: string, kind: string, data: unknown): Promise<void>;
+  onWindow(cb: (m: WindowMessage) => void): () => void;
   onFrame(cb: (p: FramePayload) => void): () => void;
   onConfig(cb: (c: Config) => void): () => void;
   /** A type's column settings changed (any client): all types' settings. */

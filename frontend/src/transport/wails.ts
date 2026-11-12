@@ -1,5 +1,5 @@
 import { Call, Clipboard, Events } from "@wailsio/runtime";
-import type { Config, FramePayload, Launch, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus } from "./types";
+import type { Config, FramePayload, Launch, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus, WindowMessage } from "./types";
 
 const svc = "github.com/dguendisch/kubewing/internal/app.App";
 const call = <T>(method: string, ...args: unknown[]) =>
@@ -99,6 +99,14 @@ export function wailsTransport(): Transport {
     skipUpdate: (v) => call("SkipUpdate", v),
     installUpdate: () => call("InstallUpdate"),
     openURL: (u) => call("OpenURL", u),
+    openWindow: (b) => call("OpenWindow", b),
+    windowReady: () => call("WindowReady"),
+    closeWindow: (n) => call("CloseWindow", n),
+    windows: () => call("Windows"),
+    pointer: () => call("Pointer"),
+    reassign: (ids, to) => call("Reassign", ids, to),
+    sendWindow: (to, kind, data) => call("SendWindow", to, kind, data),
+    onWindow: (cb) => Events.On("kw:window", (ev) => cb(ev.data as WindowMessage)),
     onFrame: (cb) => Events.On("kw:frame", (ev) => cb(ev.data as FramePayload)),
     onConfig: (cb) => Events.On("kw:config", (ev) => cb(ev.data as Config)),
     onColumns: (cb) => Events.On("kw:columns", (ev) => cb(ev.data as Record<string, TypeView>)),

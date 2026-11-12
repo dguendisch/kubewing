@@ -1,4 +1,4 @@
-import type { Config, FramePayload, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus } from "./types";
+import type { Config, FramePayload, LogsPayload, PortForward, SessionPayload, Transport, TypeView, UpdateStatus, WindowMessage } from "./types";
 
 /** WebSocket transport to the headless Go backend (tests, browser dev). */
 export function wsTransport(url: string): Transport {
@@ -11,6 +11,7 @@ export function wsTransport(url: string): Transport {
   const logsListeners = new Set<(p: LogsPayload) => void>();
   const forwardListeners = new Set<(l: PortForward[]) => void>();
   const updateListeners = new Set<(s: UpdateStatus) => void>();
+  const windowListeners = new Set<(m: WindowMessage) => void>();
   let ws: WebSocket;
   const ready = new Promise<void>((resolve, reject) => {
     ws = new WebSocket(url);
@@ -44,6 +45,10 @@ export function wsTransport(url: string): Transport {
       }
       if (msg.event === "kw:update") {
         updateListeners.forEach((cb) => cb(msg.data));
+        return;
+      }
+      if (msg.event === "kw:window") {
+        windowListeners.forEach((cb) => cb(msg.data));
         return;
       }
       const p = pending.get(msg.id);
@@ -156,6 +161,29 @@ export function wsTransport(url: string): Transport {
     installUpdate: () => call("InstallUpdate"),
     // browser/test build: the page opens links in a new tab itself (Go has no browser to hand them to)
     openURL: async (u) => void window.open(u, "_blank", "noopener"),
+    // a browser window (a popup in tests) is the window: the page opens it, Go waits for it to connect
+    openWindow: async (b) => {
+      const name = await call<string>("OpenWindow", b);
+      const url = new URL(location.href);
+      url.searchParams.set("window", name);
+      window.open(url.toString(), name, b.w > 0 ? `popup,left=${b.x},top=${b.y},width=${b.w},height=${b.h}` : "popup");
+      await call("AwaitWindow", name);
+      return name;
+    },
+    windowReady: () => call("WindowReady"),
+    // the browser window closes itself (Go has no window to close headless)
+    closeWindow: async (n) => {
+      await call("CloseWindow", n);
+      if (n === new URLSearchParams(location.search).get("window")) window.close();
+    },
+    windows: () => call("Windows"),
+    pointer: () => call("Pointer"),
+    reassign: (ids, to) => call("Reassign", ids, to),
+    sendWindow: (to, kind, data) => call("SendWindow", to, kind, data),
+    onWindow: (cb) => {
+      windowListeners.add(cb);
+      return () => windowListeners.delete(cb);
+    },
     onFrame: (cb) => {
       frameListeners.add(cb);
       return () => frameListeners.delete(cb);

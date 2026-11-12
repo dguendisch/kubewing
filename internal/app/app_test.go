@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
 	"reflect"
 	"strings"
@@ -28,7 +29,11 @@ func TestEveryMethodDispatches(t *testing.T) {
 	for i := range typ.NumMethod() {
 		m := typ.Method(i)
 		var args []json.RawMessage
-		for j := 1; j < m.Type.NumIn(); j++ {
+		first := 1
+		if m.Type.NumIn() > 1 && m.Type.In(1) == reflect.TypeFor[context.Context]() {
+			first = 2 // the calling window, which Dispatch passes itself
+		}
+		for j := first; j < m.Type.NumIn(); j++ {
 			b, err := json.Marshal(reflect.Zero(m.Type.In(j)).Interface())
 			if err != nil {
 				t.Fatal(err)

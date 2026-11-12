@@ -11,7 +11,9 @@ export * from "./types";
 export async function createTransport(): Promise<Transport> {
   if (import.meta.env.VITE_KW_TRANSPORT === "ws") {
     const proto = location.protocol === "https:" ? "wss" : "ws";
-    return wsTransport(`${proto}://${location.host}/kw-ws`);
+    // a detached window's page is a window of its own (?window=w1): its streams go to its connection
+    const name = new URLSearchParams(location.search).get("window");
+    return wsTransport(`${proto}://${location.host}/kw-ws${name ? `?window=${encodeURIComponent(name)}` : ""}`);
   }
   const { wailsTransport } = await import("./wails");
   return wailsTransport();

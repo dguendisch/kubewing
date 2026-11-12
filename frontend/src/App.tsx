@@ -35,6 +35,12 @@ import * as S from "./store/state";
 const noDrag = { ["--wails-draggable" as string]: "no-drag" };
 
 export function App() {
+  const empty = useUI((s) => s.tabs.length === 0);
+  // a detached window waits for its pane (or is closing, its last one gone)
+  return empty ? <div className="h-full bg-bg" style={{ ["--wails-draggable" as string]: "drag" }} /> : <Window />;
+}
+
+function Window() {
   useKeys();
   const tabs = useUI((s) => s.tabs);
   const active = useUI((s) => s.activeTab);

@@ -54,44 +54,42 @@ func (h *Hub) Emit(event string, data any) {
 	}
 }
 
-// API is the object served over WebSocket (app.App, the same object Wails
-// binds); its exported methods are called by name via Dispatch. Close and
-// SessionClose stop the panes and log tails opened over a connection when
-// it goes away.
-type API interface {
-	Close(pane string) error
-	SessionClose(id string) error
-}
-
-// Handler serves api over WebSocket.
-func (h *Hub) Handler(api API) http.Handler {
+// Handler serves api (app.App, the object Wails binds; its exported methods
+// are called by name via Dispatch) over WebSocket. Each connection is a
+// window of svc's router, named by the URL's ?window= (default: the main
+// window): stream events go to the connection showing the stream, and the
+// streams a connection still owns close when it goes away (a log tail holds
+// a pods watch: left running, it would outlive the page).
+func (h *Hub) Handler(api any, svc *Service) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{OriginPatterns: []string{"localhost:*", "127.0.0.1:*"}})
 		if err != nil {
 			return
 		}
-		c.SetReadLimit(1 << 20)
+		c.SetReadLimit(64 << 20) // a pane handed to another window carries its shell's transcript and its log backlog
 		ctx, cancel := context.WithCancel(r.Context())
 		defer cancel()
+		name := r.URL.Query().Get("window")
+		if name == "" {
+			name = MainWindow
+		}
 		out := make(chan wsMessage, 256)
 		h.mu.Lock()
 		h.clients[c] = out
 		h.mu.Unlock()
-		// panes and log tails opened over this connection are closed when it
-		// goes away (a tail holds a pods watch: left running, it would outlive
-		// the page)
-		opened := map[string]bool{}
-		tails := map[string]bool{}
+		// in order and complete (a shell's output is numbered): waits for the writer rather than dropping
+		win := svc.Router().Register(name, func(event string, data any) {
+			select {
+			case out <- wsMessage{Event: event, Data: data}:
+			case <-ctx.Done():
+			}
+		})
 		defer func() {
 			h.mu.Lock()
 			delete(h.clients, c)
 			h.mu.Unlock()
-			for id := range opened {
-				_ = api.Close(id)
-			}
-			for id := range tails {
-				_ = api.SessionClose(id)
-			}
+			cancel()
+			svc.ConnectionClosed(win)
 			c.CloseNow()
 		}()
 		go func() {
@@ -107,24 +105,13 @@ func (h *Hub) Handler(api API) http.Handler {
 				}
 			}
 		}()
+		callCtx := WithWindow(ctx, name)
 		for {
 			var req wsRequest
 			if err := wsjson.Read(ctx, c, &req); err != nil {
 				return
 			}
-			res, err := Dispatch(api, req.Method, req.Args)
-			if or, ok := res.(OpenResult); ok && err == nil {
-				opened[or.Pane] = true
-			}
-			if lr, ok := res.(LogsResult); ok && err == nil {
-				tails[lr.Session] = true
-			}
-			if req.Method == "Close" && len(req.Args) > 0 {
-				var id string
-				if json.Unmarshal(req.Args[0], &id) == nil {
-					delete(opened, id)
-				}
-			}
+			res, err := DispatchContext(callCtx, api, req.Method, req.Args)
 			m := wsMessage{ID: req.ID, Result: res}
 			if err != nil {
 				m = wsMessage{ID: req.ID, Error: err.Error()}
@@ -140,24 +127,37 @@ func (h *Hub) Handler(api API) http.Handler {
 
 var errorType = reflect.TypeFor[error]()
 
+var contextType = reflect.TypeFor[context.Context]()
+
 // Dispatch calls api's exported method by name, decoding each JSON arg into
 // the parameter's type. Methods return (T, error), error, T or nothing.
 func Dispatch(api any, method string, args []json.RawMessage) (any, error) {
+	return DispatchContext(context.Background(), api, method, args)
+}
+
+// DispatchContext is Dispatch passing ctx to a method whose first parameter
+// is a context.Context (as Wails does: it names the calling window).
+func DispatchContext(ctx context.Context, api any, method string, args []json.RawMessage) (any, error) {
 	m := reflect.ValueOf(api).MethodByName(method)
 	if !m.IsValid() || !token.IsExported(method) {
 		return nil, fmt.Errorf("unknown method %q", method)
 	}
 	t := m.Type()
-	if t.IsVariadic() || len(args) != t.NumIn() {
-		return nil, fmt.Errorf("%s: want %d arguments, got %d", method, t.NumIn(), len(args))
+	var in []reflect.Value
+	first := 0
+	if t.NumIn() > 0 && t.In(0) == contextType {
+		in = append(in, reflect.ValueOf(&ctx).Elem())
+		first = 1
 	}
-	in := make([]reflect.Value, len(args))
+	if t.IsVariadic() || len(args) != t.NumIn()-first {
+		return nil, fmt.Errorf("%s: want %d arguments, got %d", method, t.NumIn()-first, len(args))
+	}
 	for i, raw := range args {
-		v := reflect.New(t.In(i))
+		v := reflect.New(t.In(first + i))
 		if err := json.Unmarshal(raw, v.Interface()); err != nil {
 			return nil, fmt.Errorf("%s: argument %d: %w", method, i, err)
 		}
-		in[i] = v.Elem()
+		in = append(in, v.Elem())
 	}
 	var res any
 	var err error

@@ -462,6 +462,11 @@ func (s *Service) CheckOpsPod(cluster, node string, o OpsPodOptions) error {
 // until it runs, then the shell. The pod is deleted when the session ends
 // (shell exits, pane closed, app quit).
 func (s *Service) OpsPodStart(token string, o OpsPodOptions, cols, rows int) (OpsPodResult, error) {
+	return s.OpsPodStartIn(context.Background(), token, o, cols, rows)
+}
+
+// OpsPodStartIn is OpsPodStart for the calling window.
+func (s *Service) OpsPodStartIn(ctx context.Context, token string, o OpsPodOptions, cols, rows int) (OpsPodResult, error) {
 	a, target, err := s.guard.Redeem(token, safety.OpsPod)
 	if err != nil {
 		return OpsPodResult{}, err
@@ -472,7 +477,7 @@ func (s *Service) OpsPodStart(token string, o OpsPodOptions, cols, rows int) (Op
 		return OpsPodResult{}, err
 	}
 	settings := strings.TrimPrefix(strings.TrimPrefix(spec.String(), spec.Image+" on "+spec.Node), ", ")
-	id := s.startSession(cols, rows, func(ctx context.Context, st source.ExecStreams) error {
+	id := s.startSession(windowOf(ctx), cols, rows, func(ctx context.Context, st source.ExecStreams) error {
 		spec := spec // the session's own copy
 		dim := func(format string, args ...any) { fmt.Fprintf(st.Stdout, "\x1b[2m"+format+"\x1b[0m\r\n", args...) }
 		dim("creating %s/%s (%s) …", spec.Namespace, spec.Name, spec)
