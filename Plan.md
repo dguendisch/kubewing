@@ -4,7 +4,6 @@ What's not done yet. What works is in the [Manual](Manual.md), how it's built in
 
 ## Next up
 
-- cmd+shift+i should select the existing name (so that I can easily modify it) instead emptying it
 - events (of a pod) is missing from context menu, could come below of describe
 - color font for ready/true thingies (like [kubecolor](https://github.com/kubecolor/kubecolor))
 - better top bar display where you are (control-plane, shoot, proper landscape names)

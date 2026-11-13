@@ -8,6 +8,7 @@
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 
 ### Changed
+- naming a tab (`⌘⇧I` or double-click) starts with its current title selected, ready to edit, instead of an empty field
 - the open cluster dialog (`⌘⇧O`) opens panes/tabs now like a jump (`⌘J`): `⏎` in the focused pane, `⇧⏎` in a split below, `⌘⏎` in a new tab. The "open in" toggle and `⌃⇧⏎` are gone
 
 ### Fixed

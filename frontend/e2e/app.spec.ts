@@ -12,7 +12,7 @@ type Inspect = {
   place?: { line: number; col: number };
   selected?: string;
   activeTab: number;
-  tabs: { id: string; focused: string; layout: unknown }[];
+  tabs: { id: string; name?: string; focused: string; layout: unknown }[];
   panes: Record<string, { spec: { resource: string; grep: string; filter: string; labelSelector?: string; sort?: string }; serverId?: string; total: number; selected: number; type?: string; view?: { columns?: { name: string; path?: string; expr?: string }[]; widths?: Record<string, number> }; columns: string[]; rows: { key: string; cells: string[]; mark?: string; changed?: number[]; marked?: boolean }[]; status?: { synced: boolean; at?: string; recording?: boolean; marked?: number }; textSel?: { key: string; column: string; text: string; start: number; end: number; age?: boolean }; logs?: { session: string; title: string; filter: string; timestamps: boolean; follow: boolean; exited?: string } }>;
   logs?: Record<string, { lines: number; streams: { pod: string; container: string; state: string }[]; dropped: number; screen: string; viewportY: number; length: number; rows: number }>;
 };
@@ -1346,8 +1346,14 @@ test("tabs: cmd+t opens, cmd+shift+] cycles; ARIA structure", async ({ page }) =
 test("naming: double-click or cmd+shift+i names a tab, cmd+i or a double-click on the header a pane; esc undoes, empty clears", async ({ page }) => {
   await openTape(page);
   const tab = page.getByRole("tab", { selected: true });
-  await tab.dblclick();
   const tabField = page.getByRole("textbox", { name: "tab name" });
+  // unnamed, the field starts with the title shown, selected; ⏎ untouched keeps the tab unnamed
+  await page.keyboard.press("ControlOrMeta+Shift+I");
+  await expect(tabField).toHaveValue("e2e-pods");
+  expect(await tabField.evaluate((e: HTMLInputElement) => [e.selectionStart, e.selectionEnd])).toEqual([0, "e2e-pods".length]);
+  await page.keyboard.press("Enter");
+  expect((await inspect(page)).tabs[0]!.name).toBeUndefined();
+  await tab.dblclick();
   await expect(tabField).toBeFocused();
   await page.keyboard.type("incident");
   await page.keyboard.press("Enter");

@@ -844,7 +844,7 @@ Tabs keep their width: when there are more than fit, they wrap into more rows an
 
 ### Names
 
-`⌘⇧I` (or a double-click on the tab) names the tab; `⌘I` (or a double-click on the empty part of a pane's header) names the pane. The name applies as you type; `⏎` or a click elsewhere keeps it, `Esc` restores the old one, an empty name removes it.
+`⌘⇧I` (or a double-click on the tab) names the tab; `⌘I` (or a double-click on the empty part of a pane's header) names the pane. The field starts with the current name selected, so you can type over it or edit it. For a tab without a name, that's the title it shows, and the tab stays unnamed until you change it. The name applies as you type; `⏎` or a click elsewhere keeps it, `Esc` restores the old one, an empty name removes it.
 
 A pane's name shows in its header, and in the tab while the tab has no name of its own (otherwise the tab shows the focused pane's resource and namespace). A context label (`PROD`) always stays in front. Names aren't saved across restarts.
 

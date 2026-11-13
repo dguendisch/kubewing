@@ -86,7 +86,7 @@ function Window() {
             return (
               <div key={t.id} className="group relative flex" style={noDrag}>
                 <div role="tab" data-tab={t.id} aria-selected={i === active} className={className}>
-                  <NameField label="tab name" initial={t.name ?? ""} onName={(name) => (s) => S.nameTab(s, t.id, name)} />
+                  <NameField label="tab name" initial={t.name ?? ""} shown={title} onName={(name) => (s) => S.nameTab(s, t.id, name)} />
                   {shortcut}
                 </div>
                 {close}

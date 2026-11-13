@@ -6,11 +6,13 @@ import * as S from "../store/state";
  * The name field of a tab or pane, in place of its title (renameTab /
  * renamePane overlay). The name applies as it's typed, so it's kept however
  * the field goes (⏎, a click elsewhere, a key that moves the focus, another
- * overlay); Esc puts the old one back. An empty name removes it.
+ * overlay); Esc puts the old one back. An empty name removes it. Without a
+ * name, the field starts with `shown` (the title in its place), selected: it
+ * becomes the name only once edited, so ⏎ leaves it unnamed.
  */
-export function NameField({ label, initial, onName, className = "" }: { label: string; initial: string; onName: (name: string) => (s: S.UIState) => S.UIState; className?: string }) {
+export function NameField({ label, initial, shown = "", onName, className = "" }: { label: string; initial: string; shown?: string; onName: (name: string) => (s: S.UIState) => S.UIState; className?: string }) {
   const ref = useRef<HTMLInputElement>(null);
-  const [value, setValue] = useState(initial);
+  const [value, setValue] = useState(initial || shown);
   // as opened: the name applies as typed, so `initial` follows it
   const [before] = useState(initial);
   useEffect(() => ref.current?.select(), []);
