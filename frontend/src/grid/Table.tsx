@@ -59,6 +59,9 @@ const colorVar: Record<ColorToken, string> = {
   added: "added",
   deleted: "deleted",
   changed: "changed",
+  ok: "ok",
+  warn: "warn",
+  bad: "bad",
 };
 
 interface Props {
@@ -364,7 +367,7 @@ export function Table({ serverId, grep, selected, focused, type, onSelect, onMar
     const { ctx, rect, col, row, theme: t } = args;
     const r = rowAt(data.current, row);
     const column = data.current.columns[col];
-    const l = layout(r, col, column, nowOf(data.current));
+    const l = layout(r, col, column, nowOf(data.current), data.current.columns);
     // The background: marked for an action on many rows (under a diff tint), blended into one opaque color.
     // A repaint of single cells (updateCells: the ages' tick, a frame's changed rows) wipes only the
     // cell's inside, not its top pixel row and left one (the grid line), and redraws no grid lines: a

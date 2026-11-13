@@ -28,6 +28,21 @@ describe("layout", () => {
     expect(layout({ ...row, hidden: true }, 0, cols[0], now).hiddenMarker).toBe(true);
     expect(layout({ ...row, hidden: true }, 1, cols[1], now).hiddenMarker).toBe(false);
   });
+  it("status colors: warn and bad over the diff's text color (the tint stays), ok only unmarked, deleted stays deleted", () => {
+    const pc = [{ name: "NAME" }, { name: "READY" }, { name: "STATUS" }];
+    const pod = (status: string, ready = "1/1") => ({ key: "p", cells: ["web", ready, status] });
+    expect(layout(pod("Running"), 2, pc[2], now, pc).color).toBe("ok");
+    expect(layout(pod("Running"), 0, pc[0], now, pc).color).toBe("fg");
+    expect(layout(pod("CrashLoopBackOff", "0/1"), 2, pc[2], now, pc).color).toBe("bad");
+    expect(layout(pod("CrashLoopBackOff", "0/1"), 1, pc[1], now, pc).color).toBe("warn");
+    expect(layout({ ...pod("CrashLoopBackOff"), changed: [2] }, 2, pc[2], now, pc)).toMatchObject({ color: "bad", tint: "changed" });
+    expect(layout({ ...pod("Running"), changed: [2] }, 2, pc[2], now, pc)).toMatchObject({ color: "changed", tint: "changed" });
+    expect(layout({ ...pod("Pending"), mark: "added" }, 2, pc[2], now, pc)).toMatchObject({ color: "warn", tint: "added" });
+    expect(layout({ ...pod("Running"), mark: "added" }, 2, pc[2], now, pc)).toMatchObject({ color: "added", tint: "added" });
+    expect(layout({ ...pod("Failed"), mark: "deleted" }, 2, pc[2], now, pc)).toMatchObject({ color: "deleted", strike: true });
+    // without the pane's columns: no status colors
+    expect(layout(pod("Failed"), 2, pc[2], now).color).toBe("fg");
+  });
   it("a pod's restarts: the count and how long ago the last restart was, right-aligned", () => {
     const c = { name: "RESTARTS", type: "restarts" as const };
     expect(layout({ key: "k", cells: ["3 (2026-01-01T11:55:00Z)"] }, 0, c, now)).toMatchObject({ text: "3 (5m ago)", align: "right" });

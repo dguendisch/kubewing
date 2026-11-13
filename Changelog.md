@@ -6,6 +6,7 @@
 - copy on select: with `terminal.copyOnSelect: true` in `config.yaml`, selecting text with the mouse in a shell or log pane copies it (off by default)
 - copy & copy cell(s) (`⌘⇧C`) with rows marked, copies all marked rows (instead of only the cursor's row)
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
+- status colors: state cells (STATUS, READY, conditions such as AVAILABLE or a shoot's NODES, an event's TYPE) show their text in orange when waiting (`Pending`, `1/2`, `Unknown`) and red when broken (`CrashLoopBackOff`, `False`), like kubecolor; healthy states stay uncolored unless a theme sets the `ok` token
 - the row menu (`⌘⏎`, right-click) has an **events** entry (`v`) (previously, "events" where only visible from the jump menu)
 
 ### Changed

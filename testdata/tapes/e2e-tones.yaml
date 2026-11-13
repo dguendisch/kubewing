@@ -1,0 +1,15 @@
+# E2E tape for status colors: one pod running and ready, one pending,
+# one crash-looping, without scripted steps (no diff marks over them).
+pipeline:
+  source: {resource: pods}
+columns:
+  - {name: Name, type: string, priority: 0}
+  - {name: Ready, type: string, priority: 0}
+  - {name: Status, type: string, priority: 0}
+initial:
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: a-running, namespace: shop, uid: t-running, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [a-running, 1/1, Running]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: b-pending, namespace: shop, uid: t-pending, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Pending}}
+    cells: [b-pending, 0/1, Pending]
+  - object: {apiVersion: v1, kind: Pod, metadata: {name: c-crashing, namespace: shop, uid: t-crashing, creationTimestamp: "2026-01-01T10:00:00Z"}, status: {phase: Running}}
+    cells: [c-crashing, 0/1, CrashLoopBackOff]

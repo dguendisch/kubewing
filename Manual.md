@@ -229,6 +229,21 @@ In the table itself:
 
 Columns and widths are kept in `columns.yaml` across restarts. Changing columns keeps the watch and its diff state.
 
+**Status colors.** Cells that tell a state color their text when it needs attention, like [kubecolor](https://github.com/kubecolor/kubecolor) does for kubectl, but only where the column means a state (`False` in READY, not in SUSPEND):
+
+| Column | Orange (wait) | Red (broken) |
+|---|---|---|
+| STATUS, PHASE, CONDITION | `Pending`, `ContainerCreating`, `Init:0/2`, `Terminating`, `Unknown`, `NotReady`, `SchedulingDisabled`, `Released`, `Suspended`, `progressing` | `Failed`, `Error`, `CrashLoopBackOff`, `ImagePullBackOff`, `CreateContainerConfigError`, `OOMKilled`, `ExitCode:1`, `Evicted`, `Lost`, `Denied`, `unhealthy` |
+| READY | fewer ready than expected (`1/2`, `0/1`: not for completed pods); `Unknown` | `False` |
+| AVAILABLE, HEALTHY, APPLIED, SYNCED, ESTABLISHED, a shoot's APISERVER, CONTROL, NODES, SYSTEM, OBSERVABILITY | `Unknown`, `Progressing` | `False` |
+| PROGRESSING | `True` | |
+| LAST OPERATION (shoots) | `Processing`, `Pending` | `Error`, `Failed`, `Aborted` |
+| TYPE (events) | `Warning` | |
+
+- A list such as `Ready,SchedulingDisabled` takes its worst part.
+- Only the text is colored: the background stays the [keyed diff's](#the-keyed-diff). A pod that just started crash-looping shows red text on the "changed" highlight. A deleted row stays struck through.
+- Healthy states (`Running`, `True`, `2/2`) stay in the normal text color. A theme can color them too, with the `ok` token (see [Themes](#themes)); `warn` and `bad` are the orange and the red.
+
 ### Metrics: `m`, requests/limits: `⇧M`
 
 `m` shows the CPU and memory usage of pods and nodes as columns, like `kubectl top`, and hides them again. `⇧M` does the same for what the pods on each node request and are limited to, like `kubectl describe node`. Like **-o wide**, it applies to the resource type: every pane of pods (or nodes) shows them, in every context, and they stay across restarts. They're off by default. The first time they're turned on, they're placed right after NAME, as narrow as their numbers. Moved and resized, they keep it: turned off and on again (`m` or the switch), they come back where they were, in their order and widths (right after NAME if the column they followed is hidden by then). Each group keeps its own place. The column configurator lists them marked `metrics` or `requests/limits`, with a **metrics** and a **requests/limits** switch that show or hide a group at once; they can also be shown, hidden and moved one by one.
@@ -1044,7 +1059,7 @@ A reload (`⌘⇧,`, or saving in `⌘,`) applies changes at once, to open panes
 
 Two themes are built in: the default one (dark grey with an orange accent) and `blue` (navy with a blue accent); select it with `theme: blue`. Both draw drop shadows below menus and dialogs.
 
-`themes/<name>.yaml` overrides the tokens in [theme.css](frontend/src/theme.css) (colors such as `prod`, `changed`, `added`, `deleted`, `match`); select it with `theme: <name>`. A `themes/blue.yaml` changes single tokens of the built-in blue theme. The `shadow` token colors the drop shadow below menus and dialogs; `shadow: "#0000"` turns it off.
+`themes/<name>.yaml` overrides the tokens in [theme.css](frontend/src/theme.css) (colors such as `prod`, `changed`, `added`, `deleted`, `match`, and the [status colors](#columns) `ok`, `warn`, `bad`); select it with `theme: <name>`. A `themes/blue.yaml` changes single tokens of the built-in blue theme. The `shadow` token colors the drop shadow below menus and dialogs; `shadow: "#0000"` turns it off.
 
 ---
 

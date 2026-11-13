@@ -1,0 +1,58 @@
+--- frame 0
+{
+  "seq": 1,
+  "columns": [
+    {
+      "name": "NAMESPACE"
+    },
+    {
+      "name": "NAME"
+    },
+    {
+      "name": "READY"
+    },
+    {
+      "name": "STATUS"
+    }
+  ],
+  "total": 3,
+  "offset": 0,
+  "order": [
+    "t-running",
+    "t-pending",
+    "t-crashing"
+  ],
+  "rows": [
+    {
+      "key": "t-running",
+      "cells": [
+        "shop",
+        "a-running",
+        "1/1",
+        "Running"
+      ]
+    },
+    {
+      "key": "t-pending",
+      "cells": [
+        "shop",
+        "b-pending",
+        "0/1",
+        "Pending"
+      ]
+    },
+    {
+      "key": "t-crashing",
+      "cells": [
+        "shop",
+        "c-crashing",
+        "0/1",
+        "CrashLoopBackOff"
+      ]
+    }
+  ],
+  "status": {
+    "synced": true,
+    "objects": 3
+  }
+}

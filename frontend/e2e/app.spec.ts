@@ -650,6 +650,30 @@ test("grep highlights its matches in the cells, and the highlight goes with the 
   await expect.poll(highlighted).toBe(0);
 });
 
+// e2e-tones: a-running (Running, 1/1), b-pending (Pending, 0/1), c-crashing (CrashLoopBackOff, 0/1)
+test("status colors: a pending pod's status and readiness in the warn color, a crash-looping one's status in bad, a running one's uncolored", async ({ page }) => {
+  await openTape(page, "e2e-tones", 3);
+  const canvas = page.locator("section[data-pane] canvas").first();
+  // pixels of a row near a theme token's color (summed channel distance), in its band (header 24px, rows 22px)
+  const near = (row: number, token: string) =>
+    canvas.evaluate((c: HTMLCanvasElement, [row, token]) => {
+      const hex = getComputedStyle(document.documentElement).getPropertyValue(`--color-${token}`).trim().slice(1);
+      const want = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+      const dpr = window.devicePixelRatio;
+      const px = c.getContext("2d")!.getImageData(0, (24 + 22 * row) * dpr, c.width, 22 * dpr).data;
+      let n = 0;
+      for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i]! - want[0]!) + Math.abs(px[i + 1]! - want[1]!) + Math.abs(px[i + 2]! - want[2]!) < 40) n++;
+      return n;
+    }, [row, token] as const);
+  // b-pending: "0/1" and "Pending" in warn
+  await expect.poll(() => near(1, "warn")).toBeGreaterThan(20);
+  expect(await near(1, "bad")).toBe(0);
+  // c-crashing: "CrashLoopBackOff" in bad ("0/1" in warn)
+  expect(await near(2, "bad")).toBeGreaterThan(20);
+  // a-running: ok is the text color by default, nothing warn or bad
+  expect((await near(0, "warn")) + (await near(0, "bad"))).toBe(0);
+});
+
 test("label selector: click or l focuses it and keeps focus while typing, ⏎ goes back to the table; tab moves between the filter fields", async ({ page }) => {
   await openTape(page);
   const labels = page.getByLabel("label selector");

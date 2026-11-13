@@ -1,10 +1,11 @@
 import type { ColumnInfo, RowData } from "../transport/types";
+import { tone } from "./tones";
 
 /**
  * Pure cell layout: everything a renderer needs, as data. The Glide draw
  * callback (Table.tsx) is a thin painter over this; tests cover layout().
  */
-export type ColorToken = "fg" | "fgMuted" | "added" | "deleted" | "changed";
+export type ColorToken = "fg" | "fgMuted" | "added" | "deleted" | "changed" | "ok" | "warn" | "bad";
 
 export interface CellLayout {
   text: string;
@@ -50,17 +51,26 @@ export function shownText(raw: string, column: ColumnInfo | undefined, now: numb
   return raw;
 }
 
-export function layout(row: RowData | undefined, col: number, column: ColumnInfo | undefined, now: number): CellLayout {
+/**
+ * A cell as drawn. columns (the pane's, which column belongs to) gives the
+ * status colors (tones.ts): without it, cells have none. A warn or bad tone
+ * colors the text over an added row's or a changed cell's color (the tint
+ * stays, so both show); an ok tone only where nothing is marked. A deleted
+ * row stays all deleted.
+ */
+export function layout(row: RowData | undefined, col: number, column: ColumnInfo | undefined, now: number, columns?: readonly ColumnInfo[]): CellLayout {
   if (!row || !column) return { text: "", color: "fgMuted", hiddenMarker: false, strike: false, align: "left" };
   const raw = row.cells[col] ?? "";
   const text = shownText(raw, column, now);
   const numeric = column.type === "number" || column.type === "bytes" || column.type === "restarts";
   const base: CellLayout = { text, color: "fg", hiddenMarker: false, strike: false, align: numeric ? "right" : "left" };
   if (row.mark === "deleted") return { ...base, color: "deleted", tint: "deleted", strike: true };
-  if (row.mark === "added") return { ...base, color: "added", tint: "added" };
-  if (row.changed?.includes(col)) return { ...base, color: "changed", tint: "changed" };
+  const t = columns && tone(row.cells, col, columns);
+  const alert = t === "warn" || t === "bad" ? t : undefined;
+  if (row.mark === "added") return { ...base, color: alert ?? "added", tint: "added" };
+  if (row.changed?.includes(col)) return { ...base, color: alert ?? "changed", tint: "changed" };
   if (column.type === "age") return { ...base, color: "fgMuted", hiddenMarker: col === 0 && !!row.hidden };
-  return { ...base, hiddenMarker: col === 0 && !!row.hidden };
+  return { ...base, color: t ?? "fg", hiddenMarker: col === 0 && !!row.hidden };
 }
 
 /**

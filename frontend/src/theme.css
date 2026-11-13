@@ -15,6 +15,11 @@
   --color-connected: #72c087; /* green-grey: synced, watches running */
   --color-deleted: #f14c4c;
   --color-changed: #e2c08d;
+  /* status colors of state cells (STATUS, READY, conditions …: grid/tones.ts), on the text only, as the background is the
+     keyed diff's: warn (Pending, 1/2 ready, Unknown), bad (CrashLoopBackOff, False); ok (Running, True) uncolored by default */
+  --color-ok: var(--color-fg);
+  --color-warn: #e5a448;
+  --color-bad: #f47067;
   --color-hidden: #c586c0;
   --color-match: #6a8caf;
   --color-marked: #4a7fc1; /* rows marked for an action on many rows */
