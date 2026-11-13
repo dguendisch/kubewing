@@ -1540,6 +1540,15 @@ func (v *View) Item(key string) (source.Item, bool) {
 	return e.item, true
 }
 
+// Cells returns a row's cells as the table shows them (a copy; nil if it's unknown).
+func (v *View) Cells(key string) []string {
+	e, ok := v.entries[key]
+	if !ok {
+		return nil
+	}
+	return slices.Clone(e.cells)
+}
+
 // Preview is the outcome of a draft filter or label selector, evaluated
 // against the view's live objects without changing the view.
 type Preview struct {

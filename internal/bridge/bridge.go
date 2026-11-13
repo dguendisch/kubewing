@@ -765,7 +765,8 @@ type row struct {
 	res     source.Resolved
 	typed   string // the pipeline's resource name
 	item    source.Item
-	key     string // the row's key, where known (marked rows)
+	key     string   // the row's key, where known (marked rows)
+	cells   []string // the row's cells, where known (marked rows)
 }
 
 func (r row) namespace() string { return r.item.Object.GetNamespace() }

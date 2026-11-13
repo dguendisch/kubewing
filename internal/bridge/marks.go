@@ -30,7 +30,9 @@ var ErrNoMarks = errors.New("no rows marked")
 
 // MarkedRow is one marked row, with what the dialogs of an action on many
 // rows show: names (copy name, confirmation), replicas (scale), containers
-// (debug), labels and annotations (label, annotate), restartability.
+// (debug), labels and annotations (label, annotate), restartability, and
+// the cells as the table shows them (copy cells: the table holds only the
+// rows in view).
 type MarkedRow struct {
 	Key         string            `json:"key"`
 	Kind        string            `json:"kind"`
@@ -44,6 +46,8 @@ type MarkedRow struct {
 	Restart string `json:"restart,omitempty"`
 	// Logs: it has pods to tail, as RowInfo.Logs.
 	Logs bool `json:"logs,omitempty"`
+	// Cells: the row's cells in the pane's column order.
+	Cells []string `json:"cells,omitempty"`
 }
 
 // Marked lists a pane's marked rows in display order.
@@ -66,21 +70,25 @@ func (s *Service) markedRows(paneID string) ([]row, error) {
 	}
 	pn.mu.Lock()
 	keys := pn.view.Marked()
+	cells := make([][]string, len(keys))
+	for i, k := range keys {
+		cells[i] = pn.view.Cells(k)
+	}
 	pn.mu.Unlock()
 	rows := make([]row, 0, len(keys))
-	for _, k := range keys {
+	for i, k := range keys {
 		r, err := s.row(paneID, k)
 		if err != nil {
 			continue // gone since: the next frame drops its mark
 		}
-		r.key = k
+		r.key, r.cells = k, cells[i]
 		rows = append(rows, r)
 	}
 	return rows, nil
 }
 
 func markedRow(r row) MarkedRow {
-	m := MarkedRow{Key: r.key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Replicas: replicas(r.item.Object)}
+	m := MarkedRow{Key: r.key, Kind: r.kind(), Name: r.name(), Namespace: r.namespace(), Replicas: replicas(r.item.Object), Cells: r.cells}
 	if r.isPod() {
 		m.Containers = podContainers(r)
 		def := defaultContainer(r, m.Containers)

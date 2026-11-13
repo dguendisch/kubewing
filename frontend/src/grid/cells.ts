@@ -100,9 +100,9 @@ function rgbOf(color: string, caller: string): number[] {
   return rgb;
 }
 
-/** One entry of the copy-cell picker (⌘⇧C): a cell of the row, or the whole row. */
+/** One entry of the copy-cell picker (⌘⇧C): the whole row, or a cell of the row (of each marked row). */
 export interface CellChoice {
-  /** The column's name ("whole row" for the last entry). */
+  /** The column's name ("whole row" for the first entry). */
   label: string;
   /** What ⏎ copies. */
   text: string;
@@ -115,19 +115,30 @@ export interface CellChoice {
 export const wholeRow = "whole row";
 
 /**
- * The picker's entries: every shown column in table order with the row's
- * value, then the whole row (tab-separated, so it pastes into a
- * spreadsheet's columns). An age or restarts column copies its timestamp: a
- * "5m" goes stale once pasted. Empty cells are listed but skipped. Pure.
+ * The picker's entries: the whole row (tab-separated, so it pastes into a
+ * spreadsheet's columns), then every shown column in table order with the
+ * row's value. With several rows (the marked ones) each entry copies them
+ * all, a line each, and shows the first row's value. An age or restarts
+ * column copies its timestamp: a "5m" goes stale once pasted. Empty cells
+ * are listed but skipped (with several rows: if every row's is empty). Pure.
  */
-export function cellChoices(row: RowData, columns: ColumnInfo[], now: number): CellChoice[] {
+export function cellChoices(rows: Pick<RowData, "cells">[], columns: ColumnInfo[], now: number): CellChoice[] {
+  const more = rows.length > 1 ? ` … +${rows.length - 1}` : "";
   const cells = columns.map((c, i): CellChoice => {
-    const text = row.cells[i] ?? "";
-    const shown = shownText(text, c, now);
-    return { label: c.name, text, shown: shown === text ? undefined : shown, disabled: text ? undefined : "empty" };
+    const texts = rows.map((r) => r.cells[i] ?? "");
+    const first = texts[0] ?? "";
+    const shown = shownText(first, c, now);
+    const text = texts.join("\n");
+    return {
+      label: c.name,
+      text,
+      shown: more ? `${shown || "—"}${more}` : shown === text ? undefined : shown,
+      disabled: texts.some(Boolean) ? undefined : "empty",
+    };
   });
   if (columns.length < 2) return cells;
-  return [...cells, { label: wholeRow, text: columns.map((_, i) => row.cells[i] ?? "").join("\t"), shown: "tab-separated" }];
+  const whole = rows.map((r) => columns.map((_, i) => r.cells[i] ?? "").join("\t")).join("\n");
+  return [{ label: wholeRow, text: whole, shown: more ? `${rows.length} rows, tab-separated` : "tab-separated" }, ...cells];
 }
 
 /** Initially highlighted: the given column (right-clicked, or copied last) if it can be copied, else the first that can. */

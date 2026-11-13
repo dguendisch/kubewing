@@ -121,7 +121,7 @@ const sections: { title: string; rows: Row[] }[] = [
       row("copy the text selected in a cell, else the name", "table.copy"),
       row("clear the cell's text selection, then the marks", "table.clearSelection"),
       row("copy name (unbound by default: ⌘C without a selection, or the row menu)", "object.copyName"),
-      row("copy cell… (right-click: the cell clicked)", "object.copyCell"),
+      row("copy cell(s)… (right-click: the cell clicked)", "object.copyCell"),
       row("describe", "object.describe"),
       row("describe in a split to the right", "object.describeSplit"),
       row("edit YAML", "object.edit"),

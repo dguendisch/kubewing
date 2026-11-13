@@ -79,28 +79,42 @@ describe("cellChoices", () => {
   const cols = [{ name: "NAME" }, { name: "NOMINATED NODE" }, { name: "RESTARTS", type: "number" as const }, { name: "AGE", type: "age" as const }];
   const row = { key: "k", cells: ["web-0", "", "3", "2026-01-01T11:00:00Z"] };
 
-  it("lists every column with its value, then the whole row tab-separated", () => {
-    expect(cellChoices(row, cols, now)).toEqual([
+  it("lists the whole row tab-separated, then every column with its value", () => {
+    expect(cellChoices([row], cols, now)).toEqual([
+      { label: "whole row", text: "web-0\t\t3\t2026-01-01T11:00:00Z", shown: "tab-separated" },
       { label: "NAME", text: "web-0", shown: undefined, disabled: undefined },
       { label: "NOMINATED NODE", text: "", shown: undefined, disabled: "empty" },
       { label: "RESTARTS", text: "3", shown: undefined, disabled: undefined },
       // the timestamp is copied (a "1h" goes stale once pasted); the picker shows both
       { label: "AGE", text: "2026-01-01T11:00:00Z", shown: "1h", disabled: undefined },
-      { label: "whole row", text: "web-0\t\t3\t2026-01-01T11:00:00Z", shown: "tab-separated" },
     ]);
   });
 
   it("a single column has no whole-row entry", () => {
-    expect(cellChoices({ key: "k", cells: ["a"] }, [{ name: "NAME" }], now).map((c) => c.label)).toEqual(["NAME"]);
+    expect(cellChoices([{ cells: ["a"] }], [{ name: "NAME" }], now).map((c) => c.label)).toEqual(["NAME"]);
+  });
+
+  it("with several rows each entry copies them all, a line each, and shows the first row's value", () => {
+    const other = { cells: ["web-1", "node-b", "0", "2026-01-01T10:00:00Z"] };
+    expect(cellChoices([row, other], cols, now)).toEqual([
+      { label: "whole row", text: "web-0\t\t3\t2026-01-01T11:00:00Z\nweb-1\tnode-b\t0\t2026-01-01T10:00:00Z", shown: "2 rows, tab-separated" },
+      { label: "NAME", text: "web-0\nweb-1", shown: "web-0 … +1", disabled: undefined },
+      // empty in the first row only: still copyable (a blank line for it)
+      { label: "NOMINATED NODE", text: "\nnode-b", shown: "— … +1", disabled: undefined },
+      { label: "RESTARTS", text: "3\n0", shown: "3 … +1", disabled: undefined },
+      { label: "AGE", text: "2026-01-01T11:00:00Z\n2026-01-01T10:00:00Z", shown: "1h … +1", disabled: undefined },
+    ]);
+    expect(cellChoices([row, row], cols, now)[2]!.disabled).toBe("empty");
   });
 
   it("highlights the given column if it can be copied, else the first that can", () => {
-    const c = cellChoices(row, cols, now);
-    expect(initialCell(c, "RESTARTS")).toBe(2);
+    const c = cellChoices([row], cols, now);
+    expect(initialCell(c, "RESTARTS")).toBe(3);
     expect(initialCell(c, "NOMINATED NODE")).toBe(0); // empty
     expect(initialCell(c, "GONE")).toBe(0);
     expect(initialCell(c)).toBe(0);
-    expect(initialCell(cellChoices({ key: "k", cells: ["", "x"] }, cols.slice(0, 2), now))).toBe(1);
+    // nothing to go by: the whole row
+    expect(initialCell(cellChoices([{ cells: ["", "x"] }], cols.slice(0, 2), now), "NAME")).toBe(0);
   });
 });
 

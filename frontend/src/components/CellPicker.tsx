@@ -4,10 +4,12 @@ import { copyCell } from "../commands";
 import { setUI, useUI } from "../store/store";
 
 /**
- * ⌘⇧C, or "copy cell…" in the ⌘⏎ menu: the selected row's cells, each with
- * its column and value, then the whole row (tab-separated). j/k or arrows
- * move, ⏎ (or a click) copies, Esc cancels. Highlighted first: the cell
- * right-clicked, else the column copied last. Anchored like the ⌘⏎ menu.
+ * ⌘⇧C, or "copy cell(s)…" in the ⌘⏎ menu: the whole row (tab-separated),
+ * then the selected row's cells, each with its column and value; with rows
+ * marked, each copies all of them (a line each). j/k or arrows move (past
+ * either end around), ⏎ (or a click) copies, Esc cancels. Highlighted
+ * first: the cell right-clicked, else the column copied last. Anchored like
+ * the ⌘⏎ menu.
  */
 export function CellPicker() {
   const o = useUI((s) => (s.overlay?.kind === "cells" ? s.overlay : undefined));
@@ -39,11 +41,11 @@ export function CellPicker() {
     <div
       ref={el}
       role="menu"
-      aria-label="copy cell"
+      aria-label="copy cells"
       className={`absolute z-40 flex max-w-[36rem] min-w-80 flex-col border border-accent bg-bg-elev py-1 shadow-menu ${pos ? "" : "top-24 left-1/2 -translate-x-1/2"}`}
       style={pos ? { left: pos.x, top: pos.y } : undefined}
     >
-      <div className="border-b border-border px-3 pb-1 text-fg-muted">copy cell</div>
+      <div className="border-b border-border px-3 pb-1 text-fg-muted">{o.rows && o.rows > 1 ? `copy cells of ${o.rows} rows` : "copy cell(s)"}</div>
       {o.cells.map((c, i) => (
         <button
           key={c.label}

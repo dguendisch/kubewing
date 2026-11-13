@@ -243,10 +243,12 @@ export interface Overlay {
   at?: { x: number; y: number };
   /** menu, jump, cells: the row it belongs to, for anchoring. */
   rowIndex?: number;
-  /** menu: the column right-clicked (copy cell… highlights it). */
+  /** menu: the column right-clicked (copy cell(s)… highlights it). */
   column?: string;
   /** cells: the row's cells to pick from. */
   cells?: CellChoice[];
+  /** cells: how many rows they copy (the marked ones); undefined = the cursor row. */
+  rows?: number;
   /** jump: from an object's YAML (view, diff or editor), its text and the cursor line: the field section's references. */
   yaml?: { text: string; line: number };
   pane: string;

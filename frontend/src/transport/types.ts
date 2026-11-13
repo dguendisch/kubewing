@@ -574,6 +574,8 @@ export interface MarkedRow {
   restart?: string;
   /** It has pods to tail (as RowInfo.logs). */
   logs?: boolean;
+  /** Its cells as the table shows them, in the pane's column order (copy cells: the table holds only the rows in view). */
+  cells?: string[];
 }
 
 /** Mirrors safety.Batch + bridge.MarkedBatch: one action prepared for the marked rows, a token each (pending[i] for rows[i]). */

@@ -276,8 +276,9 @@ What counts as healthy is configurable per kind, for your own resources too: see
 ### Selecting and copying
 
 - **Text in a cell** selects as in a text field: double-click a word (a name, IP, image or `key=value` counts as one word), triple-click the whole cell, or drag over part of it. `⌘C` copies the selection. An age cell is always selected whole and copies its timestamp (`2026-01-01T10:00:00Z`), not `5m`. `Esc`, a click elsewhere or another row clears it; a live update to the cell drops it too (and `⌘C` then says so rather than copying something else).
-- **`⌘C` without a selection** copies the selected row's name.
-- **`⌘⇧C`** copies any other cell: a picker lists the row's columns with their values, then the whole row (tab-separated, so it pastes into spreadsheet columns). `j`/`k` move, `⏎` copies, `Esc` cancels. The column copied last is highlighted again, so `⌘⇧C ⏎` copies the same column of the next row. A right-click on a cell → **copy cell…** highlights the cell clicked.
+- **`⌘C` without a selection** copies the selected row's name; with rows marked, their names, a line each.
+- **`⌘⇧C`** copies any other cell: a picker (**copy cell(s)**) lists the whole row first (tab-separated, so it pastes into spreadsheet columns), then the row's columns with their values. `j`/`k` move (up from the first entry goes to the last, down from the last back to the first), `⏎` copies, `Esc` cancels. The column copied last is highlighted again, so `⌘⇧C ⏎` copies the same column of the next row. A right-click on a cell → **copy cell(s)…** highlights the cell clicked.
+- **With rows marked**, `⌘⇧C` copies from all of them: the picker (**copy cells of 3 rows**) shows the first marked row's values with how many more follow (`web-0 … +2`), and copies the chosen column of every marked row, a line each, in table order. The whole row copies a tab-separated line per row, so they paste into spreadsheet rows.
 
 A double-click doesn't open the YAML; `⏎` or `y` does.
 
@@ -298,7 +299,8 @@ Marked rows have a blue tint and a bar on their left edge, and the status line c
 
 With rows marked, the multi actions act on them, not on the cursor row (unless it's marked too); everything else (YAML, edit, describe, exec, jump …) stays on the cursor row. The row menu (`⌘⏎`) shows which: its header reads **3 marked · cursor on web-0**, the multi entries say how many they act on (**delete 3…**), the others name the cursor row. A multi action that fits only some of the marked rows (scale: workloads; rollout restart: deployments, stateful sets, daemon sets; debug: pods) skips the others and says so; if it fits none, the entry is disabled. A right-click on a row that isn't marked clears the marks first, so the menu is for that row alone.
 
-- **Copy name** copies the names, separated by spaces, so they paste into `kubectl get pod web-0 web-1`.
+- **Copy name** copies the names, a line each.
+- **Copy cell(s)** (`⌘⇧C`) copies a column of every marked row, a line each, or the whole rows (see [Selecting and copying](#selecting-and-copying)).
 - **Label / annotate**: one dialog for all. It lists every key of the marked rows, with how many rows have it (`app=web 3/3`) and its value if they all share it (else how many values). The changes go to each row. Setting a key to the value all rows already have is no change. A key that differs, or that only some rows have, can be set or removed (`key-`).
 - **Scale**: one number for all, each row's current replicas listed.
 - **Rollout restart**: always confirmed, listing the workloads.
@@ -625,7 +627,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `e` | edit YAML (`⇧E` in a split) |
 | `d` | describe (`⇧D` in a split) |
 | — | diff (row menu; `d` in the YAML view) |
-| `⌘C` / `⌘⇧C` | copy name / copy cell… |
+| `⌘C` / `⌘⇧C` | copy name / copy cell(s)… |
 | `⌘J` | jump to… |
 | `v` | events |
 | `l` | logs… (`⌥L` for the whole pane) |
@@ -639,7 +641,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | `r` | rollout restart… |
 | `⌘⌫` / `Del` | delete… |
 
-With rows marked, copy name, label, annotate, scale, rollout restart, delete and debug act on them (see [Marking rows](#marking-rows)).
+With rows marked, copy name, copy cell(s), label, annotate, scale, rollout restart, delete and debug act on them (see [Marking rows](#marking-rows)).
 
 ### Label, annotate
 

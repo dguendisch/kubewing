@@ -51,7 +51,7 @@ const layout: { title: string; entries: Entry[] }[] = [
       ["Describe", "object.describe"],
       ["Copy", "table.copy"],
       ["Copy Name", "object.copyName"],
-      ["Copy Cell…", "object.copyCell"],
+      ["Copy Cell(s)…", "object.copyCell"],
       null,
       ["Logs…", "object.logs"],
       ["Logs of Pane…", "view.logs"],

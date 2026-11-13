@@ -5018,7 +5018,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "describe d · ⇧D split"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name"
-        - menuitem "copy cell… ⌘⇧C"
+        - menuitem "copy cell(s)… ⌘⇧C"
         - menuitem "jump to… ⌘J"
         - separator
         - menuitem "exec shell x"
@@ -5197,7 +5197,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await expect(page.getByRole("region", { name: "object detail" }).locator(".view-lines")).toContainText("name: web-1");
   });
 
-  test("⌘⇧C copies a cell of the row; right-click highlights the cell clicked; the whole row is tab-separated", async ({ page, context }) => {
+  test("⌘⇧C copies a cell of the row; right-click highlights the cell clicked; the whole row (first) is tab-separated; j/k wrap around", async ({ page, context }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
     await openStatic(page);
@@ -5206,12 +5206,13 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     const idx = rows.findIndex((r) => r.key === "s-web-1");
     const name = cols.indexOf("NAME");
     await page.keyboard.press("ControlOrMeta+Shift+C");
-    const picker = page.getByRole("menu", { name: "copy cell" });
-    await expect(picker.getByRole("menuitem")).toHaveText([...cols.map((c) => new RegExp(`^${c}`)), /^whole row\s*tab-separated/]);
+    const picker = page.getByRole("menu", { name: "copy cells" });
+    await expect(picker).toContainText("copy cell(s)");
+    await expect(picker.getByRole("menuitem")).toHaveText([/^whole row\s*tab-separated/, ...cols.map((c) => new RegExp(`^${c}`))]);
     expect((await inspect(page)).focus).toBe("menu");
-    // nothing copied last: the first cell
-    await expect(picker.locator("[data-active]")).toContainText(rows[idx]!.cells[0]!);
-    for (let i = 0; i < name; i++) await page.keyboard.press("j");
+    // nothing copied last: the whole row
+    await expect(picker.locator("[data-active]")).toContainText("whole row");
+    for (let i = 0; i <= name; i++) await page.keyboard.press("j");
     await expect(picker.locator("[data-active]")).toContainText("web-1");
     await page.keyboard.press("Enter");
     await expect(picker).toHaveCount(0);
@@ -5227,7 +5228,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     await expect(picker).toHaveCount(0);
     expect((await inspect(page)).focus).toBe("table");
 
-    // right-click on the first cell (NAMESPACE): "copy cell…" in the menu highlights it, at the menu's place
+    // right-click on the first cell (NAMESPACE): "copy cell(s)…" in the menu highlights it, at the menu's place
     const box = (await page.locator("section[data-pane] canvas").first().boundingBox())!;
     await page.mouse.click(box.x + 30, box.y + 24 + idx * 22 + 11, { button: "right" });
     await menu(page).getByRole("menuitem", { name: /copy cell/ }).click();
@@ -5236,11 +5237,18 @@ test.describe("context menu (⌘⏎, right-click)", () => {
     const pb = (await picker.boundingBox())!;
     expect(Math.abs(pb.x - (box.x + 30))).toBeLessThan(4);
 
-    // the whole row: every cell, tab-separated
-    for (let i = 0; i < cols.length; i++) await page.keyboard.press("j");
+    // up from the top entry wraps to the last column, down from there back to the top
+    await page.keyboard.press("k");
     await expect(picker.locator("[data-active]")).toContainText("whole row");
+    await page.keyboard.press("k");
+    await expect(picker.locator("[data-active]")).toContainText(cols[cols.length - 1]!);
+    await page.keyboard.press("j");
+    await expect(picker.locator("[data-active]")).toContainText("whole row");
+
+    // the whole row: every cell, tab-separated
     await page.keyboard.press("Enter");
     await expect.poll(clipboard).toBe(rows[idx]!.cells.join("\t"));
+    await expect(page.getByRole("status", { name: "pane status" })).toContainText("copied the whole row");
   });
 });
 
@@ -6696,7 +6704,7 @@ test.describe("marked rows", () => {
     // space toggles the cursor row (it becomes the anchor)
     await page.keyboard.press("Space");
     await expect.poll(() => marked(page)).toEqual(["b-pod-0"]);
-    // copy name: the marked names, space-separated
+    // copy name: the marked names, a line each
     await page.keyboard.press("j");
     await page.keyboard.press("Space");
     await page.keyboard.press("ControlOrMeta+Enter");
@@ -6707,8 +6715,27 @@ test.describe("marked rows", () => {
     await expect(menu.getByRole("menuitem", { name: /^debug containers in 1 pods…/ })).toBeVisible();
     // describe stays on the cursor row
     await expect(menu.getByRole("menuitem", { name: /^describe.*b-scale-0/ })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: /^copy cells of 2…/ })).toBeVisible();
     await menu.getByRole("menuitem", { name: /^copy 2 names/ }).click();
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("b-pod-0 b-scale-0");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("b-pod-0\nb-scale-0");
+    // ⌘C without a text selection: the marked names too, not the cursor row's
+    await page.evaluate(() => navigator.clipboard.writeText(""));
+    await page.keyboard.press("ControlOrMeta+C");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("b-pod-0\nb-scale-0");
+    // copy cells: a column of every marked row, a line each; the whole row, a tab-separated line each
+    await page.keyboard.press("ControlOrMeta+Shift+C");
+    const cells = page.getByRole("menu", { name: "copy cells" });
+    await expect(cells).toContainText("copy cells of 2 rows");
+    await expect(cells.getByRole("menuitem").first()).toContainText("2 rows, tab-separated");
+    const { columns: bcols, rows: brows } = await focused(page);
+    const bname = bcols.indexOf("NAME");
+    const line = (key: string) => brows.find((r) => r.key === key)!.cells;
+    for (let i = 0; i <= bname; i++) await page.keyboard.press("j");
+    await expect(cells.locator("[data-active]")).toContainText("… +1");
+    await page.keyboard.press("Enter");
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe([line("b-pod-0")[bname], line("b-scale-0")[bname]].join("\n"));
+    await expect(page.getByRole("status", { name: "pane status" })).toContainText("copied NAME of 2 rows");
+    await expect(status(page)).toHaveText("2 marked"); // the marks stay
     // ⌘A: every row shown; esc clears
     await page.keyboard.press("ControlOrMeta+A");
     const shown = (await focused(page)).rows.length; // b-del-* may be gone (the delete test)

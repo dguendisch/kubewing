@@ -49,6 +49,17 @@ func TestMarkedRows(t *testing.T) {
 	}
 	waitRow(t, log, res.Pane, "s-web-1", func(r view.RowData) bool { return r.Marked })
 
+	// with their cells as the table shows them (copy cells: the table holds only the rows in view)
+	rows, err := svc.Marked(res.Pane)
+	if err != nil || len(rows) != 3 {
+		t.Fatalf("marked: %v %+v", err, rows)
+	}
+	for _, r := range rows {
+		if !slices.Contains(r.Cells, r.Name) {
+			t.Fatalf("%s: cells %q lack its name", r.Key, r.Cells)
+		}
+	}
+
 	// debug skips what isn't a pod; each token is bound to its pod
 	b, err := svc.PrepareMarked("debug", res.Pane)
 	if err != nil {

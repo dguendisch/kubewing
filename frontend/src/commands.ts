@@ -147,7 +147,7 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       if (markedCount(pane)) return void mark(pane, { op: "clear" });
       return;
     case "object.copyCell":
-      return openCells();
+      return void openCells();
     case "object.menu": {
       const key = selectedKey(pane);
       if (!key) return;
@@ -540,12 +540,12 @@ function toggleHealthy() {
   void applySpec(pane.id, { ...pane.spec, hideHealthy: !pane.spec.hideHealthy });
 }
 
-/** ⌘C in the table: the text selected in a cell of the row (an age cell: its timestamp), else the name. */
+/** ⌘C in the table: the text selected in a cell of the row (an age cell: its timestamp), else the name (with rows marked: theirs). */
 async function copySelection(pane: S.PaneState) {
   if (!pane.serverId) return;
   const d = paneData.get(pane.serverId);
   const sel = useTextSel.getState()[pane.serverId];
-  if (!sel) return copyName(pane);
+  if (!sel) return (await hasMarks(pane)) ? copyMarkedNames(pane) : copyName(pane);
   const text = selectedText(sel, d.rows.get(sel.key), d.columns);
   // the cell changed under the selection (a live update): copying the name instead would surprise
   if (text === undefined) {
@@ -577,12 +577,14 @@ async function copyName(pane: S.PaneState) {
 let lastCell: string | undefined;
 
 /**
- * ⌘⇧C, or "copy cell…" in the ⌘⏎ menu (opened by right-clicking a cell,
- * that cell is highlighted): which of the selected row's cells to copy. The
- * cells are the ones the table holds, so no bridge call; opened from the
- * menu it takes the menu's place, at the same anchor.
+ * ⌘⇧C, or "copy cell(s)…" in the ⌘⏎ menu (opened by right-clicking a cell,
+ * that cell is highlighted): which of the selected row's cells to copy, or
+ * with rows marked, which column of all of them (a line each). The cursor
+ * row's cells are the ones the table holds; marked rows come from Go (the
+ * table holds only the rows in view). Opened from the menu it takes the
+ * menu's place, at the same anchor.
  */
-function openCells() {
+async function openCells() {
   const s = useUI.getState();
   const pane = S.focusedPane(s);
   const key = selectedKey(pane);
@@ -590,10 +592,22 @@ function openCells() {
   const d = paneData.get(pane.serverId);
   const row = rowAt(d, pane.selected);
   if (!row) return;
-  const cells = cellChoices(row, d.columns, nowOf(d));
   const fromMenu = s.overlay?.kind === "menu" ? s.overlay : undefined;
+  let rows: { cells: string[] }[] = [row];
+  if (await hasMarks(pane)) {
+    try {
+      const marked = await bridge().marked(pane.serverId);
+      if (marked.length) rows = marked.map((r) => ({ cells: r.cells ?? [] }));
+    } catch (e) {
+      return flash(pane.id, errorText(e), true);
+    }
+  }
+  // something else took over meanwhile (another overlay, another pane)
+  const now = useUI.getState();
+  if (S.focusedPane(now).id !== pane.id || (now.overlay && now.overlay !== fromMenu)) return;
+  const cells = cellChoices(rows, d.columns, nowOf(d));
   const index = initialCell(cells, fromMenu?.column ?? lastCell);
-  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "cells", pane: pane.id, key, cells, index, rowIndex: pane.selected, at: fromMenu?.at }));
+  setUI((x) => S.openOverlay(S.closeOverlay(x), { kind: "cells", pane: pane.id, key, cells, index, rowIndex: pane.selected, at: fromMenu?.at, rows: rows.length }));
 }
 
 export async function copyCell(index: number) {
@@ -602,9 +616,11 @@ export async function copyCell(index: number) {
   if (o?.kind !== "cells" || !c || c.disabled) return;
   setUI(S.closeOverlay);
   lastCell = c.label;
+  const n = o.rows ?? 1;
   try {
     await bridge().copyText(c.text);
-    flash(o.pane, c.label === wholeRow ? "copied the whole row" : `copied ${c.label} ${c.text}`);
+    if (n > 1) flash(o.pane, c.label === wholeRow ? `copied ${n} whole rows` : `copied ${c.label} of ${n} rows`);
+    else flash(o.pane, c.label === wholeRow ? "copied the whole row" : `copied ${c.label} ${c.text}`);
   } catch (e) {
     flash(o.pane, errorText(e), true);
   }
@@ -765,12 +781,12 @@ function report(paneId: string, b: Batch, results: PromiseSettledResult<unknown>
   flash(paneId, `${ok ? done : `${b.kind} failed`} — ${failed.slice(0, 3).join("; ")}${failed.length > 3 ? `; and ${failed.length - 3} more` : ""}`, true);
 }
 
-/** Copy name with marked rows: their names, space-separated (as kubectl get takes them). */
+/** Copy name with marked rows: their names, a line each. */
 async function copyMarkedNames(pane: S.PaneState) {
   try {
     const rows = await bridge().marked(pane.serverId!);
     if (!rows.length) return copyName(pane);
-    await bridge().copyText(rows.map((r) => r.name).join(" "));
+    await bridge().copyText(rows.map((r) => r.name).join("\n"));
     flash(pane.id, `copied ${rows.length} names`);
   } catch (e) {
     flash(pane.id, errorText(e), true);
@@ -1580,10 +1596,11 @@ function moveContainer(s: S.UIState, delta: number): S.UIState {
   return index === o.index ? s : { ...s, overlay: { ...o, index } };
 }
 
+/** Moves the copy-cell picker's highlight, skipping empty cells; past either end it wraps around. */
 function moveCell(s: S.UIState, delta: number): S.UIState {
   const o = s.overlay;
   if (!o?.cells) return s;
-  const index = moveChoice(o.cells, o.index ?? 0, delta);
+  const index = S.wrapIndex(o.cells, o.index ?? 0, delta, (c) => !c.disabled) ?? o.index;
   return index === o.index ? s : { ...s, overlay: { ...o, index } };
 }
 

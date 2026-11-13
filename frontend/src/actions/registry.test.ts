@@ -123,6 +123,7 @@ describe("row actions menu with marked rows", () => {
     expect(m["object.delete"]).toMatchObject({ label: "delete 3…", multi: true, disabled: undefined });
     expect(m["object.label"]!.label).toBe("label 3…");
     expect(m["object.copyName"]!.label).toBe("copy 3 names");
+    expect(m["object.copyCell"]).toMatchObject({ label: "copy cells of 3…", multi: true });
     // the cursor row is a config map, but two marked rows are pods
     expect(m["object.debug"]).toMatchObject({ label: "debug containers in 2 pods…", disabled: undefined });
     expect(m["object.scale"]!.disabled).toBe("none of the 3 marked fits");
