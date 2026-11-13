@@ -24,6 +24,11 @@
   --color-match: #6a8caf;
   --color-marked: #4a7fc1; /* rows marked for an action on many rows */
   --color-prod: #f14c4c;
+  /* the Gardener plane a pane shows (its header's badge): fixed hues, apart from the safety colors (prod, accent) */
+  --color-plane-shoot: #4fc1ff;
+  --color-plane-control: #b48ef5;
+  --color-plane-seed: #d19a66;
+  --color-plane-garden: #6fbf8a;
   /* drop shadow below menus and dialogs (shadow-menu, shadow-dialog); "#0000" turns it off */
   --color-shadow: #000000c0;
   --shadow-menu: 0 2px 6px -1px color-mix(in srgb, var(--color-shadow) 60%, transparent), 0 12px 28px -6px var(--color-shadow);

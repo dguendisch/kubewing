@@ -6487,6 +6487,19 @@ test.describe("⌘⇧O: open a cluster", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
+  test("a typed kubeconfig path opens that file at its current context", async ({ page }, info) => {
+    await ready(page);
+    // the test garden's kubeconfig, by its absolute path (the dialog takes /… and ~/… only)
+    const kc = info.config.rootDir.replace(/\/frontend\/e2e$/, "") + "/testdata/garden/kubeconfig.yaml";
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    await page.getByRole("combobox", { name: "cluster" }).fill(kc);
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/^@\d+\/virtual-garden$/) });
+    await page.keyboard.press("Escape");
+  });
+
   test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
     await openStatic(page);
     await page.keyboard.press("ControlOrMeta+Shift+O");
@@ -6551,6 +6564,7 @@ test.describe("⌘⇧O: open a cluster", () => {
     const garden = ((await focused(page)).spec as { context?: string }).context;
     expect(garden).toMatch(/^@\d+\/tape-garden$/);
     await list("shoots", 3);
+    await expect(page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"] header`).getByLabel("location")).toHaveAttribute("data-plane", "garden");
 
     // a shoot row: its shoot and control plane first, highlighted, with their context names
     await select("shoot-baz");
@@ -6582,6 +6596,55 @@ test.describe("⌘⇧O: open a cluster", () => {
     let s = await inspect(page);
     expect(s.focusedPane).not.toBe(from);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
+    // the header says where: landscape › seed loam › CONTROL PLANE foo/baz (the seed's kind only in the tooltip); the tab leads with its mark
+    const where = () => page.locator(`section[data-pane="${s.focusedPane}"] header`).getByLabel("location");
+    await expect(where()).toHaveAttribute("data-plane", "controlPlane");
+    await expect(where()).toHaveText(/^tape-garden›seed loam›⛭ CPfoo\/baz$/);
+    await expect(where()).toHaveAttribute("title", /seed: loam \(managed seed: shoot garden\/loam on seed soil\)/);
+    await expect(page.getByRole("tab", { selected: true })).toContainText("⛭");
+    // narrow: landscape and seed give way, the badge stays whole and inside the header
+    const size = page.viewportSize()!;
+    await page.setViewportSize({ width: 560, height: size.height });
+    const badge = where().getByRole("button", { name: "plane control plane" });
+    await expect.poll(async () => {
+      const [b, l] = [await badge.boundingBox(), await where().boundingBox()];
+      const clipped = await badge.evaluate((el) => el.scrollWidth > el.clientWidth);
+      return !!b && !!l && !clipped && b.x >= l.x && b.x + b.width <= l.x + l.width + 0.5;
+    }).toBe(true);
+    // the other pane's too (it has no room to spare: the filter fields don't give way)
+    await expect(page.locator(`section[data-pane="${from}"] header`).getByRole("button", { name: "plane garden" })).toBeVisible();
+    // the pane has room for it all at that width; narrower, landscape and seed give way, the badge stays whole
+    const cut = (l: ReturnType<typeof where>) => l.evaluate((el) => [...el.querySelectorAll<HTMLElement>("*")].filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.textContent));
+    await expect.poll(() => cut(where())).toEqual([]);
+    await page.setViewportSize({ width: 250, height: size.height });
+    await expect.poll(() => cut(where())).toEqual(["tape-garden", "seed loam"]);
+    // wide again: nothing cut, whatever the width was before
+    await page.setViewportSize(size);
+    await expect.poll(() => cut(where())).toEqual([]);
+    // nor after being in a background tab (hidden: no width at all) while the window was narrow
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+T");
+    await page.setViewportSize({ width: 480, height: size.height });
+    await page.setViewportSize(size);
+    await page.keyboard.press("ControlOrMeta+W");
+    await expect.poll(async () => (await inspect(page)).focusedPane).toBe(s.focusedPane);
+    await expect.poll(() => cut(where())).toEqual([]);
+    await page.keyboard.press("ControlOrMeta+O");
+    // a click on the landscape opens the garden here, in the shoot's project; on the seed that seed (all namespaces); ⌘← goes back
+    await where().getByRole("button", { name: "tape-garden" }).click();
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: garden, namespace: "garden-foo" });
+    await expect(where()).toHaveAttribute("data-plane", "garden");
+    await expect(where()).toContainText("project foo");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
+    await where().getByRole("button", { name: "seed loam" }).click();
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "" });
+    await expect(where()).toHaveAttribute("data-plane", "seed");
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+ArrowLeft");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
+    await page.keyboard.press("ControlOrMeta+O");
     // ⌥⌘O right away, ⌘O still open over it: the shoot, ⌘O open over that
     expect((await inspect(page)).overlays).toEqual(["open"]);
     await page.keyboard.press("ControlOrMeta+Alt+O");
@@ -6590,6 +6653,15 @@ test.describe("⌘⇧O: open a cluster", () => {
     // ⌘O is the shoot's now (not the control plane's it was opened over): what it picks lists there
     await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
     await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", namespace: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
+    // the shoot's header: its seed too
+    await expect(where()).toHaveAttribute("data-plane", "shoot");
+    await expect(where()).toHaveText(/^tape-garden›seed loam›◉ SHOOTfoo\/baz$/);
+    // a click on the badge switches too (⌥⌘O), and back with the key
+    await where().getByRole("button", { name: "plane shoot" }).click();
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/\/tape-garden\/seed--loam$/), namespace: "shoot--foo--baz" });
+    await expect(where()).toHaveAttribute("data-plane", "controlPlane");
+    await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", namespace: "", context: expect.stringMatching(/\/tape-garden\/shoot--foo--baz$/) });
     // and back from the table
     await page.keyboard.press("ControlOrMeta+Alt+O");
@@ -6616,6 +6688,11 @@ test.describe("⌘⇧O: open a cluster", () => {
     expect(s.tabs).toHaveLength(tabs + 1);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", namespace: "", context: expect.stringMatching(/\/tape-garden\/seed--loam$/) });
     await page.keyboard.press("Escape");
+    // all namespaces of the seed: the seed, a managed one (shoot garden/loam on seed soil)
+    const seedWhere = page.locator(`section[data-pane="${s.focusedPane}"] header`).getByLabel("location");
+    await expect(seedWhere).toHaveAttribute("data-plane", "seed");
+    await expect(seedWhere).toHaveText(/^tape-garden›▣ SEEDloammanaged · shootgarden\/loamonseed soil$/);
+    await expect(seedWhere.getByRole("button", { name: "plane seed" })).toBeDisabled();
     // remembered: ⌘⇧O lists the seed
     await page.keyboard.press("ControlOrMeta+Shift+O");
     await page.getByRole("combobox", { name: "cluster" }).fill("seed--loam");

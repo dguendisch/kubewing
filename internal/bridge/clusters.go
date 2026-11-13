@@ -166,6 +166,12 @@ func (s *Service) OpenCluster(e ClusterEntry) (ClusterOpen, error) {
 		// from another namespace (nodes, all namespaces) this one, the last opened there
 		s.opened[openedKey(o.Cluster, "", false)] = gardener.Target{Garden: o.Target.Garden, Seed: o.Target.Seed, Project: o.Target.Project, Namespace: o.Target.Namespace, Shoot: o.Target.Shoot}
 	}
+	if o.Seed.Known {
+		s.seeds[o.Target.Garden+"/"+o.Seed.Name] = o.Seed
+	}
+	if o.Target.Shoot != "" && !o.Target.ControlPlane {
+		s.shoots[o.Cluster] = shootInfo{seed: o.Seed.Name, isSeed: o.IsSeed}
+	}
 	s.mu.Unlock()
 	// picked explicitly: the connection is wanted, so ⌘O completes on it before a pane lists anything
 	if s.opts.Catalog != nil {

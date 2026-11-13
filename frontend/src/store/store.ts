@@ -7,6 +7,7 @@ import { menuSpec } from "../keys/appMenu";
 import type { Binding } from "../keys/keymap";
 import { applyConfig, useConfig } from "./config";
 import { clearRules } from "./rules";
+import { clearLocations } from "./location";
 import { checkFollow, contextNamespace, emptyState, initialState, pickClusterState, logsEnded, orphanedEdits, orphanedServerPanes, orphanedSessions, paneFocus, sessionEnded, touchTab, type UIState } from "./state";
 import { logBuffers } from "../logs/buffer";
 import { useUpdate } from "../update/update";
@@ -111,6 +112,7 @@ export function connect(t: Transport) {
   t.columnConfigs().then((c) => useColumns.setState({ types: c ?? {} }, true), () => {});
   t.onConfig((c) => {
     clearRules(); // context rules may have changed; panes refetch on render
+    clearLocations(); // so may gardenctl's gardens
     applyConfig(c);
   });
   t.config().then(applyConfig, () => {});

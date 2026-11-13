@@ -15,15 +15,20 @@ export function resourceLabel(p: Pick<PaneState, "spec" | "type" | "ambiguous">)
   return { name: full.slice(0, dot), group: p.ambiguous ? full.slice(dot) : "", full };
 }
 
-/** A pane's title: its context label (safety rule), then its name, else its resource and namespace. */
-export const paneTitle = (p: PaneState | undefined, rule?: SafetyRule) => {
+/**
+ * A pane's title: its context label (safety rule), the mark of the Gardener
+ * plane it shows (icon: ◉ shoot, ⛭ control plane …), then its name, else its
+ * resource and namespace.
+ */
+export const paneTitle = (p: PaneState | undefined, rule?: SafetyRule, icon = "") => {
   if (!p) return "…";
+  const lead = `${rule?.label ? `${rule.label} · ` : ""}${icon ? `${icon} ` : ""}`;
   // ⌘⇧O's pane listing nothing yet: its cluster
-  if (!p.spec.resource && !p.term && !p.logs) return `${rule?.label ? `${rule.label} · ` : ""}${p.name ?? (clusterLabel(p.spec.context) || "…")}`;
+  if (!p.spec.resource && !p.term && !p.logs) return `${lead}${p.name ?? (clusterLabel(p.spec.context) || "…")}`;
   const r = resourceLabel(p);
-  return `${rule?.label ? `${rule.label} · ` : ""}${p.name ?? `${r.name}${r.group}${p.spec.namespace ? ` · ${p.spec.namespace}` : ""}`}`;
+  return `${lead}${p.name ?? `${r.name}${r.group}${p.spec.namespace ? ` · ${p.spec.namespace}` : ""}`}`;
 };
 
-/** Tab label: the tab's name, else the focused pane's title; the context label always leads (prod stays recognizable). */
-export const tabTitle = (t: Tab | undefined, p: PaneState | undefined, rule?: SafetyRule) =>
-  t?.name ? `${rule?.label ? `${rule.label} · ` : ""}${t.name}` : paneTitle(p, rule);
+/** Tab label: the tab's name, else the focused pane's title; the context label always leads (prod stays recognizable), the plane's mark next. */
+export const tabTitle = (t: Tab | undefined, p: PaneState | undefined, rule?: SafetyRule, icon = "") =>
+  t?.name ? `${rule?.label ? `${rule.label} · ` : ""}${icon ? `${icon} ` : ""}${t.name}` : paneTitle(p, rule, icon);

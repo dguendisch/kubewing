@@ -49,7 +49,7 @@ func (f *fakeGarden) ListObjects(_ context.Context, cluster, resource, ns, field
 	name := strings.TrimPrefix(fieldSel, "metadata.name=")
 	var out []*unstructured.Unstructured
 	for k, u := range f.objs {
-		if strings.HasPrefix(k, resource+"/") && u.GetName() == name && (ns == "" || u.GetNamespace() == ns) {
+		if strings.HasPrefix(k, resource+"/") && (fieldSel == "" || u.GetName() == name) && (ns == "" || u.GetNamespace() == ns) {
 			out = append(out, u)
 		}
 	}
@@ -116,7 +116,7 @@ func TestResolveShoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Opened{Cluster: "@2/live/shoot--foo--bar", Target: Target{Garden: "live", Project: "foo", Namespace: "garden-foo", Shoot: "bar"}}
+	want := Opened{Cluster: "@2/live/shoot--foo--bar", Target: Target{Garden: "live", Project: "foo", Namespace: "garden-foo", Shoot: "bar"}, Seed: Seed{Name: "soil"}}
 	if !reflect.DeepEqual(o, want) {
 		t.Errorf("Opened = %+v, want %+v", o, want)
 	}
@@ -198,6 +198,10 @@ func TestResolveControlPlane(t *testing.T) {
 	if o.Cluster != "@2/live/seed--soil" || o.Namespace != "shoot--foo--bar" || o.Target.Seed != "soil" {
 		t.Errorf("%+v", o)
 	}
+	// what opening learned of the seed: managed, its shoot and the seed that runs on
+	if o.Seed != (Seed{Name: "soil", Known: true, Managed: true, Shoot: "soil-shoot", Host: "root"}) {
+		t.Errorf("seed: %+v", o.Seed)
+	}
 	raw := reg["seed:live/soil"]
 	if raw == nil || raw.CurrentContext != "live/seed--soil" {
 		t.Fatalf("registered: %v", reg)
@@ -224,7 +228,7 @@ contexts: [{name: gke, context: {cluster: gke, user: gke}}, {name: unused, conte
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Cluster != "@3/live/seed--gke" || o.Namespace != "shoot--foo--baz" {
+	if o.Cluster != "@3/live/seed--gke" || o.Namespace != "shoot--foo--baz" || o.Seed != (Seed{Name: "gke", Known: true}) {
 		t.Errorf("%+v", o)
 	}
 	g := reg["seed:live/gke"]
@@ -270,7 +274,7 @@ func TestResolveSeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.Cluster != "@2/live/seed--soil" || o.Namespace != "" || o.Target != (Target{Garden: "live", Seed: "soil"}) {
+	if o.Cluster != "@2/live/seed--soil" || o.Namespace != "" || o.Target != (Target{Garden: "live", Seed: "soil"}) || !o.Seed.Managed || o.Seed.Host != "root" {
 		t.Errorf("%+v", o)
 	}
 	if raw := reg["seed:live/soil"]; raw == nil || raw.AuthInfos["garden--soil-shoot"].Exec.Args[1] != "--access-level=admin" {
@@ -286,6 +290,17 @@ func TestResolveSeed(t *testing.T) {
 	// an unmanaged seed without a login secret
 	if _, err := r.Resolve(context.Background(), Target{Garden: "live", Seed: "gke"}); err == nil || !strings.Contains(err.Error(), "no login secret") {
 		t.Errorf("no login: %v", err)
+	}
+
+	// the managed seed's shoot: it is that seed, and runs on another one
+	o, err = r.Resolve(context.Background(), Target{Garden: "live", Namespace: "garden", Shoot: "soil-shoot"})
+	if err != nil || o.IsSeed != "soil" || o.Seed.Name != "root" {
+		t.Errorf("seed's shoot: %+v %v", o, err)
+	}
+	// a shoot of another project is no seed (not even looked for)
+	f.add("configmaps", "garden-foo", "bar.ca-cluster", ca())
+	if o, err := r.Resolve(context.Background(), Target{Garden: "live", Namespace: "garden-foo", Shoot: "bar"}); err != nil || o.IsSeed != "" {
+		t.Errorf("project shoot: %+v %v", o, err)
 	}
 }
 

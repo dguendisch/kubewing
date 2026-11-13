@@ -38,6 +38,25 @@ type Opened struct {
 	Namespace string `json:"namespace,omitempty"`
 	// Target is what was resolved, completed (project, namespace, shoot's seed).
 	Target Target `json:"target"`
+	// Seed is the seed it runs on (a shoot, a control plane) or is (a seed),
+	// as far as resolving learned it: a shoot's only by name.
+	Seed Seed `json:"seed"`
+	// IsSeed: a shoot that is a managed seed's (project garden), that seed.
+	IsSeed string `json:"isSeed,omitempty"`
+}
+
+// Seed is what resolving learned of a seed: whether it's a managed seed (a
+// shoot of project garden, whose control plane runs on another seed) or an
+// unmanaged one (registered with a kubeconfig of its own). Looked up only
+// where opening needs it anyway (a seed's or control plane's connection).
+type Seed struct {
+	Name string `json:"name,omitempty"`
+	// Known: Managed was looked up.
+	Known   bool `json:"known,omitempty"`
+	Managed bool `json:"managed,omitempty"`
+	// Shoot is a managed seed's shoot (project garden), Host the seed that shoot runs on.
+	Shoot string `json:"shoot,omitempty"`
+	Host  string `json:"host,omitempty"`
 }
 
 // Ambiguous is a shoot name found in several projects: the choices.
@@ -101,11 +120,11 @@ func (r *Resolver) Resolve(ctx context.Context, t Target) (Opened, error) {
 	if t.Seed != "" && t.Shoot == "" {
 		// a seed: its cluster, all namespaces (a project's namespace means nothing there)
 		t.Project, t.Namespace, t.ControlPlane = "", "", false
-		cluster, err := r.seed(ctx, garden, g, t.Seed)
+		cluster, seed, err := r.seed(ctx, garden, g, t.Seed)
 		if err != nil {
 			return Opened{}, err
 		}
-		return Opened{Cluster: cluster, Target: t}, nil
+		return Opened{Cluster: cluster, Target: t, Seed: seed}, nil
 	}
 	if t.Project != "" && t.Namespace == "" {
 		p, err := r.Lookup.GetObject(ctx, garden, projects, "", t.Project)
@@ -138,7 +157,27 @@ func (r *Resolver) Resolve(ctx context.Context, t Target) (Opened, error) {
 		return Opened{}, err
 	}
 	ref := r.register("shoot:"+g.Identity+"/"+t.Namespace+"/"+t.Shoot+"/"+level, raw)
-	return Opened{Cluster: source.JoinCluster(ref, ctxName), Target: t}, nil
+	seedName, _, _ := unstructured.NestedString(shoot.Object, "spec", "seedName")
+	return Opened{Cluster: source.JoinCluster(ref, ctxName), Target: t, Seed: Seed{Name: seedName}, IsSeed: r.managedSeedOf(ctx, garden, shoot)}, nil
+}
+
+// managedSeedOf is the managed seed a shoot of project garden is ("" = none,
+// or it can't be told: managed seeds are an operator's to read).
+func (r *Resolver) managedSeedOf(ctx context.Context, garden string, shoot *unstructured.Unstructured) string {
+	if shoot.GetNamespace() != "garden" {
+		return ""
+	}
+	list, err := r.Lookup.ListObjects(ctx, garden, managedSeeds, "garden", "")
+	if err != nil {
+		return ""
+	}
+	for _, ms := range list {
+		name, _, _ := unstructured.NestedString(ms.Object, "spec", "shoot", "name")
+		if name == shoot.GetName() {
+			return ms.GetName()
+		}
+	}
+	return ""
 }
 
 // findShoot reads the target's shoot: in its namespace, else by name in
@@ -194,18 +233,18 @@ func (r *Resolver) controlPlane(ctx context.Context, garden string, g Garden, sh
 		return Opened{}, fmt.Errorf("shoot %s/%s isn't scheduled to a seed yet", shoot.GetNamespace(), shoot.GetName())
 	}
 	t.Seed = seed
-	cluster, err := r.seed(ctx, garden, g, seed)
+	cluster, info, err := r.seed(ctx, garden, g, seed)
 	if err != nil {
 		return Opened{}, err
 	}
-	return Opened{Cluster: cluster, Namespace: tid, Target: t}, nil
+	return Opened{Cluster: cluster, Namespace: tid, Target: t, Seed: info}, nil
 }
 
 // seed is a seed's cluster: a managed seed by its shoot's kubeconfig
 // (project garden), another one by its login secret, as gardenctl does.
 // Named <garden>/seed--<seed>, so its control planes and the seed itself
-// share one connection.
-func (r *Resolver) seed(ctx context.Context, garden string, g Garden, seed string) (string, error) {
+// share one connection. What its lookups learned of the seed comes with it.
+func (r *Resolver) seed(ctx context.Context, garden string, g Garden, seed string) (string, Seed, error) {
 	ctxName := g.Identity + "/seed--" + seed
 	ms, err := r.Lookup.GetObject(ctx, garden, managedSeeds, "garden", seed)
 	switch {
@@ -216,26 +255,28 @@ func (r *Resolver) seed(ctx context.Context, garden string, g Garden, seed strin
 		}
 		s, err := r.Lookup.GetObject(ctx, garden, shoots, "garden", name)
 		if err != nil {
-			return "", fmt.Errorf("shoot garden/%s of managed seed %s: %w", name, seed, err)
+			return "", Seed{}, fmt.Errorf("shoot garden/%s of managed seed %s: %w", name, seed, err)
 		}
 		// named for the seed, not its shoot: safety rules can tell seeds apart
 		raw, err := r.shootKubeconfig(ctx, garden, g, s, ctxName, g.accessLevel(true))
 		if err != nil {
-			return "", err
+			return "", Seed{}, err
 		}
-		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, raw), ctxName), nil
+		host, _, _ := unstructured.NestedString(s.Object, "spec", "seedName")
+		info := Seed{Name: seed, Known: true, Managed: true, Shoot: name, Host: host}
+		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, raw), ctxName), info, nil
 	case apierrors.IsNotFound(err):
 		raw, err := r.seedLogin(ctx, garden, seed)
 		if err != nil {
-			return "", err
+			return "", Seed{}, err
 		}
 		c, err := single(raw, "", ctxName)
 		if err != nil {
-			return "", fmt.Errorf("seed %s: %w", seed, err)
+			return "", Seed{}, fmt.Errorf("seed %s: %w", seed, err)
 		}
-		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, c), ctxName), nil
+		return source.JoinCluster(r.register("seed:"+g.Identity+"/"+seed, c), ctxName), Seed{Name: seed, Known: true}, nil
 	default:
-		return "", fmt.Errorf("managed seed %s: %w", seed, err)
+		return "", Seed{}, fmt.Errorf("managed seed %s: %w", seed, err)
 	}
 }
 

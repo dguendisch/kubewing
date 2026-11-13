@@ -164,6 +164,28 @@ Entries that can't be opened (a garden whose kubeconfig is missing) are greyed o
 - The garden is one connection however many of its projects and lookups you open, so you log in once. A shoot's kubeconfig is built in memory and lives as long as kubewing runs: nothing is written to disk.
 - A seed is a target of its own when a pattern names one (a `seed` group), a gardenctl session targets one, or `⌘J` opened it from a seed row. A seed and the control planes on it are one connection.
 
+### Where you are: the pane header
+
+A pane's header names its cluster. On a Gardener cluster, instead of the context name, it shows where you are: the landscape (the garden), the seed beneath, and a colored badge for the **plane** you're looking at, followed by its name:
+
+| Header | You're looking at |
+|---|---|
+| `live › seed aws-eu1 › ◉ SHOOT foo/bar` | the shoot `bar` of project `foo`, running on seed `aws-eu1` |
+| `live › seed aws-eu1 › ⛭ CP foo/bar` | its control plane (CP): the shoot's namespace on the seed |
+| `live › ▣ SEED aws-eu1 managed · shoot garden/aws-eu1 on seed root` | the seed itself, a managed seed: a shoot of project `garden`, whose own control plane runs on seed `root` |
+| `live › ▣ SEED gke-01 unmanaged` | a seed registered with a kubeconfig of its own |
+| `live › seed root › ◉ SHOOT garden/aws-eu1 is seed aws-eu1` | the shoot behind a managed seed |
+| `live ◆ GARDEN project foo` | the garden, in project `foo`'s namespace |
+
+- Each plane has a color of its own: shoot blue, control plane violet, seed brown, garden green. They're fixed, so they never clash with a safety rule's label and frame color (see [Safety](#16-safety)), which stay as they are.
+- On a seed the pane's namespace decides: a shoot's namespace (`shoot--<project>--<name>`) is that shoot's **control plane**, any other namespace, or all, is the **seed**. Switching the namespace with `⌘O` switches the badge.
+- A click on the landscape opens the garden (in the shown project's namespace), a click on a seed opens that seed, a click on a managed seed's shoot opens that shoot, all in the pane (`⌘←` goes back). A click on the **SHOOT** or **CP** badge switches to the other plane, as `⌥⌘O` does.
+- In a narrow pane the landscape and seed are cut short first (`sap-l… › seed g… ›`); the badge always stays whole, and the shoot's name keeps as much room as it can.
+- Hovering the header shows all of it: landscape, project, shoot, seed and what kind of seed it is, the namespace on the seed, and the context name.
+- The tab leads with the plane's mark too (`⛭ pods · shoot--foo--bar`), after the safety label (`LIVE · ◉ pods`).
+- Whether a seed is managed or unmanaged shows on the seed itself; it's learned when kubewing opens it (it needs to know that to connect), so it costs no extra login. A shoot's or control plane's header names only the seed, to leave room for the shoot; hovering tells its kind once known.
+- This works for clusters opened with `⌘⇧O` or `⌘J`, for gardenctl's kubeconfigs when kubewing was launched from a terminal (`gardenctl target`, then `kubewing`), and for a garden opened from its own kubeconfig. Other clusters show their context name, as before.
+
 ### The status line
 
 At the bottom of every table pane: the connection state (a green dot and **connected** once the watch is synced), `N shown / M objects`, errors, why metric columns are empty (see [Metrics](#metrics-m)), the **record changes** toggle and **columns**.

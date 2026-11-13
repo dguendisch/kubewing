@@ -182,9 +182,36 @@ func TestClusterJumps(t *testing.T) {
 	if _, ctx := source.SplitCluster(cp.Cluster); err != nil || ctx != "tape-garden/seed--loam" || cp.Namespace != "shoot--foo--baz" {
 		t.Fatalf("control plane: %+v %v", cp, err)
 	}
+	// the header's location: the control plane of baz on the managed seed loam (shoot garden/loam on soil)
+	want := Location{Garden: "tape-garden", Plane: "controlPlane", Project: "foo", Shoot: "baz", Seed: "loam", SeedKind: "managed", SeedShoot: "loam", SeedHost: "soil"}
+	if l := svc.Location(cp.Cluster, cp.Namespace); l != want {
+		t.Errorf("location of the control plane: %+v", l)
+	}
+	// the same cluster in another namespace (or all): the seed
+	for _, ns := range []string{"", "kube-system"} {
+		if l := svc.Location(cp.Cluster, ns); l.Plane != "seed" || l.Seed != "loam" || l.SeedKind != "managed" || l.Shoot != "" {
+			t.Errorf("location in %q: %+v", ns, l)
+		}
+	}
 	// ⌘⇧P works on what ⌘J opened, as on a ⌘⇧O pick
-	if o, err := svc.OtherPlane(cp.Cluster, cp.Namespace); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
+	o, err := svc.OtherPlane(cp.Cluster, cp.Namespace)
+	if err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/shoot--foo--baz") {
 		t.Errorf("other plane: %+v %v", o, err)
+	}
+	// the shoot: its seed, known as managed from opening its control plane
+	if l := svc.Location(o.Cluster, ""); l != (Location{Garden: "tape-garden", Plane: "shoot", Project: "foo", Shoot: "baz", Seed: "loam", SeedKind: "managed", SeedShoot: "loam", SeedHost: "soil"}) {
+		t.Errorf("location of the shoot: %+v", l)
+	}
+	// the garden: its project by the pane's namespace
+	if l := svc.Location(g.Cluster, "garden-foo"); l != (Location{Garden: "tape-garden", Plane: "garden", Project: "foo"}) {
+		t.Errorf("location of the garden: %+v", l)
+	}
+	if l := svc.Location(g.Cluster, "kube-system"); l != (Location{Garden: "tape-garden", Plane: "garden"}) {
+		t.Errorf("location of the garden elsewhere: %+v", l)
+	}
+	// not Gardener: nothing
+	if l := svc.Location("@99/elsewhere", ""); l != (Location{}) {
+		t.Errorf("location elsewhere: %+v", l)
 	}
 	// the control plane's pane moved to another shoot's namespace on the seed: that shoot
 	if _, err := svc.OtherPlane(cp.Cluster, "shoot--foo--bar"); err != nil {
@@ -201,7 +228,7 @@ func TestClusterJumps(t *testing.T) {
 	if len(seed) != 1 || seed[0].Label != "seed loam" || seed[0].Type != "seed" || seed[0].Entry.Seed != "loam" || seed[0].Entry.Name != "tape-garden/seed--loam" {
 		t.Fatalf("seed: %+v", seed)
 	}
-	o, err := svc.OpenCluster(seed[0].Entry)
+	o, err = svc.OpenCluster(seed[0].Entry)
 	if err != nil || o.Cluster != cp.Cluster || o.Namespace != "" {
 		t.Fatalf("seed opened: %+v %v (control plane %s)", o, err, cp.Cluster)
 	}
@@ -223,6 +250,14 @@ func TestClusterJumps(t *testing.T) {
 	ms := jumps("managedseeds", "ms-loam", 1)
 	if len(ms) != 2 || ms[0].Entry.Seed != "loam" || ms[1].Label != "control plane of shoot loam" || ms[1].Entry.Shoot != "loam" || ms[1].Entry.Namespace != "garden" || !ms[1].Entry.ControlPlane {
 		t.Fatalf("managed seed: %+v", ms)
+	}
+	// the managed seed's shoot: it is seed loam, and runs on soil
+	ls, err := svc.OpenCluster(ClusterEntry{Cluster: config.Cluster{Garden: "tape-garden", Namespace: "garden", Shoot: "loam"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l := svc.Location(ls.Cluster, ""); l.Plane != "shoot" || l.Project != "garden" || l.Shoot != "loam" || l.IsSeed != "loam" || l.Seed != "soil" || l.SeedKind != "" {
+		t.Errorf("location of the seed's shoot: %+v", l)
 	}
 
 	// not a garden: nothing (tape's own cluster), nor other kinds
@@ -305,7 +340,18 @@ contexts: [{name: ` + ctx + `, context: {cluster: c, user: u` + nsLine + `}}]
 		}
 	}
 
+	// the header: a control plane in the shoot's namespace, the seed (by its shoot's name, unknown kind) elsewhere
+	if l := svc.Location(cp, "shoot--foo--baz"); l != (Location{Garden: "tape-garden", Plane: "controlPlane", Project: "foo", Shoot: "baz", Seed: "loam"}) {
+		t.Errorf("location of the control plane: %+v", l)
+	}
+	if l := svc.Location(cp, ""); l.Plane != "seed" {
+		t.Errorf("location of the seed: %+v", l)
+	}
+
 	shoot := kubeconfig("shoot--foo--baz", "", "garden-foo", "baz")
+	if l := svc.Location(shoot, "kube-system"); l != (Location{Garden: "tape-garden", Plane: "shoot", Project: "foo", Shoot: "baz"}) {
+		t.Errorf("location of the shoot: %+v", l)
+	}
 	if o, err := svc.OtherPlane(shoot, "kube-system"); err != nil || !strings.HasSuffix(o.Cluster, "/tape-garden/seed--loam") || o.Namespace != "shoot--foo--baz" {
 		t.Errorf("shoot: %+v %v", o, err)
 	}

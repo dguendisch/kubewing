@@ -275,6 +275,12 @@ export interface ContextList {
   kubeconfig?: string[];
 }
 
+/**
+ * Go's zero time.Time, as it sends it: an entry built here (never used) must
+ * send it too, since Go can't parse "" as a time and refuses the whole call.
+ */
+export const neverUsed = "0001-01-01T00:00:00Z";
+
 /** Mirrors bridge.ClusterEntry: a cluster the ⌘⇧O dialog offers, a kubeconfig's context or a Gardener target. */
 export interface ClusterEntry {
   /** A kubeconfig's files (none: ~/.kube/config) and context ("" = its current one). */
@@ -287,7 +293,7 @@ export interface ClusterEntry {
   shoot?: string;
   controlPlane?: boolean;
   seed?: string;
-  /** RFC 3339; zero for gardens and matches. */
+  /** RFC 3339; zero for gardens and matches (neverUsed, never ""). */
   used: string;
   /** recent: opened before; gardenctl: a gardenctl session's target; match: a pattern matched the text; garden: a garden; jump: ⌘J's clusters. */
   from: "recent" | "gardenctl" | "match" | "garden" | "jump";
@@ -298,6 +304,26 @@ export interface ClusterEntry {
   disabled?: string;
   /** A shoot's other plane (its control plane, or the shoot of a control plane): one line, toggled. */
   alt?: ClusterEntry;
+}
+
+/**
+ * Mirrors bridge.Location: where a pane is, for its header. plane unset: not
+ * a Gardener cluster kubewing knows (the header shows the context name).
+ */
+export interface Location {
+  /** The landscape: the garden's identity. */
+  garden?: string;
+  plane?: "shoot" | "controlPlane" | "seed" | "garden";
+  project?: string;
+  shoot?: string;
+  /** The seed a shoot or control plane runs on, or the seed shown. */
+  seed?: string;
+  /** managed: a shoot of project garden (seedShoot, running on seedHost); unmanaged: registered with a kubeconfig of its own; unset: not known. */
+  seedKind?: "managed" | "unmanaged";
+  seedShoot?: string;
+  seedHost?: string;
+  /** The shoot shown is this managed seed's. */
+  isSeed?: string;
 }
 
 /** Mirrors bridge.ClusterList. */
@@ -1028,6 +1054,8 @@ export interface Transport {
   forgetCluster(e: ClusterEntry): Promise<void>;
   /** ⌥⌘O: the control plane of a shoot a pane shows, or the shoot of a control plane (one ⌘⇧O opened); may ask to log in. */
   otherPlane(cluster: string, namespace: string): Promise<ClusterOpen>;
+  /** Where a pane (cluster, namespace) is: the landscape, plane and seed, as far as known; connects nowhere. */
+  location(cluster: string, namespace: string): Promise<Location>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;
   /** Checks a mutation against the safety policy (Go decides); throws if refused. */

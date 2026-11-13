@@ -69,6 +69,17 @@ func TestDispatchErrors(t *testing.T) {
 			t.Errorf("%s(%v): got %v, want %q", tc.method, tc.args, err, tc.want)
 		}
 	}
+	// a cluster entry the frontend builds itself (a header's breadcrumb, ⌘⇧O's toggle) sends Go's
+	// zero time as used (neverUsed in transport/types.ts): "" can't be parsed and fails the call
+	entry := func(used string) []json.RawMessage {
+		return []json.RawMessage{json.RawMessage(`{"garden":"live","seed":"aws","used":` + used + `,"from":"jump","rule":{"context":"","confirm":[]}}`)}
+	}
+	if _, err := bridge.Dispatch(a, "OpenCluster", entry(`"0001-01-01T00:00:00Z"`)); err != nil && strings.Contains(err.Error(), "argument") {
+		t.Errorf("OpenCluster with the zero time: %v", err)
+	}
+	if _, err := bridge.Dispatch(a, "OpenCluster", entry(`""`)); err == nil || !strings.Contains(err.Error(), "argument") {
+		t.Errorf("OpenCluster with an empty time: %v, want an argument error", err)
+	}
 	res, err := bridge.Dispatch(a, "Contexts", []json.RawMessage{json.RawMessage(`""`)})
 	if err != nil || res.(bridge.ContextList).Current != "c" {
 		t.Errorf("Contexts: %v, %v", res, err)

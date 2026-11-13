@@ -29,7 +29,10 @@ import { prettyKey } from "./keys/keymap";
 import { useKeys } from "./keys/useKeys";
 import { useConfig } from "./store/config";
 import { useRules } from "./store/rules";
-import { setUI, usePortForwards, useUI } from "./store/store";
+import { loadLocation, locationKey, useLocations } from "./store/location";
+import { locationNamespace, planeIcon } from "./components/location";
+import { bridge, setUI, usePortForwards, useUI } from "./store/store";
+import { useEffect } from "react";
 import * as S from "./store/state";
 
 const noDrag = { ["--wails-draggable" as string]: "no-drag" };
@@ -46,6 +49,13 @@ function Window() {
   const active = useUI((s) => s.activeTab);
   const panes = useUI((s) => s.panes);
   const rules = useRules();
+  const locations = useLocations();
+  // every tab's focused pane: its plane's mark in the tab (a tab in the background renders no pane to fetch it)
+  const focusedPanes = tabs.map((t) => panes[t.focused]).filter((p) => p !== undefined);
+  const wanted = focusedPanes.map((p) => locationKey(p.spec.context, locationNamespace(p))).join("\n");
+  useEffect(() => {
+    for (const p of focusedPanes) loadLocation(p.spec.context, locationNamespace(p), (c, ns) => bridge().location(c, ns));
+  }, [wanted, locations]);
   const forwards = usePortForwards((s) => s.list.length);
   // the live key (keybindings.yaml may rebind or unbind it)
   const listKey = useConfig((c) => c.bindings.find((b) => b.command === "portforward.list"));
@@ -62,7 +72,7 @@ function Window() {
         {tabs.map((t, i) => {
           const p = panes[t.focused];
           const n = S.tabShortcut(i, tabs.length);
-          const title = tabTitle(t, p, p?.context ? rules[p.context] : undefined);
+          const title = tabTitle(t, p, p?.context ? rules[p.context] : undefined, p ? planeIcon(locations[locationKey(p.spec.context, locationNamespace(p))]) : "");
           const shortcut = n && (
             <span aria-hidden className="text-small text-fg-muted">
               ⌘{n}

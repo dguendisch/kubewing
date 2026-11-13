@@ -25,6 +25,8 @@ import { ruleColor } from "./safetyStyle";
 import { PaneName } from "./NameField";
 import { ObjectPane } from "./ObjectPane";
 import { resourceLabel } from "./tabTitle";
+import { LocationCrumb, useLocation } from "./LocationCrumb";
+import { locationNamespace } from "./location";
 
 /**
  * The pointer itself moved, no button held (not a text selection or a drag).
@@ -197,7 +199,7 @@ function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rul
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
       <Badges rule={rule} />
       <PaneName pane={pane} />
-      <span className="text-fg-muted">{pane.context}</span>
+      <PaneLocation pane={pane} fallback={pane.context ?? ""} />
       <span className="font-semibold text-accent">{term.local ? "terminal" : term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
       {term.local ? (
         term.local.namespace ? <span className="text-fg-muted">{term.local.namespace}</span> : null
@@ -244,7 +246,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
       <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
         <Badges rule={rule} />
         <PaneName pane={pane} />
-        <span className="text-fg-muted">{pane.context}</span>
+        <PaneLocation pane={pane} fallback={pane.context ?? ""} />
         <span className="font-semibold text-accent">logs</span>
         <span>{logs.title}</span>
         <LogFilter paneId={id} value={logs.filter} focused={filterFocused} shown={st.shown} total={st.total} />
@@ -358,6 +360,13 @@ export function ResourceName({ pane }: { pane: S.PaneState }) {
   );
 }
 
+/** Where the pane is: a Gardener cluster's landscape, plane and seed; any other cluster's context name. */
+function PaneLocation({ pane, fallback, fallbackTitle }: { pane: S.PaneState; fallback: string; fallbackTitle?: string }) {
+  // "" too: kubewing's own current context may be gardenctl's kubeconfig
+  const location = useLocation(pane.spec.context, locationNamespace(pane));
+  return <LocationCrumb paneId={pane.id} location={location} fallback={fallback} fallbackTitle={fallbackTitle} />;
+}
+
 /** The header's empty stretch: a double-click there names the pane (⌘I). */
 function NameGap({ paneId }: { paneId: string }) {
   return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
@@ -449,7 +458,7 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
       <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
         <Badges rule={rule} />
         <PaneName pane={pane} />
-        <span className="text-fg-muted">{noCluster ? "no cluster" : S.clusterLabel(pane.spec.context)}</span>
+        {noCluster ? <span className="text-fg-muted">no cluster</span> : <PaneLocation pane={pane} fallback={S.clusterLabel(pane.spec.context)} />}
         <NameGap paneId={pane.id} />
       </header>
       <div className="flex min-h-0 flex-1 items-center justify-center">
@@ -583,9 +592,11 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
       <Badges rule={rule} />
       {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
       <PaneName pane={pane} />
-      <span className="shrink-0 text-fg-muted" title={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}>
-        {S.splitCluster(context).context || pane.context || "(current)"}
-      </span>
+      <PaneLocation
+        pane={pane}
+        fallback={S.splitCluster(context).context || pane.context || "(current)"}
+        fallbackTitle={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}
+      />
       <ResourceName pane={pane} />
       <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
       {fieldSelector ? (

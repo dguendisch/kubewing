@@ -109,6 +109,10 @@ type Service struct {
 	feeds map[feedKey]*feed
 	// opened: the Gardener targets OpenCluster resolved, by where their panes are (openedKey)
 	opened map[string]gardener.Target
+	// seeds: what resolving learned of seeds (managed or not), by garden/seed;
+	// shoots: of shoots, their seed and the managed seed they are, by their cluster (see Location)
+	seeds  map[string]gardener.Seed
+	shoots map[string]shootInfo
 }
 
 // New creates a service.
@@ -120,7 +124,7 @@ func New(reg *source.Registry, emit Emitter, opts Options) *Service {
 		opts.Clock = realClock{}
 	}
 	win := NewWindows(emit)
-	s := &Service{reg: reg, emit: win, win: win, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}, opened: map[string]gardener.Target{}}
+	s := &Service{reg: reg, emit: win, win: win, opts: opts, panes: map[string]*pane{}, sessions: map[string]*session{}, leased: map[watchKey]*leasedWatch{}, forwards: map[string]*forward{}, described: map[string]*describeSnap{}, edits: map[string]*editSession{}, feeds: map[feedKey]*feed{}, opened: map[string]gardener.Target{}, seeds: map[string]gardener.Seed{}, shoots: map[string]shootInfo{}}
 	s.guard = safety.NewGuard(safety.NewPolicy(nil), opts.Clock.Now)
 	if s.opts.History == nil {
 		s.opts.History = config.OpenHistory("")

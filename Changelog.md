@@ -8,6 +8,7 @@
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 - status colors: state cells (STATUS, READY, conditions such as AVAILABLE or a shoot's NODES, an event's TYPE) show their text in orange when waiting (`Pending`, `1/2`, `Unknown`) and red when broken (`CrashLoopBackOff`, `False`), like kubecolor; healthy states stay uncolored unless a theme sets the `ok` token
 - the row menu (`⌘⏎`, right-click) has an **events** entry (`v`) (previously, "events" where only visible from the jump menu)
+- Gardener clusters show where you are in the pane header: the landscape, the seed beneath, and a colored badge for the plane (shoot, control plane, seed, garden), with managed and unmanaged seeds told apart; its parts open the garden, a seed or the other plane, and the tab leads with the plane's mark
 
 ### Changed
 - naming a tab (`⌘⇧I` or double-click) starts with its current title selected, ready to edit, instead of an empty field

@@ -4,7 +4,7 @@
  * match (a dashboard URL …) adds its targets on top, a path a kubeconfig file.
  */
 import { rank, type Candidate } from "../complete/complete";
-import type { ClusterEntry, ClusterList } from "../transport/types";
+import { neverUsed, type ClusterEntry, type ClusterList } from "../transport/types";
 
 export interface Item {
   /** What's opened: the line's shoot or its control plane, as toggled. */
@@ -23,7 +23,7 @@ export type Plane = "shoot" | "controlPlane";
 /** The entry a line opens on a plane: a shoot's (or control plane's) other plane is its alt. */
 export function onPlane(e: ClusterEntry, plane: Plane): ClusterEntry {
   if (!e.shoot || !!e.controlPlane === (plane === "controlPlane")) return e;
-  return e.alt ?? { ...e, controlPlane: !e.controlPlane, name: undefined, rule: { context: "", confirm: [] }, used: "" };
+  return e.alt ?? { ...e, controlPlane: !e.controlPlane, name: undefined, rule: { context: "", confirm: [] }, used: neverUsed };
 }
 
 /** A shoot line's details: the latest use of either plane, gardenctl if either is a session's. */
@@ -88,7 +88,7 @@ export const isPath = (text: string) => /^(~\/|\/|\.\.?\/)/.test(text.trim());
 
 /** A ClusterEntry for a typed kubeconfig path (at its current context). */
 export function pathEntry(text: string): ClusterEntry {
-  return { kubeconfig: [text.trim()], used: "", from: "match", rule: { context: "", confirm: [] } };
+  return { kubeconfig: [text.trim()], used: neverUsed, from: "match", rule: { context: "", confirm: [] } };
 }
 
 /**

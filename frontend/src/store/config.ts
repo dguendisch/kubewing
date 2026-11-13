@@ -25,6 +25,10 @@ export const themeTokens = [
   "match",
   "marked",
   "prod",
+  "plane-shoot",
+  "plane-control",
+  "plane-seed",
+  "plane-garden",
   "shadow",
 ] as const;
 

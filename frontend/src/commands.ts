@@ -16,6 +16,7 @@ import { selectedText, setTextSel, useTextSel } from "./grid/textsel";
 import { logBuffers } from "./logs/buffer";
 import { useUpdate } from "./update/update";
 import { zoom } from "./store/config";
+import { clearLocations } from "./store/location";
 
 /**
  * The single command dispatcher. Keyboard shortcuts, native menu
@@ -1505,6 +1506,7 @@ export async function openSource(paneId: string, spec: S.PaneSpec) {
  * It lists nothing yet: ⌘O opens over it, to pick what.
  */
 export async function openCluster(paneId: string, cluster: string, namespace: string, where: S.ClusterTarget) {
+  clearLocations(); // resolving may have told Go more (a seed managed or not): headers ask again
   const spec = S.clusterSpec(cluster, namespace);
   const pane = useUI.getState().panes[paneId];
   if (where === "here" && pane && S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
@@ -1527,6 +1529,7 @@ async function switchPlane(pane: S.PaneState) {
   flash(pane.id, "resolving the other plane… (the garden may ask to log in)");
   try {
     const o = await bridge().otherPlane(pane.spec.context, pane.spec.namespace);
+    clearLocations();
     const p = useUI.getState().panes[pane.id];
     if (!p) return;
     const picking = useUI.getState().overlay?.kind === "open";
@@ -1538,6 +1541,32 @@ async function switchPlane(pane: S.PaneState) {
     flash(pane.id, String((e as Error)?.message ?? e), true);
   }
 }
+
+/**
+ * A click on the header's breadcrumb: that Gardener cluster (the garden, a
+ * seed, a managed seed's shoot), resolved as a ⌘⇧O pick and opened in the
+ * pane (⌘← goes back), listing nothing yet with ⌘O over it. Errors show in
+ * the status line.
+ */
+export async function openTarget(paneId: string, target: ClusterEntry, label: string) {
+  const pane = useUI.getState().panes[paneId];
+  if (!pane) return;
+  if (S.unsaved(pane)) return flash(pane.id, "unsaved changes in the editor: esc to discard them first", true);
+  flash(pane.id, `resolving ${label}… (the garden may ask to log in)`);
+  try {
+    const o = await bridge().openCluster(target);
+    if (o.choices?.length) return flash(pane.id, `${target.shoot} exists in several projects: pick it in ⌘⇧O`, true);
+    await openCluster(paneId, o.cluster, o.namespace ?? "", pane.term || pane.logs ? "tab" : "here");
+  } catch (e) {
+    flash(pane.id, String((e as Error)?.message ?? e), true);
+  }
+}
+
+/** A click on the header's plane badge: ⌥⌘O on that pane. */
+export const switchPanePlane = (paneId: string) => {
+  const p = useUI.getState().panes[paneId];
+  if (p) void switchPlane(p);
+};
 
 /**
  * ⌘← / ⌘→ in the table (or the header's ← / → buttons): the view before the
