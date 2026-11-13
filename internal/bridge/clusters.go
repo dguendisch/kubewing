@@ -346,7 +346,7 @@ func (s *Service) entry(cfg gardener.Config, c config.Cluster, from string) Clus
 		}
 	}
 	if e.Name != "" {
-		e.Rule = s.guard.Rule(e.Name)
+		e.Rule = s.guard.RuleIn(e.Name, e.Garden)
 	}
 	return e
 }

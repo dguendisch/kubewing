@@ -842,7 +842,7 @@ func (s *Service) Prepare(kind, paneID, key string) (safety.Pending, error) {
 		}
 	}
 	a := safety.Action{
-		Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),
+		Kind: kind, Context: r.context, Landscape: s.landscape(r.cluster), Resource: resourceName(r.res, r.typed),
 		Namespace: r.namespace(), Name: r.name(), UID: string(r.item.Object.GetUID()),
 	}
 	return s.guard.Prepare(a, r)

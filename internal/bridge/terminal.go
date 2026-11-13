@@ -26,7 +26,7 @@ func (s *Service) PrepareTerminal(cluster, namespace string) (safety.Pending, er
 	if err != nil {
 		return safety.Pending{}, err
 	}
-	a := safety.Action{Kind: safety.Terminal, Context: ctxName, Resource: "terminal", Namespace: namespace, Name: ctxName}
+	a := safety.Action{Kind: safety.Terminal, Context: ctxName, Landscape: s.landscape(cluster), Resource: "terminal", Namespace: namespace, Name: ctxName}
 	return s.guard.Prepare(a, terminalTarget{cluster: cluster, namespace: namespace})
 }
 

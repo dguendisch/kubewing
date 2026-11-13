@@ -315,7 +315,7 @@ func (s *Service) PrepareOpsPod(cluster, node string) (safety.Pending, error) {
 	if err != nil {
 		return safety.Pending{}, err
 	}
-	a := safety.Action{Kind: safety.OpsPod, Context: ctxName, Resource: "nodes", Name: node}
+	a := safety.Action{Kind: safety.OpsPod, Context: ctxName, Landscape: s.landscape(cluster), Resource: "nodes", Name: node}
 	if w, err := s.leasedWatch(cluster, "nodes"); err == nil {
 		w.mu.Lock()
 		synced := w.synced

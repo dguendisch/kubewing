@@ -4,7 +4,7 @@ import { RecordButton, TravelBadge, TravelBar, useKey, usePaneStatus } from "./T
 import { Table } from "../grid/Table";
 import { rowAt, type PaneData } from "../grid/rowcache";
 import type { SafetyRule } from "../transport/types";
-import { loadRule, useRules } from "../store/rules";
+import { loadRule, ruleKey, useRules } from "../store/rules";
 import { bridge, paneData, setUI, useContexts, useUI } from "../store/store";
 import { useConfig } from "../store/config";
 import { formatAge, syncProgress } from "../grid/cells";
@@ -26,6 +26,7 @@ import { PaneName } from "./NameField";
 import { ObjectPane } from "./ObjectPane";
 import { resourceLabel } from "./tabTitle";
 import { LocationCrumb, useLocation } from "./LocationCrumb";
+import { SafetyLabel } from "./SafetyLabel";
 import { locationNamespace } from "./location";
 
 /**
@@ -107,10 +108,11 @@ export function Pane({ id }: { id: string }) {
 
   // closing happens in the store once no UI pane references the server pane (see connect)
 
-  const rule = useRules((r) => (pane?.context ? r[pane.context] : undefined));
+  const key = ruleKey(pane);
+  const rule = useRules((r) => (key ? r[key] : undefined));
   useEffect(() => {
-    if (pane?.context) loadRule(pane.context, (c) => bridge().contextRule(c));
-  }, [pane?.context, rule]);
+    loadRule(pane, (c, ctx) => bridge().clusterRule(c, ctx));
+  }, [key, rule]);
 
   if (!pane) return null;
   // a labeled context colors the whole pane frame, so prod is never mistaken for dev
@@ -375,13 +377,9 @@ function NameGap({ paneId }: { paneId: string }) {
 export function Badges({ rule }: { rule?: SafetyRule }) {
   return (
     <>
-      {rule?.label ? (
-        <span aria-label="context label" className="px-1 font-semibold text-bg" style={{ background: ruleColor(rule) ?? "var(--color-accent)" }}>
-          {rule.label}
-        </span>
-      ) : null}
+      <SafetyLabel rule={rule} />
       {rule?.readOnly ? (
-        <span aria-label="read-only" title="read-only context: mutations are refused" className="border border-fg-muted px-1 text-fg-muted">
+        <span aria-label="read-only" title="read-only context: mutations are refused" className="shrink-0 border border-fg-muted px-1 leading-4 text-fg-muted">
           RO
         </span>
       ) : null}

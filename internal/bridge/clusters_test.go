@@ -300,6 +300,7 @@ func TestOtherPlaneFromKubeconfig(t *testing.T) {
 		op.Tapes[tp.Pipeline.Source.Resource] = tp
 	}
 	cfg := config.Defaults("")
+	cfg.Config.Contexts = []config.ContextRule{{Match: "tape-*", Label: "TG", ReadOnly: true}}
 	svc := New(source.NewRegistry(op), &eventLog{events: map[string][]any{}}, Options{
 		Actor: op, Config: &cfg, Clock: fixedClock{time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)},
 		Clusters: config.OpenClusters(""),
@@ -349,6 +350,15 @@ contexts: [{name: ` + ctx + `, context: {cluster: c, user: u` + nsLine + `}}]
 	}
 
 	shoot := kubeconfig("shoot--foo--baz", "", "garden-foo", "baz")
+	// gardenctl's context names say nothing of the landscape: its rule (tape-*, matching tape-garden) applies by the kubeconfig's
+	for _, c := range [][2]string{{cp, "garden--loam-external"}, {shoot, "shoot--foo--baz"}} {
+		if r := svc.ClusterRule(c[0], c[1]); r.Label != "TG" || !r.ReadOnly {
+			t.Errorf("rule of %s: %+v", c[1], r)
+		}
+	}
+	if r := svc.ContextRule("shoot--foo--baz"); r.Label != "" {
+		t.Errorf("by the name alone: %+v", r)
+	}
 	if l := svc.Location(shoot, "kube-system"); l != (Location{Garden: "tape-garden", Plane: "shoot", Project: "foo", Shoot: "baz"}) {
 		t.Errorf("location of the shoot: %+v", l)
 	}

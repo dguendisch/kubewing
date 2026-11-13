@@ -182,3 +182,64 @@ func TestPrepareBatch(t *testing.T) {
 		t.Errorf("%d tokens left behind", n)
 	}
 }
+
+// A rule for a landscape covers its Gardener clusters as kubewing names
+// them; a rule for one of them, placed before it, still wins. The guard
+// enforces it, not only the badge.
+func TestPolicyForLandscape(t *testing.T) {
+	p := NewPolicy([]config.ContextRule{
+		{Match: "*-live/shoot--ops--*", Label: "OPS"},
+		{Match: "*-live", Label: "LIVE", ReadOnly: true},
+		{Match: "*/seed--*", Label: "SEED"},
+	})
+	for ctx, label := range map[string]string{
+		"sap-landscape-live":                         "LIVE", // the garden itself, by its name
+		"sap-landscape-live/shoot--core--cicd":       "LIVE",
+		"sap-landscape-live/seed--gcp-ha-eu2":        "LIVE", // the first matching rule: the landscape's
+		"sap-landscape-live/shoot--ops--monitoring":  "OPS",
+		"sap-landscape-dev/seed--aws":                "SEED",
+		"sap-landscape-dev/shoot--core--cicd":        "",
+		"sap-landscape-live/other":                   "", // not a name kubewing gives
+		"shoot--core--cicd":                          "", // gardenctl's context name: no landscape in it
+		"sap-landscape-live/shoot--core--cicd/extra": "",
+	} {
+		if r := p.For(ctx); r.Label != label {
+			t.Errorf("%s: label %q, want %q", ctx, r.Label, label)
+		}
+	}
+	g := NewGuard(p, time.Now)
+	if _, err := g.Prepare(del("sap-landscape-live/seed--gcp-ha-eu2", "a"), nil); !errors.Is(err, ErrReadOnly) {
+		t.Errorf("a live landscape's seed: %v, want read-only", err)
+	}
+}
+
+func TestLandscape(t *testing.T) {
+	for ctx, want := range map[string]string{
+		"live/shoot--p--s": "live", "live/seed--s": "live", "live": "", "/shoot--p--s": "", "live/garden": "", "a/b/shoot--p--s": "",
+	} {
+		if got := Landscape(ctx); got != want {
+			t.Errorf("Landscape(%q) = %q, want %q", ctx, got, want)
+		}
+	}
+}
+
+// A context gardenctl named (no landscape in it) matches the landscape it's
+// known to be in, for the badge and the guard alike.
+func TestPolicyForInLandscape(t *testing.T) {
+	p := NewPolicy([]config.ContextRule{{Match: "*-live", Label: "LIVE", ReadOnly: true}})
+	if r := p.ForIn("garden--gcp-ha-eu2-external", "sap-landscape-live"); r.Label != "LIVE" {
+		t.Errorf("gardenctl's seed context: %+v", r)
+	}
+	if r := p.ForIn("garden--gcp-ha-eu2-external", ""); r.Label != "" {
+		t.Errorf("without a landscape: %+v", r)
+	}
+	g := NewGuard(p, time.Now)
+	a := del("shoot--core--cicdes", "a")
+	if _, err := g.Prepare(a, nil); err != nil {
+		t.Errorf("by name alone: %v", err)
+	}
+	a.Landscape = "sap-landscape-live"
+	if _, err := g.Prepare(a, nil); !errors.Is(err, ErrReadOnly) {
+		t.Errorf("in a live landscape: %v, want read-only", err)
+	}
+}

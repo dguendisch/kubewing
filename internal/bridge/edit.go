@@ -61,7 +61,7 @@ func (s *Service) EditOpen(paneID, key string) (EditSession, error) {
 	if err != nil {
 		return EditSession{}, err
 	}
-	if rule := s.guard.Rule(r.context); rule.ReadOnly {
+	if rule := s.guard.RuleIn(r.context, s.landscape(r.cluster)); rule.ReadOnly {
 		return EditSession{}, fmt.Errorf("%s %s/%s: %w %q", safety.Edit, resourceName(r.res, r.typed), r.name(), safety.ErrReadOnly, r.context)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

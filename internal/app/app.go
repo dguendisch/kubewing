@@ -122,6 +122,9 @@ func (a *App) ForgetCluster(e bridge.ClusterEntry) error { return a.svc.ForgetCl
 func (a *App) OtherPlane(cluster, namespace string) (bridge.ClusterOpen, error) {
 	return a.svc.OtherPlane(cluster, namespace)
 }
+func (a *App) ClusterRule(cluster, context string) safety.Rule {
+	return a.svc.ClusterRule(cluster, context)
+}
 func (a *App) Location(cluster, namespace string) bridge.Location {
 	return a.svc.Location(cluster, namespace)
 }

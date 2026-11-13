@@ -28,7 +28,7 @@ import { dispatch } from "./commands";
 import { prettyKey } from "./keys/keymap";
 import { useKeys } from "./keys/useKeys";
 import { useConfig } from "./store/config";
-import { useRules } from "./store/rules";
+import { ruleKey, useRules } from "./store/rules";
 import { loadLocation, locationKey, useLocations } from "./store/location";
 import { locationNamespace, planeIcon } from "./components/location";
 import { bridge, setUI, usePortForwards, useUI } from "./store/store";
@@ -72,7 +72,7 @@ function Window() {
         {tabs.map((t, i) => {
           const p = panes[t.focused];
           const n = S.tabShortcut(i, tabs.length);
-          const title = tabTitle(t, p, p?.context ? rules[p.context] : undefined, p ? planeIcon(locations[locationKey(p.spec.context, locationNamespace(p))]) : "");
+          const title = tabTitle(t, p, ruleKey(p) ? rules[ruleKey(p)] : undefined, p ? planeIcon(locations[locationKey(p.spec.context, locationNamespace(p))]) : "");
           const shortcut = n && (
             <span aria-hidden className="text-small text-fg-muted">
               ⌘{n}

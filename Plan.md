@@ -3,8 +3,7 @@
 What's not done yet. What works is in the [Manual](Manual.md), how it's built in [Architecture.md](Architecture.md), developer related topics are in [Development](Development.md). A finished item leaves this file and goes into the manual (if user facing) or readme (if huge/important enough) or development or architecture.
 
 ## Next up
-- safety labels for gardener shoots (like *-live) should also apply to the landscape name, either that or a different config to accomodate for gardener shoot landscape names
-- in addition, they should render like the cp/shoot chip, maybe just without cornered borders to make them a bit different
+
 - opening the yaml viewer should auto-collapse the "last-applied-configuration" field
 - **Reverse references ("used by"):** the field reference rules (`refs.yaml`) read backwards: pods using this secret/configmap/claim, bindings granting this role, attachments of this volume. A `⌘J` section run on request (like the owned scan): a reverse step lists the referring kinds in full unless the field is metadata. `**` patterns expand to concrete paths per listed kind (pod, workload templates, cron job), which also build the target pane's CEL filter.
 - **Chains:** transitive jumps as configured sequences of rule ids, `~` reversing a step, e.g. `via: [pod-volume-pvc, pvc-volumename, ~va-pv]`, `show: each | set`. Bounded depth (~3) and lookups; no syntax beyond `via` + `show`. Port today's hand-written storage paths to built-in chains (the bridge tests prove it). Selector- and naming-convention-based relations (deployment → pods, stateful set claims) stay in Go.

@@ -3,7 +3,7 @@ import { placeMenu, rowLocators, type Anchor } from "../actions/anchor";
 import { menuFor, useMenu } from "../actions/registry";
 import { dispatch } from "../commands";
 import { useConfig } from "../store/config";
-import { useRules } from "../store/rules";
+import { ruleKey, useRules } from "../store/rules";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 
@@ -40,8 +40,8 @@ function Menu({ paneId, serverId, rowKey }: { paneId: string; serverId: string; 
     if (!disabled) setUI((s) => (s.overlay?.kind === "menu" && s.overlay.index !== i ? { ...s, overlay: { ...s.overlay, index: i } } : s));
   };
   const [pos, setPos] = useState<{ x: number; y: number; above: boolean }>();
-  const context = useUI((s) => s.panes[paneId]?.context);
-  const rule = useRules((r) => (context ? r[context] : undefined));
+  const key = useUI((s) => ruleKey(s.panes[paneId]));
+  const rule = useRules((r) => (key ? r[key] : undefined));
   const bindings = useConfig((s) => s.bindings);
   const { items, row, marked } = useMenu();
   // an object view acts on its object: the table's marks don't apply

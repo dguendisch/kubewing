@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/dguendisch/kubewing/internal/gardener"
+	"github.com/dguendisch/kubewing/internal/safety"
 )
 
 // Location is where a pane is, for its header: a Gardener cluster's
@@ -90,4 +91,20 @@ func (s *Service) Location(cluster, namespace string) Location {
 		}
 		return l
 	}
+}
+
+// landscape is the Gardener landscape (garden identity) a cluster is in,
+// as Location finds it (opened by ⌘⇧O or ⌘J, else its kubeconfig's
+// gardenlogin, else a garden by its API server): safety rules match it
+// too, also where gardenctl named the context (shoot--p--s), which says
+// nothing of it. "" for other clusters. Connects nowhere.
+func (s *Service) landscape(cluster string) string {
+	return s.Location(cluster, "").Garden
+}
+
+// ClusterRule is the safety rule of a pane's cluster: by its context name
+// (as ContextRule) and its landscape (see landscape), which the name of a
+// gardenctl kubeconfig's context doesn't tell.
+func (s *Service) ClusterRule(cluster, context string) safety.Rule {
+	return s.guard.RuleIn(context, s.landscape(cluster))
 }

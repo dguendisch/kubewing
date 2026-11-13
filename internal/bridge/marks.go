@@ -133,13 +133,17 @@ func (s *Service) PrepareMarked(kind, paneID string) (MarkedBatch, error) {
 	var b MarkedBatch
 	var as []safety.Action
 	var targets []any
+	landscape := ""
+	if len(rows) > 0 {
+		landscape = s.landscape(rows[0].cluster) // one pane: one cluster
+	}
 	for _, r := range rows {
 		if kind == safety.Debug && !r.isPod() || kind == safety.Scale && replicas(r.item.Object) == nil || kind == safety.Restart && restartable(r) != "" {
 			b.Skipped = append(b.Skipped, r.name())
 			continue
 		}
 		as = append(as, safety.Action{
-			Kind: kind, Context: r.context, Resource: resourceName(r.res, r.typed),
+			Kind: kind, Context: r.context, Landscape: landscape, Resource: resourceName(r.res, r.typed),
 			Namespace: r.namespace(), Name: r.name(), UID: string(r.item.Object.GetUID()),
 		})
 		targets = append(targets, r)

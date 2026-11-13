@@ -36,6 +36,7 @@ export function wailsTransport(): Transport {
     otherPlane: (c, ns) => call("OtherPlane", c, ns),
     location: (c, ns) => call("Location", c, ns),
     contextRule: (c) => call("ContextRule", c),
+    clusterRule: (c, ctx) => call("ClusterRule", c, ctx),
     prepare: (k, p, key) => call("Prepare", k, p, key),
     delete: (t) => call("Delete", t),
     mark: (p, op) => call("Mark", p, op),

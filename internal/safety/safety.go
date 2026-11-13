@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"path"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -72,10 +73,26 @@ func NewPolicy(rules []config.ContextRule) *Policy { return &Policy{rules: rules
 
 // For returns the rule for a context. Without a matching rule the context
 // is writable and only delete and restart need confirmation; they always do.
-func (p *Policy) For(context string) Rule {
+// A rule matches the context name or, for a Gardener cluster kubewing
+// named (<landscape>/shoot--…, <landscape>/seed--…), its landscape: a rule
+// for "*-live" covers every shoot, control plane and seed of a live
+// landscape. The garden itself is named by its landscape anyway.
+func (p *Policy) For(context string) Rule { return p.ForIn(context, "") }
+
+// ForIn is For with the landscape known otherwise ("" = none, or only what
+// the name says): a Gardener cluster named by gardenctl (shoot--p--s,
+// garden--seed-external) is in a landscape its name doesn't tell.
+func (p *Policy) ForIn(context, landscape string) Rule {
 	r := Rule{Context: context, Confirm: slices.Clone(always)}
+	if landscape == "" {
+		landscape = Landscape(context)
+	}
 	for _, cr := range p.rules {
-		if ok, _ := path.Match(cr.Match, context); !ok {
+		ok, _ := path.Match(cr.Match, context)
+		if !ok && landscape != "" {
+			ok, _ = path.Match(cr.Match, landscape)
+		}
+		if !ok {
 			continue
 		}
 		r.Label, r.Color, r.ReadOnly, r.Strict = cr.Label, cr.Color, cr.ReadOnly, cr.Strict
@@ -92,11 +109,25 @@ func (p *Policy) For(context string) Rule {
 	return r
 }
 
+// Landscape is the garden of a context named as kubewing names Gardener
+// clusters: <garden>/shoot--<project>--<name> or <garden>/seed--<seed>
+// ("" for any other name).
+func Landscape(context string) string {
+	garden, rest, ok := strings.Cut(context, "/")
+	if !ok || garden == "" || strings.Contains(rest, "/") || !(strings.HasPrefix(rest, "shoot--") || strings.HasPrefix(rest, "seed--")) {
+		return ""
+	}
+	return garden
+}
+
 // Action identifies one mutation precisely: a token is only valid for the
 // exact action it was issued for.
 type Action struct {
-	Kind      string `json:"kind"`
-	Context   string `json:"context"`
+	Kind    string `json:"kind"`
+	Context string `json:"context"`
+	// Landscape is the Gardener landscape (garden) of the context's cluster,
+	// where its name doesn't say it (see Policy.ForIn); "" = none or by name.
+	Landscape string `json:"landscape,omitempty"`
 	Resource  string `json:"resource"`
 	Namespace string `json:"namespace,omitempty"`
 	Name      string `json:"name"`
@@ -151,10 +182,13 @@ func (g *Guard) SetPolicy(p *Policy) {
 }
 
 // Rule returns the rule for a context.
-func (g *Guard) Rule(context string) Rule {
+func (g *Guard) Rule(context string) Rule { return g.RuleIn(context, "") }
+
+// RuleIn returns the rule for a context in a landscape (see Policy.ForIn).
+func (g *Guard) RuleIn(context, landscape string) Rule {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.policy.For(context)
+	return g.policy.ForIn(context, landscape)
 }
 
 // Prepare checks a against the policy and issues a token for it. target is
@@ -165,7 +199,7 @@ func (g *Guard) Prepare(a Action, target any) (Pending, error) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	r := g.policy.For(a.Context)
+	r := g.policy.ForIn(a.Context, a.Landscape)
 	if r.ReadOnly {
 		return Pending{}, fmt.Errorf("%s %s/%s: %w %s", a.Kind, a.Resource, a.Name, ErrReadOnly, ctxName(r))
 	}
@@ -202,7 +236,7 @@ func (g *Guard) Redeem(token, kind string) (Action, any, error) {
 		return Action{}, nil, errors.New("prepared action expired; try again")
 	}
 	// defense in depth: SetPolicy drops tokens, but re-check anyway
-	if r := g.policy.For(is.action.Context); r.ReadOnly {
+	if r := g.policy.ForIn(is.action.Context, is.action.Landscape); r.ReadOnly {
 		return Action{}, nil, fmt.Errorf("%w %s", ErrReadOnly, ctxName(r))
 	}
 	return is.action, is.target, nil

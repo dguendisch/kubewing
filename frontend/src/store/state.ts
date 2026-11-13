@@ -848,6 +848,13 @@ export function splitCluster(cluster: string): { kubeconfig: string; context: st
   return m ? { kubeconfig: m[1]!, context: m[2]! } : { kubeconfig: "", context: cluster };
 }
 
+/**
+ * The context name safety rules match a pane on: the one Go resolved, else
+ * (a pane listing nothing yet, as ⌘⇧O and ⌘J open them) the one its cluster
+ * names; "" for the current context before Go said which.
+ */
+export const ruleContext = (p: PaneState | undefined) => p?.context || (p ? splitCluster(p.spec.context).context : "");
+
 /** A cluster as shown: the context's name, "(current)" for the current one. */
 export const clusterLabel = (cluster: string) => splitCluster(cluster).context || "(current)";
 

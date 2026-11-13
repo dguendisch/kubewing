@@ -4,6 +4,7 @@ import { paneIds } from "../store/layout";
 import { useUI } from "../store/store";
 import * as S from "../store/state";
 import { ruleColor } from "./safetyStyle";
+import { SafetyLabel } from "./SafetyLabel";
 
 /**
  * Confirmation for a prepared mutation (the safety rule asked for it).
@@ -47,11 +48,7 @@ function ConfirmBatch() {
       }}
     >
       <h2 className="flex items-baseline gap-2">
-        {b.rule.label ? (
-          <span className="px-1 font-semibold text-bg" style={{ background: color ?? "var(--color-accent)" }}>
-            {b.rule.label}
-          </span>
-        ) : null}
+        <SafetyLabel rule={b.rule} named={false} />
         <span className="font-semibold text-deleted">{b.kind}?</span>
       </h2>
       <p id="confirm-summary" className="text-fg select-text">
@@ -115,11 +112,7 @@ function ConfirmDialog() {
       }}
     >
       <h2 className="flex items-baseline gap-2">
-        {p.rule.label ? (
-          <span className="px-1 font-semibold text-bg" style={{ background: color ?? "var(--color-accent)" }}>
-            {p.rule.label}
-          </span>
-        ) : null}
+        <SafetyLabel rule={p.rule} named={false} />
         <span className="font-semibold text-deleted">{p.action.kind}?</span>
       </h2>
       <p id="confirm-summary" className="text-fg select-text">

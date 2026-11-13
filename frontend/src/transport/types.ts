@@ -1058,6 +1058,8 @@ export interface Transport {
   location(cluster: string, namespace: string): Promise<Location>;
   /** Safety rule for a context name: a pane's resolved one (OpenResult.context), not its cluster. */
   contextRule(context: string): Promise<SafetyRule>;
+  /** A pane's rule: by its context name and its cluster's Gardener landscape (which gardenctl's context names don't tell). */
+  clusterRule(cluster: string, context: string): Promise<SafetyRule>;
   /** Checks a mutation against the safety policy (Go decides); throws if refused. */
   prepare(kind: ActionKind, pane: string, key: string): Promise<Pending>;
   /** Executes a prepared delete. */

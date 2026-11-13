@@ -31,8 +31,9 @@ contexts:
   - {match: "*-prod", label: PROD, color: prod, readOnly: true}
   - {match: "*-live", label: LIVE, color: changed, strict: true}
   - {match: "*-dev", label: DEV, color: added, confirm: [delete, exec, debug, opspod, edit, terminal, label, annotate, scale]}
-  # clusters picked in ⌘⇧O from the test garden (testdata/garden): <garden>/shoot--<project>--<name>
-  - {match: "tape-garden/*", label: GARDEN, color: changed}
+  # the test garden's landscape (testdata/garden): the garden and every cluster picked from it in ⌘⇧O
+  # (<garden>/shoot--<project>--<name>, <garden>/seed--<seed>), by the landscape alone
+  - {match: "tape-garden", label: GARDEN, color: changed}
 
 # b (debug container, as kubectl debug): defaults of the dialog
 #   image:   prefilled (else the last image that started)

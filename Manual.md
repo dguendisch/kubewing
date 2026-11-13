@@ -177,7 +177,7 @@ A pane's header names its cluster. On a Gardener cluster, instead of the context
 | `live › seed root › ◉ SHOOT garden/aws-eu1 is seed aws-eu1` | the shoot behind a managed seed |
 | `live ◆ GARDEN project foo` | the garden, in project `foo`'s namespace |
 
-- Each plane has a color of its own: shoot blue, control plane violet, seed brown, garden green. They're fixed, so they never clash with a safety rule's label and frame color (see [Safety](#16-safety)), which stay as they are.
+- Each plane has a color of its own: shoot blue, control plane violet, seed brown, garden green. They're fixed, so they never clash with a safety rule's label and frame color (see [Safety](#16-safety)). The plane badge has round corners, the safety label (`LIVE`) square ones. A rule for a landscape (`*-live`) labels all its clusters.
 - On a seed the pane's namespace decides: a shoot's namespace (`shoot--<project>--<name>`) is that shoot's **control plane**, any other namespace, or all, is the **seed**. Switching the namespace with `⌘O` switches the badge.
 - A click on the landscape opens the garden (in the shown project's namespace), a click on a seed opens that seed, a click on a managed seed's shoot opens that shoot, all in the pane (`⌘←` goes back). A click on the **SHOOT** or **CP** badge switches to the other plane, as `⌥⌘O` does.
 - In a narrow pane the landscape and seed are cut short first (`sap-l… › seed g… ›`); the badge always stays whole, and the shoot's name keeps as much room as it can.
@@ -905,7 +905,7 @@ contexts:
 | Field | Effect |
 |---|---|
 | `match` | Required. A glob (`*`, `?`, `[a-z]`) on the context name. The first matching rule wins, so put specific rules before broad ones. |
-| `label` | A badge on the pane frame, header and tab, e.g. `PROD`. |
+| `label` | A badge in the pane header, tab, confirmations and the clusters dialog, e.g. `PROD`. |
 | `color` | Colors frame, header and tab: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
 | `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit, local terminals (`terminal`: a shell can run anything), `label`, `annotate`, `scale` and rollout restart (`restart`). Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
 | `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`, `label`, `annotate`, `scale`, `restart`. Delete and restart always ask. An edit asks after its diff preview; label, annotate and scale after their dialog, naming the changes. |
@@ -914,7 +914,9 @@ contexts:
 A context no rule matches is writable, and only delete and rollout restart ask.
 
 - Rules match the context name only, whichever kubeconfig it comes from.
-- Gardener clusters picked in `⌘⇧O` are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-o)). A glob's `*` doesn't match `/`, so a rule for a landscape is `{match: "sap-landscape-live/*", …}`, one for every control plane `{match: "*/seed--*", …}`, and the garden itself is matched by its name.
+- **Gardener landscapes:** a rule also matches the landscape of a Gardener cluster picked in `⌘⇧O` or `⌘J`. These are named `<garden>/shoot--<project>--<name>`, `<garden>/seed--<seed>` and `<garden>` (see [Opening a cluster](#opening-a-cluster-o)), so `{match: "*-live", …}` covers the garden `sap-landscape-live` and every shoot, control plane and seed opened from it, enforced as for any context. A rule for single clusters goes before it, as the first matching rule wins: `{match: "sap-landscape-live/shoot--ops--*", …}` (a glob's `*` doesn't match `/`), `{match: "*/seed--*", …}` for every seed and control plane.
+- This also works for gardenctl's kubeconfigs when kubewing was launched from a terminal (`gardenctl target`, then `kubewing`), whose context names (`shoot--core--cicd`, `garden--gcp-ha-eu2-external`) don't name the landscape: kubewing reads it from the kubeconfig (gardenlogin's garden identity). A seed reached through its login secret has none, so only a rule on its context name applies there.
+- A catch-all rule (`{match: "*", …}`) covers Gardener clusters too, through their landscape.
 - A rule with an error (no `match`, a broken glob, an unknown color or action) shows in the config banner and is skipped, so its contexts fall through to the next rule. Check the banner after editing.
 - The rules are enforced in the backend, not the UI. Every mutation needs a single-use token, valid for 60 s and bound to that exact action and object (including its UID), so no path (key, menu, context menu) gets around a rule, and a confirmation can't act on another object than the one it showed. Reloading the config drops outstanding tokens.
 

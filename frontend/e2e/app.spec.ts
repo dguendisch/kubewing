@@ -6600,6 +6600,8 @@ test.describe("⌘⇧O: open a cluster", () => {
     const where = () => page.locator(`section[data-pane="${s.focusedPane}"] header`).getByLabel("location");
     await expect(where()).toHaveAttribute("data-plane", "controlPlane");
     await expect(where()).toHaveText(/^tape-garden›seed loam›⛭ CPfoo\/baz$/);
+    // the landscape's safety rule (match: tape-garden) labels its seed's cluster too
+    await expect(page.locator(`section[data-pane="${s.focusedPane}"] header`).getByLabel("context label")).toHaveText("GARDEN");
     await expect(where()).toHaveAttribute("title", /seed: loam \(managed seed: shoot garden\/loam on seed soil\)/);
     await expect(page.getByRole("tab", { selected: true })).toContainText("⛭");
     // narrow: landscape and seed give way, the badge stays whole and inside the header
