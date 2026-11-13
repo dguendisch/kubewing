@@ -158,6 +158,8 @@ export function dispatch(cmd: CommandId, opts: { repeat?: boolean } = {}) {
       return openJump();
     case "object.events":
       return void openEvents();
+    case "object.eventsSplit":
+      return void openEvents(true);
     case "menu.runTab": {
       // a jump menu's cluster entry in a new tab; other menu entries have no tab of their own
       const o = s.overlay;
@@ -1397,17 +1399,18 @@ export async function jumpToField(paneId: string, text: string, line: number, in
 
 /**
  * v, on a row (or from its object view): the pane jumps to the events about
- * it, as a jump menu entry would (⌘← goes back to the row). Go builds the
- * target (field selector on the involved object).
+ * it, as a jump menu entry would (⌘← goes back to the row); ⇧V opens them in
+ * a split to the right instead, like ⇧⏎ / ⇧E / ⇧D. Go builds the target
+ * (field selector on the involved object).
  */
-async function openEvents() {
+async function openEvents(inSplit = false) {
   const pane = S.focusedPane(useUI.getState());
   const key = selectedKey(pane);
   if (!pane.serverId || !key) return;
   try {
     const target = await bridge().eventsTarget(pane.serverId, key);
     setUI(S.closeOverlay);
-    await jumpTo(pane.id, target, false, key);
+    await jumpTo(pane.id, target, inSplit, key, "row");
   } catch (e) {
     flash(pane.id, errorText(e), true);
   }
@@ -1468,14 +1471,14 @@ async function jumpToCluster(paneId: string, id: string, entry: ClusterEntry, wh
  * A split object view has no table of its own: its jumps go to a split.
  * From the editor always a split, to its right: the edit stays beside it.
  */
-export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolean, fromKey?: string) {
+export async function jumpTo(paneId: string, target: JumpTarget, inSplit: boolean, fromKey?: string, dir: "row" | "column" = "column") {
   const pane = useUI.getState().panes[paneId];
   if (!pane) return;
   const spec = S.jumpSpec(pane.spec, target);
   const editing = !!pane.object?.edit;
   if (inSplit || editing || pane.object?.split) {
     // the new pane opens itself on mount (Pane's effect), like any split
-    return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec, editing ? "row" : "column"));
+    return setUI((x) => S.splitWith(S.focusPane(x, paneId), spec, editing ? "row" : dir));
   }
   setUI((x) => S.updatePane(S.pushHistory(x, paneId, fromKey), paneId, ({ object: _, ...p }) => p));
   await applySpec(paneId, spec);

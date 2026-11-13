@@ -22,6 +22,7 @@ describe("row actions menu", () => {
     expect(m["object.edit"]!.shortcut).toBe("e");
     expect(m["object.delete"]!.shortcut).toBe("⌘⌫");
     expect(m["object.portForward"]!.shortcut).toBe("f");
+    expect(m["object.events"]).toMatchObject({ shortcut: "v", split: "object.eventsSplit", splitShortcut: "⇧V" });
     expect(m["detail.open"]!.shortcut).toBe("⏎");
   });
 
@@ -47,6 +48,7 @@ describe("row actions menu", () => {
     expect(gone["object.delete"]!.disabled).toBe("deleted");
     expect(gone["object.exec"]!.disabled).toBe("deleted");
     expect(gone["detail.open"]!.disabled).toBeUndefined(); // the last state is still viewable
+    expect(gone["object.events"]!.disabled).toBeUndefined(); // events outlive their object
 
     expect(m["object.scale"]!).toMatchObject({ label: "scale…", disabled: "configmap has no replicas" });
     const deploy = byCmd(menuFor({ key: "d1", kind: "Deployment", name: "web", namespace: "shop", replicas: 3 }, undefined));
@@ -92,8 +94,7 @@ describe("row actions menu", () => {
   it("every object.* command is in the menu (new row actions must be added to the registry)", () => {
     // split variants are a hint on their entry (⇧⏎ in the menu)
     const inMenu = new Set(rowActions.flatMap((a) => (a.split ? [a.command, a.split] : [a.command])));
-    // object.events is an entry of the jump menu (jump to…), like the other places a pane can switch to
-    const objectCmds = commandIds.filter((c) => c.startsWith("object.") && c !== "object.menu" && c !== "object.events");
+    const objectCmds = commandIds.filter((c) => c.startsWith("object.") && c !== "object.menu");
     expect(objectCmds.filter((c) => !inMenu.has(c))).toEqual([]);
   });
 

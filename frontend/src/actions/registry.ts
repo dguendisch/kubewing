@@ -7,7 +7,8 @@ import type { MarkedRow, RowInfo, SafetyRule } from "../transport/types";
  * right-click) is generated from this list, and its shortcuts come from the
  * live keymap, so a new row action only needs an entry here (a unit test
  * fails for object.* commands that have none). Places the pane switches
- * to are in the jump menu instead (jump to…), events included.
+ * to are in the jump menu instead (jump to…), except events, which also
+ * gets an entry of its own.
  *
  * `available` only drives the display: Go re-checks everything (safety
  * policy, object identity) when the command runs.
@@ -40,6 +41,8 @@ export const rowActions: RowAction[] = [
   { command: "detail.open", label: "view YAML", group: "view", available: () => true, split: "detail.openSplit" },
   { command: "object.edit", label: "edit YAML", group: "view", available: live, mutates: true, split: "object.editSplit" },
   { command: "object.describe", label: "describe", group: "view", available: live, split: "object.describeSplit" },
+  // also on tombstones: events outlive their object for a while
+  { command: "object.events", label: "events", group: "view", available: () => true, split: "object.eventsSplit" },
   {
     command: "object.diff",
     // with recorded history the diff steps through every kept change ([ / ])

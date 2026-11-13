@@ -603,7 +603,7 @@ The jump menu reads metadata only: it works on read-only contexts and on deleted
 
 ### Events of a row: `v`
 
-`v` (also in the YAML view, or **events** in the jump menu) turns the pane into the events about that object: `events` with a field selector like `involvedObject.kind=Pod,involvedObject.name=web-0`, in the object's namespace (all namespaces for cluster-scoped objects). Matched by kind and name, as `kubectl describe` does. It's a live watch, so new events show up as they happen. It works on deleted rows too (events outlive their object for a while), and on objects without events yet (to wait for them).
+`v` (also in the YAML view, or **events** in the row menu or the jump menu) turns the pane into the events about that object: `events` with a field selector like `involvedObject.kind=Pod,involvedObject.name=web-0`, in the object's namespace (all namespaces for cluster-scoped objects). `⇧V` opens them in a split to the right instead, the row (or object) staying as it is. Matched by kind and name, as `kubectl describe` does. It's a live watch, so new events show up as they happen. It works on deleted rows too (events outlive their object for a while), and on objects without events yet (to wait for them).
 
 ### Back and forward: `⌘←` / `⌘→`
 
@@ -619,7 +619,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 
 ### The row menu: `⌘⏎`
 
-`⌘⏎` or a right-click on a row lists every operation on it, with its shortcut from the live keymap. The entries come in groups: viewing and copying (YAML, edit, describe, diff, copy, jump to), then shells, port-forward and logs, then changes (label, annotate, scale, rollout restart), and delete last. Unavailable entries say why ("needs a pod", "read-only context", "no change seen yet"). `j`/`k` move (wrapping around), `⏎` runs, `Esc` closes. View YAML, edit YAML and describe show their split key too (`⇧⏎`, `⇧E`, `⇧D`), and `⇧⏎` on the entry runs the split variant.
+`⌘⏎` or a right-click on a row lists every operation on it, with its shortcut from the live keymap. The entries come in groups: viewing and copying (YAML, edit, describe, events, diff, copy, jump to), then shells, port-forward and logs, then changes (label, annotate, scale, rollout restart), and delete last. Unavailable entries say why ("needs a pod", "read-only context", "no change seen yet"). `j`/`k` move (wrapping around), `⏎` runs, `Esc` closes. View YAML, edit YAML, describe and events show their split key too (`⇧⏎`, `⇧E`, `⇧D`, `⇧V`), and `⇧⏎` on the entry runs the split variant.
 
 | Key | Action |
 |---|---|
@@ -629,7 +629,7 @@ Each pane keeps a history, as a browser does. Jumps and `⌘O` to a new source a
 | — | diff (row menu; `d` in the YAML view) |
 | `⌘C` / `⌘⇧C` | copy name / copy cell(s)… |
 | `⌘J` | jump to… |
-| `v` | events |
+| `v` | events (`⇧V` in a split) |
 | `l` | logs… (`⌥L` for the whole pane) |
 | `x` | exec shell |
 | `b` | debug container… |
@@ -1060,7 +1060,7 @@ The most used keys:
 |---|---|
 | Anywhere | `⌘O` open · `⌘⇧O` cluster · `⌥⌘O` shoot ⇄ control plane · `⌘T` tab · `⌘D`/`⌘⇧D` split · `⌃T`/`⌃⇧T` local terminal · `⌘W` close tab · `⌘R` list `all` again · `⌘⇧R` reconnect · `⌘,` settings · `⌘⇧,` reload config · `⌘+`/`⌘-`/`⌘0` font size · `?` help |
 | Table | `/` grep (`⇥` labels, CEL) · `h` hide healthy · `o` columns · `m` metrics · `⇧M` requests/limits · `⇧R` record changes · `t` time travel · `⇧↓`/`⇧↑` mark · `Space` mark one · `⌘A` mark all |
-| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events · `l` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
+| Row | `⏎` YAML · `e` edit · `d` describe · `⌘J` jump · `v` events (`⇧V` split) · `l` logs · `x` exec · `b` debug · `n` node shell · `f` port-forward · `⇧L` label · `⇧A` annotate · `s` scale · `r` restart · `⌘⌫` delete · `⌘⏎` all actions |
 | YAML view | `⏎` decode (`e` in it: edit it) · `d` diff · `⇧D` describe · `=`/`!` filter by value · `⇧H` field history · `⌘J` / `⌘`-click jump from a field · `b` who set each line · `w` wrap · `⌘F` find · `⌃←`/`⌃→` fold/unfold |
 | Diff | `j`/`k` changes · `[`/`]` versions |
 | Time travel | `←`/`→` changes · `⇧←`/`⇧→` minutes · `Home` start · `Esc` live |

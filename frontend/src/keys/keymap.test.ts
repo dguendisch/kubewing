@@ -301,6 +301,8 @@ describe("jump to (⌘J), history (⌘← / ⌘→), tabs (⌘⇧[ / ⌘⇧])", 
   it("v shows the row's events from the table and the detail view; in fields it's text", () => {
     expect(resolve("V", "table")).toBe("object.events");
     expect(resolve("V", "detail")).toBe("object.events");
+    expect(resolve("Shift+V", "table")).toBe("object.eventsSplit");
+    expect(resolve("Shift+V", "detail")).toBe("object.eventsSplit");
     for (const ctx of ["filter", "terminal", "edit", "menu"] as const) expect(resolve("V", ctx)).toBeUndefined();
   });
 

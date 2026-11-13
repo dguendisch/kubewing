@@ -5022,6 +5022,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "view YAML ⏎ · ⇧⏎ split"
         - menuitem "edit YAML e · ⇧E split"
         - menuitem "describe d · ⇧D split"
+        - menuitem "events v · ⇧V split"
         - menuitem "diff last change · no change seen yet" [disabled]
         - menuitem "copy name"
         - menuitem "copy cell(s)… ⌘⇧C"
@@ -5041,13 +5042,17 @@ test.describe("context menu (⌘⏎, right-click)", () => {
         - menuitem "delete… ⌘⌫"
     `);
     expect((await inspect(page)).focus).toBe("menu");
-    // j/k skip the disabled diff entry: edit YAML → describe → copy name → describe
+    // j/k skip the disabled diff entry: edit YAML → describe → events → copy name → events → describe
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("edit YAML");
     await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     await page.keyboard.press("j");
+    await expect(menu(page).locator("[data-active]")).toContainText("events");
+    await page.keyboard.press("j");
     await expect(menu(page).locator("[data-active]")).toContainText("copy name");
+    await page.keyboard.press("k");
+    await expect(menu(page).locator("[data-active]")).toContainText("events");
     await page.keyboard.press("k");
     await expect(menu(page).locator("[data-active]")).toContainText("describe");
     // the highlight wraps around: ↑ from the first entry to the last, ↓ from there to the first
@@ -5117,7 +5122,7 @@ test.describe("context menu (⌘⏎, right-click)", () => {
   test("⌘⏎ flips the menu above the row when there's no room below", async ({ page }) => {
     await openSettled(page);
     // stack a split below so the table's last row sits low in the window, with room above it (for the whole menu)
-    await page.setViewportSize({ width: 1400, height: 700 });
+    await page.setViewportSize({ width: 1400, height: 760 });
     await page.keyboard.press("ControlOrMeta+D"); // split: the new (bottom) pane is focused
     // the split's fresh relist has no tombstone for the recreated pod, so it may have one row less
     await expect.poll(async () => (await focused(page)).status?.synced).toBe(true);
@@ -5410,6 +5415,15 @@ test.describe("jump to (⌘J)", () => {
     await page.keyboard.press("Shift+Enter");
     await expect.poll(shown).toBe("rel-events shop re-1,re-2");
     expect(Object.keys((await inspect(page)).panes)).toHaveLength(2);
+    // ⇧V: in a split to the right, like ⇧⏎ / ⇧E / ⇧D (the pods pane keeps its row)
+    await page.keyboard.press("Control+D");
+    await expect.poll(async () => Object.keys((await inspect(page)).panes)).toHaveLength(1);
+    await expect.poll(backOnPod).toBe("rp-web-b");
+    const podsPane = (await inspect(page)).focusedPane;
+    await page.keyboard.press("Shift+V");
+    await expect.poll(shown).toBe("rel-events shop re-1,re-2");
+    const s = await inspect(page);
+    expect(s.tabs[s.activeTab]!.layout).toMatchObject({ type: "split", dir: "row", children: [{ id: podsPane }, { id: s.focusedPane }] });
 
     // cluster-scoped: a node's events are found in any namespace
     await openRel(page, "rel-nodes", 2);

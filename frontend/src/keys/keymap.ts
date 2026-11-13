@@ -85,6 +85,7 @@ export type CommandId =
   | "object.menu"
   | "object.jump"
   | "object.events"
+  | "object.eventsSplit"
   | "menu.run"
   | "menu.runSplit"
   | "menu.runTab"
@@ -165,7 +166,7 @@ export const commandIds: readonly CommandId[] = [
   "mark.toggle", "mark.down", "mark.up", "mark.pageDown", "mark.pageUp", "mark.first", "mark.last", "mark.all",
   "detail.open", "detail.openSplit", "detail.close", "detail.toggleDiff", "detail.showYaml", "detail.refresh", "detail.toggleWrap", "detail.toggleBlame", "detail.decode", "diff.next", "diff.prev", "diff.older", "diff.newer",
   "source.open", "cluster.open", "cluster.otherPlane", "config.reload", "config.edit", "config.editKeys", "source.reconnect", "source.refresh",
-  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
+  "object.delete", "object.diff", "object.copyName", "table.copy", "table.clearSelection", "object.copyCell", "object.menu", "object.jump", "object.events", "object.eventsSplit", "menu.run", "menu.runSplit", "menu.runTab", "history.back", "history.forward", "object.describe", "object.describeSplit", "object.exec", "object.edit", "object.editSplit", "object.debug", "object.opsPod", "terminal.splitDown", "terminal.splitRight", "object.portForward", "object.label", "object.annotate", "object.scale", "object.restart", "object.logs", "view.logs",
   "logs.focusFilter", "logs.blurFilter", "logs.toggleTimestamps", "logs.clear", "logs.find", "logs.findNext", "logs.findPrev", "logs.findClose",
   "logs.lineDown", "logs.lineUp", "logs.pageDown", "logs.pageUp", "logs.top", "logs.bottom",
   "portforward.list", "portforward.stop", "confirm.accept", "confirm.cancel", "help.toggle", "help.find", "help.findNext", "help.findPrev", "help.findClose", "update.check", "edit.submit", "edit.back", "edit.decode",
@@ -343,6 +344,8 @@ export const defaultBindings: Binding[] = [
   { key: "Meta+ArrowRight", command: "history.forward", when: ["table"] },
   // the row's events: a jump to the events about it (⌘← back to the row)
   { key: "V", command: "object.events", when: ["table", "detail"] },
+  // the events in a split to the right, like ⇧⏎ / ⇧E / ⇧D
+  { key: "Shift+V", command: "object.eventsSplit", when: ["table", "detail"] },
   { key: "D", command: "object.describe", when: ["table"] },
   // describe in a split to the right, like ⇧⏎ / ⇧E; in the detail view d is the diff toggle, so ⇧D is describe there
   { key: "Shift+D", command: "object.describeSplit", when: ["table"] },
