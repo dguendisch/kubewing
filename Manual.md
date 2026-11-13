@@ -127,17 +127,22 @@ Completion comes from a per-context **catalog** (resource types and namespaces),
 
 ### Opening a cluster: `⌘⇧O`
 
-`⌘⇧O` (File → Open Cluster…) opens another cluster in a new tab, a new pane or the focused pane, without going through a terminal. (`⌘O` opens what's in a cluster, `⌘⇧O` a cluster itself.) It has one field and a list:
+`⌘⇧O` (File → Open Cluster…) opens another cluster in the focused pane, a split below or a new tab, without going through a terminal. (`⌘O` opens what's in a cluster, `⌘⇧O` a cluster itself.) It has one field and a list:
 
 - **Empty field:** the clusters you opened recently (up to 100, the latest first), then your gardens. A cluster counts as opened once a pane showed it, whichever way it got there (launch, `⌘O`, `⌘⇧O`). The targets of your gardenctl sessions (each terminal's `gardenctl target`) are listed too, marked `gardenctl`, so the list isn't empty on the first day. `✕` forgets a cluster.
 - **Typing** ranks the list by shoot, project, garden, context name and kubeconfig file (`shoot--foo--bar` finds the shoot `bar` of project `foo`).
 - **Pasting a Gardener dashboard URL** (or an API server host, or `garden/shoot--project--name`) shows what gardenctl's patterns make of it: the shoot (see the toggle below for its control plane). A dashboard URL of a project (no shoot) is the project in its garden.
 - **A path** (`/…`, `~/…`) opens that kubeconfig file at its current context; `⌘O` then lists its other contexts.
 
-`↑`/`↓` move, `⌥↑`/`⌥↓` first/last, `⏎` (or a click) opens it, `⌃⇧⏎` opens it in a new pane whatever the toggle says, `Esc` closes. The cluster opens with nothing listed and `⌘O` over it, in the cluster's namespace, to pick the resource. `Esc` there leaves the pane empty (its status line says **nothing listed**), and a click into it (or `⌘O`) picks later. Two toggles at the bottom say what opens and where. Click them, or switch them with their keys while typing:
+`↑`/`↓` move, `⌥↑`/`⌥↓` first/last, `Esc` closes. Like a jump (`⌘J`), the highlighted cluster opens with:
 
-- **Open in** (`⇧⇥` cycles): **new tab** (the default); **new pane** below the focused one (as `⌘D`); **here**, the focused pane (`⌘←` goes back to what it showed). From a shell or log pane, here opens a new tab instead. The choice is kept until kubewing quits.
-- **Gardener shoot** (`⇥` toggles): a shoot is listed once, and opens as the **shoot** or its **control plane**. Each opening of the dialog starts on the shoot. Recent entries and labels follow the toggle: opening a control plane also lists its shoot.
+- `⏎` (or a click) in the focused pane (`⌘←` goes back to what it showed). From a shell or log pane, it opens in a new tab instead.
+- `⇧⏎` (or `⇧`-click) in a split below the focused pane (as `⌘D`).
+- `⌘⏎` (or `⌘`-click) in a new tab.
+
+The hints at the bottom of the dialog list these keys. The cluster opens with nothing listed and `⌘O` over it, in the cluster's namespace, to pick the resource. `Esc` there leaves the pane empty (its status line says **nothing listed**), and a click into it (or `⌘O`) picks later.
+
+**Gardener shoot** (`⇥` toggles, or click the toggle at the bottom): a shoot is listed once, and opens as the **shoot** or its **control plane**. Each opening of the dialog starts on the shoot. Recent entries and labels follow the toggle: opening a control plane also lists its shoot.
 
 Entries that can't be opened (a garden whose kubeconfig is missing) are greyed out, with the reason. Safety labels show next to the entries already, as far as the name is known. `✕` on a shoot forgets both its shoot and its control plane.
 

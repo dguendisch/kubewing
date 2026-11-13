@@ -490,7 +490,7 @@ function LocalRefusedHint({ pane }: { pane: S.PaneState }) {
       </span>
       <button
         type="button"
-        onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "clusters", pane: pane.id, where: "here" }))}
+        onClick={() => setUI((s) => S.openOverlay(S.closeOverlay(S.focusPane(s, pane.id)), { kind: "clusters", pane: pane.id }))}
         className="shrink-0 border border-border px-2 py-0.5 text-fg hover:border-accent"
       >
         open another cluster{key ? ` (${prettyKey(key)})` : ""}

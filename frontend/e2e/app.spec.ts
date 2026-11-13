@@ -6389,12 +6389,9 @@ test.describe("⌘⇧O: open a cluster", () => {
     await expect(dialog(page).getByRole("radio", { name: "control plane" })).toHaveAttribute("aria-checked", "true");
     await page.keyboard.press("Tab");
     await expect(options(page).nth(0)).toHaveAttribute("aria-selected", "true");
-    // where it opens: a new tab at first; ⇧⇥ cycles here → new pane → new tab, so a click picks here
-    const where = dialog(page).getByRole("radiogroup", { name: "open in" });
-    await expect(where.getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
-    await page.keyboard.press("Shift+Tab");
-    await expect(where.getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
-    await expect(page.getByRole("combobox", { name: "cluster" })).toBeFocused();
+    // where it opens, by key as in the ⌘J menu: ⏎ here, ⇧⏎ a split, ⌘⏎ a new tab (no toggle)
+    await expect(dialog(page).getByRole("radiogroup", { name: "open in" })).toHaveCount(0);
+    await expect(dialog(page).getByLabel("keys")).toHaveText("⏎ here · ⇧⏎ split · ⌘⏎ tab · esc close");
     await page.keyboard.press("Enter");
     await expect(dialog(page)).toHaveCount(0);
     // the pane on the shoot's cluster (named <garden>/<technical id>) lists nothing yet: ⌘O is open over it
@@ -6424,9 +6421,8 @@ test.describe("⌘⇧O: open a cluster", () => {
     await page.keyboard.press("Enter");
     await expect.poll(async () => (await inspect(page)).focus).toBe("table");
 
-    // remembered: first in the list next time, with a ✕ to forget it; where it opens too
+    // remembered: first in the list next time, with a ✕ to forget it
     await page.keyboard.press("ControlOrMeta+Shift+O");
-    await expect(dialog(page).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
     await expect(options(page).first()).toContainText("bar");
     await expect(options(page).first()).toContainText("just now");
     await options(page).first().getByRole("button", { name: "forget bar" }).dispatchEvent("mousedown");
@@ -6439,12 +6435,10 @@ test.describe("⌘⇧O: open a cluster", () => {
     expect((await inspect(page)).focus).toBe("table");
   });
 
-  test("a new tab, a new pane (⌃⇧⏎ too); errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
+  test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
     await openStatic(page);
     await page.keyboard.press("ControlOrMeta+Shift+O");
     const field = page.getByRole("combobox", { name: "cluster" });
-    // where it opens is kept while kubewing runs (an earlier test may have changed it): new tab
-    await dialog(page).getByRole("radio", { name: "new tab" }).dispatchEvent("mousedown");
     // the control plane's seed isn't in the test garden: the error shows, the dialog stays
     await field.fill("tg/shoot--foo--bar");
     await expect(options(page)).toHaveCount(1);
@@ -6453,7 +6447,7 @@ test.describe("⌘⇧O: open a cluster", () => {
     await expect(dialog(page).getByRole("status", { name: "cluster status" })).toContainText("soil");
     await expect(dialog(page)).toBeVisible();
     await page.keyboard.press("Tab");
-    await page.keyboard.press("Enter");
+    await page.keyboard.press("ControlOrMeta+Enter");
     await expect(dialog(page)).toHaveCount(0);
     let s = await inspect(page);
     expect(s.tabs).toHaveLength(2);
@@ -6467,11 +6461,11 @@ test.describe("⌘⇧O: open a cluster", () => {
     const from = (await inspect(page)).focusedPane;
     await page.keyboard.press("ControlOrMeta+Alt+O");
     await expect(page.locator(`section[data-pane="${from}"]`).getByLabel("message")).toContainText("⌘⇧O");
-    // ⌃⇧⏎: a new pane below the focused one, the toggle unchanged
+    // ⇧⏎: a split below the focused pane
     await page.keyboard.press("ControlOrMeta+Shift+O");
     await field.fill("tg/shoot--foo--bar");
     await expect(options(page)).toHaveCount(1);
-    await page.keyboard.press("Control+Shift+Enter");
+    await page.keyboard.press("Shift+Enter");
     await expect(dialog(page)).toHaveCount(0);
     s = await inspect(page);
     expect(s.tabs).toHaveLength(2);
@@ -6479,8 +6473,6 @@ test.describe("⌘⇧O: open a cluster", () => {
     expect(s.overlays).toEqual(["open"]);
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "", context: expect.stringMatching(/tape-garden\/shoot--foo--bar$/) });
     await page.keyboard.press("Escape");
-    await page.keyboard.press("ControlOrMeta+Shift+O");
-    await expect(dialog(page).getByRole("radio", { name: "new tab" })).toHaveAttribute("aria-checked", "true");
   });
 
   test("⌘J on a garden's shoot and seed rows: its clusters, opened here, in a split or (⌘⏎) a new tab; errors stay in the menu", async ({ page }) => {
@@ -6497,10 +6489,9 @@ test.describe("⌘⇧O: open a cluster", () => {
       for (let i = 0; i < rows.findIndex((r) => r.key === key); i++) await page.keyboard.press("j");
     };
     await ready(page);
-    // the test garden, here (the toggle is kept: an earlier test may have changed it)
+    // the test garden, here (a click)
     await page.keyboard.press("ControlOrMeta+Shift+O");
     await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
-    await dialog(page).getByRole("radio", { name: "here" }).dispatchEvent("mousedown");
     // the garden's own line (its shoots, remembered by earlier tests, match the text too)
     await options(page).filter({ hasText: /^tape-garden/ }).first().click();
     await expect(page.getByRole("combobox", { name: "resource" })).toBeVisible();
@@ -6656,8 +6647,6 @@ test("a local cluster refusing the connection: the error hints at it, its button
   await alert.getByRole("button", { name: /open another cluster/ }).click();
   const dialog = page.getByRole("dialog", { name: "open cluster" });
   await expect(dialog).toBeVisible();
-  // here, not the last choice: the broken pane is the one to replace
-  await expect(dialog.getByRole("radiogroup", { name: "open in" }).getByRole("radio", { name: "here" })).toHaveAttribute("aria-checked", "true");
   // the test garden (the tape backend's own contexts aren't in a kubeconfig ⌘⇧O can open)
   await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
   await dialog.getByRole("option").filter({ hasText: /^tape-garden/ }).first().click();

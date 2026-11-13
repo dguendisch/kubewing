@@ -4,7 +4,7 @@ import { firstJumpable, jumpItems, jumpable, sectionTitle, useJump } from "../ac
 import { runJump } from "../commands";
 import { useConfig } from "../store/config";
 import { bridge, setUI, useUI } from "../store/store";
-import { prettyKey } from "../keys/keymap";
+import { keyFor, prettyKey } from "../keys/keymap";
 
 /**
  * ⌘J: where the selected row leads — its namespace, its owners up the chain,
@@ -33,8 +33,8 @@ function Menu({ serverId, rowKey }: { serverId: string; rowKey: string }) {
   const [error, setError] = useState<string>();
   const bindings = useConfig((s) => s.bindings);
   const keyOf = (cmd: string) => {
-    const b = bindings.find((x) => x.command === cmd && (!x.when?.length || x.when.includes("menu")));
-    return b && prettyKey(b.key);
+    const k = keyFor(bindings, cmd, "menu");
+    return k && prettyKey(k);
   };
 
   // the relations, then (on request) the owned scan; both keep the highlight by entry id

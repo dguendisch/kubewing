@@ -1,45 +1,46 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { openCluster } from "../commands";
+import { chord, keyFor, prettyKey } from "../keys/keymap";
+import { useConfig } from "../store/config";
 import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { ClusterEntry, ClusterList } from "../transport/types";
 import { item as listItem, items as listItems, keepIndex, type Item, type Plane } from "./clusterList";
 import { Badges } from "./Pane";
 
-/** ⌘⇧O: a cluster for a new tab, a new pane or the focused pane. */
+/** ⌘⇧O: a cluster for the focused pane, a split below or a new tab. */
 export function ClusterPicker() {
   const overlay = useUI((s) => s.overlay);
   if (overlay?.kind !== "clusters") return null;
   // mounted per open: the list is read anew, the text starts empty
-  return <Picker paneId={overlay.pane} initialWhere={overlay.where} />;
+  return <Picker paneId={overlay.pane} />;
 }
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
 
-const targets: { value: S.ClusterTarget; label: string }[] = [
-  { value: "here", label: "here" },
-  { value: "pane", label: "new pane" },
-  { value: "tab", label: "new tab" },
-];
 const planes: { value: Plane; label: string }[] = [
   { value: "shoot", label: "shoot" },
   { value: "controlPlane", label: "control plane" },
 ];
-// where clusters open: kept while kubewing runs, a new tab at first
-let lastTarget: S.ClusterTarget = "tab";
+// where a pick opens, by the jump menu's keys (⏎ here, ⇧⏎ split, ⌘⏎ tab: rebindable together)
+const runs: [string, S.ClusterTarget][] = [
+  ["menu.run", "here"],
+  ["menu.runSplit", "pane"],
+  ["menu.runTab", "tab"],
+];
 
 /**
  * One field above the list. Empty, the list holds the recently opened
  * clusters (and gardenctl sessions' targets), the latest first, then the
  * gardens; typing ranks them, a text gardenctl's patterns match (a
  * dashboard URL, an API host, shoot--project--name) adds its targets on top,
- * a path (/…, ~/…) a kubeconfig file. ↑/↓ move, ⏎ opens where the toggle says
- * (⇧⇥: here, new pane, new tab; ⌃⇧⏎ a new pane), a shoot or its control
- * plane as the other toggle says (⇥), Esc closes. It opens listing nothing,
+ * a path (/…, ~/…) a kubeconfig file. ↑/↓ move; as in the ⌘J menu, ⏎ opens
+ * in the focused pane, ⇧⏎ in a split below, ⌘⏎ in a new tab (a click, ⇧-click,
+ * ⌘-click too); a shoot or its control plane as the toggle says (⇥), Esc closes. It opens listing nothing,
  * with ⌘O over it. Resolving a Gardener target may take a login (the
  * garden's exec plugin): the dialog stays until it's done or failed.
  */
-function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.ClusterTarget }) {
+function Picker({ paneId }: { paneId: string }) {
   const id = useId();
   const [list, setList] = useState<ClusterList>();
   const [text, setText] = useState("");
@@ -48,8 +49,8 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
   const [choices, setChoices] = useState<ClusterEntry[]>();
   const [active, setActive] = useState(0);
   const [busy, setBusy] = useState<string>();
-  const [where, setWhereState] = useState(initialWhere ?? lastTarget);
-  const setWhere = (w: S.ClusterTarget) => setWhereState((lastTarget = w));
+  const bindings = useConfig((s) => s.bindings);
+  const keyOf = (cmd: string) => keyFor(bindings, cmd, "menu");
   // a shoot line opens the shoot or its control plane: shoot at every open
   const [plane, setPlane] = useState<Plane>("shoot");
   const [error, setError] = useState<string>();
@@ -90,7 +91,7 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
   const cur = shown[active];
 
   const close = () => setUI(S.closeOverlay);
-  const pick = async (it: Item | undefined, to = where) => {
+  const pick = async (it: Item | undefined, to: S.ClusterTarget) => {
     if (!it || busy) return;
     if (it.entry.disabled) return setError(it.entry.disabled);
     setError(undefined);
@@ -164,15 +165,16 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
           } else if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
             e.preventDefault();
             setActive(e.key === "ArrowUp" ? 0 : Math.max(0, shown.length - 1));
-          } else if (e.key === "Tab" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          } else if (e.key === "Tab" && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
             e.preventDefault();
-            if (e.shiftKey) setWhere(targets[(targets.findIndex((t) => t.value === where) + 1) % targets.length]!.value);
-            else setPlane((p) => (p === "shoot" ? "controlPlane" : "shoot"));
-          } else if (e.key === "Enter") {
+            setPlane((p) => (p === "shoot" ? "controlPlane" : "shoot"));
+          } else {
+            const c = chord(e);
+            const to = runs.find(([cmd]) => keyOf(cmd) === c)?.[1] ?? (c === "Enter" ? "here" : undefined);
+            if (!to) return;
             e.preventDefault();
             e.stopPropagation();
-            // ⌃⇧⏎: a new pane, whatever the toggle says
-            void pick(cur, e.ctrlKey && e.shiftKey ? "pane" : where);
+            void pick(cur, to);
           }
         }}
       />
@@ -195,7 +197,7 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
             onMouseDown={(e) => {
               e.preventDefault();
               setActive(i);
-              void pick(it);
+              void pick(it, e.shiftKey ? "pane" : e.metaKey ? "tab" : "here");
             }}
             onMouseMove={() => setActive(i)}
             className={`flex cursor-default items-center gap-3 px-2 py-0.5 ${i === active ? "bg-bg-hover text-fg" : "text-fg-muted"} ${it.entry.disabled ? "opacity-50" : ""}`}
@@ -226,9 +228,10 @@ function Picker({ paneId, initialWhere }: { paneId: string; initialWhere?: S.Clu
         ))}
       </ul>
       <div className="flex items-center gap-3 border-t border-border px-2 py-0.5 text-fg-muted">
-        <Toggle label="open in" keyHint="⇧⇥" options={targets} value={where} onChange={setWhere} />
         <Toggle label="gardener shoot" keyHint="⇥" options={planes} value={plane} onChange={setPlane} dim={!cur?.row.shoot} />
-        <span className="ml-auto">⏎ open · ⌃⇧⏎ new pane · esc close</span>
+        <span aria-label="keys" className="ml-auto">
+          {pretty(keyOf("menu.run"), "⏎")} here · {pretty(keyOf("menu.runSplit"), "⇧⏎")} split · {pretty(keyOf("menu.runTab"), "⌘⏎")} tab · esc close
+        </span>
       </div>
     </div>
   );
@@ -259,6 +262,8 @@ function Toggle<T extends string>({ label, keyHint, options, value, onChange, di
     </span>
   );
 }
+
+const pretty = (key: string | undefined, fallback: string) => (key ? prettyKey(key) : fallback);
 
 function highlight(text: string, hits: number[]) {
   if (!hits.length) return text;

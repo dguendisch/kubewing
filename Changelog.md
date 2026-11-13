@@ -6,6 +6,9 @@
 - copy on select: with `terminal.copyOnSelect: true` in `config.yaml`, selecting text with the mouse in a shell or log pane copies it (off by default)
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 
+### Changed
+- the open cluster dialog (`⌘⇧O`) opens panes/tabs now like a jump (`⌘J`): `⏎` in the focused pane, `⇧⏎` in a split below, `⌘⏎` in a new tab. The "open in" toggle and `⌃⇧⏎` are gone
+
 ### Fixed
 - an ended log tail now names the key that closes its pane (`⌃D`), not `⌘W`, which closes the whole tab
 - marked rows no longer grow pulsing borders around their age and restarts cells a few seconds after they were marked (due to time/age repainting)

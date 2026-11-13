@@ -233,8 +233,6 @@ export interface Overlay {
   kind: "open" | "clusters" | "confirm" | "portforward" | "forwards" | "menu" | "help" | "closeTab" | "closePane" | "container" | "debug" | "meta" | "opspod" | "jump" | "history" | "error" | "columns" | "cells" | "field" | "renameTab" | "renamePane" | "logs" | "update" | "config";
   /** history: which one. */
   dir?: "back" | "forward";
-  /** clusters: where it opens at first, in place of the last choice (a broken pane's hint: here). */
-  where?: ClusterTarget;
   /** error: which error (the source's, the CEL filter's, the pane's message). */
   view?: "source" | "filter" | "skipped" | "flash";
   /** error: its full text. */

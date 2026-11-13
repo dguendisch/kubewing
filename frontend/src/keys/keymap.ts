@@ -640,6 +640,11 @@ const symbols: Record<string, string> = {
   Enter: "⏎", Escape: "esc", ArrowUp: "↑", ArrowDown: "↓", ArrowLeft: "←", ArrowRight: "→", Space: "␣", Tab: "⇥", Backspace: "⌫", Delete: "⌦",
 };
 
+/** The key bound to cmd in a focus context (or globally): the first binding, as in the keymap. */
+export function keyFor(bindings: Binding[], cmd: string, focus: FocusContext): string | undefined {
+  return bindings.find((b) => b.command === cmd && (!b.when?.length || b.when.includes(focus)))?.key;
+}
+
 /** "Shift+D" → "⇧D", "Ctrl+D" → "⌃D", "S" → "s". */
 export function prettyKey(key: string): string {
   const parts = key.split("+");
