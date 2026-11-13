@@ -207,6 +207,12 @@ func TestPolicyForLandscape(t *testing.T) {
 			t.Errorf("%s: label %q, want %q", ctx, r.Label, label)
 		}
 	}
+	// by the landscape, or by the name (the garden's own, a cluster's rule): which, for safety.label: landscape
+	for ctx, by := range map[string]bool{"sap-landscape-live/seed--gcp-ha-eu2": true, "sap-landscape-live/shoot--ops--monitoring": false} {
+		if r := p.For(ctx); r.ByLandscape != by {
+			t.Errorf("%s: byLandscape %v", ctx, r.ByLandscape)
+		}
+	}
 	g := NewGuard(p, time.Now)
 	if _, err := g.Prepare(del("sap-landscape-live/seed--gcp-ha-eu2", "a"), nil); !errors.Is(err, ErrReadOnly) {
 		t.Errorf("a live landscape's seed: %v, want read-only", err)
@@ -227,8 +233,12 @@ func TestLandscape(t *testing.T) {
 // known to be in, for the badge and the guard alike.
 func TestPolicyForInLandscape(t *testing.T) {
 	p := NewPolicy([]config.ContextRule{{Match: "*-live", Label: "LIVE", ReadOnly: true}})
-	if r := p.ForIn("garden--gcp-ha-eu2-external", "sap-landscape-live"); r.Label != "LIVE" {
+	if r := p.ForIn("garden--gcp-ha-eu2-external", "sap-landscape-live"); r.Label != "LIVE" || !r.ByLandscape {
 		t.Errorf("gardenctl's seed context: %+v", r)
+	}
+	// the garden: its name is its landscape
+	if r := p.ForIn("sap-landscape-live", "sap-landscape-live"); !r.ByLandscape {
+		t.Errorf("the garden: %+v", r)
 	}
 	if r := p.ForIn("garden--gcp-ha-eu2-external", ""); r.Label != "" {
 		t.Errorf("without a landscape: %+v", r)

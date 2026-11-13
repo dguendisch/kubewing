@@ -6500,6 +6500,45 @@ test.describe("⌘⇧O: open a cluster", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("safety.label: landscape puts the landscape's rule on the landscape crumb; safety.frame: false keeps the frame plain", async ({ page }) => {
+    // config.yaml's safety block, as Go would send it
+    await page.routeWebSocket(/\/kw-ws$/, (ws) => {
+      const server = ws.connectToServer();
+      const configs = new Set<number>();
+      ws.onMessage((m) => {
+        const msg = JSON.parse(String(m));
+        if (msg.method === "Config") configs.add(msg.id);
+        server.send(m);
+      });
+      server.onMessage((m) => {
+        const msg = JSON.parse(String(m));
+        if (configs.delete(msg.id) && msg.result) msg.result.config.safety = { label: "landscape", frame: false };
+        ws.send(JSON.stringify(msg));
+      });
+    });
+    await openStatic(page);
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    await page.getByRole("combobox", { name: "cluster" }).fill("tg/shoot--foo--bar");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    const pane = page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`);
+    const where = pane.locator("header").getByLabel("location");
+    // the landscape reads the rule's label (match: tape-garden), as a chip; no chip of its own before it
+    await expect(where).toHaveAttribute("data-plane", "shoot");
+    await expect(where.getByLabel("context label")).toHaveText("GARDEN");
+    await expect(where.getByLabel("context label")).toHaveAttribute("title", /^tape-garden/);
+    await expect(pane.locator("header").getByLabel("context label")).toHaveCount(1);
+    await expect(where).toHaveText(/^GARDEN›seed soil›◉ SHOOTfoo\/bar$/);
+    // the tab still leads with it; the frame isn't colored
+    await expect(page.getByRole("tab", { selected: true })).toContainText("GARDEN · ◉");
+    expect(await pane.evaluate((el) => el.classList.contains("border-2"))).toBe(false);
+    // a click on it still opens the garden
+    await where.getByLabel("context label").click();
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/^@\d+\/tape-garden$/), namespace: "garden-foo" });
+  });
+
   test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
     await openStatic(page);
     await page.keyboard.press("ControlOrMeta+Shift+O");

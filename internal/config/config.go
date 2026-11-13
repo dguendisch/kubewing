@@ -48,6 +48,8 @@ type Config struct {
 	Diff  Diff   `json:"diff"`
 	// Contexts are per-context safety rules; the first matching rule wins.
 	Contexts []ContextRule `json:"contexts"`
+	// Safety is how rules show (their enforcement is Contexts').
+	Safety   Safety        `json:"safety"`
 	Debug    Debug         `json:"debug"`
 	OpsPod   OpsPod        `json:"opsPod"`
 	Terminal Terminal      `json:"terminal"`
@@ -124,6 +126,19 @@ func missingFonts(family string) string {
 }
 
 // Launch configures a launch from a terminal.
+// Safety is how safety rules show.
+type Safety struct {
+	// Label: "badge" (default) a chip of its own in the pane header; "landscape"
+	// on a Gardener cluster whose rule matched its landscape, the landscape's
+	// name in the breadcrumb becomes the chip, reading the rule's label.
+	Label string `json:"label,omitempty"`
+	// Frame colors the pane frame in the rule's color; nil = true.
+	Frame *bool `json:"frame,omitempty"`
+}
+
+// SafetyLabels are the values of safety.label.
+var SafetyLabels = []string{"badge", "landscape"}
+
 type Launch struct {
 	// Wait keeps kubewing in the foreground: the shell waits for it and its
 	// log goes to the terminal (-wait overrides it). Default: it detaches, the
@@ -458,6 +473,12 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 			}
 			e.Config.Contexts = append(e.Config.Contexts, r)
 		}
+		if l := c.Safety.Label; l != "" && !slices.Contains(SafetyLabels, l) {
+			errf("config.yaml", "safety.label: unknown %q (known: %v)", l, SafetyLabels)
+		} else {
+			e.Config.Safety.Label = l
+		}
+		e.Config.Safety.Frame = c.Safety.Frame
 		e.Config.Theme = c.Theme
 		if f := c.Font.Family; f != "" && !fontFamily.MatchString(f) {
 			errf("config.yaml", "font.family: %q is not a font name or a comma-separated list of them", f)

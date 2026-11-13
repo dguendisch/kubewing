@@ -494,7 +494,7 @@ export interface ContextRule {
 /** Mirrors config.Effective: the user's ~/.kubewing/ files, as loaded. */
 export interface Config {
   dir: string;
-  config: { theme?: string; font?: FontConfig; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number; copyOnSelect?: boolean }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean };
+  config: { theme?: string; font?: FontConfig; diff: { ignore: { path: string; kinds?: string[] }[] }; contexts: ContextRule[]; debug?: DebugConfig; opsPod?: OpsPodConfig; terminal?: { scrollback: number; copyOnSelect?: boolean }; logs?: { tail: number; maxStreams: number; buffer: number }; launch?: { wait?: boolean }; focusFollowsMouse?: boolean; safety?: SafetyDisplay };
   keybindings: UserBinding[];
   /** Token name (theme.css without --color-) → color. */
   theme: Record<string, string>;
@@ -568,6 +568,16 @@ export interface SafetyRule {
   readOnly?: boolean;
   confirm: string[];
   strict?: boolean;
+  /** The rule matched the cluster's Gardener landscape, not its context name. */
+  byLandscape?: boolean;
+}
+
+/** Mirrors config.Safety: how rules show. */
+export interface SafetyDisplay {
+  /** badge (default): a chip of its own; landscape: a Gardener cluster's landscape crumb becomes the chip. */
+  label?: "badge" | "landscape";
+  /** Color the pane frame (default true). */
+  frame?: boolean;
 }
 
 export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal" | "label" | "annotate" | "scale" | "restart";

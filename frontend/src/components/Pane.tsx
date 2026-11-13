@@ -27,7 +27,8 @@ import { ObjectPane } from "./ObjectPane";
 import { resourceLabel } from "./tabTitle";
 import { LocationCrumb, useLocation } from "./LocationCrumb";
 import { SafetyLabel } from "./SafetyLabel";
-import { locationNamespace } from "./location";
+import { locationNamespace, locationParts } from "./location";
+import { locationKey, useLocations } from "../store/location";
 
 /**
  * The pointer itself moved, no button held (not a text selection or a drag).
@@ -66,6 +67,7 @@ export function Pane({ id }: { id: string }) {
     return t ? paneIds(t.layout).length - 1 : 0;
   });
   const followMouse = useConfig((c) => !!c.config?.config.focusFollowsMouse);
+  const frame = useConfig((c) => c.config?.config.safety?.frame !== false);
 
   // open on mount / spec change of a table pane without server pane
   useEffect(() => {
@@ -115,8 +117,8 @@ export function Pane({ id }: { id: string }) {
   }, [key, rule]);
 
   if (!pane) return null;
-  // a labeled context colors the whole pane frame, so prod is never mistaken for dev
-  const color = ruleColor(rule);
+  // a labeled context colors the whole pane frame, so prod is never mistaken for dev (unless safety.frame: false)
+  const color = frame ? ruleColor(rule) : undefined;
   return (
     <section
       data-pane={id}
@@ -199,7 +201,7 @@ function Maximized({ hidden }: { hidden: number }) {
 function TermHeader({ pane, term, rule }: { pane: S.PaneState; term: S.Term; rule?: SafetyRule }) {
   return (
     <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
-      <Badges rule={rule} />
+      <Badges rule={rule} pane={pane} />
       <PaneName pane={pane} />
       <PaneLocation pane={pane} fallback={pane.context ?? ""} />
       <span className="font-semibold text-accent">{term.local ? "terminal" : term.ops ? "node shell" : term.debug ? "debug" : "exec"}</span>
@@ -246,7 +248,7 @@ function LogPane({ pane, id, logs, rule }: { pane: S.PaneState; id: string; logs
   return (
     <>
       <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
-        <Badges rule={rule} />
+        <Badges rule={rule} pane={pane} />
         <PaneName pane={pane} />
         <PaneLocation pane={pane} fallback={pane.context ?? ""} />
         <span className="font-semibold text-accent">logs</span>
@@ -366,7 +368,22 @@ export function ResourceName({ pane }: { pane: S.PaneState }) {
 function PaneLocation({ pane, fallback, fallbackTitle }: { pane: S.PaneState; fallback: string; fallbackTitle?: string }) {
   // "" too: kubewing's own current context may be gardenctl's kubeconfig
   const location = useLocation(pane.spec.context, locationNamespace(pane));
-  return <LocationCrumb paneId={pane.id} location={location} fallback={fallback} fallbackTitle={fallbackTitle} />;
+  const key = ruleKey(pane);
+  const rule = useRules((r) => (key ? r[key] : undefined));
+  const onLandscape = useLabelOnLandscape(pane, rule);
+  return <LocationCrumb paneId={pane.id} location={location} fallback={fallback} fallbackTitle={fallbackTitle} landscapeRule={onLandscape ? rule : undefined} />;
+}
+
+/**
+ * safety.label: landscape: whether a pane's rule label goes on the landscape
+ * crumb instead of a chip of its own. Only for a rule that matched the
+ * landscape (a rule for one cluster keeps its chip: it isn't the
+ * landscape's name), and only where the header shows the landscape.
+ */
+function useLabelOnLandscape(pane: S.PaneState | undefined, rule: SafetyRule | undefined): boolean {
+  const mode = useConfig((c) => c.config?.config.safety?.label);
+  const location = useLocations((m) => (pane ? m[locationKey(pane.spec.context, locationNamespace(pane))] : undefined));
+  return mode === "landscape" && !!rule?.label && !!rule.byLandscape && !!locationParts(location) && location?.plane !== "garden";
 }
 
 /** The header's empty stretch: a double-click there names the pane (⌘I). */
@@ -374,10 +391,12 @@ function NameGap({ paneId }: { paneId: string }) {
   return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
 }
 
-export function Badges({ rule }: { rule?: SafetyRule }) {
+export function Badges({ rule, pane }: { rule?: SafetyRule; pane?: S.PaneState }) {
+  // safety.label: landscape: the label is the landscape crumb's, not a chip of its own
+  const onLandscape = useLabelOnLandscape(pane, rule);
   return (
     <>
-      <SafetyLabel rule={rule} />
+      {onLandscape ? null : <SafetyLabel rule={rule} />}
       {rule?.readOnly ? (
         <span aria-label="read-only" title="read-only context: mutations are refused" className="shrink-0 border border-fg-muted px-1 leading-4 text-fg-muted">
           RO
@@ -454,7 +473,7 @@ function EmptyPane({ pane, rule }: { pane: S.PaneState; rule?: SafetyRule }) {
   return (
     <>
       <header className="flex items-center gap-2 border-b border-border bg-bg-elev px-2 py-1">
-        <Badges rule={rule} />
+        <Badges rule={rule} pane={pane} />
         <PaneName pane={pane} />
         {noCluster ? <span className="text-fg-muted">no cluster</span> : <PaneLocation pane={pane} fallback={S.clusterLabel(pane.spec.context)} />}
         <NameGap paneId={pane.id} />
@@ -587,7 +606,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   return (
     <header className={`flex items-center gap-2 border-b bg-bg-elev px-2 py-1 ${st?.at ? "border-accent" : "border-border"}`}>
       <HistoryButtons pane={pane} />
-      <Badges rule={rule} />
+      <Badges rule={rule} pane={pane} />
       {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
       <PaneName pane={pane} />
       <PaneLocation

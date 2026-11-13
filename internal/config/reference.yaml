@@ -14,11 +14,15 @@ diff:
 
 contexts:                   # safety rules per kubeconfig context, the first match wins; none by default
   - match: "*-prod"         # glob on the context name
-    label: PROD             # shown on the pane frame, header and tab
+    label: PROD             # shown in the pane header, tab and confirmations
     color: prod             # a theme token (prod, changed, added …) or a color (#e5534b, rgb(…), oklch(…))
     readOnly: false         # true: every mutation is refused
     confirm: [delete, exec, debug, opspod, edit, terminal, label, annotate, scale, restart]   # need a confirmation (delete and restart always do)
     strict: false           # true: a confirmation needs the object's name typed
+
+safety:                     # how the rules above show
+  label: badge              # badge: a chip of its own; landscape: on Gardener clusters the landscape's name becomes the chip (its rule's label)
+  frame: true               # false: the pane frame keeps its usual color
 
 debug:                      # debug containers (b)
   image: nicolaka/netshoot  # prefilled; none: the last image that started

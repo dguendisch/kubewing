@@ -1,5 +1,5 @@
 import type { PaneState } from "../store/state";
-import type { ClusterEntry, Location } from "../transport/types";
+import type { ClusterEntry, Location, SafetyRule } from "../transport/types";
 
 export type Plane = NonNullable<Location["plane"]>;
 
@@ -21,6 +21,8 @@ export interface Crumb {
   open?: Target;
   /** What a click does, for its tooltip and accessible name. */
   title?: string;
+  /** safety.label: landscape: this crumb (the landscape) is the rule's label chip. */
+  safety?: SafetyRule;
 }
 
 /**

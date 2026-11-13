@@ -61,6 +61,10 @@ type Rule struct {
 	ReadOnly bool     `json:"readOnly,omitempty"`
 	Confirm  []string `json:"confirm"`
 	Strict   bool     `json:"strict,omitempty"`
+	// ByLandscape: the rule matched the cluster's Gardener landscape (or the
+	// garden's own name, which is its landscape), not a name of the cluster
+	// alone: safety.label: landscape puts its label on the landscape.
+	ByLandscape bool `json:"byLandscape,omitempty"`
 }
 
 // Policy maps contexts to rules (first matching config rule wins).
@@ -89,8 +93,10 @@ func (p *Policy) ForIn(context, landscape string) Rule {
 	}
 	for _, cr := range p.rules {
 		ok, _ := path.Match(cr.Match, context)
+		r.ByLandscape = ok && context == landscape
 		if !ok && landscape != "" {
 			ok, _ = path.Match(cr.Match, landscape)
+			r.ByLandscape = ok
 		}
 		if !ok {
 			continue

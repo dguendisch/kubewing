@@ -2,7 +2,8 @@ import { useEffect, type CSSProperties } from "react";
 import { openTarget, switchPanePlane } from "../commands";
 import { bridge } from "../store/store";
 import { loadLocation, locationKey, useLocations } from "../store/location";
-import { neverUsed, type Location } from "../transport/types";
+import { neverUsed, type Location, type SafetyRule } from "../transport/types";
+import { ruleColor } from "./safetyStyle";
 import { locationParts, planeColor, planes, type Crumb } from "./location";
 
 /** A pane's location (bridge.Location), fetched once per cluster and namespace. */
@@ -21,7 +22,20 @@ export function useLocation(cluster: string, namespace: string): Location | unde
  * that cluster in the pane, on the badge switches shoot ⇄ control plane (⌥⌘O).
  * Other clusters: their context name (fallback), as before.
  */
-export function LocationCrumb({ paneId, location, fallback, fallbackTitle }: { paneId: string; location?: Location; fallback: string; fallbackTitle?: string }) {
+export function LocationCrumb({
+  paneId,
+  location,
+  fallback,
+  fallbackTitle,
+  landscapeRule,
+}: {
+  paneId: string;
+  location?: Location;
+  fallback: string;
+  fallbackTitle?: string;
+  /** safety.label: landscape: the rule whose label the landscape crumb reads, as a chip. */
+  landscapeRule?: SafetyRule;
+}) {
   const parts = locationParts(location);
   if (!parts) {
     return (
@@ -30,8 +44,24 @@ export function LocationCrumb({ paneId, location, fallback, fallbackTitle }: { p
       </span>
     );
   }
-  return <Crumbs paneId={paneId} parts={parts} context={fallback} />;
+  return <Crumbs paneId={paneId} parts={landscapeRule ? labelLandscape(parts, landscapeRule) : parts} context={fallback} />;
 }
+
+/**
+ * The landscape crumb as the safety rule's chip: its label for text (the
+ * landscape's name in its tooltip), its color, square as safety labels are.
+ */
+function labelLandscape(parts: NonNullable<ReturnType<typeof locationParts>>, rule: SafetyRule): NonNullable<ReturnType<typeof locationParts>> {
+  const [first, ...rest] = parts.before;
+  if (!first) return parts;
+  const g = location(first);
+  return {
+    ...parts,
+    before: [{ ...first, text: rule.label ?? first.text, safety: rule, title: `${g}${first.open ? ` · ${first.title}` : ""}${rule.readOnly ? " · read-only" : ""}` }, ...rest],
+  };
+}
+
+const location = (c: Crumb) => c.open?.garden ?? c.text;
 
 function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable<ReturnType<typeof locationParts>>; context: string }) {
   const { word, icon, badge } = planes[parts.plane];
@@ -50,7 +80,7 @@ function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable
         <span className="flex items-center gap-1" style={{ flex: "0 1 auto", minWidth: beforeWidth(parts.before) }}>
           {parts.before.map((c, i) => (
             <span key={i} className="contents">
-              <CrumbPart paneId={paneId} crumb={c} style={fit(c.text, beforeMin, 1)} />
+              <CrumbPart paneId={paneId} crumb={c} style={c.safety ? chip(c.safety) : fit(c.text, beforeMin, 1)} />
               <span className="shrink-0 text-fg-muted">›</span>
             </span>
           ))}
@@ -89,18 +119,23 @@ function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable
  */
 /** The landscape and seed box's least width: its parts' least, the separators, the gaps between them. */
 function beforeWidth(before: Crumb[]): string {
-  const chars = before.reduce((n, c) => n + least(c.text, beforeMin) + 1, 0);
-  return `calc(${chars}ch + ${before.length * 2 - 1} * 0.25rem)`;
+  const chars = before.reduce((n, c) => n + leastBefore(c) + 1, 0);
+  const chips = before.filter((c) => c.safety).length;
+  return `calc(${chars}ch + ${before.length * 2 - 1} * 0.25rem + ${chips} * (0.75rem + 2px))`;
 }
+
+/** A landscape and seed crumb's least letters: a few, the safety chip whole (its padding and border apart). */
+const leastBefore = (c: Crumb) => (c.safety ? c.text.length : least(c.text, beforeMin));
 
 function leastWidth(parts: NonNullable<ReturnType<typeof locationParts>>, icon: string, badge: string): string {
   const chars =
-    parts.before.reduce((n, c) => n + least(c.text, beforeMin) + 1, 0) +
+    parts.before.reduce((n, c) => n + leastBefore(c) + 1, 0) +
     (parts.name ? least(parts.name, nameMin) : 0) +
     parts.after.reduce((n, c) => n + least(c.text, afterMin), 0) +
     icon.length + 1 + badge.length + 1;
   const items = parts.before.length * 2 + 1 + (parts.name ? 1 : 0) + parts.after.length;
-  return `calc(${chars}ch + ${items - 1} * 0.25rem + 0.75rem + 2px)`;
+  const chips = 1 + parts.before.filter((c) => c.safety).length; // the plane badge, the safety chip
+  return `calc(${chars}ch + ${items - 1} * 0.25rem + ${chips} * (0.75rem + 2px))`;
 }
 
 const beforeMin = 4;
@@ -119,11 +154,18 @@ const fit = (text: string, min: number, shrink: number): CSSProperties => ({
   minWidth: `${least(text, min)}ch`,
 });
 
+/** A safety label chip's look (see SafetyLabel), whole: it's the label, not a name to cut short. */
+function chip(rule: SafetyRule): CSSProperties {
+  const color = ruleColor(rule) ?? "var(--color-accent)";
+  return { flex: "none", color, borderColor: color, background: `color-mix(in srgb, ${color} 16%, transparent)` };
+}
+
 function CrumbPart({ paneId, crumb, style }: { paneId: string; crumb: Crumb; style: CSSProperties }) {
   const target = crumb.open;
+  const safety = crumb.safety ? "border px-1.5 leading-4 font-semibold hover:brightness-125" : "";
   if (!target)
     return (
-      <span className={`truncate ${crumb.muted ? "text-fg-muted" : ""}`} style={style}>
+      <span aria-label={crumb.safety ? "context label" : undefined} title={crumb.title} className={crumb.safety ? safety : `truncate ${crumb.muted ? "text-fg-muted" : ""}`} style={style}>
         {crumb.text}
       </span>
     );
@@ -134,7 +176,8 @@ function CrumbPart({ paneId, crumb, style }: { paneId: string; crumb: Crumb; sty
       style={style}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => void openTarget(paneId, { ...target, used: neverUsed, from: "jump", rule: { context: "", confirm: [] } }, crumb.text)}
-      className="truncate text-left text-fg-muted hover:text-fg hover:underline"
+      aria-label={crumb.safety ? "context label" : undefined}
+      className={crumb.safety ? safety : "truncate text-left text-fg-muted hover:text-fg hover:underline"}
     >
       {crumb.text}
     </button>
