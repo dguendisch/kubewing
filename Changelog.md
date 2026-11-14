@@ -1,5 +1,7 @@
 # Changelog
 ## [Unreleased]
+
+## [0.7.0] - 2026-11-14
 ### Added
 - multi-window support for tabs: drag a tab out of the window to give it a window of its own, or onto another window to move it there, with all its panes as they were
 - multi-window support for panes: drag a pane's grip out of the window to give the pane a window of its own, or onto another window to move it there; it keeps its watch, filters, history, a shell's screen and a log pane's lines
