@@ -6537,6 +6537,63 @@ test.describe("⌘⇧O: open a cluster", () => {
     // a click on it still opens the garden
     await where.getByLabel("context label").click();
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/^@\d+\/tape-garden$/), namespace: "garden-foo" });
+
+    // the managed seed's shoot, its note after the name (is seed loam), listing something: however narrow,
+    // the header's items never overlap nor leave it; the crumb gives way (landscape and seed first, the name last)
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    // by its dashboard URL (the namespace names the project, which the test garden has no object of)
+    await page.getByRole("combobox", { name: "cluster" }).fill("https://dashboard.tape.example/namespace/garden/shoots/loam");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await page.getByRole("combobox", { name: "resource" }).fill("e2e-static");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ resource: "e2e-static", context: expect.stringMatching(/tape-garden\/shoot--garden--loam$/) });
+    await expect(where).toContainText("is seed loam");
+    // the header's items and the breadcrumb's parts: what each draws (its box, and its text where that's wider) mustn't
+    // reach into the next one, nor out of the header
+    const overlaps = () =>
+      pane.locator("header").evaluate((h) => {
+        const box = h.getBoundingClientRect();
+        const drawn = (el: Element) => {
+          const r = el.getBoundingClientRect();
+          // a box narrower than its content draws past its right edge unless it clips (truncate)
+          const clips = getComputedStyle(el).overflowX !== "visible";
+          return { left: r.left, right: clips ? r.right : Math.max(r.right, r.left + el.scrollWidth) };
+        };
+        const row = (parent: Element) => [...parent.children].filter((c) => c.getBoundingClientRect().width > 0 && getComputedStyle(c).position !== "absolute");
+        const bad: string[] = [];
+        const check = (items: Element[]) => {
+          for (let i = 0; i + 1 < items.length; i++) {
+            const [a, b] = [drawn(items[i]!), drawn(items[i + 1]!)];
+            if (a.right > b.left + 0.5) bad.push(`${(items[i] as HTMLElement).innerText.trim() || items[i]!.tagName} × ${(items[i + 1] as HTMLElement).innerText.trim() || items[i + 1]!.tagName}`);
+          }
+          for (const el of items) {
+            const d = drawn(el);
+            if (d.left < box.left - 0.5 || d.right > box.right + 0.5) bad.push(`${(el as HTMLElement).innerText.trim() || el.tagName} leaves the header`);
+          }
+        };
+        check(row(h));
+        const crumb = h.querySelector('[aria-label="location"]');
+        if (crumb) {
+          check(row(crumb));
+          // every part inside its breadcrumb, which must hold them (what spills out lands on what follows it)
+          const c = crumb.getBoundingClientRect();
+          for (const part of crumb.querySelectorAll("*")) {
+            const r = part.getBoundingClientRect();
+            if (r.width > 0 && (r.right > c.right + 0.5 || r.left < c.left - 0.5)) bad.push(`${(part as HTMLElement).innerText.trim()} spills out of the breadcrumb`);
+          }
+        }
+        return bad;
+      });
+    const size = page.viewportSize()!;
+    for (const width of [1100, 900, 760, 640]) {
+      await page.setViewportSize({ width, height: size.height });
+      await expect.poll(overlaps, { message: `at ${width}px` }).toEqual([]);
+      // and the breadcrumb holds all its parts (it clips what it can't: the badge and the name mustn't be what's clipped)
+      expect(await where.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `breadcrumb clipped at ${width}px`).toBe(true);
+    }
+    await page.setViewportSize(size);
   });
 
   test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {
@@ -6657,8 +6714,12 @@ test.describe("⌘⇧O: open a cluster", () => {
     // the pane has room for it all at that width; narrower, landscape and seed give way, the badge stays whole
     const cut = (l: ReturnType<typeof where>) => l.evaluate((el) => [...el.querySelectorAll<HTMLElement>("*")].filter((c) => c.scrollWidth > c.clientWidth + 1).map((c) => c.textContent));
     await expect.poll(() => cut(where())).toEqual([]);
-    await page.setViewportSize({ width: 250, height: size.height });
-    await expect.poll(() => cut(where())).toEqual(["tape-garden", "seed loam"]);
+    // landscape and seed long before the name: they're down to a few letters while the name is (nearly) whole
+    // (the GARDEN label before it takes its share: the safety rule of the test garden's landscape)
+    await page.setViewportSize({ width: 280, height: size.height });
+    // what each text shows of itself: tape-garden and seed loam cut to under half, foo/baz (nearly) whole
+    const shown = () => where().evaluate((el) => [...el.querySelectorAll<HTMLElement>("[data-least=text]")].map((t) => t.clientWidth / t.scrollWidth));
+    await expect.poll(async () => { const [l, sd, n] = await shown(); return l! < 0.5 && sd! < 0.6 && n! > 0.85; }, { message: "landscape and seed cut first" }).toBe(true);
     // wide again: nothing cut, whatever the width was before
     await page.setViewportSize(size);
     await expect.poll(() => cut(where())).toEqual([]);

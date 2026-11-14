@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { openTarget, switchPanePlane } from "../commands";
 import { bridge } from "../store/store";
 import { loadLocation, locationKey, useLocations } from "../store/location";
@@ -64,30 +64,42 @@ function labelLandscape(parts: NonNullable<ReturnType<typeof locationParts>>, ru
 const location = (c: Crumb) => c.open?.garden ?? c.text;
 
 function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable<ReturnType<typeof locationParts>>; context: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const least = useLeastWidth(ref);
   const { word, icon, badge } = planes[parts.plane];
   const switchable = parts.plane === "shoot" || parts.plane === "controlPlane";
   const color = planeColor[parts.plane];
   return (
-    // as wide as its texts while there's room; short of it, never less than its parts' least (the header's other parts give way too)
-    <span aria-label="location" data-plane={parts.plane} title={`${parts.title}\ncontext: ${context}`} className="flex items-center gap-1 whitespace-nowrap" style={{ flex: "0 1 auto", minWidth: leastWidth(parts, icon, badge) }}>
-      {/*
-        short of room, landscape and seed give way first (down to a few letters, …), then the notes after the
-        name, the name last; the badge never. One after the other, not all a bit (flex-shrink would share the
-        shortage): landscape and seed sit in a box of their own, which alone may shrink below its content
-        (min-width 0) down to its parts' least, while name and notes hold their full width until then
-      */}
+    /*
+      As wide as its texts while the header has room; short of it, it gives way before the header's other
+      items, down to its parts' least (useLeastWidth), and clips besides, so nothing ever lands on what follows it.
+      Inside, landscape and seed give way first, then the notes after the name, the name last, each down to a few
+      letters; the badges, separators and the safety chip never.
+    */
+    <span
+      ref={ref}
+      aria-label="location"
+      data-plane={parts.plane}
+      title={`${parts.title}\ncontext: ${context}`}
+      className="flex items-center gap-1 overflow-hidden whitespace-nowrap"
+      style={{ flex: `0 ${shrinkFirst} auto`, minWidth: least.all ?? 0 }}
+    >
+      {/* landscape and seed in a box of their own, which alone shrinks while it can: they give way wholly before the name does */}
       {parts.before.length ? (
-        <span className="flex items-center gap-1" style={{ flex: "0 1 auto", minWidth: beforeWidth(parts.before) }}>
+        <span data-least="row" className="flex items-center gap-1" style={{ flex: `0 ${shrinkFirst} auto`, minWidth: least.before ?? 0 }}>
           {parts.before.map((c, i) => (
             <span key={i} className="contents">
               <CrumbPart paneId={paneId} crumb={c} style={c.safety ? chip(c.safety) : fit(c.text, beforeMin, 1)} />
-              <span className="shrink-0 text-fg-muted">›</span>
+              <span data-least="fixed" className="shrink-0 text-fg-muted">
+                ›
+              </span>
             </span>
           ))}
         </span>
       ) : null}
       <button
         type="button"
+        data-least="fixed"
         aria-label={`plane ${word}`}
         title={switchable ? `${word}: ⌥⌘O switches to the ${parts.plane === "shoot" ? "control plane" : "shoot"}` : word}
         disabled={!switchable}
@@ -100,43 +112,64 @@ function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable
         {icon} {badge}
       </button>
       {parts.name ? (
-        <span className="truncate font-semibold" style={{ color, ...fit(parts.name, nameMin, 0.001) }}>
+        <span data-least="text" className="truncate font-semibold" style={{ color, ...fit(parts.name, nameMin, 1) }}>
           {parts.name}
         </span>
       ) : null}
       {parts.after.map((c, i) => (
-        <CrumbPart key={i} paneId={paneId} crumb={c} style={fit(c.text, afterMin, 0.01)} />
+        <CrumbPart key={i} paneId={paneId} crumb={c} style={fit(c.text, afterMin, shrinkNext)} />
       ))}
     </span>
   );
 }
 
 /**
- * The breadcrumb's least width: each part's least (see fit), the
- * separators, the badge whole (padding and border), the gaps, 1ch spare for
- * the icons' glyphs. Counted, not measured: the header lays out the same
- * whatever was shown before (a background tab, a narrower window).
+ * The breadcrumb's least width: what its parts can't give up, as the browser
+ * lays them out. A text (data-least="text") its min-width, anything fixed
+ * (data-least="fixed": badges, separators, the safety chip) its width, and
+ * the gaps between all of them. Not the browser's min-content, which counts a
+ * truncating text in full (the breadcrumb couldn't shrink), nor counted
+ * letters (they came out short of badges' borders and glyphs, and the parts
+ * spilled over what follows). Measured again whenever a part's size changes,
+ * never while hidden (a background tab: no width at all).
  */
-/** The landscape and seed box's least width: its parts' least, the separators, the gaps between them. */
-function beforeWidth(before: Crumb[]): string {
-  const chars = before.reduce((n, c) => n + leastBefore(c) + 1, 0);
-  const chips = before.filter((c) => c.safety).length;
-  return `calc(${chars}ch + ${before.length * 2 - 1} * 0.25rem + ${chips} * (0.75rem + 2px))`;
+function useLeastWidth(ref: RefObject<HTMLSpanElement | null>): { all?: number; before?: number } {
+  const [least, setLeast] = useState<{ all?: number; before?: number }>({});
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // a row's least: its parts' (a row inside it counts as one part) and the gaps between them
+    const row = (r: HTMLElement): number => {
+      const parts = [...r.querySelectorAll<HTMLElement>("[data-least]")].filter((p) => p.parentElement?.closest("[data-least=row]") === (r.dataset.least === "row" ? r : null));
+      const gap = parseFloat(getComputedStyle(r).columnGap) || 0;
+      let w = Math.max(0, parts.length - 1) * gap;
+      for (const p of parts) w += p.dataset.least === "row" ? row(p) : p.dataset.least === "text" ? parseFloat(getComputedStyle(p).minWidth) || 0 : p.getBoundingClientRect().width;
+      return w;
+    };
+    const measure = () => {
+      if (el.getClientRects().length === 0) return; // hidden: keep the last
+      const box = el.querySelector<HTMLElement>(":scope > [data-least=row]");
+      const all = Math.ceil(row(el));
+      const before = box ? Math.ceil(row(box)) : undefined;
+      setLeast((old) => (old.all === all && old.before === before ? old : { all, before }));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    for (const p of el.querySelectorAll("[data-least]")) ro.observe(p);
+    return () => ro.disconnect();
+  });
+  return least;
 }
 
-/** A landscape and seed crumb's least letters: a few, the safety chip whole (its padding and border apart). */
-const leastBefore = (c: Crumb) => (c.safety ? c.text.length : least(c.text, beforeMin));
-
-function leastWidth(parts: NonNullable<ReturnType<typeof locationParts>>, icon: string, badge: string): string {
-  const chars =
-    parts.before.reduce((n, c) => n + leastBefore(c) + 1, 0) +
-    (parts.name ? least(parts.name, nameMin) : 0) +
-    parts.after.reduce((n, c) => n + least(c.text, afterMin), 0) +
-    icon.length + 1 + badge.length + 1;
-  const items = parts.before.length * 2 + 1 + (parts.name ? 1 : 0) + parts.after.length;
-  const chips = 1 + parts.before.filter((c) => c.safety).length; // the plane badge, the safety chip
-  return `calc(${chars}ch + ${items - 1} * 0.25rem + ${chips} * (0.75rem + 2px))`;
-}
+/**
+ * Who gives way first, as flex-shrink weights (shares of the shortage, in
+ * proportion to weight × width): in the header the breadcrumb before the
+ * filter fields (weight 1); in it the landscape and seed box by far, then the
+ * notes after the name, the name last. Whole numbers: weights that add up to
+ * less than 1 shrink by that fraction of the shortage only.
+ */
+const shrinkFirst = 1000;
+const shrinkNext = 30;
 
 const beforeMin = 4;
 const nameMin = 6;
@@ -144,10 +177,8 @@ const afterMin = 3;
 const least = (text: string, min: number) => Math.min(min, text.length);
 
 /**
- * A part that gives way to an ellipsis: as wide as its text while there's
- * room, shrinking (by shrink: the landscape and seed long before the name)
- * down to min letters (the font is monospace). The explicit least width
- * replaces the text's own, so a part can shrink at all.
+ * A text that gives way to an ellipsis: as wide as its text while there's
+ * room, shrinking by shrink, never below min letters (the font is monospace).
  */
 const fit = (text: string, min: number, shrink: number): CSSProperties => ({
   flex: `0 ${shrink} auto`,
@@ -165,13 +196,14 @@ function CrumbPart({ paneId, crumb, style }: { paneId: string; crumb: Crumb; sty
   const safety = crumb.safety ? "border px-1.5 leading-4 font-semibold hover:brightness-125" : "";
   if (!target)
     return (
-      <span aria-label={crumb.safety ? "context label" : undefined} title={crumb.title} className={crumb.safety ? safety : `truncate ${crumb.muted ? "text-fg-muted" : ""}`} style={style}>
+      <span data-least={crumb.safety ? "fixed" : "text"} aria-label={crumb.safety ? "context label" : undefined} title={crumb.title} className={crumb.safety ? safety : `truncate ${crumb.muted ? "text-fg-muted" : ""}`} style={style}>
         {crumb.text}
       </span>
     );
   return (
     <button
       type="button"
+      data-least={crumb.safety ? "fixed" : "text"}
       title={crumb.title}
       style={style}
       onMouseDown={(e) => e.preventDefault()}

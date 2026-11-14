@@ -622,7 +622,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         </span>
       ) : null}
       <NameGap paneId={pane.id} />
-      <div className="relative">
+      {/* the filter fields give way too, once the breadcrumb has (its weight is far higher), down to a usable width */}
+      <div className="relative min-w-32 shrink basis-48">
         <input
           ref={input}
           aria-label="filter"
@@ -656,7 +657,7 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
             commit();
             onBlur(e);
           }}
-          className={`w-48 ${field} ${held ? "border-dashed" : ""}`}
+          className={`w-full ${field} ${held ? "border-dashed" : ""}`}
         />
         {/* same drop-down hint as the label and CEL drafts */}
         {held && filterField === "grep" ? (
@@ -677,7 +678,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         onDone={toTable}
         onFocus={focus("labels")}
         onBlur={onBlur}
-        className={`w-36 ${field}`}
+        className={`w-full ${field}`}
+        box="min-w-24 shrink basis-36"
       />
       <DraftField
         ref={celInput}
@@ -691,7 +693,8 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
         onDone={toTable}
         onFocus={focus("cel")}
         onBlur={onBlur}
-        className={`w-36 truncate ${field}`}
+        className={`w-full truncate ${field}`}
+        box="min-w-24 shrink basis-36"
       />
       <HideHealthy pane={pane} apply={apply} />
     </header>

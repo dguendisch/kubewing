@@ -17,6 +17,8 @@ interface Props {
   onFocus: () => void;
   onBlur: (e: React.FocusEvent) => void;
   className: string;
+  /** Classes of the field's box in the header's row (its flex sizing); a focused CEL field takes the free room instead. */
+  box?: string;
 }
 
 /** Recent CEL filters, newest first (session only). */
@@ -41,7 +43,7 @@ const remember = (v: string) => {
  * label keys and values. ↓ opens the suggestions at the caret.
  */
 export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftField(
-  { field, label, placeholder, applied, serverId, focused, onApply, onDone, onFocus, onBlur, className },
+  { field, label, placeholder, applied, serverId, focused, onApply, onDone, onFocus, onBlur, className, box },
   ref,
 ) {
   const input = useRef<HTMLInputElement>(null);
@@ -121,7 +123,7 @@ export const DraftField = forwardRef<HTMLInputElement, Props>(function DraftFiel
   const status = pending ? describe(preview) : undefined;
   const wide = cel && focused;
   return (
-    <div className={`relative ${wide ? "min-w-0 flex-1" : ""}`}>
+    <div className={`relative ${wide ? "min-w-0 flex-1" : (box ?? "")}`}>
       <input
         ref={input}
         aria-label={label}
