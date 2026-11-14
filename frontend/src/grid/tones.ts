@@ -3,7 +3,8 @@ import type { ColumnInfo } from "../transport/types";
 /**
  * Status colors: a cell's tone from its column and text, as kubecolor colors
  * kubectl's output, but per column, so a value only counts where it means a
- * state ("False" in READY, not in SUSPEND). Built-in rules only. Pure.
+ * state ("False" in READY, not in SUSPEND), and a metric's percentage from a
+ * threshold. Built-in rules only. Pure.
  */
 export type Tone = "ok" | "warn" | "bad";
 
@@ -90,10 +91,23 @@ const rules: Record<string, Rule> = {
   TYPE: (v) => (v === "Warning" ? "warn" : v === "Normal" ? "ok" : undefined),
 };
 
+/** A metric column's percentage ("%CPU", "%MEM/L", "%CPU REQ", "%PODS" …): from 70% it's getting full, from 90% it is. */
+const percentWarn = 70;
+const percentBad = 90;
+
+function percent(v: string): Tone | undefined {
+  const m = /^(\d+)%$/.exec(v);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  return n >= percentBad ? "bad" : n >= percentWarn ? "warn" : undefined;
+}
+
 /** The tone of a row's cell, if its column and text say one. */
 export function tone(cells: readonly string[], col: number, columns: readonly ColumnInfo[]): Tone | undefined {
   const column = columns[col];
   const v = cells[col];
-  if (!column || !v || column.type) return undefined; // typed columns (numbers, ages, restarts) have no states
+  if (!column || !v) return undefined;
+  if (column.type === "number" && column.name.startsWith("%")) return percent(v);
+  if (column.type) return undefined; // other typed columns (numbers, ages, restarts) have no states
   return rules[column.name]?.(v, cells, columns);
 }

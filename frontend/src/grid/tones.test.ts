@@ -69,4 +69,20 @@ describe("tone", () => {
     expect(tone(["web", "1/2"], 1, [{ name: "NAME" }, { name: "READY", type: "number" }])).toBeUndefined();
     expect(tone(["web"], 3, [{ name: "NAME" }])).toBeUndefined();
   });
+  it("a metric's percentage: warn from 70%, bad from 90%, over 100% too", () => {
+    const pct = (name: string, v: string) => tone(["web", v], 1, [{ name: "NAME" }, { name, type: "number" }]);
+    expect(pct("%CPU", "69%")).toBeUndefined();
+    expect(pct("%CPU", "70%")).toBe("warn");
+    expect(pct("%MEM", "89%")).toBe("warn");
+    expect(pct("%MEM", "90%")).toBe("bad");
+    expect(pct("%CPU/R", "250%")).toBe("bad");
+    expect(pct("%MEM/L", "95%")).toBe("bad");
+    expect(pct("%CPU REQ", "75%")).toBe("warn");
+    expect(pct("%PODS", "100%")).toBe("bad");
+    expect(pct("%nvidia.com/gpu REQ", "50%")).toBeUndefined();
+    expect(pct("%CPU", "")).toBeUndefined(); // no metrics yet
+    // only numeric % columns: not a counter, nor a string column that happens to start with %
+    expect(pct("PODS", "95")).toBeUndefined();
+    expect(tone(["web", "95%"], 1, [{ name: "NAME" }, { name: "%DONE" }])).toBeUndefined();
+  });
 });

@@ -394,7 +394,7 @@ test.describe("columns (per resource type)", () => {
     await expect(page.getByLabel("message")).toContainText("metrics on");
     // web-0 requests 500m/256Mi and is limited to 1/1Gi; web-1 sets nothing (no percentages)
     await expect.poll(async () => (await focused(page)).rows.map((r) => r.cells.slice(2, 8))).toEqual([
-      ["250m", "50%", "25%", "128.0Mi", "50%", "12%"],
+      ["400m", "80%", "40%", "240.0Mi", "93%", "23%"],
       ["1200m", "", "", "64.0Mi", "", ""],
     ]);
     // the other pane follows
@@ -405,6 +405,19 @@ test.describe("columns (per resource type)", () => {
     await page.keyboard.press("Escape");
     await page.keyboard.press("m");
     await expect.poll(async () => (await focused(page)).columns).toEqual(["NAMESPACE", "NAME", "STATUS", "AGE"]);
+  });
+
+  test("metric percentages in the warn color from 70%, in bad from 90%", async ({ page }) => {
+    await openTape(page, "e2e-wide", 2);
+    expect((await tonePixels(page, 0, "warn")) + (await tonePixels(page, 0, "bad"))).toBe(0);
+    await page.keyboard.press("m");
+    await expect.poll(async () => (await focused(page)).rows[0]?.cells.slice(2, 8)).toEqual(["400m", "80%", "40%", "240.0Mi", "93%", "23%"]);
+    // web-0: 80% of its CPU request in warn, 93% of its memory request in bad
+    await expect.poll(() => tonePixels(page, 0, "warn")).toBeGreaterThan(5);
+    expect(await tonePixels(page, 0, "bad")).toBeGreaterThan(5);
+    // web-1 has no percentages
+    expect((await tonePixels(page, 1, "warn")) + (await tonePixels(page, 1, "bad"))).toBe(0);
+    await page.keyboard.press("m");
   });
 
   test("metric columns start narrow; a dragged width stays across m off and on", async ({ page }) => {
@@ -650,21 +663,23 @@ test("grep highlights its matches in the cells, and the highlight goes with the 
   await expect.poll(highlighted).toBe(0);
 });
 
+// pixels of the first pane's row near a theme token's color (summed channel distance), in its band (header 24px, rows 22px)
+function tonePixels(page: Page, row: number, token: string) {
+  return page.locator("section[data-pane] canvas").first().evaluate((c: HTMLCanvasElement, [row, token]) => {
+    const hex = getComputedStyle(document.documentElement).getPropertyValue(`--color-${token}`).trim().slice(1);
+    const want = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const dpr = window.devicePixelRatio;
+    const px = c.getContext("2d")!.getImageData(0, (24 + 22 * row) * dpr, c.width, 22 * dpr).data;
+    let n = 0;
+    for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i]! - want[0]!) + Math.abs(px[i + 1]! - want[1]!) + Math.abs(px[i + 2]! - want[2]!) < 40) n++;
+    return n;
+  }, [row, token] as const);
+}
+
 // e2e-tones: a-running (Running, 1/1), b-pending (Pending, 0/1), c-crashing (CrashLoopBackOff, 0/1)
 test("status colors: a pending pod's status and readiness in the warn color, a crash-looping one's status in bad, a running one's uncolored", async ({ page }) => {
   await openTape(page, "e2e-tones", 3);
-  const canvas = page.locator("section[data-pane] canvas").first();
-  // pixels of a row near a theme token's color (summed channel distance), in its band (header 24px, rows 22px)
-  const near = (row: number, token: string) =>
-    canvas.evaluate((c: HTMLCanvasElement, [row, token]) => {
-      const hex = getComputedStyle(document.documentElement).getPropertyValue(`--color-${token}`).trim().slice(1);
-      const want = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
-      const dpr = window.devicePixelRatio;
-      const px = c.getContext("2d")!.getImageData(0, (24 + 22 * row) * dpr, c.width, 22 * dpr).data;
-      let n = 0;
-      for (let i = 0; i < px.length; i += 4) if (Math.abs(px[i]! - want[0]!) + Math.abs(px[i + 1]! - want[1]!) + Math.abs(px[i + 2]! - want[2]!) < 40) n++;
-      return n;
-    }, [row, token] as const);
+  const near = (row: number, token: string) => tonePixels(page, row, token);
   // b-pending: "0/1" and "Pending" in warn
   await expect.poll(() => near(1, "warn")).toBeGreaterThan(20);
   expect(await near(1, "bad")).toBe(0);

@@ -261,6 +261,7 @@ Columns and widths are kept in `columns.yaml` across restarts. Changing columns 
 | PROGRESSING | `True` | |
 | LAST OPERATION (shoots) | `Processing`, `Pending` | `Error`, `Failed`, `Aborted` |
 | TYPE (events) | `Warning` | |
+| Metric percentages (`%CPU`, `%MEM`, `%CPU/R`, `%MEM/L`, `%CPU REQ`, `%PODS` …, see [Metrics](#metrics-m)) | from 70% | from 90% (also above 100%) |
 
 - A list such as `Ready,SchedulingDisabled` takes its worst part.
 - Only the text is colored: the background stays the [keyed diff's](#the-keyed-diff). A pod that just started crash-looping shows red text on the "changed" highlight. A deleted row stays struck through.
@@ -278,6 +279,7 @@ Columns and widths are kept in `columns.yaml` across restarts. Changing columns 
 - The usage comes from the cluster's metrics-server. It is read every 15 s, and only while a pane shows a usage column; panes on the same source share the reads.
 - A pod's requests and limits are counted as the scheduler and kubectl count them: its containers summed, sidecars added, an init container as the larger of it and the rest (it runs alone), pod-level resources and the runtime's overhead included. A node's are the sum over its pods that haven't finished; a pod without a limit adds nothing to the limits, so they can be below what the node may really use (and above 100%: overcommitted).
 - The nodes' requests and limits follow the pods live (one watch of the context's pods, while a pane shows such a column), and need no metrics-server. They're separate from `m` because they list every pod of the context first, which takes a few seconds on a big cluster: meanwhile the status line says **loading requests/limits…**. If the pods can't be listed (no permission across namespaces), the status line says why.
+- Percentages from 70% are orange, from 90% red (see **Status colors** in [Columns](#columns)): a node almost full, a pod near its memory limit. A pod using more CPU than it requests shows over 100%, in red too.
 - Percentages are cut off, not rounded, as in kubectl. They sort as numbers, and grep matches them. A pod without metrics yet (pending, just started) has empty cells, sorted last. A percentage is empty if the pod sets no requests (or limits), or if the node has none of the resource (no ephemeral storage in its allocatable, a node without GPUs).
 - New values don't count as a change: no marker, nothing recorded. In time travel the metric cells are empty, since past values aren't known.
 - Without a metrics-server (or without permission to read it) the usage cells stay empty and the status line says so.
