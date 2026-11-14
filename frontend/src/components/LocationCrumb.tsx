@@ -28,6 +28,7 @@ export function LocationCrumb({
   fallback,
   fallbackTitle,
   landscapeRule,
+  landscapeChip = true,
 }: {
   paneId: string;
   location?: Location;
@@ -35,6 +36,8 @@ export function LocationCrumb({
   fallbackTitle?: string;
   /** safety.label: landscape: the rule whose label the landscape crumb reads, as a chip. */
   landscapeRule?: SafetyRule;
+  /** safety.chip: false: that label as its text in the rule's color, no chip. */
+  landscapeChip?: boolean;
 }) {
   const parts = locationParts(location);
   if (!parts) {
@@ -44,20 +47,21 @@ export function LocationCrumb({
       </span>
     );
   }
-  return <Crumbs paneId={paneId} parts={landscapeRule ? labelLandscape(parts, landscapeRule) : parts} context={fallback} />;
+  return <Crumbs paneId={paneId} parts={landscapeRule ? labelLandscape(parts, landscapeRule, !landscapeChip) : parts} context={fallback} />;
 }
 
 /**
  * The landscape crumb as the safety rule's chip: its label for text (the
- * landscape's name in its tooltip), its color, square as safety labels are.
+ * landscape's name in its tooltip), its color, square as safety labels are;
+ * plain (safety.chip: false), the label's text in that color alone.
  */
-function labelLandscape(parts: NonNullable<ReturnType<typeof locationParts>>, rule: SafetyRule): NonNullable<ReturnType<typeof locationParts>> {
+function labelLandscape(parts: NonNullable<ReturnType<typeof locationParts>>, rule: SafetyRule, plain: boolean): NonNullable<ReturnType<typeof locationParts>> {
   const [first, ...rest] = parts.before;
   if (!first) return parts;
   const g = location(first);
   return {
     ...parts,
-    before: [{ ...first, text: rule.label ?? first.text, safety: rule, title: `${g}${first.open ? ` · ${first.title}` : ""}${rule.readOnly ? " · read-only" : ""}` }, ...rest],
+    before: [{ ...first, text: rule.label ?? first.text, safety: rule, plain, title: `${g}${first.open ? ` · ${first.title}` : ""}${rule.readOnly ? " · read-only" : ""}` }, ...rest],
   };
 }
 
@@ -89,7 +93,7 @@ function Crumbs({ paneId, parts, context }: { paneId: string; parts: NonNullable
         <span data-least="row" className="flex items-center gap-1" style={{ flex: `0 ${shrinkFirst} auto`, minWidth: least.before ?? 0 }}>
           {parts.before.map((c, i) => (
             <span key={i} className="contents">
-              <CrumbPart paneId={paneId} crumb={c} style={c.safety ? chip(c.safety) : fit(c.text, beforeMin, 1)} />
+              <CrumbPart paneId={paneId} crumb={c} style={c.safety ? chip(c.safety, c.plain) : fit(c.text, beforeMin, 1)} />
               <span data-least="fixed" className="shrink-0 text-fg-muted">
                 ›
               </span>
@@ -185,15 +189,16 @@ const fit = (text: string, min: number, shrink: number): CSSProperties => ({
   minWidth: `${least(text, min)}ch`,
 });
 
-/** A safety label chip's look (see SafetyLabel), whole: it's the label, not a name to cut short. */
-function chip(rule: SafetyRule): CSSProperties {
+/** A safety label chip's look (see SafetyLabel), whole: it's the label, not a name to cut short. Plain: its text in the color alone. */
+function chip(rule: SafetyRule, plain?: boolean): CSSProperties {
   const color = ruleColor(rule) ?? "var(--color-accent)";
+  if (plain) return { flex: "none", color };
   return { flex: "none", color, borderColor: color, background: `color-mix(in srgb, ${color} 16%, transparent)` };
 }
 
 function CrumbPart({ paneId, crumb, style }: { paneId: string; crumb: Crumb; style: CSSProperties }) {
   const target = crumb.open;
-  const safety = crumb.safety ? "border px-1.5 leading-4 font-semibold hover:brightness-125" : "";
+  const safety = crumb.safety ? `${crumb.plain ? "" : "border px-1.5 "}leading-4 font-semibold hover:brightness-125` : "";
   if (!target)
     return (
       <span data-least={crumb.safety ? "fixed" : "text"} aria-label={crumb.safety ? "context label" : undefined} title={crumb.title} className={crumb.safety ? safety : `truncate ${crumb.muted ? "text-fg-muted" : ""}`} style={style}>

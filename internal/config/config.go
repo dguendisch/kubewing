@@ -125,7 +125,6 @@ func missingFonts(family string) string {
 	}
 }
 
-// Launch configures a launch from a terminal.
 // Safety is how safety rules show.
 type Safety struct {
 	// Label: "badge" (default) a chip of its own in the pane header; "landscape"
@@ -134,11 +133,15 @@ type Safety struct {
 	Label string `json:"label,omitempty"`
 	// Frame colors the pane frame in the rule's color; nil = true.
 	Frame *bool `json:"frame,omitempty"`
+	// Chip: with Label "landscape", false shows the landscape's label as its
+	// text in the rule's color, without the chip's tint and border; nil = true.
+	Chip *bool `json:"chip,omitempty"`
 }
 
 // SafetyLabels are the values of safety.label.
 var SafetyLabels = []string{"badge", "landscape"}
 
+// Launch configures a launch from a terminal.
 type Launch struct {
 	// Wait keeps kubewing in the foreground: the shell waits for it and its
 	// log goes to the terminal (-wait overrides it). Default: it detaches, the
@@ -479,6 +482,7 @@ func load(dir string, readFile func(file string) ([]byte, error)) Effective {
 			e.Config.Safety.Label = l
 		}
 		e.Config.Safety.Frame = c.Safety.Frame
+		e.Config.Safety.Chip = c.Safety.Chip
 		e.Config.Theme = c.Theme
 		if f := c.Font.Family; f != "" && !fontFamily.MatchString(f) {
 			errf("config.yaml", "font.family: %q is not a font name or a comma-separated list of them", f)

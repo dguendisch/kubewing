@@ -8,6 +8,7 @@
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 - status colors: state cells (STATUS, READY, conditions such as AVAILABLE or a shoot's NODES, an event's TYPE) show their text in orange when waiting (`Pending`, `1/2`, `Unknown`) and red when broken (`CrashLoopBackOff`, `False`), like kubecolor; healthy states stay uncolored unless a theme sets the `ok` token
 - the row menu (`⌘⏎`, right-click) has an **events** entry (`v`) (previously, "events" where only visible from the jump menu)
+- `safety.chip: false` in `config.yaml` shows the landscape's label (with `safety.label: landscape`) as just its text in the rule's color, without a chip, in the pane header and the clusters dialog
 - `safety.label: landscape` in `config.yaml` shows a landscape's safety label (e.g. `Live`) in place of the landscape's name in the pane header instead of as a separate badge; `safety.frame: false` stops coloring the pane frame
 - Gardener clusters show where you are in the pane header: the landscape, the seed beneath, and a colored badge for the plane (shoot, control plane, seed, garden), with managed and unmanaged seeds told apart; its parts open the garden, a seed or the other plane, and the tab leads with the plane's mark
 

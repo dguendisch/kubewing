@@ -170,11 +170,11 @@ func TestUpdateConfig(t *testing.T) {
 
 // safety: a badge and a colored frame unless set; an unknown label mode is reported and dropped.
 func TestSafetyConfig(t *testing.T) {
-	if s := Load(write(t, map[string]string{"config.yaml": "contexts: []\n"})).Config.Safety; s.Label != "" || s.Frame != nil {
+	if s := Load(write(t, map[string]string{"config.yaml": "contexts: []\n"})).Config.Safety; s.Label != "" || s.Frame != nil || s.Chip != nil {
 		t.Errorf("defaults: %+v", s)
 	}
-	e := Load(write(t, map[string]string{"config.yaml": "safety: {label: landscape, frame: false}\n"}))
-	if s := e.Config.Safety; s.Label != "landscape" || s.Frame == nil || *s.Frame || len(e.Errors) != 0 {
+	e := Load(write(t, map[string]string{"config.yaml": "safety: {label: landscape, frame: false, chip: false}\n"}))
+	if s := e.Config.Safety; s.Label != "landscape" || s.Frame == nil || *s.Frame || s.Chip == nil || *s.Chip || len(e.Errors) != 0 {
 		t.Errorf("set: %+v %v", s, e.Errors)
 	}
 	e = Load(write(t, map[string]string{"config.yaml": "safety: {label: chip}\n"}))

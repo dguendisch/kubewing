@@ -23,6 +23,8 @@ export interface Crumb {
   title?: string;
   /** safety.label: landscape: this crumb (the landscape) is the rule's label chip. */
   safety?: SafetyRule;
+  /** safety.chip: false: the label is its text in the rule's color, not a chip. */
+  plain?: boolean;
 }
 
 /**

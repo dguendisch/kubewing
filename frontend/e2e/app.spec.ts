@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 type Inspect = {
   focus: string;
@@ -6594,6 +6594,57 @@ test.describe("⌘⇧O: open a cluster", () => {
       expect(await where.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), `breadcrumb clipped at ${width}px`).toBe(true);
     }
     await page.setViewportSize(size);
+  });
+
+  test("safety.chip: false shows the landscape's label as its text in the rule's color, without a chip, in the header and the clusters dialog", async ({ page }) => {
+    await page.routeWebSocket(/\/kw-ws$/, (ws) => {
+      const server = ws.connectToServer();
+      const configs = new Set<number>();
+      ws.onMessage((m) => {
+        const msg = JSON.parse(String(m));
+        if (msg.method === "Config") configs.add(msg.id);
+        server.send(m);
+      });
+      server.onMessage((m) => {
+        const msg = JSON.parse(String(m));
+        if (configs.delete(msg.id) && msg.result) msg.result.config.safety = { label: "landscape", chip: false };
+        ws.send(JSON.stringify(msg));
+      });
+    });
+    await openStatic(page);
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    await page.getByRole("combobox", { name: "cluster" }).fill("tg/shoot--foo--bar");
+    await expect(options(page)).toHaveCount(1);
+    await page.keyboard.press("Enter");
+    await expect(dialog(page)).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    const pane = page.locator(`section[data-pane="${(await inspect(page)).focusedPane}"]`);
+    // the rule's color (changed) on the text, no border, no tint
+    const plain = async (label: Locator) => {
+      await expect(label).toHaveText("GARDEN");
+      // polled: the dialog's list may still re-render under it
+      await expect
+        .poll(() =>
+          label.evaluate((el) => {
+            const s = getComputedStyle(el);
+            const probe = document.createElement("span");
+            probe.style.color = "var(--color-changed)";
+            el.after(probe);
+            const changed = getComputedStyle(probe).color;
+            probe.remove();
+            return { border: s.borderTopWidth, background: s.backgroundColor, inColor: !!changed && s.color === changed };
+          }),
+        )
+        .toEqual({ border: "0px", background: "rgba(0, 0, 0, 0)", inColor: true });
+    };
+    await plain(pane.locator("header").getByLabel("location").getByLabel("context label"));
+    // the clusters dialog alike: the remembered shoot and its landscape's garden
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    for (const name of ["tg/shoot--foo--bar", "tape-garden"]) {
+      await page.getByRole("combobox", { name: "cluster" }).fill(name);
+      await plain(options(page).first().getByLabel("context label"));
+    }
+    await page.keyboard.press("Escape");
   });
 
   test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {

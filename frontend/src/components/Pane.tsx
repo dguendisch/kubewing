@@ -371,7 +371,8 @@ function PaneLocation({ pane, fallback, fallbackTitle }: { pane: S.PaneState; fa
   const key = ruleKey(pane);
   const rule = useRules((r) => (key ? r[key] : undefined));
   const onLandscape = useLabelOnLandscape(pane, rule);
-  return <LocationCrumb paneId={pane.id} location={location} fallback={fallback} fallbackTitle={fallbackTitle} landscapeRule={onLandscape ? rule : undefined} />;
+  const chip = useConfig((c) => c.config?.config.safety?.chip !== false);
+  return <LocationCrumb paneId={pane.id} location={location} fallback={fallback} fallbackTitle={fallbackTitle} landscapeRule={onLandscape ? rule : undefined} landscapeChip={chip} />;
 }
 
 /**
@@ -391,12 +392,23 @@ function NameGap({ paneId }: { paneId: string }) {
   return <span aria-hidden className="flex-1 self-stretch" onDoubleClick={() => setUI((s) => S.renamePane(s, paneId))} />;
 }
 
-export function Badges({ rule, pane }: { rule?: SafetyRule; pane?: S.PaneState }) {
+/**
+ * safety.chip: false: whether a rule's label shows as plain text where it
+ * stands for its landscape (safety.label: landscape, a rule that matched the
+ * landscape), as on the landscape crumb, rather than as a chip.
+ */
+export function usePlainLabel(rule: SafetyRule | undefined): boolean {
+  const plain = useConfig((c) => c.config?.config.safety?.label === "landscape" && c.config.config.safety.chip === false);
+  return plain && !!rule?.byLandscape;
+}
+
+/** The safety label and RO; plain: the label as plain text (usePlainLabel), for lists such as the clusters dialog. */
+export function Badges({ rule, pane, plain }: { rule?: SafetyRule; pane?: S.PaneState; plain?: boolean }) {
   // safety.label: landscape: the label is the landscape crumb's, not a chip of its own
   const onLandscape = useLabelOnLandscape(pane, rule);
   return (
     <>
-      {onLandscape ? null : <SafetyLabel rule={rule} />}
+      {onLandscape ? null : <SafetyLabel rule={rule} plain={plain} />}
       {rule?.readOnly ? (
         <span aria-label="read-only" title="read-only context: mutations are refused" className="shrink-0 border border-fg-muted px-1 leading-4 text-fg-muted">
           RO

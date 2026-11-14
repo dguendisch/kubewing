@@ -578,6 +578,8 @@ export interface SafetyDisplay {
   label?: "badge" | "landscape";
   /** Color the pane frame (default true). */
   frame?: boolean;
+  /** label: landscape: the landscape's label as a chip (default true); false: just its text in the rule's color. */
+  chip?: boolean;
 }
 
 export type ActionKind = "delete" | "exec" | "debug" | "opspod" | "edit" | "terminal" | "label" | "annotate" | "scale" | "restart";

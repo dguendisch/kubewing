@@ -4,9 +4,10 @@ import { ruleColor } from "./safetyStyle";
 /**
  * A safety rule's label (PROD, LIVE) as a chip: the plane badge's look (a
  * light tint of the rule's color, a sharp border in it, its text in it), but
- * square, so the two read apart side by side.
+ * square, so the two read apart side by side. Plain (safety.chip: false on a
+ * landscape's label): its text in the rule's color alone.
  */
-export function SafetyLabel({ rule, named = true }: { rule?: SafetyRule; named?: boolean }) {
+export function SafetyLabel({ rule, named = true, plain = false }: { rule?: SafetyRule; named?: boolean; plain?: boolean }) {
   if (!rule?.label) return null;
   const color = ruleColor(rule) ?? "var(--color-accent)";
   return (
@@ -14,8 +15,8 @@ export function SafetyLabel({ rule, named = true }: { rule?: SafetyRule; named?:
       // named on its own (pane header, lists); in a heading its text is part of the heading's name
       aria-label={named ? "context label" : undefined}
       title={`safety rule for ${rule.context}${rule.readOnly ? ": read-only" : ""}`}
-      className="shrink-0 border px-1.5 leading-4 font-semibold"
-      style={{ color, borderColor: color, background: `color-mix(in srgb, ${color} 16%, transparent)` }}
+      className={`shrink-0 leading-4 font-semibold ${plain ? "" : "border px-1.5"}`}
+      style={plain ? { color } : { color, borderColor: color, background: `color-mix(in srgb, ${color} 16%, transparent)` }}
     >
       {rule.label}
     </span>

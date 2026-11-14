@@ -6,7 +6,7 @@ import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import type { ClusterEntry, ClusterList } from "../transport/types";
 import { item as listItem, items as listItems, keepIndex, type Item, type Plane } from "./clusterList";
-import { Badges } from "./Pane";
+import { Badges, usePlainLabel } from "./Pane";
 
 /** ⌘⇧O: a cluster for the focused pane, a split below or a new tab. */
 export function ClusterPicker() {
@@ -17,6 +17,11 @@ export function ClusterPicker() {
 }
 
 const errorText = (e: unknown) => String((e as Error)?.message ?? e);
+
+/** An entry's safety label and RO; a landscape's label as plain text under safety.chip: false, as in the pane header. */
+function EntryBadges({ rule }: { rule: ClusterEntry["rule"] }) {
+  return <Badges rule={rule} plain={usePlainLabel(rule)} />;
+}
 
 const planes: { value: Plane; label: string }[] = [
   { value: "shoot", label: "shoot" },
@@ -204,7 +209,7 @@ function Picker({ paneId }: { paneId: string }) {
           >
             <span className="min-w-0 shrink truncate text-fg">{highlight(it.label, it.hits)}</span>
             <span className="flex shrink-0 gap-1">
-              <Badges rule={it.entry.rule} />
+              <EntryBadges rule={it.entry.rule} />
             </span>
             <span className="min-w-0 shrink-[1000] truncate">{it.detail}</span>
             {it.entry.disabled && <span className="shrink-0 italic">{it.entry.disabled}</span>}

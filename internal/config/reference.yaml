@@ -23,6 +23,7 @@ contexts:                   # safety rules per kubeconfig context, the first mat
 safety:                     # how the rules above show
   label: badge              # badge: a chip of its own; landscape: on Gardener clusters the landscape's name becomes the chip (its rule's label)
   frame: true               # false: the pane frame keeps its usual color
+  chip: true                # false: with label: landscape, the label is just its text in the rule's color, no chip
 
 debug:                      # debug containers (b)
   image: nicolaka/netshoot  # prefilled; none: the last image that started

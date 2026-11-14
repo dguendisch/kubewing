@@ -919,10 +919,12 @@ How the rules show is set apart from them, under `safety:`:
 safety:
   label: landscape   # badge (default) or landscape
   frame: false       # color the pane frame in the rule's color (default true)
+  chip: false        # with label: landscape, show the label as a chip (default true)
 ```
 
 - **`label: badge`** shows a rule's label as a chip of its own at the start of the pane header.
 - **`label: landscape`** puts it on the landscape instead, for Gardener clusters whose rule matched their landscape (`{match: "sap-landscape-live", label: Live, …}`): the landscape's name in the header becomes a chip in the rule's color reading `Live`, so the header starts `Live › seed gcp-ha-eu2 › ⛭ CP core/cicd`. Hovering it shows the landscape's name, and a click still opens the garden. A rule matching a cluster's own name (`sap-landscape-live/shoot--ops--*`) isn't the landscape's, so it keeps its chip of its own, as do other clusters.
+- **`chip: false`**, with `label: landscape`, shows the landscape's label as just its text in the rule's color, without the chip's border and tint: `Live › seed gcp-ha-eu2 › …` reads like the rest of the header, only colored. Hovering and clicking it work as before. The clusters dialog (`⌘⇧O`) shows that label the same way on the landscape's garden and on the clusters remembered from it.
 - **`frame: false`** leaves the pane frame in its usual color; the label still shows.
 
 - Rules match the context name only, whichever kubeconfig it comes from.
@@ -980,7 +982,7 @@ diff:
     - {path: metadata.annotations.example\.com/last-sync}
 
 contexts: []                # safety rules, see Safety
-safety: {label: badge, frame: true}   # how they show: landscape puts a landscape's label on its name; frame: false keeps frames plain
+safety: {label: badge, frame: true, chip: true}   # how they show: landscape puts a landscape's label on its name; frame: false keeps frames plain; chip: false shows that label as colored text
 
 debug:
   image: nicolaka/netshoot  # prefilled debug image
