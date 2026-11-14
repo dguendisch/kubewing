@@ -182,6 +182,7 @@ A pane's header names its cluster. On a Gardener cluster, instead of the context
 - A click on the landscape opens the garden (in the shown project's namespace), a click on a seed opens that seed, a click on a managed seed's shoot opens that shoot, all in the pane (`⌘←` goes back). A click on the **SHOOT** or **CP** badge switches to the other plane, as `⌥⌘O` does.
 - In a narrow pane the landscape and seed are cut short first (`sap-l… › seed g… ›`); the badge always stays whole, and the shoot's name keeps as much room as it can.
 - Hovering the header shows all of it: landscape, project, shoot, seed and what kind of seed it is, the namespace on the seed, and the context name.
+- The YAML, diff, describe and editor views have the same header as their table (safety label, pane name, where you are, resource, namespace), followed by the object's path.
 - The tab leads with the plane's mark too (`⛭ pods · shoot--foo--bar`), after the safety label (`LIVE · ◉ pods`).
 - Whether a seed is managed or unmanaged shows on the seed itself; it's learned when kubewing opens it (it needs to know that to connect), so it costs no extra login. A shoot's or control plane's header names only the seed, to leave room for the shoot; hovering tells its kind once known.
 - This works for clusters opened with `⌘⇧O` or `⌘J`, for gardenctl's kubeconfigs when kubewing was launched from a terminal (`gardenctl target`, then `kubewing`), and for a garden opened from its own kubeconfig. Other clusters show their context name, as before.

@@ -13,6 +13,7 @@
 - Gardener clusters show where you are in the pane header: the landscape, the seed beneath, and a colored badge for the plane (shoot, control plane, seed, garden), with managed and unmanaged seeds told apart; its parts open the garden, a seed or the other plane, and the tab leads with the plane's mark
 
 ### Changed
+- the YAML, diff, describe and editor views have the same header as their table: they show where you are (landscape, seed, plane) and the namespace instead of the bare context name
 - safety rules also match a Gardener cluster's landscape: a rule for `*-live` now labels and guards every shoot, control plane and seed opened from a live landscape (also gardenctl's kubeconfigs), not only the garden
 - safety labels (`PROD`, `LIVE`) are outlined chips in the rule's color instead of filled blocks
 - naming a tab (`⌘⇧I` or double-click) starts with its current title selected, ready to edit, instead of an empty field

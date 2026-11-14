@@ -9,8 +9,7 @@ import { bridge, setUI, useUI } from "../store/store";
 import * as S from "../store/state";
 import { StatusMessage } from "./ErrorDetail";
 import { HistoryButtons } from "./HistoryNav";
-import { PaneName } from "./NameField";
-import { Badges, ResourceName } from "./Pane";
+import { PaneWhere } from "./Pane";
 import { useKey, usePaneStatus } from "./Travel";
 import type { DescribeResult, Decoded, Detail as DetailData, DiffInfo, SafetyRule } from "../transport/types";
 
@@ -83,17 +82,14 @@ function ObjectStatus({ pane }: { pane: S.PaneState }) {
   );
 }
 
-/** Context badges, what's shown (the object, the decoded path), the follow checkbox. */
+/** The table's header start (PaneWhere), then what's shown (the object, the decoded path), the follow checkbox. */
 function ObjectHeader({ pane, o, rule }: { pane: S.PaneState; o: S.ObjectView; rule?: SafetyRule }) {
   const blocked = useUI((s) => S.followBlocked(s, pane));
   const title = o.title ?? "…";
   return (
     <header className="flex items-center gap-2 whitespace-nowrap border-b border-border bg-bg-elev px-2 py-1">
       {o.split ? null : <HistoryButtons pane={pane} />}
-      <Badges rule={rule} />
-      <PaneName pane={pane} />
-      <span className="shrink-0 text-fg-muted">{pane.context}</span>
-      <ResourceName pane={pane} />
+      <PaneWhere pane={pane} rule={rule} />
       <Breadcrumb pane={pane} o={o} title={title} />
       {o.split ? <FollowBox paneId={pane.id} on={!!o.follow} blocked={o.edit ? "while editing" : blocked} off={o.followOff} /> : null}
       {S.unsaved(pane) ? (

@@ -6702,6 +6702,41 @@ test.describe("⌘⇧O: open a cluster", () => {
     await page.keyboard.press("Escape");
   });
 
+  test("the viewer's header starts as its table's: labels, name, where (the location), resource, namespace", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.press("ControlOrMeta+Shift+O");
+    await page.getByRole("combobox", { name: "cluster" }).fill("tape-garden");
+    await options(page).filter({ hasText: /^tape-garden/ }).first().click();
+    await page.getByRole("combobox", { name: "resource" }).fill("shoots");
+    await page.keyboard.press("Enter");
+    await expect.poll(async () => { const p = await focused(page); return p.spec.resource === "shoots" && p.status?.synced ? p.total : -1; }).toBe(3);
+    const table = (await inspect(page)).focusedPane;
+    // over a table, the viewer's header is the one shown (the table's stays mounted under it)
+    const header = (pane: string) => page.locator(`section[data-pane="${pane}"] header:visible`);
+    // what the table's header says before its own items (the filter fields)
+    const where = (pane: string) =>
+      header(pane).evaluate((h) => ["context label", "location", "resource"].map((l) => h.querySelector<HTMLElement>(`[aria-label="${l}"]`)?.innerText ?? null));
+    await expect(header(table).getByLabel("location")).toHaveAttribute("data-plane", "garden");
+    const want = await where(table);
+    expect(want).toEqual(["GARDEN", expect.stringContaining("GARDEN"), expect.stringContaining("shoots")]);
+    const scope = await header(table).getByText(/^(-A|-n .+)$/).innerText();
+    // ⏎: the viewer over the table, the same start, then the object's path
+    await page.keyboard.press("Enter");
+    await expect(header(table).getByRole("navigation", { name: "object path" })).toBeVisible();
+    await expect.poll(() => where(table)).toEqual(want);
+    await expect(header(table).getByText(scope, { exact: true })).toBeVisible();
+    await expect(header(table).getByLabel("location")).toHaveAttribute("data-plane", "garden");
+    // ⇧⏎ from the table: a split viewer, alike
+    await page.keyboard.press("Escape");
+    await expect(header(table).getByRole("navigation", { name: "object path" })).toHaveCount(0);
+    await page.keyboard.press("Shift+Enter");
+    await expect.poll(async () => (await inspect(page)).focusedPane).not.toBe(table);
+    const split = (await inspect(page)).focusedPane;
+    await expect(header(split).getByRole("navigation", { name: "object path" })).toBeVisible();
+    await expect.poll(() => where(split)).toEqual(want);
+    await expect(header(split).getByText(scope, { exact: true })).toBeVisible();
+  });
+
   test("⌘J on a garden's shoot and seed rows: its clusters, opened here, in a split or (⌘⏎) a new tab; errors stay in the menu", async ({ page }) => {
     const jump = page.getByRole("menu", { name: /^jump from/ });
     const list = async (resource: string, n: number) => {

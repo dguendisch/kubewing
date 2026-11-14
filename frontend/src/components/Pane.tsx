@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { applySpec, markExtend, markToggle, moveColumn, openColumns, reconnect, refresh } from "../commands";
 import { RecordButton, TravelBadge, TravelBar, useKey, usePaneStatus } from "./Travel";
 import { Table } from "../grid/Table";
@@ -364,6 +364,30 @@ export function ResourceName({ pane }: { pane: S.PaneState }) {
   );
 }
 
+/**
+ * The header's "what and where", the same over a table and its object views
+ * (viewer, editor): the safety label and RO, the pane's name, where it is
+ * (PaneLocation), the resource and the namespace. travel: the table's
+ * time-travel badge, after the labels.
+ */
+export function PaneWhere({ pane, rule, travel }: { pane: S.PaneState; rule?: SafetyRule; travel?: ReactNode }) {
+  const { context, namespace } = pane.spec;
+  return (
+    <>
+      <Badges rule={rule} pane={pane} />
+      {travel}
+      <PaneName pane={pane} />
+      <PaneLocation
+        pane={pane}
+        fallback={S.splitCluster(context).context || pane.context || "(current)"}
+        fallbackTitle={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}
+      />
+      <ResourceName pane={pane} />
+      <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
+    </>
+  );
+}
+
 /** Where the pane is: a Gardener cluster's landscape, plane and seed; any other cluster's context name. */
 function PaneLocation({ pane, fallback, fallbackTitle }: { pane: S.PaneState; fallback: string; fallbackTitle?: string }) {
   // "" too: kubewing's own current context may be gardenctl's kubeconfig
@@ -613,21 +637,12 @@ function Header({ pane, rule, filterField }: { pane: S.PaneState; rule?: SafetyR
   };
 
   const field = "rounded border border-border bg-bg px-2 py-0.5 text-fg outline-none focus:border-accent";
-  const { context, namespace, fieldSelector } = pane.spec;
+  const { fieldSelector } = pane.spec;
   const st = usePaneStatus(pane.serverId);
   return (
     <header className={`flex items-center gap-2 border-b bg-bg-elev px-2 py-1 ${st?.at ? "border-accent" : "border-border"}`}>
       <HistoryButtons pane={pane} />
-      <Badges rule={rule} pane={pane} />
-      {st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null}
-      <PaneName pane={pane} />
-      <PaneLocation
-        pane={pane}
-        fallback={S.splitCluster(context).context || pane.context || "(current)"}
-        fallbackTitle={S.splitCluster(context).kubeconfig ? "from a terminal's own kubeconfig (⌘O lists its contexts)" : undefined}
-      />
-      <ResourceName pane={pane} />
-      <span className="shrink-0 text-fg-muted">{namespace ? `-n ${namespace}` : "-A"}</span>
+      <PaneWhere pane={pane} rule={rule} travel={st?.at ? <TravelBadge paneId={pane.id} at={st.at} behind={st.behind} /> : null} />
       {fieldSelector ? (
         <span aria-label="field selector" title="field selector (from a jump)" className="truncate border border-border px-1 text-fg-muted">
           {fieldSelector}
