@@ -909,7 +909,7 @@ contexts:
 |---|---|
 | `match` | Required. A glob (`*`, `?`, `[a-z]`) on the context name. The first matching rule wins, so put specific rules before broad ones. |
 | `label` | A badge in the pane header, tab, confirmations and the clusters dialog, e.g. `PROD`. |
-| `color` | Colors the label and the pane frame: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
+| `color` | Colors the label and the focused pane's frame: a theme token (`prod`, `changed`, `added`, `deleted`, …) or a CSS color (`#f14c4c`, `rgb(…)`, `oklch(…)`). |
 | `readOnly` | Refuses every mutation: delete, exec, debug, node shell (`opspod`), edit, local terminals (`terminal`: a shell can run anything), `label`, `annotate`, `scale` and rollout restart (`restart`). Reading still works: tables, YAML, diff, describe, logs, jumps, port-forward. |
 | `confirm` | Actions that ask before they run: `delete`, `exec`, `debug`, `opspod`, `edit`, `terminal`, `label`, `annotate`, `scale`, `restart`. Delete and restart always ask. An edit asks after its diff preview; label, annotate and scale after their dialog, naming the changes. |
 | `strict` | A confirmation needs the object's name typed, not just `⏎`. |
@@ -921,13 +921,14 @@ How the rules show is set apart from them, under `safety:`:
 ```yaml
 safety:
   label: landscape   # badge (default) or landscape
-  frame: false       # color the pane frame in the rule's color (default true)
+  frame: false       # color the focused pane's frame in the rule's color (default true)
   chip: false        # with label: landscape, show the label as a chip (default true)
 ```
 
 - **`label: badge`** shows a rule's label as a chip of its own at the start of the pane header.
 - **`label: landscape`** puts it on the landscape instead, for Gardener clusters whose rule matched their landscape (`{match: "sap-landscape-live", label: Live, …}`): the landscape's name in the header becomes a chip in the rule's color reading `Live`, so the header starts `Live › seed gcp-ha-eu2 › ⛭ CP core/cicd`, and on the garden itself `Live ◆ GARDEN project core`. Hovering it shows the landscape's name, and a click still opens the garden. A rule matching a cluster's own name (`sap-landscape-live/shoot--ops--*`) isn't the landscape's, so it keeps its chip of its own, as do other clusters.
 - **`chip: false`**, with `label: landscape`, shows the landscape's label as just its text in the rule's color, without the chip's border and tint: `Live › seed gcp-ha-eu2 › …` reads like the rest of the header, only colored. Hovering and clicking it work as before. The clusters dialog (`⌘⇧O`) shows that label the same way on the landscape's garden and on the clusters remembered from it.
+- **`frame: true`** (the default) draws the focused pane's frame in the rule's color, in place of the usual focus color; the other panes keep their plain frames, as panes without a rule do.
 - **`frame: false`** leaves the pane frame in its usual color; the label still shows.
 
 - Rules match the context name only, whichever kubeconfig it comes from.

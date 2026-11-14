@@ -2178,6 +2178,19 @@ test.describe("safety model", () => {
     expect(p!.y + p!.height).toBeLessThanOrEqual(e!.y);
     await page.keyboard.press("Escape");
     await expect(pop).toHaveCount(0);
+    // only the focused pane's frame has the rule's color (prod: #f14c4c); the others' stay plain, as without a rule;
+    // all as thin as any pane's frame
+    await page.keyboard.press("ControlOrMeta+D"); // split: the new (bottom) pane is focused
+    const panes = page.locator("section[data-pane]");
+    await expect(panes).toHaveCount(2);
+    const red = "rgb(241, 76, 76)";
+    await expect(panes.nth(1)).toHaveCSS("border-top-color", red);
+    await expect(panes.nth(0)).not.toHaveCSS("border-top-color", red);
+    await expect(panes.nth(0)).toHaveCSS("border-top-width", "1px");
+    await expect(panes.nth(1)).toHaveCSS("border-top-width", "1px");
+    await panes.nth(0).click();
+    await expect(panes.nth(0)).toHaveCSS("border-top-color", red);
+    await expect(panes.nth(1)).not.toHaveCSS("border-top-color", red);
   });
 });
 
@@ -6548,7 +6561,7 @@ test.describe("⌘⇧O: open a cluster", () => {
     await expect(where).toHaveText(/^GARDEN›seed soil›◉ SHOOTfoo\/bar$/);
     // the tab still leads with it; the frame isn't colored
     await expect(page.getByRole("tab", { selected: true })).toContainText("GARDEN · ◉");
-    expect(await pane.evaluate((el) => el.classList.contains("border-2"))).toBe(false);
+    expect(await pane.evaluate((el) => el.style.borderColor)).toBe("");
     // a click on it still opens the garden
     await where.getByLabel("context label").click();
     await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/^@\d+\/tape-garden$/), namespace: "garden-foo" });

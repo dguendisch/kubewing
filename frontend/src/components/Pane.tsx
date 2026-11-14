@@ -117,15 +117,17 @@ export function Pane({ id }: { id: string }) {
   }, [key, rule]);
 
   if (!pane) return null;
-  // a labeled context colors the whole pane frame, so prod is never mistaken for dev (unless safety.frame: false)
+  // a labeled context colors the focused pane's frame (in place of the accent), so prod is never mistaken
+  // for dev (unless safety.frame: false); the others keep theirs plain, as without a rule. Same width as any
+  // pane's frame, so nothing shifts when the focus moves
   const color = frame ? ruleColor(rule) : undefined;
   return (
     <section
       data-pane={id}
       data-context={pane.context}
       aria-label={`pane ${pane.spec.resource}`}
-      className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden ${corners} ${color ? "border-2" : "border"} ${isFocused ? "border-accent" : "border-border"}`}
-      style={color ? { borderColor: color } : undefined}
+      className={`relative flex h-full min-h-0 w-full min-w-0 flex-col overflow-hidden border ${corners} ${isFocused ? "border-accent" : "border-border"}`}
+      style={color && isFocused ? { borderColor: color } : undefined}
       onMouseDown={() => setUI((s) => S.focusPane(s, id))}
       onMouseMove={followMouse ? (e) => hoverFocus(e, id) : undefined}
     >
