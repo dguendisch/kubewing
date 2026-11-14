@@ -1,6 +1,9 @@
 # Changelog
 ## [Unreleased]
 
+### Fixed
+- recent gardenctl session targets and local terminal targeting use its private per-user temporary directory, including resolved macOS paths; this integration requires gardenctl v2.19.0 or newer (gardenctl remains optional for using kubewing)
+
 ## [0.7.0] - 2026-11-14
 ### Added
 - multi-window support for tabs: drag a tab out of the window to give it a window of its own, or onto another window to move it there, with all its panes as they were

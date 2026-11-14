@@ -53,7 +53,8 @@ type ClusterList struct {
 	// Recent: clusters opened before and gardenctl sessions' targets, the latest first.
 	Recent  []ClusterEntry `json:"recent"`
 	Gardens []ClusterEntry `json:"gardens"`
-	// Errors: gardenctl-v2.yaml can't be read, a pattern doesn't compile.
+	// Errors: gardenctl-v2.yaml can't be read, a session directory is unsafe,
+	// a pattern doesn't compile.
 	Errors []string `json:"errors,omitempty"`
 }
 
@@ -86,7 +87,11 @@ func (s *Service) Clusters() ClusterList {
 		out.Recent = append(out.Recent, s.entry(cfg, c, "recent"))
 	}
 	if s.opts.Gardener != nil {
-		for _, st := range gardener.Sessions(s.opts.Gardener.Paths.Sessions) {
+		targets, err := gardener.Sessions(s.opts.Gardener.Paths.Sessions)
+		if err != nil {
+			out.Errors = append(out.Errors, err.Error())
+		}
+		for _, st := range targets {
 			c := targetCluster(st.Target)
 			c.Used = st.Set
 			if !slices.ContainsFunc(recent, c.Same) {

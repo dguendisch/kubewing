@@ -109,7 +109,10 @@ func TestProjectName(t *testing.T) {
 }
 
 func TestSessions(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := PrepareSessions(filepath.Join(t.TempDir(), "garden", "sessions"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	write := func(id, body string, age int) {
 		p := filepath.Join(dir, id)
 		_ = os.MkdirAll(p, 0o700)
@@ -125,7 +128,10 @@ func TestSessions(t *testing.T) {
 	write("c", "garden: g\nseed: soil\n", 0)           // a seed
 	write("d", "garden: g\nproject: p\nshoot: s\n", 2) // a repeat of a (older one dropped)
 	write("e", "{{{", 0)
-	got := Sessions(dir)
+	got, err := Sessions(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var ts []Target
 	for _, s := range got {
 		ts = append(ts, s.Target)
@@ -134,7 +140,7 @@ func TestSessions(t *testing.T) {
 	if !reflect.DeepEqual(ts, want) {
 		t.Errorf("Sessions = %+v, want %+v", ts, want)
 	}
-	if Sessions("") != nil {
+	if got, err := Sessions(""); err != nil || got != nil {
 		t.Error("no dir")
 	}
 }
@@ -142,7 +148,10 @@ func TestSessions(t *testing.T) {
 // A local shell's gardenctl session: a fresh id, its target as gardenctl
 // writes it (and Sessions reads it back), removed by the cleanup.
 func TestNewSession(t *testing.T) {
-	dir := t.TempDir()
+	dir, err := PrepareSessions(filepath.Join(t.TempDir(), "garden", "sessions"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	cases := []struct {
 		t    Target
 		want string
@@ -171,7 +180,7 @@ func TestNewSession(t *testing.T) {
 		if fi, _ := os.Stat(f); fi == nil || fi.Mode().Perm() != 0o600 {
 			t.Errorf("mode %v", fi)
 		}
-		if got := Sessions(dir); len(got) == 0 || got[0].Garden != "g" {
+		if got, err := Sessions(dir); err != nil || len(got) == 0 || got[0].Garden != "g" {
 			t.Errorf("read back: %+v", got)
 		}
 		cleanup()

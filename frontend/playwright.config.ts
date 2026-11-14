@@ -1,7 +1,5 @@
 import { defineConfig } from "@playwright/test";
 
-const goEnv = ". ../.cache/env.sh && export GOPROXY=off GOFLAGS=-mod=mod";
-
 /**
  * E2E on meaning: Chromium against the headless Go backend replaying
  * scenario tapes (../testdata/tapes). Assertions use window.__kw.inspect()
@@ -17,10 +15,11 @@ export default defineConfig({
     {
       // KUBECONFIG: an empty one, never the developer's: a tape pane is the "current context", and
       // what kubewing reads from a real kubeconfig's (gardenlogin: ⌘⇧P's target) would leak in
-      command: `${goEnv} && export KUBECONFIG="$(mktemp)" && cd .. && go run . -headless 127.0.0.1:7777 -tapes testdata/tapes -catalog testdata/catalog.yaml -config testdata/config -garden testdata/garden -releases testdata/releases.json -releases-current 0.1.0 -state "$(mktemp -d)"`,
+      command: "bash e2e/backend.sh",
       url: "http://127.0.0.1:7777/healthz",
       reuseExistingServer: false,
       timeout: 120_000,
+      gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
       stdout: "pipe",
     },
     {

@@ -1,7 +1,15 @@
+// Session-directory logic mirrors gardenctl's internal/util (v2.19.1):
+// factory.go (DefaultGardenTempDir, FactoryImpl.Manager), privatedir*.go
+// (EnsurePrivateDir, checkPrivate, checkTrustedParents).
+// https://github.com/gardener/gardenctl-v2/tree/v2.19.1/internal/util
+// Kept local because internal packages cannot be imported; keep in sync.
 package gardener
 
 import (
 	"crypto/rand"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,6 +17,60 @@ import (
 
 	"sigs.k8s.io/yaml"
 )
+
+// PrepareSessions creates gardenctl's private temporary root and sessions
+// directory, resolving parent symlinks as gardenctl does. Untrusted
+// existing directories are rejected, never repaired. dir "" = no sessions.
+func PrepareSessions(dir string) (string, error) {
+	if dir == "" {
+		return "", nil
+	}
+	root, err := preparePrivateDir(filepath.Dir(dir))
+	if err != nil {
+		return "", err
+	}
+	return preparePrivateDir(filepath.Join(root, filepath.Base(dir)))
+}
+
+func preparePrivateDir(dir string) (string, error) {
+	absolute, err := filepath.Abs(dir)
+	if err != nil {
+		return "", err
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(absolute))
+	if err != nil {
+		return "", err
+	}
+	// A private root is only trustworthy if another user cannot replace it
+	// or one of its ancestors (a root/user-owned sticky directory is safe).
+	for p := parent; ; p = filepath.Dir(p) {
+		if err := checkSessionDirectory(p, false); err != nil {
+			return "", err
+		}
+		if filepath.Dir(p) == p {
+			break
+		}
+	}
+	dir = filepath.Join(parent, filepath.Base(absolute))
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return "", err
+	}
+	if err := checkSessionDirectory(dir, true); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func checkSessionDirectory(dir string, private bool) error {
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("refusing gardenctl directory %s: not a directory (or a symlink)", dir)
+	}
+	return checkSessionPermissions(dir, info, private)
+}
 
 // SessionTarget is the target of a gardenctl session (a terminal), as of
 // when it was last set.
@@ -19,10 +81,14 @@ type SessionTarget struct {
 
 // Sessions reads the targets of gardenctl's sessions (dir/<session>/target.yaml),
 // the latest first, without repeats. Targets kubewing can't open (no
-// garden) are left out.
-func Sessions(dir string) []SessionTarget {
+// garden) are left out. The directory is validated before every read.
+func Sessions(dir string) ([]SessionTarget, error) {
 	if dir == "" {
-		return nil
+		return nil, nil
+	}
+	dir, err := PrepareSessions(dir)
+	if err != nil {
+		return nil, err
 	}
 	files, _ := filepath.Glob(filepath.Join(dir, "*", "target.yaml"))
 	var out []SessionTarget
@@ -53,7 +119,7 @@ func Sessions(dir string) []SessionTarget {
 		}
 		seen[s.Target] = true
 		return false
-	})
+	}), nil
 }
 
 // sessionTarget is gardenctl's target.yaml.
@@ -70,12 +136,16 @@ type sessionTarget struct {
 // dir/<id>/target.yaml as `gardenctl target` writes it (t.Garden "" = no
 // target). The cleanup removes the session directory, also what gardenctl
 // put there (its kubeconfigs). dir "" = gardenctl's sessions are unknown:
-// only the id.
+// only the id. The directory is validated before every use.
 func NewSession(dir string, t Target) (id string, cleanup func(), err error) {
 	id = "kubewing-" + rand.Text()
 	cleanup = func() {}
 	if dir == "" {
 		return id, cleanup, nil
+	}
+	dir, err = PrepareSessions(dir)
+	if err != nil {
+		return "", nil, err
 	}
 	sd := filepath.Join(dir, id)
 	cleanup = func() { _ = os.RemoveAll(sd) }

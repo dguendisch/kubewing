@@ -28,8 +28,10 @@ type Paths struct {
 }
 
 // DefaultPaths are gardenctl's: $GCTL_HOME (else ~/.garden) with
-// $GCTL_CONFIG_NAME.yaml (else gardenctl-v2.yaml); sessions in the
-// temporary directory, as gardenctl keeps them.
+// $GCTL_CONFIG_NAME.yaml (else gardenctl-v2.yaml); sessions in the resolved
+// temporary directory's garden-<effective uid>/sessions (garden on Windows),
+// as gardenctl keeps them. This only finds paths; PrepareSessions creates
+// and checks the private directories before they are used.
 func DefaultPaths() Paths {
 	home := os.Getenv("GCTL_HOME")
 	if home == "" {
@@ -41,7 +43,15 @@ func DefaultPaths() Paths {
 	if name == "" {
 		name = "gardenctl-v2"
 	}
-	return Paths{Config: filepath.Join(home, name+".yaml"), Sessions: filepath.Join(os.TempDir(), "garden", "sessions")}
+	tmp := os.TempDir()
+	if resolved, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = resolved
+	}
+	dir := "garden"
+	if uid := os.Geteuid(); uid >= 0 {
+		dir = fmt.Sprintf("garden-%d", uid)
+	}
+	return Paths{Config: filepath.Join(home, name+".yaml"), Sessions: filepath.Join(tmp, dir, "sessions")}
 }
 
 // Config is the part of gardenctl-v2.yaml kubewing reads.
