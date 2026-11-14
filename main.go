@@ -114,14 +114,21 @@ func main() {
 		lookup, _ := opener.(gardener.Lookup)
 		opts.Gardener = &bridge.Gardener{Paths: paths, Lookup: lookup, ShellSessions: paths.Sessions}
 		if *headless != "" {
-			// tests: local terminals' sessions not in the repository
+			// Headless shells must not write into the supplied garden's sessions.
+			// Keep their private root and sessions separate from recent targets.
 			dir, err := os.MkdirTemp("", "kubewing-gardenctl-")
 			if err != nil {
 				log.Fatal(err)
 			}
-			opts.Gardener.ShellSessions = dir
+			defer os.RemoveAll(dir)
+			shells, err := gardener.PrepareSessions(filepath.Join(dir, "sessions"))
+			if err != nil {
+				_ = os.RemoveAll(dir)
+				log.Fatal(err)
+			}
+			opts.Gardener.ShellSessions = shells
 			if o, ok := opener.(*tape.Opener); ok {
-				o.Sessions = dir
+				o.Sessions = shells
 			}
 		}
 	}

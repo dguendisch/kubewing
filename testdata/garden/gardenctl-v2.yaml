@@ -1,5 +1,6 @@
-# gardenctl's config for tests (-garden testdata/garden): a garden whose
-# lookups go to the tapes (shoots, projects, ca-cluster config maps).
+# gardenctl's config for tests: the E2E launcher stages it in a private -garden
+# home. Kubeconfig paths stay repo-relative (the backend runs from the repo root).
+# Garden lookups go to the tapes (shoots, projects, ca-cluster config maps).
 gardens:
 - identity: tape-garden
   name: tg

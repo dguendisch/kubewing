@@ -43,7 +43,10 @@ func TestClusters(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sessions := t.TempDir()
+	sessions, err := gardener.PrepareSessions(filepath.Join(t.TempDir(), "garden", "sessions"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	target := filepath.Join(sessions, "term1", "target.yaml")
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		t.Fatal(err)
@@ -403,7 +406,10 @@ func TestTerminalGardenctlTarget(t *testing.T) {
 		op.Tapes[n] = tp
 		op.Tapes[tp.Pipeline.Source.Resource] = tp
 	}
-	sessions := t.TempDir()
+	sessions, err := gardener.PrepareSessions(filepath.Join(t.TempDir(), "garden", "sessions"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	op.Sessions = sessions
 	cfg := config.Defaults("")
 	log := &eventLog{events: map[string][]any{}}

@@ -1,3 +1,4 @@
+# The E2E launcher copies this target into private sessions/, preserving mtime.
 garden: tape-garden
 project: foo
 shoot: old
