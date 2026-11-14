@@ -6660,6 +6660,13 @@ test.describe("⌘⇧O: open a cluster", () => {
       await plain(options(page).first().getByLabel("context label"));
     }
     await page.keyboard.press("Escape");
+    // a click on it: the garden, whose header reads the label on its landscape alike, no chip in front
+    await pane.locator("header").getByLabel("location").getByLabel("context label").click();
+    await expect.poll(async () => (await focused(page)).spec).toMatchObject({ context: expect.stringMatching(/^@\d+\/tape-garden$/) });
+    await page.keyboard.press("Escape");
+    await expect(pane.locator("header").getByLabel("location")).toHaveAttribute("data-plane", "garden");
+    await expect(pane.locator("header").getByLabel("context label")).toHaveCount(1);
+    await plain(pane.locator("header").getByLabel("location").getByLabel("context label"));
   });
 
   test("⌘⏎ a new tab, ⇧⏎ a split; errors stay in the dialog; ⌥⌘O only on what ⌘⇧O opened", async ({ page }) => {

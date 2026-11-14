@@ -403,12 +403,13 @@ function PaneLocation({ pane, fallback, fallbackTitle }: { pane: S.PaneState; fa
  * safety.label: landscape: whether a pane's rule label goes on the landscape
  * crumb instead of a chip of its own. Only for a rule that matched the
  * landscape (a rule for one cluster keeps its chip: it isn't the
- * landscape's name), and only where the header shows the landscape.
+ * landscape's name), and only where the header shows the landscape: on
+ * every plane, the garden's own too (its landscape crumb reads the label).
  */
 function useLabelOnLandscape(pane: S.PaneState | undefined, rule: SafetyRule | undefined): boolean {
   const mode = useConfig((c) => c.config?.config.safety?.label);
   const location = useLocations((m) => (pane ? m[locationKey(pane.spec.context, locationNamespace(pane))] : undefined));
-  return mode === "landscape" && !!rule?.label && !!rule.byLandscape && !!locationParts(location) && location?.plane !== "garden";
+  return mode === "landscape" && !!rule?.label && !!rule.byLandscape && !!locationParts(location);
 }
 
 /** The header's empty stretch: a double-click there names the pane (⌘I). */
