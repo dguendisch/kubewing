@@ -3,14 +3,16 @@
  * renders what this returns (internal/app/menu.go), and a click comes back as
  * a kw:command event into the single dispatcher.
  *
- * Only a global ⌘ chord becomes a native key equivalent. The page sees every
- * key before the menu does, and a key the keymap resolves is consumed there,
- * so such an item never fires twice; it only takes over when the page can't
- * (busy, nothing focused). A scoped chord would fire window-wide, also where
- * the keymap leaves the key to a text field (⌘← in the filter bar), and a
- * plain letter would hijack typing: those items name their key in the label.
+ * Every item shows its key where macOS shows key equivalents, but only a
+ * global ⌘ chord is a working one. The page sees every key before the menu
+ * does, and a key the keymap resolves is consumed there, so such an item never
+ * fires twice; it only takes over when the page can't (busy, nothing focused).
+ * A scoped chord would fire window-wide, also where the keymap leaves the key
+ * to a text field (⌘← in the filter bar), and a plain letter would hijack
+ * typing: those are displayOnly, and Go keeps AppKit from firing them
+ * (internal/app/menukeys_darwin.go).
  */
-import { defaultBindings, prettyKey, type Binding, type CommandId } from "./keymap";
+import { defaultBindings, type Binding, type CommandId } from "./keymap";
 
 export interface MenuItem {
   label: string;
@@ -18,6 +20,8 @@ export interface MenuItem {
   command?: CommandId;
   /** Native key equivalent in Wails syntax ("CmdOrCtrl+Shift+d"). */
   accelerator?: string;
+  /** The accelerator is only shown: the page handles the key, natively it never fires. */
+  displayOnly?: true;
   /** A submenu's items (null = separator). */
   items?: (MenuItem | null)[];
 }
@@ -149,8 +153,8 @@ function item(label: string, command: CommandId, bindings: Binding[]): MenuItem 
   // the first global ⌘ chord whose key is not taken by another command in some context
   const native = own.find((b) => !b.when?.length && b.key.split("+").includes("Meta") && !shadowed(b, bindings));
   if (native) return { label, command, accelerator: accelerator(native.key) };
-  // otherwise name the key, as the cheat sheet would
-  return own.length ? { label: `${label}  (${prettyKey(own[0]!.key)})`, command } : { label, command };
+  // otherwise only show the key, as the cheat sheet would
+  return own.length ? { label, command, accelerator: accelerator(own[0]!.key), displayOnly: true } : { label, command };
 }
 
 /** A global chord that some context binds to another command: natively it would fire there too. */

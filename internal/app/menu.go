@@ -5,9 +5,12 @@ import "github.com/wailsapp/wails/v3/pkg/application"
 // MenuItem is one command entry of the native menu (frontend: keys/appMenu.ts),
 // or with Items a submenu of them (its Command unused).
 type MenuItem struct {
-	Label       string      `json:"label"`
-	Command     string      `json:"command,omitempty"`
-	Accelerator string      `json:"accelerator,omitempty"`
+	Label       string `json:"label"`
+	Command     string `json:"command,omitempty"`
+	Accelerator string `json:"accelerator,omitempty"`
+	// DisplayOnly: the accelerator is only shown, the page handles the key
+	// (a plain letter or a scoped chord must not fire window-wide).
+	DisplayOnly bool        `json:"displayOnly,omitempty"`
 	Items       []*MenuItem `json:"items,omitempty"`
 }
 
@@ -84,10 +87,39 @@ func addItems(sub *application.Menu, items []*MenuItem, emit func(name string, d
 			continue
 		}
 		item := sub.Add(it.Label)
-		if it.Accelerator != "" {
+		// only where GuardDisplayOnly can keep it from firing
+		if it.Accelerator != "" && (!it.DisplayOnly || canGuardKeys) {
 			item.SetAccelerator(it.Accelerator)
 		}
 		cmd := it.Command
 		item.OnClick(func(*application.Context) { emit(CommandEvent, cmd) })
 	}
 }
+
+// GuardDisplayOnly keeps the installed menu's display-only accelerators of
+// commands from firing (call it after setting BaseMenu(commands, …)): macOS
+// shows them where it shows key equivalents, but the key stays the page's.
+func GuardDisplayOnly(commands []Menu) {
+	var paths []string
+	var walk func(prefix string, items []*MenuItem)
+	walk = func(prefix string, items []*MenuItem) {
+		for _, it := range items {
+			switch {
+			case it == nil:
+			case len(it.Items) > 0:
+				walk(prefix+menuPathSep+it.Label, it.Items)
+			case it.DisplayOnly && it.Accelerator != "":
+				paths = append(paths, prefix+menuPathSep+it.Label)
+			}
+		}
+	}
+	for _, c := range commands {
+		walk(c.Title, c.Items)
+	}
+	if len(paths) > 0 {
+		guardMenuKeys(paths)
+	}
+}
+
+// menuPathSep joins the titles from a top-level menu down to an item (labels have no tabs).
+const menuPathSep = "\t"

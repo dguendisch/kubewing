@@ -193,7 +193,10 @@ func main() {
 	// a menu click is for the window in front (wins is set before any window shows)
 	emitFront := func(name string, data any) { wins.EmitFront(name, data) }
 	a.Menu.Set(app.BaseMenu(nil, emitFront))
-	api.MenuFn = func(m []app.Menu) { a.Menu.Set(app.BaseMenu(m, emitFront)) }
+	api.MenuFn = func(m []app.Menu) {
+		a.Menu.Set(app.BaseMenu(m, emitFront))
+		app.GuardDisplayOnly(m)
+	}
 	winOpts := application.WebviewWindowOptions{
 		Name:   bridge.MainWindow,
 		Title:  "kubewing",

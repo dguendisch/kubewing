@@ -236,7 +236,7 @@ Rules are decided in Go (`internal/safety`); the frontend only shows what Go dec
 
 ## Frontend
 
-- **Single command dispatcher:** every shortcut (JS keydown or native menu accelerator) resolves to the same command id and goes through one dispatcher. The native menu is built from the live keymap (`keys/appMenu.ts`); global `⌘` chords are native key equivalents, scoped keys appear in labels only, so a menu shortcut never fires inside a text field.
+- **Single command dispatcher:** every shortcut (JS keydown or native menu accelerator) resolves to the same command id and goes through one dispatcher. The native menu is built from the live keymap (`keys/appMenu.ts`); every item shows its key in the native shortcut column, but only global `⌘` chords are working key equivalents. Scoped and plain keys are `displayOnly`: AppKit has no display-only key equivalent, so Go (`internal/app/menukeys_darwin.go`) disables those items while their menu is closed and enables them while it's open, so a menu shortcut never fires inside a text field.
 - **Modal editor:** the YAML editor (edit, node-shell YAML) only lets its own keys reach the app; global keys and menu commands wait until it's closed.
 - **Generated lists with completeness tests:** the row menu comes from `actions/registry.ts` (a test fails for any `object.*` command without an entry); the cheat sheet from `keys/cheatsheet.ts` (a test fails for any command no section mentions).
 - **Swappable bridge transport:** Wails IPC in the app, WebSocket to a headless Go backend in tests and browser dev.

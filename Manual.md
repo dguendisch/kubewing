@@ -890,7 +890,7 @@ A pane's name shows in its header, and in the tab while the tab has no name of i
 
 ### Menu bar
 
-The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. The app menu has **Settings ▸ General…** (`⌘,`) and **Settings ▸ Keyboard Shortcuts…** (`⌥⌘,`). There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload" (⌘⇧R reconnects the pane's context).
+The macOS menu bar (File / Object / View / Pane / Tab / Help) lists the app's commands with their current shortcuts, including your `keybindings.yaml` changes. Single-key shortcuts (`d` describe) and those that only work in some panes are only shown: typing such a key in a text field never triggers the menu. The app menu has **Settings ▸ General…** (`⌘,`) and **Settings ▸ Keyboard Shortcuts…** (`⌥⌘,`). There's no ⌘W "Close Window" (⌘W closes a tab) and no ⌘R "Reload" (⌘⇧R reconnects the pane's context).
 
 ---
 

@@ -3,23 +3,24 @@
 ### Added
 - multi-window support for tabs: drag a tab out of the window to give it a window of its own, or onto another window to move it there, with all its panes as they were
 - multi-window support for panes: drag a pane's grip out of the window to give the pane a window of its own, or onto another window to move it there; it keeps its watch, filters, history, a shell's screen and a log pane's lines
+- Gardener clusters show where you are in the pane header: the landscape, the seed beneath, and a colored badge for the plane (shoot, control plane, seed, garden), with managed and unmanaged seeds told apart; its parts open the garden, a seed or the other plane, and the tab leads with the plane's mark
 - copy on select: with `terminal.copyOnSelect: true` in `config.yaml`, selecting text with the mouse in a shell or log pane copies it (off by default)
-- copy & copy cell(s) (`⌘⇧C`) with rows marked, copies all marked rows (instead of only the cursor's row)
+- copy & copy cell(s) (`⌘⇧C`) with multiple rows marked, copies all marked rows (instead of only the cursor's row)
 - the log dialog can show the logs of each container's previous instance, like `kubectl logs -p` (the **previous** checkbox, or `⌘P` in the dialog): a crashed or restarted container's last run
 - status colors: state cells (STATUS, READY, conditions such as AVAILABLE or a shoot's NODES, an event's TYPE) show their text in orange when waiting (`Pending`, `1/2`, `Unknown`) and red when broken (`CrashLoopBackOff`, `False`), like kubecolor; healthy states stay uncolored unless a theme sets the `ok` token. Metric percentages (`%CPU`, `%MEM/L`, `%CPU REQ` …) turn orange from 70% and red from 90%
-- the row menu (`⌘⏎`, right-click) has an **events** entry (`v`) (previously, "events" where only visible from the jump menu)
+- the row menu (`⌘⏎`, right-click) now has the **events** command (`v`) (previously it was only visible from the jump menu)
 - `safety.chip: false` in `config.yaml` shows the landscape's label (with `safety.label: landscape`) as just its text in the rule's color, without a chip, in the pane header and the clusters dialog
 - `safety.label: landscape` in `config.yaml` shows a landscape's safety label (e.g. `Live`) in place of the landscape's name in the pane header instead of as a separate badge; `safety.frame: false` stops coloring the pane frame
-- Gardener clusters show where you are in the pane header: the landscape, the seed beneath, and a colored badge for the plane (shoot, control plane, seed, garden), with managed and unmanaged seeds told apart; its parts open the garden, a seed or the other plane, and the tab leads with the plane's mark
 
 ### Changed
-- the YAML, diff, describe and editor views have the same header as their table: they show where you are (landscape, seed, plane) and the namespace instead of the bare context name
-- safety rules also match a Gardener cluster's landscape: a rule for `*-live` now labels and guards every shoot, control plane and seed opened from a live landscape (also gardenctl's kubeconfigs), not only the garden
+- the YAML, diff, describe and editor views have the same header as their table
+- safety rules also match a Gardener cluster's landscape: a rule for `*-live` now labels and guards every shoot, control plane and seed opened from a live landscape (also gardenctl's kubeconfigs)
 - safety labels (`PROD`, `LIVE`) are outlined chips in the rule's color instead of filled blocks
 - naming a tab (`⌘⇧I` or double-click) starts with its current title selected, ready to edit, instead of an empty field
-- the open cluster dialog (`⌘⇧O`) opens panes/tabs now like a jump (`⌘J`): `⏎` in the focused pane, `⇧⏎` in a split below, `⌘⏎` in a new tab. The "open in" toggle and `⌃⇧⏎` are gone
+- the open cluster dialog (`⌘⇧O`) opens panes/tabs now consistent with the jump menu (`⌘J`): `⏎` in the focused pane, `⇧⏎` in a split below, `⌘⏎` in a new tab. The "open in" toggle and `⌃⇧⏎` are gone
 
 ### Fixed
+- every menu bar item now shows its shortcut in the menu's shortcut column, the macOS way
 - a cluster just opened with `⌘⇧O` or `⌘J` shows its safety label right away, not only once something is listed in it
 - an ended log tail now names the key that closes its pane (`⌃D`), not `⌘W`, which closes the whole tab
 - marked rows no longer grow pulsing borders around their age and restarts cells a few seconds after they were marked (due to time/age repainting)

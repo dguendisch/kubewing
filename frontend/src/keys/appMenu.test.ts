@@ -29,16 +29,19 @@ describe("native menu", () => {
     expect(i["source.reconnect"]).toEqual({ label: "Reconnect", command: "source.reconnect", accelerator: "CmdOrCtrl+Shift+r" });
   });
 
-  it("names scoped and plain keys in the label instead (natively they'd fire in text fields)", () => {
+  it("only shows scoped and plain keys (natively they'd fire in text fields)", () => {
     const i = items();
-    // ⌘← is line start in the filter bar: the history keys are named, not native
-    expect(i["history.back"]).toEqual({ label: "Back  (⌘←)", command: "history.back" });
+    // ⌘← is line start in the filter bar: the history keys are shown, not native
+    expect(i["history.back"]).toEqual({ label: "Back", command: "history.back", accelerator: "CmdOrCtrl+left", displayOnly: true });
     // ⌘⇧[ is global, so it is a native key equivalent
-    expect(i["tab.prev"]!.accelerator).toBe("CmdOrCtrl+Shift+[");
-    expect(i["object.describe"]).toEqual({ label: "Describe  (d)", command: "object.describe" });
+    expect(i["tab.prev"]).toEqual({ label: "Previous Tab", command: "tab.prev", accelerator: "CmdOrCtrl+Shift+[" });
+    expect(i["object.describe"]).toEqual({ label: "Describe", command: "object.describe", accelerator: "d", displayOnly: true });
     // ⌘C is the native copy in fields, Monaco and terminals
-    expect(i["table.copy"]).toEqual({ label: "Copy  (⌘C)", command: "table.copy" });
-    expect(i["filter.focus"]!.accelerator).toBeUndefined(); // ⌘F is Monaco's find in the detail view
+    expect(i["table.copy"]).toEqual({ label: "Copy", command: "table.copy", accelerator: "CmdOrCtrl+c", displayOnly: true });
+    expect(i["filter.focus"]!.displayOnly).toBe(true); // ⌘F is Monaco's find in the detail view
+    // no key hint is left in a label
+    const labels = menuSpec().flatMap((m) => flat(m.items).map((x) => x.label));
+    expect(labels.filter((l) => / \(/.test(l))).toEqual([]);
   });
 
   it("puts the settings into the app menu, as macOS apps have them: a submenu with both files", () => {
@@ -62,6 +65,8 @@ describe("native menu", () => {
     const i = items(bindings);
     expect(i["tab.new"]!.accelerator).toBe("CmdOrCtrl+Shift+t");
     expect(i["pane.splitDown"]).toEqual({ label: "Split Down", command: "pane.splitDown" });
+    // a key bound only in some context is shown, but stays the page's
+    expect(i["object.describe"]!.displayOnly).toBe(true);
   });
 
   it("never takes a chord another context binds to something else", () => {
@@ -73,8 +78,8 @@ describe("native menu", () => {
     expect(items(bindings)["tab.new"]!.accelerator).toBe("CmdOrCtrl+t");
   });
 
-  it("assigns no accelerator twice", () => {
-    const accels = menuSpec().flatMap((m) => flat(m.items).flatMap((i) => (i.accelerator ? [i.accelerator] : [])));
+  it("assigns no working accelerator twice", () => {
+    const accels = menuSpec().flatMap((m) => flat(m.items).flatMap((i) => (i.accelerator && !i.displayOnly ? [i.accelerator] : [])));
     expect(accels.filter((a, i) => accels.indexOf(a) !== i)).toEqual([]);
   });
 });
